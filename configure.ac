@@ -1,0 +1,23 @@
+AC_INIT([rps], [0.1])
+AM_INIT_AUTOMAKE
+
+AC_CONFIG_MACRO_DIR([m4])
+AC_CONFIG_HEADERS([config.h])
+
+AC_PROG_CXX
+AC_LANG([C++])
+LT_INIT
+
+AX_CXX_COMPILE_STDCXX([14], [noext])
+AX_CHECK_COMPILE_FLAG([-Wall], [CXXFLAGS="${CXXFLAGS} -Wall"])
+AX_CHECK_COMPILE_FLAG([-Werror], [CXXFLAGS="${CXXFLAGS} -Werror"])
+AX_CHECK_COMPILE_FLAG([-pedantic], [CXXFLAGS="${CXXFLAGS} -pedantic"])
+
+AC_CONFIG_FILES([
+  Makefile \
+  src/Makefile
+])
+AC_OUTPUT
+
+echo
+echo "CXXFLAGS: ${CXXFLAGS}"
