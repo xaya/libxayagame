@@ -9,8 +9,12 @@ INSTALL
 install-sh
 libtool
 ltmain.sh
+ar-lib
 m4
 missing
 Makefile
 Makefile.in
 .deps
+.libs
+*.lo
+*.la

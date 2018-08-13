@@ -5,6 +5,8 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([config.h])
 
 AC_PROG_CXX
+AM_PROG_AR
+
 AC_LANG([C++])
 LT_INIT
 
@@ -13,9 +15,12 @@ AX_CHECK_COMPILE_FLAG([-Wall], [CXXFLAGS="${CXXFLAGS} -Wall"])
 AX_CHECK_COMPILE_FLAG([-Werror], [CXXFLAGS="${CXXFLAGS} -Werror"])
 AX_CHECK_COMPILE_FLAG([-pedantic], [CXXFLAGS="${CXXFLAGS} -pedantic"])
 
+PKG_CHECK_MODULES([GLOG], [libglog])
+
 AC_CONFIG_FILES([
   Makefile \
-  src/Makefile
+  src/Makefile \
+  xayagame/Makefile
 ])
 AC_OUTPUT
 
