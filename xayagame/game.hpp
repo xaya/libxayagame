@@ -6,6 +6,7 @@
 #define XAYAGAME_GAME_HPP
 
 #include "mainloop.hpp"
+#include "zmqsubscriber.hpp"
 
 #include <string>
 
@@ -29,19 +30,53 @@ private:
   /** This game's game ID.  */
   const std::string gameId;
 
+  /** The ZMQ subscriber.  */
+  internal::ZmqSubscriber zmq;
+
   /** The main loop.  */
   internal::MainLoop mainLoop;
 
 protected:
 
   explicit Game (const std::string& id);
-  virtual ~Game ();
+  virtual ~Game () = default;
 
   Game () = delete;
   Game (const Game&) = delete;
   void operator= (const Game&) = delete;
 
 public:
+
+  /**
+   * Sets the ZMQ endpoint that will be used to connect to the ZMQ interface
+   * of the Xaya daemon.  Must not be called anymore after StartZmq() or
+   * Run() have been called.
+   */
+  void
+  SetZmqEndpoint (const std::string& addr)
+  {
+    zmq.SetEndpoint (addr);
+  }
+
+  /**
+   * Starts the ZMQ subscriber in a new thread.  Must only be called after
+   * the ZMQ endpoint has been configured, and must not be called when
+   * ZMQ is already running.
+   */
+  void
+  StartZmq ()
+  {
+    zmq.Start ();
+  }
+
+  /**
+   * Stops the ZMQ subscriber.  Must only be called if it is currently running.
+   */
+  void
+  StopZmq ()
+  {
+    zmq.Stop ();
+  }
 
   /**
    * Runs the main event loop for the Game.  This starts all configured

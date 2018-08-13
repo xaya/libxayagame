@@ -10,17 +10,26 @@ namespace xaya
 {
 
 Game::Game (const std::string& id)
-  : gameId(id)
-{}
-
-Game::~Game ()
+  : gameId(id), zmq(gameId)
 {}
 
 void
 Game::Run ()
 {
-  internal::MainLoop::Functor startAction = [this] () {};
-  internal::MainLoop::Functor stopAction = [this] () {};
+  const bool zmqStarted = zmq.IsEndpointSet ();
+  internal::MainLoop::Functor startAction = [this, zmqStarted] ()
+    {
+      if (zmqStarted)
+        StartZmq ();
+      else
+        LOG (INFO)
+            << "No ZMQ endpoint is set, not starting ZMQ from Game::Run()";
+    };
+  internal::MainLoop::Functor stopAction = [this, zmqStarted] ()
+    {
+      if (zmqStarted)
+        StopZmq ();
+    };
   mainLoop.Run (startAction, stopAction);
 }
 

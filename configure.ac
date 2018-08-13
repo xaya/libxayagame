@@ -16,6 +16,7 @@ AX_CHECK_COMPILE_FLAG([-Werror], [CXXFLAGS="${CXXFLAGS} -Werror"])
 AX_CHECK_COMPILE_FLAG([-pedantic], [CXXFLAGS="${CXXFLAGS} -pedantic"])
 
 PKG_CHECK_MODULES([GLOG], [libglog])
+PKG_CHECK_MODULES([ZMQ], [libzmq])
 
 AC_CONFIG_FILES([
   Makefile \

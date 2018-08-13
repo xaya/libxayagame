@@ -78,13 +78,13 @@ MainLoop::Run (const Functor& start, const Functor& stop)
 
   shouldStop = false;
   running = true;
-  LOG (INFO) << "Starting main loop";
   {
+    LOG (INFO) << "Starting main loop";
     StartStopRunner<Functor> startStop(start, stop);
     while (!shouldStop)
       cv.wait (mainLoopLock);
+    LOG (INFO) << "Stopping main loop";
   }
-  LOG (INFO) << "Stopping main loop";
   running = false;
 
   {
