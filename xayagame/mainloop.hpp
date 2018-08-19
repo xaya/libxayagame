@@ -16,9 +16,6 @@
 
 namespace xaya
 {
-
-class Game;
-
 namespace internal
 {
 
@@ -45,6 +42,14 @@ private:
   /** The installed sigaction handler for SIGTERM.  */
   struct sigaction sigtermHandler;
 
+  /**
+   * Handles the SIGTERM signal and notifies the running main loop to stop
+   * in that case.
+   */
+  static void HandleInterrupt (int signum);
+
+public:
+
   /** Type for start/stop functors (as convenience).  */
   using Functor = std::function<void ()>;
 
@@ -64,14 +69,6 @@ private:
    * Signals the main loop to stop if it is running.
    */
   void Stop ();
-
-  /**
-   * Handles the SIGTERM signal and notifies the running main loop to stop
-   * in that case.
-   */
-  static void HandleInterrupt (int signum);
-
-  friend class xaya::Game;
 
 };
 
