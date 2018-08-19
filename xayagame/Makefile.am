@@ -11,3 +11,10 @@ xayagame_HEADERS = \
   game.hpp \
   mainloop.hpp \
   zmqsubscriber.hpp
+
+check_PROGRAMS = tests
+TESTS = tests
+
+tests_CXXFLAGS = $(GTEST_CFLAGS)
+tests_LDADD = $(builddir)/libxayagame.la $(GTEST_LIBS)
+tests_SOURCES = mainloop_tests.cpp

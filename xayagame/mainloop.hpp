@@ -48,6 +48,8 @@ private:
    */
   static void HandleInterrupt (int signum);
 
+  friend class MainLoopTests;
+
 public:
 
   /** Type for start/stop functors (as convenience).  */

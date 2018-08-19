@@ -12,9 +12,11 @@ ltmain.sh
 ar-lib
 m4
 missing
+test-driver
 Makefile
 Makefile.in
 .deps
 .libs
 *.lo
 *.la
+*.trs
