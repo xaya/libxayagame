@@ -6,14 +6,12 @@
 
 #include <glog/logging.h>
 
+#include <sstream>
+
 namespace xaya
 {
 namespace internal
 {
-
-ZmqSubscriber::ZmqSubscriber (const std::string& id)
-  : gameId(id)
-{}
 
 ZmqSubscriber::~ZmqSubscriber ()
 {
@@ -29,11 +27,18 @@ ZmqSubscriber::SetEndpoint (const std::string& address)
   addr = address;
 }
 
+void
+ZmqSubscriber::AddListener (const std::string& gameId, ZmqListener* listener)
+{
+  CHECK (!IsRunning ());
+  listeners.emplace (gameId, listener);
+}
+
 bool
 ZmqSubscriber::ReceiveMultiparts (std::string& topic, std::string& payload,
                                   uint32_t& seq)
 {
-  for (int parts = 1; ; ++parts)
+  for (unsigned parts = 1; ; ++parts)
     {
       zmq::message_t msg;
       try
@@ -106,15 +111,80 @@ ZmqSubscriber::ReceiveMultiparts (std::string& topic, std::string& payload,
     }
 }
 
+namespace
+{
+
+/**
+ * Checks if the topic string starts with the given prefix.  If it does,
+ * then the remaining part is further returned in "suffix".
+ */
+bool
+CheckTopicPrefix (const std::string& topic, const std::string& prefix,
+                  std::string& suffix)
+{
+  if (!topic.compare (0, prefix.size (), prefix) == 0)
+    return false;
+
+  suffix = topic.substr (prefix.size ());
+  return true;
+}
+
+} // anonymous namespace
+
 void
 ZmqSubscriber::Listen (ZmqSubscriber* self)
 {
+  Json::CharReaderBuilder rbuilder;
+  rbuilder["allowComments"] = false;
+  rbuilder["strictRoot"] = true;
+  rbuilder["failIfExtra"] = true;
+  rbuilder["rejectDupKeys"] = true;
+
   std::string topic;
   std::string payload;
   uint32_t seq;
   while (self->ReceiveMultiparts (topic, payload, seq))
     {
-      LOG (INFO) << "Received:\n" << topic << "\n" << payload << "\n" << seq;
+      VLOG (1) << "Received " << topic << " with sequence number " << seq;
+      VLOG (2) << "Payload:\n" << payload;
+
+      std::string gameId;
+      bool isAttach;
+      if (CheckTopicPrefix (topic, "game-block-attach json ", gameId))
+        isAttach = true;
+      else if (CheckTopicPrefix (topic, "game-block-detach json ", gameId))
+        isAttach = false;
+      else
+        LOG (FATAL) << "Unexpected topic of ZMQ notification: " << topic;
+
+      auto mit = self->lastSeq.find (topic);
+      bool seqMismatch;
+      if (mit == self->lastSeq.end ())
+        {
+          self->lastSeq.emplace (topic, seq);
+          seqMismatch = true;
+        }
+      else
+        {
+          seqMismatch = (seq != mit->second + 1);
+          mit->second = seq;
+        }
+
+      const auto range = self->listeners.equal_range (gameId);
+      if (range.first == self->listeners.end ())
+        continue;
+
+      Json::Value data;
+      std::string parseErrs;
+      std::istringstream in(payload);
+      CHECK (Json::parseFromStream (rbuilder, in, &data, &parseErrs))
+          << "Error parsing notification JSON: " << parseErrs;
+
+      for (auto i = range.first; i != range.second; ++i)
+        if (isAttach)
+          i->second->BlockAttach (gameId, data, seqMismatch);
+        else
+          i->second->BlockDetach (gameId, data, seqMismatch);
     }
 }
 
@@ -126,17 +196,21 @@ ZmqSubscriber::Start ()
 
   CHECK (!IsRunning ());
   socket = std::make_unique<zmq::socket_t> (ctx, ZMQ_SUB);
-  for (const std::string cmd : {"game-block-attach", "game-block-detach"})
-    {
-      const std::string topic = cmd + " json " + gameId;
-      socket->setsockopt (ZMQ_SUBSCRIBE, topic.data (), topic.size ());
-    }
+  for (const auto& entry : listeners)
+    for (const std::string cmd : {"game-block-attach", "game-block-detach"})
+      {
+        const std::string topic = cmd + " json " + entry.first;
+        socket->setsockopt (ZMQ_SUBSCRIBE, topic.data (), topic.size ());
+      }
   const int timeout = 1000;
   socket->setsockopt (ZMQ_RCVTIMEO, &timeout, sizeof (timeout));
   socket->connect (addr.c_str ());
 
+  /* Reset last-seen sequence numbers for a fresh start.  */
+  lastSeq.clear ();
+
   shouldStop = false;
-  listener = std::make_unique<std::thread> (&ZmqSubscriber::Listen, this);
+  worker = std::make_unique<std::thread> (&ZmqSubscriber::Listen, this);
 }
 
 void
@@ -150,8 +224,8 @@ ZmqSubscriber::Stop ()
     shouldStop = true;
   }
 
-  listener->join ();
-  listener.reset ();
+  worker->join ();
+  worker.reset ();
   socket.reset ();
 }
 

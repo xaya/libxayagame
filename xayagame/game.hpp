@@ -8,6 +8,8 @@
 #include "mainloop.hpp"
 #include "zmqsubscriber.hpp"
 
+#include <json/json.h>
+
 #include <string>
 
 namespace xaya
@@ -22,7 +24,7 @@ namespace xaya
  * methods with the actual game logic and then instantiate and Run() it
  * from the binary's main().
  */
-class Game
+class Game : private internal::ZmqListener
 {
 
 private:
@@ -35,6 +37,11 @@ private:
 
   /** The main loop.  */
   internal::MainLoop mainLoop;
+
+  void BlockAttach (const std::string& id, const Json::Value& data,
+                    bool seqMismatch) override;
+  void BlockDetach (const std::string& id, const Json::Value& data,
+                    bool seqMismatch) override;
 
 protected:
 

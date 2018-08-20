@@ -10,15 +10,45 @@
 
 #include <zmq.hpp>
 
+#include <json/json.h>
+
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 
 namespace xaya
 {
 namespace internal
 {
+
+/**
+ * Interface that is used to receive updates from the ZmqSubscriber class.
+ */
+class ZmqListener
+{
+
+public:
+
+  virtual ~ZmqListener () = default;
+
+  /**
+   * Callback for attached blocks.  It receives the game ID, associated JSON
+   * data for the ZMQ notification and whether or not the sequence number
+   * was mismatched.  The very first notification for each topic is seen as
+   * "mismatched" sequence number as well.
+   */
+  virtual void BlockAttach (const std::string& gameId,
+                            const Json::Value& data, bool seqMismatch) = 0;
+
+  /**
+   * Callback for detached blocks, receives same arguments as GameBlockAttach.
+   */
+  virtual void BlockDetach (const std::string& gameId,
+                            const Json::Value& data, bool seqMismatch) = 0;
+
+};
 
 /**
  * The Game subsystem that implements the ZMQ subscriber to the Xaya daemon's
@@ -29,9 +59,6 @@ class ZmqSubscriber
 
 private:
 
-  /** The subscribed game ID.  */
-  const std::string gameId;
-
   /** The ZMQ endpoint to connect to.  */
   std::string addr;
   /** The ZMQ context that is used by the this instance.  */
@@ -39,8 +66,14 @@ private:
   /** The ZMQ socket used to subscribe to the Xaya daemon, if connected.  */
   std::unique_ptr<zmq::socket_t> socket;
 
+  /** Game IDs and associated listeners.  */
+  std::unordered_multimap<std::string, ZmqListener*> listeners;
+
+  /** Last sequence numbers for each topic.  */
+  std::unordered_map<std::string, uint32_t> lastSeq;
+
   /** The running ZMQ listener thread, if any.  */
-  std::unique_ptr<std::thread> listener;
+  std::unique_ptr<std::thread> worker;
 
   /** Signals the listener to stop.  */
   bool shouldStop;
@@ -63,7 +96,7 @@ private:
 
 public:
 
-  explicit ZmqSubscriber (const std::string& id);
+  ZmqSubscriber () = default;
   ~ZmqSubscriber ();
 
   ZmqSubscriber (const ZmqSubscriber&) = delete;
@@ -86,12 +119,18 @@ public:
   }
 
   /**
+   * Adds a new listener for the given game ID.  Must not be called when
+   * the subscriber is running.
+   */
+  void AddListener (const std::string& gameId, ZmqListener* listener);
+
+  /**
    * Returns true if the ZMQ subscriber is currently running.
    */
   bool
   IsRunning () const
   {
-    return listener != nullptr;
+    return worker != nullptr;
   }
 
   /**

@@ -10,8 +10,26 @@ namespace xaya
 {
 
 Game::Game (const std::string& id)
-  : gameId(id), zmq(gameId)
-{}
+  : gameId(id)
+{
+  zmq.AddListener (gameId, this);
+}
+
+void
+Game::BlockAttach (const std::string& id, const Json::Value& data,
+                   const bool seqMismatch)
+{
+  CHECK_EQ (id, gameId);
+  LOG (INFO) << "Attached:\n" << data;
+}
+
+void
+Game::BlockDetach (const std::string& id, const Json::Value& data,
+                   const bool seqMismatch)
+{
+  CHECK_EQ (id, gameId);
+  LOG (INFO) << "Detached:\n" << data;
+}
 
 void
 Game::Run ()
