@@ -17,6 +17,7 @@ namespace internal
 
 class MainLoopTests : public testing::Test
 {
+
 protected:
 
   /* Variables recording whether the start/stop functors were called.  */
@@ -163,7 +164,7 @@ TEST_F (MainLoopTests, NeverRunningIsOk)
 
 TEST_F (MainLoopTests, MustStopBeforeDestruct)
 {
-  ASSERT_DEATH (
+  EXPECT_DEATH (
     {
       MainLoop loop;
       RunWithFlags (loop);
@@ -172,7 +173,7 @@ TEST_F (MainLoopTests, MustStopBeforeDestruct)
 
 TEST_F (MainLoopTests, CannotStartRunning)
 {
-  ASSERT_DEATH (
+  EXPECT_DEATH (
     {
       MainLoop loop;
       RunWithFlags (loop);
@@ -189,7 +190,7 @@ TEST_F (MainLoopTests, CannotStartRunning)
 
 TEST_F (MainLoopTests, CannotStartAnother)
 {
-  ASSERT_DEATH (
+  EXPECT_DEATH (
     {
       MainLoop loop;
       RunWithFlags (loop);

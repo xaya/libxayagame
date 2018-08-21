@@ -15,6 +15,9 @@ xayagame_HEADERS = \
 check_PROGRAMS = tests
 TESTS = tests
 
-tests_CXXFLAGS = $(GTEST_CFLAGS)
-tests_LDADD = $(builddir)/libxayagame.la $(GTEST_LIBS)
-tests_SOURCES = mainloop_tests.cpp
+tests_CXXFLAGS = $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(ZMQ_CFLAGS)
+tests_LDADD = $(builddir)/libxayagame.la \
+  $(JSONCPP_LIBS) $(GLOG_LIBS) $(GTEST_LIBS) $(ZMQ_LIBS)
+tests_SOURCES = \
+  mainloop_tests.cpp \
+  zmqsubscriber_tests.cpp

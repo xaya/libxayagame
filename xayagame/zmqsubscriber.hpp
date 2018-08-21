@@ -81,6 +81,12 @@ private:
   std::mutex mut;
 
   /**
+   * Special flag for testing:  If true, then the listening thread stops
+   * without actually reading messages.
+   */
+  bool noListeningForTesting = false;
+
+  /**
    * Receives a three-part message sent by the Xaya daemon (consisting
    * of topic and payload as strings as well as the serial number).  Returns
    * false if the socket was closed or the subscriber stopped, and errors out
@@ -93,6 +99,8 @@ private:
    * Listens on the ZMQ socket for messages until the socket is closed.
    */
   static void Listen (ZmqSubscriber* self);
+
+  friend class BasicZmqSubscriberTests;
 
 public:
 

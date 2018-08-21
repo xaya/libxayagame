@@ -17,7 +17,7 @@ AX_CHECK_COMPILE_FLAG([-pedantic], [CXXFLAGS="${CXXFLAGS} -pedantic"])
 
 PKG_CHECK_MODULES([JSONCPP], [jsoncpp])
 PKG_CHECK_MODULES([GLOG], [libglog])
-PKG_CHECK_MODULES([GTEST], [gtest_main])
+PKG_CHECK_MODULES([GTEST], [gmock gtest_main])
 PKG_CHECK_MODULES([ZMQ], [libzmq])
 
 AC_CONFIG_FILES([

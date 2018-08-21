@@ -60,7 +60,7 @@ ZmqSubscriber::ReceiveMultiparts (std::string& topic, std::string& payload,
              we just want to shut down the listener thread.  */
           if (exc.num () == ETERM)
             return false;
-          throw exc;
+          throw;
         }
 
       switch (parts)
@@ -134,6 +134,9 @@ CheckTopicPrefix (const std::string& topic, const std::string& prefix,
 void
 ZmqSubscriber::Listen (ZmqSubscriber* self)
 {
+  if (self->noListeningForTesting)
+    return;
+
   Json::CharReaderBuilder rbuilder;
   rbuilder["allowComments"] = false;
   rbuilder["strictRoot"] = true;
