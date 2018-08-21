@@ -8,8 +8,13 @@
 #include "mainloop.hpp"
 #include "zmqsubscriber.hpp"
 
-#include <json/json.h>
+#include "rpc-stubs/xayarpcclient.h"
 
+#include <json/json.h>
+#include <jsonrpccpp/client.h>
+
+#include <memory>
+#include <mutex>
 #include <string>
 
 namespace xaya
@@ -32,16 +37,34 @@ private:
   /** This game's game ID.  */
   const std::string gameId;
 
+  /** The JSON-RPC client connection to the Xaya daemon.  */
+  std::unique_ptr<XayaRpcClient> rpcClient;
+  /**
+   * Mutex guarding rpcClient.  This is necessary at least in theory since
+   * the RPC client might be used from the ZMQ listener on the ZMQ subscriber's
+   * worker thread in addition to the main thread.
+   */
+  std::mutex mutRpcClient;
+
   /** The ZMQ subscriber.  */
   internal::ZmqSubscriber zmq;
 
   /** The main loop.  */
   internal::MainLoop mainLoop;
 
+  /**
+   * The JSON-RPC version to use for talking to Xaya Core.  The actual daemon
+   * needs V1, but for the unit test (where the server is mocked and set up
+   * based on jsonrpccpp), we want V2.
+   */
+  static jsonrpc::clientVersion_t rpcClientVersion;
+
   void BlockAttach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
   void BlockDetach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
+
+  friend class GameTests;
 
 public:
 
@@ -50,6 +73,11 @@ public:
   Game () = delete;
   Game (const Game&) = delete;
   void operator= (const Game&) = delete;
+
+  /**
+   * Sets up the RPC client based on the given connector.
+   */
+  void ConnectRpcClient (jsonrpc::IClientConnector& conn);
 
   /**
    * Sets the ZMQ endpoint that will be used to connect to the ZMQ interface
@@ -61,6 +89,12 @@ public:
   {
     zmq.SetEndpoint (addr);
   }
+
+  /**
+   * Detects the ZMQ endpoint by calling getzmqnotifications on the Xaya
+   * daemon.  Returns false if pubgameblocks is not enabled.
+   */
+  bool DetectZmqEndpoint ();
 
   /**
    * Starts the ZMQ subscriber in a new thread.  Must only be called after

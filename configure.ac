@@ -16,6 +16,8 @@ AX_CHECK_COMPILE_FLAG([-Werror], [CXXFLAGS="${CXXFLAGS} -Werror"])
 AX_CHECK_COMPILE_FLAG([-pedantic], [CXXFLAGS="${CXXFLAGS} -pedantic"])
 
 PKG_CHECK_MODULES([JSONCPP], [jsoncpp])
+PKG_CHECK_MODULES([JSONRPCCLIENT], [libjsonrpccpp-client])
+PKG_CHECK_MODULES([JSONRPCSERVER], [libjsonrpccpp-server])
 PKG_CHECK_MODULES([GLOG], [libglog])
 PKG_CHECK_MODULES([GTEST], [gmock gtest_main])
 PKG_CHECK_MODULES([ZMQ], [libzmq])

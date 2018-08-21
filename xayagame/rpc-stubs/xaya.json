@@ -1,0 +1,21 @@
+[
+  {
+    "name": "getzmqnotifications",
+    "params": {},
+    "returns": []
+  },
+  {
+    "name": "getbestblockhash",
+    "params": {},
+    "returns": "hash"
+  },
+  {
+    "name": "game_sendupdates",
+    "params":
+      {
+        "gameid": "huc",
+        "fromblock": "hash"
+      },
+    "returns": {}
+  }
+]

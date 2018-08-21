@@ -1,5 +1,7 @@
 #include "xayagame/game.hpp"
 
+#include <jsonrpccpp/client/connectors/httpclient.h>
+
 #include <glog/logging.h>
 
 #include <cstdlib>
@@ -9,8 +11,14 @@ main (int argc, char** argv)
 {
   google::InitGoogleLogging (argv[0]);
 
+  CHECK_EQ (argc, 2) << "Usage: rpsd JSON-RPC-URL";
+
+  const std::string jsonRpcUrl(argv[1]);
+  jsonrpc::HttpClient httpConnector(jsonRpcUrl);
+
   xaya::Game game("rps");
-  game.SetZmqEndpoint ("tcp://127.0.0.1:28555");
+  game.ConnectRpcClient (httpConnector);
+  CHECK (game.DetectZmqEndpoint ());
   game.Run ();
 
   return EXIT_SUCCESS;

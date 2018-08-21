@@ -20,6 +20,9 @@
 
 namespace xaya
 {
+
+class GameTests;
+
 namespace internal
 {
 
@@ -101,6 +104,7 @@ private:
   static void Listen (ZmqSubscriber* self);
 
   friend class BasicZmqSubscriberTests;
+  friend class xaya::GameTests;
 
 public:
 
