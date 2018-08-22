@@ -43,16 +43,13 @@ private:
   void BlockDetach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
 
-protected:
+public:
 
   explicit Game (const std::string& id);
-  virtual ~Game () = default;
 
   Game () = delete;
   Game (const Game&) = delete;
   void operator= (const Game&) = delete;
-
-public:
 
   /**
    * Sets the ZMQ endpoint that will be used to connect to the ZMQ interface
