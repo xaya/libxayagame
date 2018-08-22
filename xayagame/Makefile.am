@@ -10,10 +10,12 @@ libxayagame_la_LIBADD = \
 libxayagame_la_SOURCES = \
   game.cpp \
   mainloop.cpp \
+  uint256.cpp \
   zmqsubscriber.cpp
 xayagame_HEADERS = \
   game.hpp \
   mainloop.hpp \
+  uint256.hpp \
   zmqsubscriber.hpp \
   rpc-stubs/xayarpcclient.h \
   rpc-stubs/xayarpcserverstub.h
@@ -30,6 +32,7 @@ tests_LDADD = $(builddir)/libxayagame.la \
 tests_SOURCES = \
   game_tests.cpp \
   mainloop_tests.cpp \
+  uint256_tests.cpp \
   zmqsubscriber_tests.cpp
 
 rpc-stubs/xayarpcclient.h: rpc-stubs/xaya.json
