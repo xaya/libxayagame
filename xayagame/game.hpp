@@ -97,6 +97,16 @@ public:
   bool DetectZmqEndpoint ();
 
   /**
+   * Adds this game's ID to the tracked games of the core daemon.
+   */
+  void TrackGame ();
+
+  /**
+   * Removes this game's ID from the tracked games of the core daemon.
+   */
+  void UntrackGame ();
+
+  /**
    * Starts the ZMQ subscriber in a new thread.  Must only be called after
    * the ZMQ endpoint has been configured, and must not be called when
    * ZMQ is already running.

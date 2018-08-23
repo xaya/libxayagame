@@ -24,6 +24,7 @@ namespace
 {
 
 using testing::_;
+using testing::InSequence;
 using testing::Return;
 
 constexpr int HTTP_PORT = 32100;
@@ -60,11 +61,14 @@ public:
     /* By default, expect no calls to be made.  The calls that we expect
        should explicitly be specified in the individual tests.  */
     EXPECT_CALL (*this, getzmqnotifications ()).Times (0);
+    EXPECT_CALL (*this, trackedgames (_, _)).Times (0);
     EXPECT_CALL (*this, getbestblockhash ()).Times (0);
     EXPECT_CALL (*this, game_sendupdates (_, _)).Times (0);
   }
 
   MOCK_METHOD0 (getzmqnotifications, Json::Value ());
+  MOCK_METHOD2 (trackedgames, void (const std::string& command,
+                                    const std::string& gameid));
   MOCK_METHOD0 (getbestblockhash, std::string ());
   MOCK_METHOD2 (game_sendupdates, Json::Value (const std::string& fromblock,
                                                const std::string& gameid));
@@ -170,6 +174,35 @@ TEST_F (DetectZmqEndpointTests, NoRpcConnection)
   Game g(GAME_ID);
   EXPECT_DEATH (
       g.DetectZmqEndpoint (),
+      "RPC client is not yet set up");
+}
+
+/* ************************************************************************** */
+
+using TrackGameTests = GameTests;
+
+TEST_F (TrackGameTests, CallsMade)
+{
+  {
+    InSequence dummy;
+    EXPECT_CALL (mockXayaServer, trackedgames ("add", GAME_ID));
+    EXPECT_CALL (mockXayaServer, trackedgames ("remove", GAME_ID));
+  }
+
+  Game g(GAME_ID);
+  g.ConnectRpcClient (httpClient);
+  g.TrackGame ();
+  g.UntrackGame ();
+}
+
+TEST_F (TrackGameTests, NoRpcConnection)
+{
+  Game g(GAME_ID);
+  EXPECT_DEATH (
+      g.TrackGame (),
+      "RPC client is not yet set up");
+  EXPECT_DEATH (
+      g.UntrackGame (),
       "RPC client is not yet set up");
 }
 

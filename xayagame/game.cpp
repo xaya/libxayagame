@@ -67,11 +67,30 @@ Game::DetectZmqEndpoint ()
 }
 
 void
+Game::TrackGame ()
+{
+  std::lock_guard<std::mutex> lock(mutRpcClient);
+  CHECK (rpcClient != nullptr) << "RPC client is not yet set up";
+  rpcClient->trackedgames ("add", gameId);
+  LOG (INFO) << "Added " << gameId << " to tracked games";
+}
+
+void
+Game::UntrackGame ()
+{
+  std::lock_guard<std::mutex> lock(mutRpcClient);
+  CHECK (rpcClient != nullptr) << "RPC client is not yet set up";
+  rpcClient->trackedgames ("remove", gameId);
+  LOG (INFO) << "Removed " << gameId << " from tracked games";
+}
+
+void
 Game::Run ()
 {
   const bool zmqStarted = zmq.IsEndpointSet ();
   internal::MainLoop::Functor startAction = [this, zmqStarted] ()
     {
+      TrackGame ();
       if (zmqStarted)
         StartZmq ();
       else
@@ -82,6 +101,7 @@ Game::Run ()
     {
       if (zmqStarted)
         StopZmq ();
+      UntrackGame ();
     };
   mainLoop.Run (startAction, stopAction);
 }

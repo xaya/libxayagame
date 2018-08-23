@@ -5,6 +5,14 @@
     "returns": []
   },
   {
+    "name": "trackedgames",
+    "params":
+      {
+        "command": "add",
+        "gameid": "huc"
+      }
+  },
+  {
     "name": "getbestblockhash",
     "params": {},
     "returns": "hash"
