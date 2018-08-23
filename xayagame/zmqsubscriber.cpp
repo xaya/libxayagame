@@ -205,7 +205,7 @@ ZmqSubscriber::Start ()
         const std::string topic = cmd + " json " + entry.first;
         socket->setsockopt (ZMQ_SUBSCRIBE, topic.data (), topic.size ());
       }
-  const int timeout = 1000;
+  const int timeout = 100;
   socket->setsockopt (ZMQ_RCVTIMEO, &timeout, sizeof (timeout));
   socket->connect (addr.c_str ());
 
