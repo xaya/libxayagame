@@ -4,6 +4,8 @@
 
 #include "game.hpp"
 
+#include "uint256.hpp"
+
 #include "rpc-stubs/xayarpcserverstub.h"
 
 #include <json/json.h>
@@ -14,6 +16,8 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <glog/logging.h>
 
 #include <sstream>
 #include <string>
@@ -62,14 +66,14 @@ public:
        should explicitly be specified in the individual tests.  */
     EXPECT_CALL (*this, getzmqnotifications ()).Times (0);
     EXPECT_CALL (*this, trackedgames (_, _)).Times (0);
-    EXPECT_CALL (*this, getbestblockhash ()).Times (0);
+    EXPECT_CALL (*this, getblockchaininfo ()).Times (0);
     EXPECT_CALL (*this, game_sendupdates (_, _)).Times (0);
   }
 
   MOCK_METHOD0 (getzmqnotifications, Json::Value ());
   MOCK_METHOD2 (trackedgames, void (const std::string& command,
                                     const std::string& gameid));
-  MOCK_METHOD0 (getbestblockhash, std::string ());
+  MOCK_METHOD0 (getblockchaininfo, Json::Value ());
   MOCK_METHOD2 (game_sendupdates, Json::Value (const std::string& fromblock,
                                                const std::string& gameid));
 
@@ -89,6 +93,9 @@ protected:
   /** HTTP connection to the mock server for the client.  */
   jsonrpc::HttpClient httpClient;
 
+  /** Some block hash for use in testing.  */
+  uint256 blockHash;
+
   static void
   SetUpTestCase ()
   {
@@ -103,6 +110,8 @@ protected:
   {
     mockXayaServer.StartListening ();
 
+    CHECK (blockHash.FromHex ("42" + std::string (62, '0')));
+
     /* The mocked RPC server listens on separate threads and is already set up
        (cannot be started only from within the death test), so we need to run
        those threadsafe.  */
@@ -112,6 +121,21 @@ protected:
   ~GameTests ()
   {
     mockXayaServer.StopListening ();
+  }
+
+  /**
+   * Expects a call to getblockchaininfo and returns the given data.
+   */
+  void
+  ExpectGetBlockchainInfo (const std::string& chain, const unsigned height,
+                           const uint256& hash)
+  {
+    Json::Value res(Json::objectValue);
+    res["chain"] = chain;
+    res["blocks"] = height;
+    res["bestblockhash"] = hash.ToHex ();
+
+    EXPECT_CALL (mockXayaServer, getblockchaininfo ()).WillOnce (Return (res));
   }
 
   /**
@@ -130,6 +154,66 @@ namespace
 
 /* ************************************************************************** */
 
+using ChainDetectionTests = GameTests;
+
+TEST_F (ChainDetectionTests, ChainDetected)
+{
+  ExpectGetBlockchainInfo ("unittest", 0, blockHash);
+
+  Game g(GAME_ID);
+  g.ConnectRpcClient (httpClient);
+  EXPECT_EQ (g.GetChain (), "unittest");
+}
+
+TEST_F (ChainDetectionTests, ReconnectionPossible)
+{
+  Json::Value data(Json::objectValue);
+  data["chain"] = "unittest";
+  data["height"] = 0;
+  data["bestblockhash"] = blockHash.ToHex ();
+
+  EXPECT_CALL (mockXayaServer, getblockchaininfo ())
+      .WillOnce (Return (data))
+      .WillOnce (Return (data));
+
+  Game g(GAME_ID);
+  g.ConnectRpcClient (httpClient);
+  g.ConnectRpcClient (httpClient);
+  EXPECT_EQ (g.GetChain (), "unittest");
+}
+
+TEST_F (ChainDetectionTests, ReconnectionToWrongChain)
+{
+  /* For the death test, we need to make sure that we only run the server
+     in the forked environment.  If we set up the mock expectations before
+     forking, they will be set in both processes, but only fulfillled
+     in one of them.  */
+  mockXayaServer.StopListening ();
+
+  Json::Value data1(Json::objectValue);
+  data1["chain"] = "unittest";
+  data1["height"] = 0;
+  data1["bestblockhash"] = blockHash.ToHex ();
+
+  Json::Value data2 = data1;
+  data2["chain"] = "otherchain";
+
+  Game g(GAME_ID);
+  EXPECT_DEATH (
+    {
+      EXPECT_CALL (mockXayaServer, getblockchaininfo ())
+          .WillOnce (Return (data1))
+          .WillOnce (Return (data2));
+
+      mockXayaServer.StartListening ();
+      g.ConnectRpcClient (httpClient);
+      g.ConnectRpcClient (httpClient);
+    },
+    "Previous RPC connection had chain");
+}
+
+/* ************************************************************************** */
+
 using DetectZmqEndpointTests = GameTests;
 
 TEST_F (DetectZmqEndpointTests, Success)
@@ -142,6 +226,7 @@ TEST_F (DetectZmqEndpointTests, Success)
     ]
   )");
 
+  ExpectGetBlockchainInfo ("unittest", 0, blockHash);
   EXPECT_CALL (mockXayaServer, getzmqnotifications ())
       .WillOnce (Return (notifications));
 
@@ -160,6 +245,7 @@ TEST_F (DetectZmqEndpointTests, NotSet)
     ]
   )");
 
+  ExpectGetBlockchainInfo ("unittest", 0, blockHash);
   EXPECT_CALL (mockXayaServer, getzmqnotifications ())
       .WillOnce (Return (notifications));
 
@@ -183,6 +269,7 @@ using TrackGameTests = GameTests;
 
 TEST_F (TrackGameTests, CallsMade)
 {
+  ExpectGetBlockchainInfo ("unittest", 0, blockHash);
   {
     InSequence dummy;
     EXPECT_CALL (mockXayaServer, trackedgames ("add", GAME_ID));

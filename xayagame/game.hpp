@@ -37,6 +37,9 @@ private:
   /** This game's game ID.  */
   const std::string gameId;
 
+  /** The chain type (main, test, regtest) to which the game is connected.  */
+  std::string chain;
+
   /** The JSON-RPC client connection to the Xaya daemon.  */
   std::unique_ptr<XayaRpcClient> rpcClient;
   /**
@@ -44,7 +47,7 @@ private:
    * the RPC client might be used from the ZMQ listener on the ZMQ subscriber's
    * worker thread in addition to the main thread.
    */
-  std::mutex mutRpcClient;
+  mutable std::mutex mutRpcClient;
 
   /** The ZMQ subscriber.  */
   internal::ZmqSubscriber zmq;
@@ -78,6 +81,13 @@ public:
    * Sets up the RPC client based on the given connector.
    */
   void ConnectRpcClient (jsonrpc::IClientConnector& conn);
+
+  /**
+   * Returns the chain (network type, "main", "test" or "regtest") of the
+   * connected Xaya daemon.  This can be used to set up the storage database
+   * correctly, for instance.  Must not be called before ConnectRpcClient.
+   */
+  const std::string& GetChain () const;
 
   /**
    * Sets the ZMQ endpoint that will be used to connect to the ZMQ interface

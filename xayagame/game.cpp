@@ -40,6 +40,22 @@ Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
 
   std::lock_guard<std::mutex> lock(mutRpcClient);
   rpcClient = std::move (newClient);
+
+  const Json::Value info = rpcClient->getblockchaininfo ();
+  const std::string newChain = info["chain"].asString ();
+  CHECK (chain.empty () || chain == newChain)
+      << "Previous RPC connection had chain " << chain << ", now we have "
+      << newChain;
+  chain = newChain;
+  LOG (INFO) << "Connected to RPC daemon with chain " << chain;
+}
+
+const std::string&
+Game::GetChain () const
+{
+  std::lock_guard<std::mutex> lock(mutRpcClient);
+  CHECK (!chain.empty ());
+  return chain;
 }
 
 bool

@@ -13,9 +13,9 @@
       }
   },
   {
-    "name": "getbestblockhash",
+    "name": "getblockchaininfo",
     "params": {},
-    "returns": "hash"
+    "returns": {}
   },
   {
     "name": "game_sendupdates",
