@@ -37,17 +37,18 @@ private:
   /** This game's game ID.  */
   const std::string gameId;
 
+  /**
+   * Mutex guarding internal state.  This is necessary at least in theory since
+   * changes might be made from the ZMQ listener on the ZMQ subscriber's
+   * worker thread in addition to the main thread.
+   */
+  mutable std::mutex mut;
+
   /** The chain type (main, test, regtest) to which the game is connected.  */
   std::string chain;
 
   /** The JSON-RPC client connection to the Xaya daemon.  */
   std::unique_ptr<XayaRpcClient> rpcClient;
-  /**
-   * Mutex guarding rpcClient.  This is necessary at least in theory since
-   * the RPC client might be used from the ZMQ listener on the ZMQ subscriber's
-   * worker thread in addition to the main thread.
-   */
-  mutable std::mutex mutRpcClient;
 
   /** The ZMQ subscriber.  */
   internal::ZmqSubscriber zmq;

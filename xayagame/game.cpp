@@ -38,7 +38,7 @@ Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
 {
   auto newClient = std::make_unique<XayaRpcClient> (conn, rpcClientVersion);
 
-  std::lock_guard<std::mutex> lock(mutRpcClient);
+  std::lock_guard<std::mutex> lock(mut);
   rpcClient = std::move (newClient);
 
   const Json::Value info = rpcClient->getblockchaininfo ();
@@ -53,7 +53,7 @@ Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
 const std::string&
 Game::GetChain () const
 {
-  std::lock_guard<std::mutex> lock(mutRpcClient);
+  std::lock_guard<std::mutex> lock(mut);
   CHECK (!chain.empty ());
   return chain;
 }
@@ -64,7 +64,7 @@ Game::DetectZmqEndpoint ()
   Json::Value notifications;
 
   {
-    std::lock_guard<std::mutex> lock(mutRpcClient);
+    std::lock_guard<std::mutex> lock(mut);
     CHECK (rpcClient != nullptr) << "RPC client is not yet set up";
     notifications = rpcClient->getzmqnotifications ();
   }
@@ -85,7 +85,7 @@ Game::DetectZmqEndpoint ()
 void
 Game::TrackGame ()
 {
-  std::lock_guard<std::mutex> lock(mutRpcClient);
+  std::lock_guard<std::mutex> lock(mut);
   CHECK (rpcClient != nullptr) << "RPC client is not yet set up";
   rpcClient->trackedgames ("add", gameId);
   LOG (INFO) << "Added " << gameId << " to tracked games";
@@ -94,7 +94,7 @@ Game::TrackGame ()
 void
 Game::UntrackGame ()
 {
-  std::lock_guard<std::mutex> lock(mutRpcClient);
+  std::lock_guard<std::mutex> lock(mut);
   CHECK (rpcClient != nullptr) << "RPC client is not yet set up";
   rpcClient->trackedgames ("remove", gameId);
   LOG (INFO) << "Removed " << gameId << " from tracked games";
