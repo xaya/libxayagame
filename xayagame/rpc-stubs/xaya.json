@@ -18,6 +18,14 @@
     "returns": {}
   },
   {
+    "name": "getblockhash",
+    "params":
+      {
+        "height": 42
+      },
+    "returns": "hash"
+  },
+  {
     "name": "game_sendupdates",
     "params":
       {

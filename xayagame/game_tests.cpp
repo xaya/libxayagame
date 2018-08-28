@@ -67,6 +67,7 @@ public:
     EXPECT_CALL (*this, getzmqnotifications ()).Times (0);
     EXPECT_CALL (*this, trackedgames (_, _)).Times (0);
     EXPECT_CALL (*this, getblockchaininfo ()).Times (0);
+    EXPECT_CALL (*this, getblockhash (_)).Times (0);
     EXPECT_CALL (*this, game_sendupdates (_, _)).Times (0);
   }
 
@@ -74,6 +75,7 @@ public:
   MOCK_METHOD2 (trackedgames, void (const std::string& command,
                                     const std::string& gameid));
   MOCK_METHOD0 (getblockchaininfo, Json::Value ());
+  MOCK_METHOD1 (getblockhash, std::string (int height));
   MOCK_METHOD2 (game_sendupdates, Json::Value (const std::string& fromblock,
                                                const std::string& gameid));
 

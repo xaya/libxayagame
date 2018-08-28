@@ -58,6 +58,22 @@ Game::GetChain () const
   return chain;
 }
 
+void
+Game::SetStorage (StorageInterface* s)
+{
+  std::lock_guard<std::mutex> lock(mut);
+  CHECK (!mainLoop.IsRunning ());
+  storage = s;
+}
+
+void
+Game::SetGameLogic (GameLogic* gl)
+{
+  std::lock_guard<std::mutex> lock(mut);
+  CHECK (!mainLoop.IsRunning ());
+  rules = gl;
+}
+
 bool
 Game::DetectZmqEndpoint ()
 {
@@ -103,6 +119,9 @@ Game::UntrackGame ()
 void
 Game::Run ()
 {
+  CHECK (storage != nullptr && rules != nullptr)
+      << "Storage and GameLogic must be set before starting the main loop";
+
   const bool zmqStarted = zmq.IsEndpointSet ();
   internal::MainLoop::Functor startAction = [this, zmqStarted] ()
     {

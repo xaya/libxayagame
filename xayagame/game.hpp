@@ -6,6 +6,8 @@
 #define XAYAGAME_GAME_HPP
 
 #include "mainloop.hpp"
+#include "storage.hpp"
+#include "uint256.hpp"
 #include "zmqsubscriber.hpp"
 
 #include "rpc-stubs/xayarpcclient.h"
@@ -19,6 +21,29 @@
 
 namespace xaya
 {
+
+/**
+ * The interface for actual games.  Implementing classes define the rules
+ * of an actual game so that it can be plugged into libxayagame to form
+ * a complete game engine.
+ */
+class GameLogic
+{
+
+public:
+
+  virtual ~GameLogic () = default;
+
+  /**
+   * Returns the initial state (as well as the associated block height
+   * and block hash in big-endian hex) for the game on the given chain
+   * ("main", "test" or "regtest").
+   */
+  virtual void GetInitialState (const std::string& chain,
+                                unsigned& height, std::string& hashHex,
+                                GameStateData& state) = 0;
+
+};
 
 /**
  * The main class implementing a game on the Xaya platform.  It handles the
@@ -52,6 +77,12 @@ private:
 
   /** The ZMQ subscriber.  */
   internal::ZmqSubscriber zmq;
+
+  /** Storage system in use.  */
+  StorageInterface* storage = nullptr;
+
+  /** The game rules in use.  */
+  GameLogic* rules = nullptr;
 
   /** The main loop.  */
   internal::MainLoop mainLoop;
@@ -89,6 +120,18 @@ public:
    * correctly, for instance.  Must not be called before ConnectRpcClient.
    */
   const std::string& GetChain () const;
+
+  /**
+   * Sets the storage interface to use.  This must be called before starting
+   * the main loop, and may not be called while it is running.
+   */
+  void SetStorage (StorageInterface* s);
+
+  /**
+   * Sets the game rules to use.  This must be called before starting
+   * the main loop, and may not be called while it is running.
+   */
+  void SetGameLogic (GameLogic* gl);
 
   /**
    * Sets the ZMQ endpoint that will be used to connect to the ZMQ interface

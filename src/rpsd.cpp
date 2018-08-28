@@ -1,4 +1,7 @@
+#include "logic.hpp"
+
 #include "xayagame/game.hpp"
+#include "xayagame/storage.hpp"
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
 
@@ -19,6 +22,13 @@ main (int argc, char** argv)
   xaya::Game game("rps");
   game.ConnectRpcClient (httpConnector);
   CHECK (game.DetectZmqEndpoint ());
+
+  xaya::MemoryStorage storage;
+  game.SetStorage (&storage);
+
+  rps::RpsLogic rules;
+  game.SetGameLogic (&rules);
+
   game.Run ();
 
   return EXIT_SUCCESS;
