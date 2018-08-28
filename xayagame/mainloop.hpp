@@ -35,7 +35,7 @@ private:
   bool shouldStop;
 
   /** Mutex guarding the running and stop flags.  */
-  std::mutex mut;
+  mutable std::mutex mut;
   /** Condition variable to signal the main loop to stop.  */
   std::condition_variable cv;
 
@@ -66,6 +66,14 @@ public:
    * blocks until terminated, and then executes "stop".
    */
   void Run (const Functor& start, const Functor& stop);
+
+  /**
+   * Returns whether or not the loop is running.  Note that this is not
+   * completely thread-safe; it contains a memory barrier for running, but
+   * as soon as the function returns, a signal or concurrent thread can change
+   * the state again while the caller processes the result.
+   */
+  bool IsRunning () const;
 
   /**
    * Signals the main loop to stop if it is running.

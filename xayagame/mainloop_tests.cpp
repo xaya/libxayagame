@@ -101,18 +101,22 @@ TEST_F (MainLoopTests, LoopWithStop)
 
   EXPECT_FALSE (startCalled);
   EXPECT_FALSE (stopCalled);
+  EXPECT_FALSE (loop.IsRunning ());
 
   RunWithFlags (loop);
   EXPECT_TRUE (startCalled);
   EXPECT_FALSE (stopCalled);
+  EXPECT_TRUE (loop.IsRunning ());
 
   SleepSome ();
   EXPECT_TRUE (startCalled);
   EXPECT_FALSE (stopCalled);
+  EXPECT_TRUE (loop.IsRunning ());
 
   StopAndJoin (loop);
   EXPECT_TRUE (startCalled);
   EXPECT_TRUE (stopCalled);
+  EXPECT_FALSE (loop.IsRunning ());
 }
 
 TEST_F (MainLoopTests, LoopWithInterrupt)
@@ -121,16 +125,19 @@ TEST_F (MainLoopTests, LoopWithInterrupt)
 
   EXPECT_FALSE (startCalled);
   EXPECT_FALSE (stopCalled);
+  EXPECT_FALSE (loop.IsRunning ());
 
   RunWithFlags (loop);
   EXPECT_TRUE (startCalled);
   EXPECT_FALSE (stopCalled);
+  EXPECT_TRUE (loop.IsRunning ());
 
   HandleInterrupt (SIGINT);
   ASSERT_NE (loopThread, nullptr);
   loopThread->join ();
   EXPECT_TRUE (startCalled);
   EXPECT_TRUE (stopCalled);
+  EXPECT_FALSE (loop.IsRunning ());
 }
 
 TEST_F (MainLoopTests, CanRunMultipleTimes)
@@ -141,14 +148,17 @@ TEST_F (MainLoopTests, CanRunMultipleTimes)
     {
       EXPECT_FALSE (startCalled);
       EXPECT_FALSE (stopCalled);
+      EXPECT_FALSE (loop.IsRunning ());
 
       RunWithFlags (loop);
       EXPECT_TRUE (startCalled);
       EXPECT_FALSE (stopCalled);
+      EXPECT_TRUE (loop.IsRunning ());
 
       StopAndJoin (loop);
       EXPECT_TRUE (startCalled);
       EXPECT_TRUE (stopCalled);
+      EXPECT_FALSE (loop.IsRunning ());
 
       startCalled = false;
       stopCalled = false;

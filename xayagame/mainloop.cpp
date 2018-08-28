@@ -13,8 +13,14 @@ namespace internal
 
 MainLoop::~MainLoop ()
 {
+  CHECK (!IsRunning ()) << "Main loop is still running, cannot destroy it";
+}
+
+bool
+MainLoop::IsRunning () const
+{
   std::lock_guard<std::mutex> lock(mut);
-  CHECK (!running) << "Main loop is still running, cannot destroy it";
+  return running;
 }
 
 namespace
