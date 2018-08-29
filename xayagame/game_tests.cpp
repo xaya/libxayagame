@@ -19,6 +19,7 @@
 
 #include <glog/logging.h>
 
+#include <cstdio>
 #include <sstream>
 #include <string>
 
@@ -53,6 +54,27 @@ ParseJson (const std::string& str)
   in >> val;
   return val;
 }
+
+/**
+ * Returns a uint256 based on the given number, to be used as block hashes
+ * in tests.
+ */
+uint256
+BlockHash (const unsigned num)
+{
+  std::string hex = "ab" + std::string (62, '0');
+
+  CHECK (num < 0x100);
+  std::sprintf (&hex[2], "%02x", num);
+  CHECK (hex[4] == 0);
+  hex[4] = '0';
+
+  uint256 res;
+  CHECK (res.FromHex (hex));
+  return res;
+}
+
+/* ************************************************************************** */
 
 /**
  * Mock RPC server that takes the place of the Xaya Core daemon in unit tests.
@@ -152,8 +174,6 @@ protected:
   /** HTTP connection to the mock server for the client.  */
   jsonrpc::HttpClient httpClient;
 
-  /** Some block hash for use in testing.  */
-  uint256 blockHash;
 
   static void
   SetUpTestCase ()
@@ -168,8 +188,6 @@ protected:
       httpClient(GetHttpUrl ())
   {
     mockXayaServer.StartListening ();
-
-    CHECK (blockHash.FromHex ("42" + std::string (62, '0')));
 
     /* The mocked RPC server listens on separate threads and is already set up
        (cannot be started only from within the death test), so we need to run
@@ -203,7 +221,7 @@ using ChainDetectionTests = GameTests;
 TEST_F (ChainDetectionTests, ChainDetected)
 {
   Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, blockHash);
+  mockXayaServer.SetBestBlock (0, BlockHash (0));
   g.ConnectRpcClient (httpClient);
   EXPECT_EQ (g.GetChain (), UNITTEST_CHAIN);
 }
@@ -211,7 +229,7 @@ TEST_F (ChainDetectionTests, ChainDetected)
 TEST_F (ChainDetectionTests, ReconnectionPossible)
 {
   Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, blockHash);
+  mockXayaServer.SetBestBlock (0, BlockHash (0));
   g.ConnectRpcClient (httpClient);
   g.ConnectRpcClient (httpClient);
   EXPECT_EQ (g.GetChain (), UNITTEST_CHAIN);
@@ -229,7 +247,7 @@ TEST_F (ChainDetectionTests, ReconnectionToWrongChain)
   EXPECT_DEATH (
     {
       mockXayaServer.StartListening ();
-      mockXayaServer.SetBestBlock (0, blockHash);
+      mockXayaServer.SetBestBlock (0, BlockHash (0));
       g.ConnectRpcClient (httpClient);
       mockXayaServer.SetChain ("otherchain");
       g.ConnectRpcClient (httpClient);
@@ -255,7 +273,7 @@ TEST_F (DetectZmqEndpointTests, Success)
       .WillOnce (Return (notifications));
 
   Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, blockHash);
+  mockXayaServer.SetBestBlock (0, BlockHash (0));
   g.ConnectRpcClient (httpClient);
   ASSERT_TRUE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "address");
@@ -274,7 +292,7 @@ TEST_F (DetectZmqEndpointTests, NotSet)
       .WillOnce (Return (notifications));
 
   Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, blockHash);
+  mockXayaServer.SetBestBlock (0, BlockHash (0));
   g.ConnectRpcClient (httpClient);
   ASSERT_FALSE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "");
@@ -301,7 +319,7 @@ TEST_F (TrackGameTests, CallsMade)
   }
 
   Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, blockHash);
+  mockXayaServer.SetBestBlock (0, BlockHash (0));
   g.ConnectRpcClient (httpClient);
   g.TrackGame ();
   g.UntrackGame ();
