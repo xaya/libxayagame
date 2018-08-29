@@ -38,6 +38,11 @@ constexpr const char GAME_ID[] = "test-game";
 
 constexpr const char UNITTEST_CHAIN[] = "unittest";
 
+constexpr const char NO_REQ_TOKEN[] = "";
+
+constexpr bool SEQ_MISMATCH = true;
+constexpr bool NO_SEQ_MISMATCH = false;
+
 std::string
 GetHttpUrl ()
 {
@@ -160,6 +165,62 @@ public:
 
 };
 
+/* ************************************************************************** */
+
+constexpr unsigned GAME_GENESIS_HEIGHT = 10;
+constexpr const char GAME_GENESIS_HASH[]
+    = "0000000000000000000000000000000000000000000000000000000000000010";
+
+/**
+ * Very simple game rules that are used in the unit tests.  This just allows
+ * one-letter names to set a one-character "value" for themselves in the game
+ * state.
+ *
+ * Moves look like this:
+ *
+ *    {
+ *      "a": "=",
+ *      "x": "0"
+ *    }
+ *
+ * The game state is a string that just holds the set names and their values
+ * in ascending order.  For the situation of the move above, it would be:
+ *
+ *    a=x0
+ *
+ * Undo data is a string with all the names that were first created (rather
+ * than changed) in this block, so they can be fully removed from the state:
+ *
+ *    ax
+ */
+class TestGame : public GameLogic
+{
+
+public:
+
+  void
+  GetInitialState (const std::string& chain,
+                   unsigned& height, std::string& hashHex,
+                   GameStateData& state) override
+  {
+    CHECK_EQ (chain, UNITTEST_CHAIN);
+    height = GAME_GENESIS_HEIGHT;
+    hashHex = GAME_GENESIS_HASH;
+    state = "";
+  }
+
+  static uint256
+  GenesisBlockHash ()
+  {
+    uint256 res;
+    CHECK (res.FromHex (GAME_GENESIS_HASH));
+    return res;
+  }
+
+};
+
+/* ************************************************************************** */
+
 } // anonymous namespace
 
 class GameTests : public testing::Test
@@ -174,6 +235,10 @@ protected:
   /** HTTP connection to the mock server for the client.  */
   jsonrpc::HttpClient httpClient;
 
+  /** In-memory storage that can be used in tests.  */
+  MemoryStorage storage;
+  /** Game rules for the test game.  */
+  TestGame rules;
 
   static void
   SetUpTestCase ()
@@ -200,13 +265,42 @@ protected:
     mockXayaServer.StopListening ();
   }
 
-  /**
-   * Gives tests access to the configured ZMQ endpoint.
-   */
+  /* Make some private internals of Game accessible to tests.  */
+
+  using State = Game::State;
+
   static std::string
   GetZmqEndpoint (const Game& g)
   {
     return g.zmq.addr;
+  }
+
+  static State
+  GetState (const Game& g)
+  {
+    return g.state;
+  }
+
+  static void
+  ReinitialiseState (Game& g)
+  {
+    std::lock_guard<std::mutex> lock(g.mut);
+    g.ReinitialiseState ();
+  }
+
+  static void
+  CallBlockAttach (Game& g, const std::string& reqToken,
+                   const uint256& parentHash, const uint256& childHash,
+                   const Json::Value& moves, const bool seqMismatch)
+  {
+    Json::Value data(Json::objectValue);
+    if (!reqToken.empty ())
+      data["reqtoken"] = reqToken;
+    data["parent"] = parentHash.ToHex ();
+    data["child"] = childHash.ToHex ();
+    data["moves"] = moves;
+
+    g.BlockAttach (GAME_ID, data, seqMismatch);
   }
 
 };
@@ -334,6 +428,106 @@ TEST_F (TrackGameTests, NoRpcConnection)
   EXPECT_DEATH (
       g.UntrackGame (),
       "RPC client is not yet set up");
+}
+
+/* ************************************************************************** */
+
+class InitialStateTests : public GameTests
+{
+
+protected:
+
+  Game g;
+
+  InitialStateTests()
+    : g(GAME_ID)
+  {
+    EXPECT_CALL (mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
+        .WillRepeatedly (Return (GAME_GENESIS_HASH));
+
+    mockXayaServer.SetBestBlock (0, BlockHash (0));
+    g.ConnectRpcClient (httpClient);
+
+    g.SetStorage (&storage);
+    g.SetGameLogic (&rules);
+  }
+
+  void
+  ExpectInitialStateInStorage () const
+  {
+    uint256 hash;
+    EXPECT_TRUE (storage.GetCurrentBlockHash (hash));
+    EXPECT_EQ (hash, TestGame::GenesisBlockHash ());
+    EXPECT_EQ (storage.GetCurrentGameState (), "");
+  }
+
+};
+
+TEST_F (InitialStateTests, BeforeGenesis)
+{
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  uint256 hash;
+  EXPECT_FALSE (storage.GetCurrentBlockHash (hash));
+}
+
+TEST_F (InitialStateTests, AfterGenesis)
+{
+  mockXayaServer.SetBestBlock (20, BlockHash (20));
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::OUT_OF_SYNC);
+  ExpectInitialStateInStorage ();
+}
+
+TEST_F (InitialStateTests, WaitingForGenesis)
+{
+  const Json::Value emptyMoves(Json::objectValue);
+
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  mockXayaServer.SetBestBlock (9, BlockHash (9));
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (8), BlockHash (9),
+                   emptyMoves, NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  CallBlockAttach (g, NO_REQ_TOKEN,
+                   BlockHash (9), TestGame::GenesisBlockHash (),
+                   emptyMoves, NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::OUT_OF_SYNC);
+  ExpectInitialStateInStorage ();
+}
+
+TEST_F (InitialStateTests, MissedNotification)
+{
+  const Json::Value emptyMoves(Json::objectValue);
+
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  mockXayaServer.SetBestBlock (9, BlockHash (9));
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (8), BlockHash (9),
+                   emptyMoves, NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  mockXayaServer.SetBestBlock (20, TestGame::GenesisBlockHash ());
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20),
+                   emptyMoves, SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::OUT_OF_SYNC);
+  ExpectInitialStateInStorage ();
+}
+
+TEST_F (InitialStateTests, MismatchingGenesisHash)
+{
+  EXPECT_CALL (mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
+      .WillRepeatedly (Return (std::string (64, '0')));
+
+  mockXayaServer.SetBestBlock (20, BlockHash (20));
+  EXPECT_DEATH (
+      ReinitialiseState (g),
+      "genesis block hash and height do not match");
 }
 
 } // anonymous namespace

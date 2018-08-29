@@ -59,6 +59,37 @@ class Game : private internal::ZmqListener
 
 private:
 
+  /**
+   * States for the game engine during syncing / operation.  The basic states
+   * and transitions between states are as follows:
+   *
+   * UNKNOWN:  The state is currently not known / well-defined.  This is the
+   * case initially before the main loop is started and also briefly whenever
+   * a ZMQ message is missed and we re-initialise.  Except for these situations,
+   * this state should not occur.
+   *
+   * PREGENESIS:  The core daemon is currently (or when the state was last
+   * checked) synced to a block height below the initial state provided by
+   * the GameLogic.  There is no current game state, and we wait until the
+   * core daemon reaches the game's "genesis" block -- at that point, the
+   * initial game state will be written as current and the state is changed
+   * to OUT_OF_SYNC.
+   *
+   * OUT_OF_SYNC:  We have a current game state, but it is not (necessarily)
+   * the current blockchain tip in the daemon.  This state occurs only briefly,
+   * and is changed to CATCHING_UP when a game_sendupdates request has been
+   * sent to bring the game state up to the tip.
+   *
+   * TODO: More states when we go beyond just getting the initial state into
+   * the system.
+   */
+  enum class State
+  {
+    UNKNOWN = 0,
+    PREGENESIS,
+    OUT_OF_SYNC,
+  };
+
   /** This game's game ID.  */
   const std::string gameId;
 
@@ -71,6 +102,17 @@ private:
 
   /** The chain type (main, test, regtest) to which the game is connected.  */
   std::string chain;
+
+  /** The game's current state.  */
+  State state = State::UNKNOWN;
+
+  /**
+   * While the state is PREGENESIS, this holds the block hash of the game's
+   * initial state to which we are catching up.  This is compared against
+   * the CHILD hashes of block-attach notifications to know when that is
+   * the case.
+   */
+  uint256 gameGenesisHash;
 
   /** The JSON-RPC client connection to the Xaya daemon.  */
   std::unique_ptr<XayaRpcClient> rpcClient;
@@ -98,6 +140,14 @@ private:
                     bool seqMismatch) override;
   void BlockDetach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
+
+  /**
+   * Re-initialises the current game state.  This is called whenever we are not
+   * sure, like when ZMQ notifications have been missed or during start up.
+   * It checks the storage for the current game state and queries the RPC
+   * daemon with getblockchaininfo and then determines what needs to be done.
+   */
+  void ReinitialiseState ();
 
   friend class GameTests;
 

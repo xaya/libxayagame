@@ -22,7 +22,37 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
                    const bool seqMismatch)
 {
   CHECK_EQ (id, gameId);
-  LOG (INFO) << "Attached:\n" << data;
+  VLOG (2) << "Attached:\n" << data;
+
+  uint256 parent;
+  CHECK (parent.FromHex (data["parent"].asString ()));
+  uint256 child;
+  CHECK (child.FromHex (data["child"].asString ()));
+  VLOG (1) << "Attaching block " << child.ToHex ();
+
+  std::lock_guard<std::mutex> lock(mut);
+  switch (state)
+    {
+    case State::UNKNOWN:
+      LOG (FATAL) << "UNKNOWN state in ZMQ message handler";
+      return;
+
+    case State::PREGENESIS:
+      /* If we reached the hash we have been waiting for, reinitialise the
+         state; this will store the game's genesis state and continue syncing
+         from there.  If we missed ZMQ notifications, do the same -- we might
+         have missed the genesis hash.  */
+      if (child == gameGenesisHash || seqMismatch)
+        ReinitialiseState ();
+      return;
+
+    case State::OUT_OF_SYNC:
+      /* TODO: Handle this case in the future.  */
+      return;
+    }
+
+  LOG (DFATAL)
+      << "State " << static_cast<int> (state) << " not handled correctly";
 }
 
 void
@@ -30,7 +60,13 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
                    const bool seqMismatch)
 {
   CHECK_EQ (id, gameId);
-  LOG (INFO) << "Detached:\n" << data;
+  VLOG (2) << "Detached:\n" << data;
+
+  uint256 parent;
+  CHECK (parent.FromHex (data["parent"].asString ()));
+  uint256 child;
+  CHECK (child.FromHex (data["child"].asString ()));
+  VLOG (1) << "Detaching block " << child.ToHex ();
 }
 
 void
@@ -131,6 +167,9 @@ Game::Run ()
       else
         LOG (INFO)
             << "No ZMQ endpoint is set, not starting ZMQ from Game::Run()";
+
+      std::lock_guard<std::mutex> lock(mut);
+      ReinitialiseState ();
     };
   internal::MainLoop::Functor stopAction = [this, zmqStarted] ()
     {
@@ -138,7 +177,61 @@ Game::Run ()
         StopZmq ();
       UntrackGame ();
     };
+
   mainLoop.Run (startAction, stopAction);
+}
+
+void
+Game::ReinitialiseState ()
+{
+  state = State::UNKNOWN;
+  LOG (INFO) << "Reinitialising game state";
+
+  const Json::Value data = rpcClient->getblockchaininfo ();
+
+  uint256 currentHash;
+  if (storage->GetCurrentBlockHash (currentHash))
+    {
+      LOG (INFO) << "We have a current game state";
+      state = State::OUT_OF_SYNC;
+      /* TODO: Support catching up (and not just getting to an initial state)
+         in the future.  */
+      return;
+    }
+
+  /* We do not have a current state in the storage.  This means that we have
+     to reset to the initial state.  */
+
+  unsigned genesisHeight;
+  std::string genesisHashHex;
+  GameStateData genesisData;
+  rules->GetInitialState (chain, genesisHeight, genesisHashHex, genesisData);
+  uint256 genesisHash;
+  CHECK (genesisHash.FromHex (genesisHashHex));
+
+  /* If the current block height in the daemon is not yet the game's genesis
+     height, simply wait for the genesis hash to be attached.  */
+  if (data["blocks"].asUInt () < genesisHeight)
+    {
+      LOG (INFO)
+          << "Block height " << data["blocks"].asInt ()
+          << " is before the genesis height " << genesisHeight;
+      state = State::PREGENESIS;
+      gameGenesisHash = genesisHash;
+      return;
+    }
+
+  /* Otherwise, we can store the initial state and start to sync from there.  */
+  const std::string blockHashHex = rpcClient->getblockhash (genesisHeight);
+  uint256 blockHash;
+  CHECK (blockHash.FromHex (blockHashHex));
+  CHECK (blockHash == genesisHash)
+    << "The game's genesis block hash and height do not match";
+  storage->Clear ();
+  storage->SetCurrentGameState (genesisHash, genesisData);
+  LOG (INFO) << "We are at the genesis height, storing initial game state";
+  state = State::OUT_OF_SYNC;
+  /* TODO: Start catching up here.  */
 }
 
 } // namespace xaya
