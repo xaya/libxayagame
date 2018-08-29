@@ -21,8 +21,7 @@ class MoverLogic : public xaya::GameLogic
 
 public:
 
-  void GetInitialState (const std::string& chain,
-                        unsigned& height, std::string& hashHex,
+  void GetInitialState (unsigned& height, std::string& hashHex,
                         xaya::GameStateData& state) override;
 
 };

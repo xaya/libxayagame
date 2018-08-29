@@ -30,17 +30,40 @@ namespace xaya
 class GameLogic
 {
 
+private:
+
+  /**
+   * The chain ("main", "test" or "regtest") that the game is running on.
+   * This may influence the rules and is provided via GetChain.
+   */
+  std::string chain;
+
+protected:
+
+  /**
+   * Returns the chain the game is running on.
+   */
+  const std::string& GetChain () const;
+
 public:
 
+  GameLogic () = default;
   virtual ~GameLogic () = default;
 
   /**
-   * Returns the initial state (as well as the associated block height
-   * and block hash in big-endian hex) for the game on the given chain
-   * ("main", "test" or "regtest").
+   * Sets the chain value.  This is typically called by the Game instance,
+   * but may be used also for unit testing.
+   *
+   * If the chain was already set, it must not be changed to a different value
+   * during the lifetime of the object.
    */
-  virtual void GetInitialState (const std::string& chain,
-                                unsigned& height, std::string& hashHex,
+  void SetChain (const std::string& c);
+
+  /**
+   * Returns the initial state (as well as the associated block height
+   * and block hash in big-endian hex) for the game.
+   */
+  virtual void GetInitialState (unsigned& height, std::string& hashHex,
                                 GameStateData& state) = 0;
 
 };

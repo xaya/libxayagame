@@ -199,11 +199,10 @@ class TestGame : public GameLogic
 public:
 
   void
-  GetInitialState (const std::string& chain,
-                   unsigned& height, std::string& hashHex,
+  GetInitialState (unsigned& height, std::string& hashHex,
                    GameStateData& state) override
   {
-    CHECK_EQ (chain, UNITTEST_CHAIN);
+    CHECK_EQ (GetChain (), UNITTEST_CHAIN);
     height = GAME_GENESIS_HEIGHT;
     hashHex = GAME_GENESIS_HASH;
     state = "";

@@ -9,6 +9,20 @@
 namespace xaya
 {
 
+const std::string&
+GameLogic::GetChain () const
+{
+  CHECK (!chain.empty ());
+  return chain;
+}
+
+void
+GameLogic::SetChain (const std::string& c)
+{
+  CHECK (chain.empty () || chain == c);
+  chain = c;
+}
+
 Game::Game (const std::string& id)
   : gameId(id)
 {
@@ -84,6 +98,9 @@ Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
       << newChain;
   chain = newChain;
   LOG (INFO) << "Connected to RPC daemon with chain " << chain;
+
+  if (rules != nullptr)
+    rules->SetChain (chain);
 }
 
 const std::string&
@@ -108,6 +125,8 @@ Game::SetGameLogic (GameLogic* gl)
   std::lock_guard<std::mutex> lock(mut);
   CHECK (!mainLoop.IsRunning ());
   rules = gl;
+  if (!chain.empty ())
+    rules->SetChain (chain);
 }
 
 bool
@@ -205,7 +224,7 @@ Game::ReinitialiseState ()
   unsigned genesisHeight;
   std::string genesisHashHex;
   GameStateData genesisData;
-  rules->GetInitialState (chain, genesisHeight, genesisHashHex, genesisData);
+  rules->GetInitialState (genesisHeight, genesisHashHex, genesisData);
   uint256 genesisHash;
   CHECK (genesisHash.FromHex (genesisHashHex));
 

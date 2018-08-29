@@ -12,14 +12,13 @@ namespace mover
 {
 
 void
-MoverLogic::GetInitialState (const std::string& chain,
-                             unsigned& height, std::string& hashHex,
+MoverLogic::GetInitialState (unsigned& height, std::string& hashHex,
                              GameStateData& state)
 {
   /* In all cases, the initial game state is just empty.  */
   state = "";
 
-  if (chain == "main")
+  if (GetChain () == "main")
     {
       height = 125000;
       hashHex
@@ -27,7 +26,7 @@ MoverLogic::GetInitialState (const std::string& chain,
       return;
     }
 
-  if (chain == "test")
+  if (GetChain () == "test")
     {
       height = 10000;
       hashHex
@@ -35,7 +34,7 @@ MoverLogic::GetInitialState (const std::string& chain,
       return;
     }
 
-  if (chain == "regtest")
+  if (GetChain () == "regtest")
     {
       height = 0;
       hashHex
@@ -43,7 +42,7 @@ MoverLogic::GetInitialState (const std::string& chain,
       return;
     }
 
-  LOG (FATAL) << "Unexpected chain: " << chain;
+  LOG (FATAL) << "Unexpected chain: " << GetChain ();
 }
 
 } // namespace mover
