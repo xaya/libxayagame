@@ -63,8 +63,8 @@ public:
    * Returns the initial state (as well as the associated block height
    * and block hash in big-endian hex) for the game.
    */
-  virtual void GetInitialState (unsigned& height, std::string& hashHex,
-                                GameStateData& state) = 0;
+  virtual GameStateData GetInitialState (unsigned& height,
+                                         std::string& hashHex) = 0;
 
 };
 

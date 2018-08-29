@@ -223,8 +223,8 @@ Game::ReinitialiseState ()
 
   unsigned genesisHeight;
   std::string genesisHashHex;
-  GameStateData genesisData;
-  rules->GetInitialState (genesisHeight, genesisHashHex, genesisData);
+  const GameStateData genesisData
+      = rules->GetInitialState (genesisHeight, genesisHashHex);
   uint256 genesisHash;
   CHECK (genesisHash.FromHex (genesisHashHex));
 
