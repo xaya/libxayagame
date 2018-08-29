@@ -35,6 +35,8 @@ constexpr int HTTP_PORT = 32100;
 
 constexpr const char GAME_ID[] = "test-game";
 
+constexpr const char UNITTEST_CHAIN[] = "unittest";
+
 std::string
 GetHttpUrl ()
 {
@@ -52,8 +54,28 @@ ParseJson (const std::string& str)
   return val;
 }
 
+/**
+ * Mock RPC server that takes the place of the Xaya Core daemon in unit tests.
+ * Some methods are mocked using GMock, while others (in particular,
+ * getblockchaininfo) have an explicit fake implemlentation.
+ */
 class MockXayaRpcServer : public XayaRpcServerStub
 {
+
+private:
+
+  /**
+   * Mutex for local state (mainly the settable values for getblockchaininfo).
+   * Since the server accesses these from a separate thread, we need to have
+   * synchronisation (at least memory barriers).
+   */
+  std::mutex mut;
+
+  /* Data for the current blockchain tip, as should be returned from
+     the getblockchaininfo call.  */
+  std::string chain = UNITTEST_CHAIN;
+  int height = -1;
+  uint256 bestBlock;
 
 public:
 
@@ -66,7 +88,6 @@ public:
        should explicitly be specified in the individual tests.  */
     EXPECT_CALL (*this, getzmqnotifications ()).Times (0);
     EXPECT_CALL (*this, trackedgames (_, _)).Times (0);
-    EXPECT_CALL (*this, getblockchaininfo ()).Times (0);
     EXPECT_CALL (*this, getblockhash (_)).Times (0);
     EXPECT_CALL (*this, game_sendupdates (_, _)).Times (0);
   }
@@ -74,10 +95,46 @@ public:
   MOCK_METHOD0 (getzmqnotifications, Json::Value ());
   MOCK_METHOD2 (trackedgames, void (const std::string& command,
                                     const std::string& gameid));
-  MOCK_METHOD0 (getblockchaininfo, Json::Value ());
   MOCK_METHOD1 (getblockhash, std::string (int height));
   MOCK_METHOD2 (game_sendupdates, Json::Value (const std::string& fromblock,
                                                const std::string& gameid));
+
+  /**
+   * Sets the chain value that should be returned for getblockchaininfo.
+   * This only needs to be changed from the default if explicit testing of
+   * other chain values is desired.
+   */
+  void
+  SetChain (const std::string& c)
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    chain = c;
+  }
+
+  /**
+   * Sets the data to be returned for the current best block.
+   */
+  void
+  SetBestBlock (const unsigned h, const uint256& hash)
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    height = h;
+    bestBlock = hash;
+  }
+
+  Json::Value
+  getblockchaininfo () override
+  {
+    CHECK (height >= -1);
+    std::lock_guard<std::mutex> lock(mut);
+
+    Json::Value res(Json::objectValue);
+    res["chain"] = chain;
+    res["blocks"] = height;
+    res["bestblockhash"] = bestBlock.ToHex ();
+
+    return res;
+  }
 
 };
 
@@ -126,21 +183,6 @@ protected:
   }
 
   /**
-   * Expects a call to getblockchaininfo and returns the given data.
-   */
-  void
-  ExpectGetBlockchainInfo (const std::string& chain, const unsigned height,
-                           const uint256& hash)
-  {
-    Json::Value res(Json::objectValue);
-    res["chain"] = chain;
-    res["blocks"] = height;
-    res["bestblockhash"] = hash.ToHex ();
-
-    EXPECT_CALL (mockXayaServer, getblockchaininfo ()).WillOnce (Return (res));
-  }
-
-  /**
    * Gives tests access to the configured ZMQ endpoint.
    */
   static std::string
@@ -160,28 +202,19 @@ using ChainDetectionTests = GameTests;
 
 TEST_F (ChainDetectionTests, ChainDetected)
 {
-  ExpectGetBlockchainInfo ("unittest", 0, blockHash);
-
   Game g(GAME_ID);
+  mockXayaServer.SetBestBlock (0, blockHash);
   g.ConnectRpcClient (httpClient);
-  EXPECT_EQ (g.GetChain (), "unittest");
+  EXPECT_EQ (g.GetChain (), UNITTEST_CHAIN);
 }
 
 TEST_F (ChainDetectionTests, ReconnectionPossible)
 {
-  Json::Value data(Json::objectValue);
-  data["chain"] = "unittest";
-  data["height"] = 0;
-  data["bestblockhash"] = blockHash.ToHex ();
-
-  EXPECT_CALL (mockXayaServer, getblockchaininfo ())
-      .WillOnce (Return (data))
-      .WillOnce (Return (data));
-
   Game g(GAME_ID);
+  mockXayaServer.SetBestBlock (0, blockHash);
   g.ConnectRpcClient (httpClient);
   g.ConnectRpcClient (httpClient);
-  EXPECT_EQ (g.GetChain (), "unittest");
+  EXPECT_EQ (g.GetChain (), UNITTEST_CHAIN);
 }
 
 TEST_F (ChainDetectionTests, ReconnectionToWrongChain)
@@ -192,23 +225,13 @@ TEST_F (ChainDetectionTests, ReconnectionToWrongChain)
      in one of them.  */
   mockXayaServer.StopListening ();
 
-  Json::Value data1(Json::objectValue);
-  data1["chain"] = "unittest";
-  data1["height"] = 0;
-  data1["bestblockhash"] = blockHash.ToHex ();
-
-  Json::Value data2 = data1;
-  data2["chain"] = "otherchain";
-
   Game g(GAME_ID);
   EXPECT_DEATH (
     {
-      EXPECT_CALL (mockXayaServer, getblockchaininfo ())
-          .WillOnce (Return (data1))
-          .WillOnce (Return (data2));
-
       mockXayaServer.StartListening ();
+      mockXayaServer.SetBestBlock (0, blockHash);
       g.ConnectRpcClient (httpClient);
+      mockXayaServer.SetChain ("otherchain");
       g.ConnectRpcClient (httpClient);
     },
     "Previous RPC connection had chain");
@@ -228,11 +251,11 @@ TEST_F (DetectZmqEndpointTests, Success)
     ]
   )");
 
-  ExpectGetBlockchainInfo ("unittest", 0, blockHash);
   EXPECT_CALL (mockXayaServer, getzmqnotifications ())
       .WillOnce (Return (notifications));
 
   Game g(GAME_ID);
+  mockXayaServer.SetBestBlock (0, blockHash);
   g.ConnectRpcClient (httpClient);
   ASSERT_TRUE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "address");
@@ -247,11 +270,11 @@ TEST_F (DetectZmqEndpointTests, NotSet)
     ]
   )");
 
-  ExpectGetBlockchainInfo ("unittest", 0, blockHash);
   EXPECT_CALL (mockXayaServer, getzmqnotifications ())
       .WillOnce (Return (notifications));
 
   Game g(GAME_ID);
+  mockXayaServer.SetBestBlock (0, blockHash);
   g.ConnectRpcClient (httpClient);
   ASSERT_FALSE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "");
@@ -271,7 +294,6 @@ using TrackGameTests = GameTests;
 
 TEST_F (TrackGameTests, CallsMade)
 {
-  ExpectGetBlockchainInfo ("unittest", 0, blockHash);
   {
     InSequence dummy;
     EXPECT_CALL (mockXayaServer, trackedgames ("add", GAME_ID));
@@ -279,6 +301,7 @@ TEST_F (TrackGameTests, CallsMade)
   }
 
   Game g(GAME_ID);
+  mockXayaServer.SetBestBlock (0, blockHash);
   g.ConnectRpcClient (httpClient);
   g.TrackGame ();
   g.UntrackGame ();
