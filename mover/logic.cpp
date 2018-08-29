@@ -8,13 +8,13 @@
 
 using xaya::GameStateData;
 
-namespace rps
+namespace mover
 {
 
 void
-RpsLogic::GetInitialState (const std::string& chain,
-                           unsigned& height, std::string& hashHex,
-                           GameStateData& state)
+MoverLogic::GetInitialState (const std::string& chain,
+                             unsigned& height, std::string& hashHex,
+                             GameStateData& state)
 {
   /* In all cases, the initial game state is just empty.  */
   state = "";
@@ -46,4 +46,4 @@ RpsLogic::GetInitialState (const std::string& chain,
   LOG (FATAL) << "Unexpected chain: " << chain;
 }
 
-} // namespace rps
+} // namespace mover

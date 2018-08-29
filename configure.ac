@@ -1,4 +1,4 @@
-AC_INIT([rps], [0.1])
+AC_INIT([libxayagame], [0.1])
 AM_INIT_AUTOMAKE
 
 AC_CONFIG_MACRO_DIR([m4])
@@ -24,8 +24,8 @@ PKG_CHECK_MODULES([ZMQ], [libzmq])
 
 AC_CONFIG_FILES([
   Makefile \
-  src/Makefile \
-  xayagame/Makefile
+  xayagame/Makefile \
+  mover/Makefile
 ])
 AC_OUTPUT
 

@@ -2,21 +2,21 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef RPS_LOGIC_HPP
-#define RPS_LOGIC_HPP
+#ifndef MOVER_LOGIC_HPP
+#define MOVER_LOGIC_HPP
 
 #include "xayagame/game.hpp"
 #include "xayagame/storage.hpp"
 
 #include <string>
 
-namespace rps
+namespace mover
 {
 
 /**
  * The actual implementation of the game rules.
  */
-class RpsLogic : public xaya::GameLogic
+class MoverLogic : public xaya::GameLogic
 {
 
 public:
@@ -27,6 +27,6 @@ public:
 
 };
 
-} // namespace rps
+} // namespace mover
 
-#endif // RPS_LOGIC_HPP
+#endif // MOVER_LOGIC_HPP

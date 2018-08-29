@@ -14,19 +14,19 @@ main (int argc, char** argv)
 {
   google::InitGoogleLogging (argv[0]);
 
-  CHECK_EQ (argc, 2) << "Usage: rpsd JSON-RPC-URL";
+  CHECK_EQ (argc, 2) << "Usage: moverd JSON-RPC-URL";
 
   const std::string jsonRpcUrl(argv[1]);
   jsonrpc::HttpClient httpConnector(jsonRpcUrl);
 
-  xaya::Game game("rps");
+  xaya::Game game("mv");
   game.ConnectRpcClient (httpConnector);
   CHECK (game.DetectZmqEndpoint ());
 
   xaya::MemoryStorage storage;
   game.SetStorage (&storage);
 
-  rps::RpsLogic rules;
+  mover::MoverLogic rules;
   game.SetGameLogic (&rules);
 
   game.Run ();
