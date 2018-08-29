@@ -5,6 +5,6 @@
 the Xaya Core daemon, so that game developers only have to implement the
 rules of their game.
 
-`mover` is a simple game using this library, where players can move around
-an infinite plane.  It is fully functional, although mainly meant as example
-and/or basis for more complex games.
+[`mover`](mover/README.md) is a simple game using this library, where players
+can move around an infinite plane.  It is fully functional, although mainly
+meant as example and/or basis for more complex games.
