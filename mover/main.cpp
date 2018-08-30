@@ -5,6 +5,8 @@
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
 
+#include <google/protobuf/stubs/common.h>
+
 #include <glog/logging.h>
 
 #include <cstdlib>
@@ -13,6 +15,7 @@ int
 main (int argc, char** argv)
 {
   google::InitGoogleLogging (argv[0]);
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   CHECK_EQ (argc, 2) << "Usage: moverd JSON-RPC-URL";
 
@@ -31,5 +34,6 @@ main (int argc, char** argv)
 
   game.Run ();
 
+  google::protobuf::ShutdownProtobufLibrary ();
   return EXIT_SUCCESS;
 }

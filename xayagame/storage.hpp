@@ -13,7 +13,12 @@
 namespace xaya
 {
 
-/** The game-specific data that encodes a game state.  */
+/**
+ * The game-specific data that encodes a game state.  std::string is used
+ * as a convenient container, but games are advised to actually use binary
+ * encoding for more compact storage.  Protocol Buffers may be a good
+ * way to encode state data (although of course not mandatory).
+ */
 using GameStateData = std::string;
 /** The game-specific undo data for a block.  */
 using UndoData = std::string;

@@ -20,6 +20,7 @@ PKG_CHECK_MODULES([JSONRPCCLIENT], [libjsonrpccpp-client])
 PKG_CHECK_MODULES([JSONRPCSERVER], [libjsonrpccpp-server])
 PKG_CHECK_MODULES([GLOG], [libglog])
 PKG_CHECK_MODULES([GTEST], [gmock gtest_main])
+PKG_CHECK_MODULES([PROTOBUF], [protobuf])
 PKG_CHECK_MODULES([ZMQ], [libzmq])
 
 AC_CONFIG_FILES([

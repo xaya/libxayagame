@@ -1,15 +1,33 @@
 noinst_LTLIBRARIES = libmover.la
 bin_PROGRAMS = moverd
 
-libmover_la_CXXFLAGS = $(JSONCPP_CFLAGS) $(GLOG_CFLAGS)
-libmover_la_LIBADD = $(top_builddir)/xayagame/libxayagame.la \
-  $(JSONCPP_LIBS) $(GLOG_LIBS)
-libmover_la_SOURCES = \
-  logic.cpp
-noinst_HEADERS = \
-  logic.hpp
+EXTRA_DIST = proto/mover.proto
 
-moverd_CXXFLAGS = $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(GLOG_CFLAGS)
+libmover_la_CXXFLAGS = $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
+libmover_la_LIBADD = $(top_builddir)/xayagame/libxayagame.la \
+  $(JSONCPP_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
+libmover_la_SOURCES = \
+  logic.cpp \
+  proto/mover.pb.cc
+noinst_HEADERS = \
+  logic.hpp \
+  proto/mover.pb.h
+
+moverd_CXXFLAGS = \
+  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
 moverd_LDADD = $(builddir)/libmover.la $(top_builddir)/xayagame/libxayagame.la \
-  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(GLOG_LIBS)
+  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
 moverd_SOURCES = main.cpp
+
+check_PROGRAMS = tests
+TESTS = tests
+
+tests_CXXFLAGS = \
+  $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS) $(GTEST_CFLAGS)
+tests_LDADD = $(builddir)/libmover.la \
+  $(JSONCPP_LIBS) $(GLOB_LIBS) $(PROTOBUF_LIBS) $(GTEST_LIBS)
+tests_SOURCES = \
+  logic_tests.cpp
+
+proto/mover.pb.h proto/mover.pb.cc: proto/mover.proto
+	protoc --cpp_out=. "$<"

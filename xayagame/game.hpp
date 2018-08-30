@@ -66,6 +66,23 @@ public:
   virtual GameStateData GetInitialState (unsigned& height,
                                          std::string& hashHex) = 0;
 
+  /**
+   * Processes the game logic forward in time:  From an old state and moves
+   * (actually, the JSON data sent for block attaches; it includes the moves
+   * but also other things like the rngseed), the new state has to be computed.
+   */
+  virtual GameStateData ProcessForward (const GameStateData& oldState,
+                                        const Json::Value& blockData,
+                                        UndoData& undoData) = 0;
+
+  /**
+   * Processes the game logic backwards in time:  Compute the previous
+   * game state from the "new" one, the moves and the undo data.
+   */
+  virtual GameStateData ProcessBackwards (const GameStateData& newState,
+                                          const Json::Value& blockData,
+                                          const UndoData& undoData) = 0;
+
 };
 
 /**

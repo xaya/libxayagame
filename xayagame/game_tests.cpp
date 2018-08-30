@@ -207,6 +207,20 @@ public:
     return "";
   }
 
+  GameStateData
+  ProcessForward (const GameStateData& oldState, const Json::Value& blockData,
+                  UndoData& undoData) override
+  {
+    LOG (FATAL) << "Not yet implemented";
+  }
+
+  GameStateData
+  ProcessBackwards (const GameStateData& newState, const Json::Value& blockData,
+                    const UndoData& undoData) override
+  {
+    LOG (FATAL) << "Not yet implemented";
+  }
+
   static uint256
   GenesisBlockHash ()
   {

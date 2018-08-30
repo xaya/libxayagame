@@ -1,0 +1,93 @@
+// Copyright (C) 2018 The Xaya developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+syntax = "proto2";
+
+package mover.proto;
+
+/** A possible direction of movement.  */
+enum Direction
+{
+  /**
+   * NONE is the direction of players that are not moving, in particular
+   * after the steps_left have counted down to zero.
+   */
+  NONE = 0;
+
+  RIGHT = 1;
+  LEFT = 2;
+  UP = 3;
+  DOWN = 4;
+  RIGHT_UP = 5;
+  RIGHT_DOWN = 6;
+  LEFT_UP = 7;
+  LEFT_DOWN = 8;
+}
+
+/** The state of a particular player in Mover.  */
+message PlayerState
+{
+
+  /** The current x coordinate.  */
+  optional sint32 x = 1;
+  /** The current y coordinate.  */
+  optional sint32 y = 2;
+
+  /** The direction of movement.  */
+  optional Direction dir = 3;
+  /** The remaining number of movement steps left.  */
+  optional uint32 steps_left = 4;
+
+}
+
+/** The full game state.  */
+message GameState
+{
+
+  /** All players on the map and their current state.  */
+  map<string, PlayerState> players = 1;
+
+}
+
+/** The undo data for a single player.  */
+message PlayerUndo
+{
+
+  /**
+   * Set to true if the player was not present previously, i.e. if it was
+   * first moved and created on the map for this block.
+   */
+  optional bool is_new = 1;
+
+  /**
+   * Previous direction of the player, if it was changed explicitly.
+   */
+  optional Direction previous_dir = 2;
+
+  /**
+   * Previous steps left if the number was changed explicitly by a move.
+   */
+  optional uint32 previous_steps_left = 3;
+
+  /**
+   * Previous direction of the player if it counted down to zero and was
+   * changed to NONE in this block.
+   *
+   * In theory, this field could be merged with previous_dir.  It is possible
+   * that both are set, namely when a move with steps=1 was made.  But this case
+   * could be reversed using the move data.  The potential space savings
+   * here seem minor, though, so we use a separate field to simplify the logic.
+   */
+  optional Direction finished_dir = 4;
+
+}
+
+/** The full undo data for a block.  */
+message UndoData
+{
+
+  /** Undo data for each player that needs one.  */
+  map<string, PlayerUndo> players = 1;
+
+}
