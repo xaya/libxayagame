@@ -120,14 +120,21 @@ private:
    * and is changed to CATCHING_UP when a game_sendupdates request has been
    * sent to bring the game state up to the tip.
    *
-   * TODO: More states when we go beyond just getting the initial state into
-   * the system.
+   * CATCHING_UP:  We are not at the daemon's current tip, and have requested
+   * updates to be sent.  Those are processed based on a particular reqtoken
+   * for now to bring us up-to-date.
+   *
+   * UP_TO_DATE:  As far as is known, we are at the current tip of the daemon.
+   * Ordinary ZMQ notifications are processed as they come in for changes
+   * to the tip, and we expect them to match the current block hash.
    */
   enum class State
   {
     UNKNOWN = 0,
     PREGENESIS,
     OUT_OF_SYNC,
+    CATCHING_UP,
+    UP_TO_DATE,
   };
 
   /** This game's game ID.  */
@@ -148,11 +155,19 @@ private:
 
   /**
    * While the state is PREGENESIS, this holds the block hash of the game's
-   * initial state to which we are catching up.  This is compared against
-   * the CHILD hashes of block-attach notifications to know when that is
-   * the case.
+   * initial state to which we are catching up.  For CATCHING_UP, this is
+   * the TOBLOCK returned from game_sendupdates.
+   *
+   * This is compared against the CHILD hashes of block-attach notifications
+   * to know when we've finished catching up to the current target.
    */
-  uint256 gameGenesisHash;
+  uint256 targetBlockHash;
+
+  /**
+   * The reqtoken value for the currently processed game_sendupdates request
+   * (if the state is CATCHING_UP).
+   */
+  std::string reqToken;
 
   /** The JSON-RPC client connection to the Xaya daemon.  */
   std::unique_ptr<XayaRpcClient> rpcClient;
@@ -190,6 +205,44 @@ private:
    * Removes this game's ID from the tracked games of the core daemon.
    */
   void UntrackGame ();
+
+  /**
+   * Checks whether a ZMQ notification is relevant to the current state,
+   * given its (lack of) reqtoken.
+   */
+  bool IsReqtokenRelevant (const Json::Value& data) const;
+
+  /**
+   * Updates the current game state for an attached block.  This does the main
+   * work for BlockAttach, after the latter verified the current state, the
+   * reqtoken and other higher-level stuff.
+   *
+   * Returns false if the block cannot be attached directly, and a reinit
+   * of the current state is required.
+   */
+  bool UpdateStateForAttach (const uint256& parent, const uint256& child,
+                             const Json::Value& blockData);
+
+  /**
+   * Updates the current game state for a detached block.  This does the main
+   * work for BlockDetach, after the latter handled the state and reqtoken.
+   *
+   * Returns false if the detached block does not correspond to the current
+   * game state and we need to reinitialise.
+   */
+  bool UpdateStateForDetach (const uint256& parent, const uint256& child,
+                             const Json::Value& blockData);
+
+  /**
+   * Starts to sync from the current game state to the current chain tip.
+   * This is a helper method called from ReinitialiseState when the state
+   * was set to OUT_OF_SYNC.  It checks the current block hash against the
+   * best known one from the daemon and then either sets the state to
+   * CATCHING_UP and requests game_sendupdates, or sets the state to
+   * UP_TO_DATE if all is already fine.
+   */
+  void SyncFromCurrentState (const Json::Value& blockchainInfo,
+                             const uint256& currentHash);
 
   /**
    * Re-initialises the current game state.  This is called whenever we are not

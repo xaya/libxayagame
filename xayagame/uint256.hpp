@@ -68,6 +68,12 @@ public:
   }
 
   friend bool
+  operator!= (const uint256& a, const uint256& b)
+  {
+    return !(a == b);
+  }
+
+  friend bool
   operator< (const uint256& a, const uint256& b)
   {
     return a.data < b.data;

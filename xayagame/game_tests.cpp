@@ -20,6 +20,7 @@
 #include <glog/logging.h>
 
 #include <cstdio>
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -176,25 +177,77 @@ constexpr const char GAME_GENESIS_HASH[]
  * one-letter names to set a one-character "value" for themselves in the game
  * state.
  *
- * Moves look like this:
+ * Moves are just single-character strings that define the new value
+ * for a name.  Two moves in a block could look like this:
  *
  *    {
- *      "a": "=",
- *      "x": "0"
+ *      ...
+ *      "moves":
+ *        [
+ *          {
+ *            ...
+ *            "name": "a",
+ *            "move": "="
+ *          },
+ *          {
+ *            ...
+ *            "name": "x",
+ *            "move": "0"
+ *          }
+ *        ]
  *    }
  *
  * The game state is a string that just holds the set names and their values
- * in ascending order.  For the situation of the move above, it would be:
+ * in ascending order.  For the situation of the block above, it would be:
  *
  *    a=x0
  *
- * Undo data is a string with all the names that were first created (rather
- * than changed) in this block, so they can be fully removed from the state:
+ * Undo data is a string with all the names that were updated in this block,
+ * together with their previous values.  The format is the same as in the game
+ * state.  Names that were created (rather than updated) have the previous
+ * value set to ".", which has a special meaning here.  So for instance, if
+ * "a" would have existed already with value "-" and "x" would have been
+ * created by the example move above, then the undo data would be:
  *
- *    ax
+ *    a-x.
  */
 class TestGame : public GameLogic
 {
+
+private:
+
+  /** A map holding name/value pairs.  */
+  using Map = std::map<std::string, std::string>;
+
+  /**
+   * Parses a string of the game state / undo format into a map holding
+   * the name/value pairs.
+   */
+  static Map
+  DecodeMap (const std::string& str)
+  {
+    CHECK_EQ (str.size () % 2, 0);
+    Map result;
+    for (size_t i = 0; i < str.size (); i += 2)
+      result.emplace (str.substr (i, 1), str.substr (i + 1, 1));
+    return result;
+  }
+
+  /**
+   * Encodes a name/value map into a string for game state / undo data.
+   */
+  static std::string
+  EncodeMap (const Map& m)
+  {
+    std::ostringstream res;
+    for (const auto& e : m)
+      {
+        CHECK_EQ (e.first.size (), 1);
+        CHECK_EQ (e.second.size (), 1);
+        res << e.first << e.second;
+      }
+    return res.str ();
+  }
 
 public:
 
@@ -204,21 +257,59 @@ public:
     CHECK_EQ (GetChain (), UNITTEST_CHAIN);
     height = GAME_GENESIS_HEIGHT;
     hashHex = GAME_GENESIS_HASH;
-    return "";
+    return EncodeMap (Map ());
   }
 
   GameStateData
   ProcessForward (const GameStateData& oldState, const Json::Value& blockData,
                   UndoData& undoData) override
   {
-    LOG (FATAL) << "Not yet implemented";
+    CHECK_EQ (GetChain (), UNITTEST_CHAIN);
+
+    Map state = DecodeMap (oldState);
+    Map undo;
+
+    for (const auto& m : blockData["moves"])
+      {
+        const std::string name = m["name"].asString ();
+        const std::string value = m["move"].asString ();
+        CHECK_NE (value, ".");
+
+        const auto mi = state.find (name);
+        if (mi == state.end ())
+          {
+            undo.emplace (name, ".");
+            state.emplace (name, value);
+          }
+        else
+          {
+            undo.emplace (name, mi->second);
+            mi->second = value;
+          }
+      }
+
+    undoData = EncodeMap (undo);
+    return EncodeMap (state);
   }
 
   GameStateData
   ProcessBackwards (const GameStateData& newState, const Json::Value& blockData,
                     const UndoData& undoData) override
   {
-    LOG (FATAL) << "Not yet implemented";
+    CHECK_EQ (GetChain (), UNITTEST_CHAIN);
+
+    Map state = DecodeMap (newState);
+    const Map undo = DecodeMap (undoData);
+
+    for (const auto& e : undo)
+      {
+        if (e.second == ".")
+          state.erase (e.first);
+        else
+          state[e.first] = e.second;
+      }
+
+    return EncodeMap (state);
   }
 
   static uint256
@@ -325,6 +416,24 @@ protected:
     data["moves"] = moves;
 
     g.BlockAttach (GAME_ID, data, seqMismatch);
+  }
+
+  static void
+  CallBlockDetach (Game& g, const std::string& reqToken,
+                   const uint256& parentHash, const uint256& childHash,
+                   const bool seqMismatch)
+  {
+    Json::Value data(Json::objectValue);
+    if (!reqToken.empty ())
+      data["reqtoken"] = reqToken;
+    data["parent"] = parentHash.ToHex ();
+    data["child"] = childHash.ToHex ();
+
+    /* For our example test game, the moves are not used for rolling backwards.
+       Thus just set an empty string.  */
+    data["moves"] = "";
+
+    g.BlockDetach (GAME_ID, data, seqMismatch);
   }
 
 };
@@ -498,9 +607,15 @@ TEST_F (InitialStateTests, BeforeGenesis)
 
 TEST_F (InitialStateTests, AfterGenesis)
 {
+  Json::Value upd(Json::objectValue);
+  upd["toblock"] = BlockHash (20).ToHex ();
+  upd["reqtoken"] = "reqtoken";
+  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+      .WillOnce (Return (upd));
+
   mockXayaServer.SetBestBlock (20, BlockHash (20));
   ReinitialiseState (g);
-  EXPECT_EQ (GetState (g), State::OUT_OF_SYNC);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectInitialStateInStorage ();
 }
 
@@ -520,7 +635,7 @@ TEST_F (InitialStateTests, WaitingForGenesis)
   CallBlockAttach (g, NO_REQ_TOKEN,
                    BlockHash (9), TestGame::GenesisBlockHash (),
                    emptyMoves, NO_SEQ_MISMATCH);
-  EXPECT_EQ (GetState (g), State::OUT_OF_SYNC);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectInitialStateInStorage ();
 }
 
@@ -539,7 +654,7 @@ TEST_F (InitialStateTests, MissedNotification)
   mockXayaServer.SetBestBlock (20, TestGame::GenesisBlockHash ());
   CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20),
                    emptyMoves, SEQ_MISMATCH);
-  EXPECT_EQ (GetState (g), State::OUT_OF_SYNC);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectInitialStateInStorage ();
 }
 
@@ -553,6 +668,231 @@ TEST_F (InitialStateTests, MismatchingGenesisHash)
       ReinitialiseState (g),
       "genesis block hash and height do not match");
 }
+
+/* ************************************************************************** */
+
+class SyncingTests : public GameTests
+{
+
+protected:
+
+  Game g;
+
+  SyncingTests()
+    : g(GAME_ID)
+  {
+    EXPECT_CALL (mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
+        .WillRepeatedly (Return (GAME_GENESIS_HASH));
+
+    mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
+                                 TestGame::GenesisBlockHash ());
+    g.ConnectRpcClient (httpClient);
+
+    g.SetStorage (&storage);
+    g.SetGameLogic (&rules);
+
+    ReinitialiseState (g);
+    EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+    ExpectGameState (TestGame::GenesisBlockHash (), "");
+  }
+
+  void
+  ExpectGameState (const uint256& expectedHash,
+                   const GameStateData& state) const
+  {
+    uint256 hash;
+    ASSERT_TRUE (storage.GetCurrentBlockHash (hash));
+    EXPECT_EQ (hash, expectedHash);
+    EXPECT_EQ (storage.GetCurrentGameState (), state);
+  }
+
+  /**
+   * Utility method to construct a JSON response object for game_sendupdates.
+   */
+  static Json::Value
+  SendupdatesResponse (const uint256& toblock, const std::string& reqtoken)
+  {
+    Json::Value res(Json::objectValue);
+    res["toblock"] = toblock.ToHex ();
+    res["reqtoken"] = reqtoken;
+    return res;
+  }
+
+  /**
+   * Converts a string in the game-state format to a series of moves as they
+   * would appear in the block notification.
+   */
+  static Json::Value
+  Moves (const std::string& str)
+  {
+    Json::Value moves(Json::arrayValue);
+
+    CHECK_EQ (str.size () % 2, 0);
+    for (size_t i = 0; i < str.size (); i += 2)
+      {
+        Json::Value obj(Json::objectValue);
+        obj["name"] = str.substr (i, 1);
+        obj["move"] = str.substr (i + 1, 1);
+        moves.append (obj);
+      }
+
+    return moves;
+  }
+
+};
+
+TEST_F (SyncingTests, UpToDateOperation)
+{
+  CallBlockAttach (g, NO_REQ_TOKEN,
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
+                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (12), "a2b1c3");
+
+  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
+                   NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  CallBlockDetach (g, NO_REQ_TOKEN,
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
+}
+
+TEST_F (SyncingTests, UpToDateIgnoresReqtoken)
+{
+  CallBlockAttach (g, NO_REQ_TOKEN,
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  /* Attach ignored because of its reqtoken.  */
+  CallBlockAttach (g, "foo", BlockHash (11), BlockHash (12),
+                   Moves ("a5"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  /* Detach ignored because of its reqtoken.  */
+  CallBlockDetach (g, "foo", BlockHash (12), BlockHash (11), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
+                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (12), "a2b1c3");
+}
+
+TEST_F (SyncingTests, CatchingUp)
+{
+  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
+
+  mockXayaServer.SetBestBlock (12, BlockHash (12));
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
+
+  CallBlockAttach (g, "reqtoken",
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  /* Attach ignored because of its reqtoken.  */
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
+                   Moves ("a5"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  /* Attach ignored because of its reqtoken.  */
+  CallBlockAttach (g, "other req", BlockHash (1), BlockHash (2),
+                   Moves ("a6"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  /* Detach ignored because of its reqtoken.  */
+  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (12), BlockHash (11),
+                   NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  CallBlockAttach (g, "reqtoken", BlockHash (11), BlockHash (12),
+                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (12), "a2b1c3");
+}
+
+TEST_F (SyncingTests, MissedAttachWhileUpToDate)
+{
+  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (BlockHash (20), "reqtoken")));
+
+  mockXayaServer.SetBestBlock (20, BlockHash (20));
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20),
+                   Moves ("a1"), SEQ_MISMATCH);
+
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
+}
+
+TEST_F (SyncingTests, MissedDetachWhileUpToDate)
+{
+  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (BlockHash (20), "reqtoken")));
+
+  mockXayaServer.SetBestBlock (20, BlockHash (20));
+  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20),
+                   SEQ_MISMATCH);
+
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
+}
+
+TEST_F (SyncingTests, MissedAttachWhileCatchingUp)
+{
+  {
+    InSequence dummy;
+    EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+        .WillOnce (Return (SendupdatesResponse (BlockHash (12), "a")));
+    EXPECT_CALL (mockXayaServer,
+                 game_sendupdates (BlockHash (11).ToHex (), GAME_ID))
+        .WillOnce (Return (SendupdatesResponse (BlockHash (12), "b")));
+  }
+
+  mockXayaServer.SetBestBlock (12, BlockHash (12));
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
+
+  CallBlockAttach (g, "a", TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  /* This attach with a sequence mismatch triggers another reinitialisation,
+     so that we make the second game_sendupdates call and from then on wait
+     for the "b" reqtoken.  */
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (12), BlockHash (13),
+                   Moves ("a5"), SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  CallBlockAttach (g, "b", BlockHash (11), BlockHash (12),
+                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (12), "a2b1c3");
+}
+
+/* ************************************************************************** */
 
 } // anonymous namespace
 } // namespace xaya

@@ -31,6 +31,79 @@ Game::Game (const std::string& id)
 
 jsonrpc::clientVersion_t Game::rpcClientVersion = jsonrpc::JSONRPC_CLIENT_V1;
 
+bool
+Game::UpdateStateForAttach (const uint256& parent, const uint256& child,
+                            const Json::Value& blockData)
+{
+  uint256 currentHash;
+  CHECK (storage->GetCurrentBlockHash (currentHash));
+  if (currentHash != parent)
+    {
+      LOG (WARNING)
+          << "Game state hash " << currentHash.ToHex ()
+          << " does not match attached block's parent " << parent.ToHex ();
+      return false;
+    }
+
+  const GameStateData oldState = storage->GetCurrentGameState ();
+  UndoData undo;
+  const GameStateData newState
+      = rules->ProcessForward (oldState, blockData, undo);
+
+  storage->SetCurrentGameState (child, newState);
+  storage->AddUndoData (child, undo);
+  LOG (INFO) << "Current game state is for block " << child.ToHex ();
+
+  return true;
+}
+
+bool
+Game::UpdateStateForDetach (const uint256& parent, const uint256& child,
+                            const Json::Value& blockData)
+{
+  uint256 currentHash;
+  CHECK (storage->GetCurrentBlockHash (currentHash));
+  if (currentHash != child)
+    {
+      LOG (WARNING)
+          << "Game state hash " << currentHash.ToHex ()
+          << " does not match detached block's child " << child.ToHex ();
+      return false;
+    }
+
+  UndoData undo;
+  if (!storage->GetUndoData (child, undo))
+    {
+      LOG (ERROR)
+          << "Failed to retrieve undo data for block " << child.ToHex ()
+          << ".  Need to resync from scratch.";
+      storage->Clear ();
+      return false;
+    }
+
+  const GameStateData newState = storage->GetCurrentGameState ();
+  const GameStateData oldState
+      = rules->ProcessBackwards (newState, blockData, undo);
+
+  storage->SetCurrentGameState (parent, oldState);
+  storage->RemoveUndoData (child);
+
+  return true;
+}
+
+bool
+Game::IsReqtokenRelevant (const Json::Value& data) const
+{
+  std::string msgReqToken;
+  if (data.isMember ("reqtoken"))
+    msgReqToken = data["reqtoken"].asString ();
+
+  if (state == State::CATCHING_UP)
+    return msgReqToken == reqToken;
+
+  return msgReqToken.empty ();
+}
+
 void
 Game::BlockAttach (const std::string& id, const Json::Value& data,
                    const bool seqMismatch)
@@ -45,28 +118,60 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
   VLOG (1) << "Attaching block " << child.ToHex ();
 
   std::lock_guard<std::mutex> lock(mut);
-  switch (state)
+
+  /* If we missed notifications, always reinitialise the state to make sure
+     that all is again consistent.  */
+  if (seqMismatch)
     {
-    case State::UNKNOWN:
-      LOG (FATAL) << "UNKNOWN state in ZMQ message handler";
-      return;
-
-    case State::PREGENESIS:
-      /* If we reached the hash we have been waiting for, reinitialise the
-         state; this will store the game's genesis state and continue syncing
-         from there.  If we missed ZMQ notifications, do the same -- we might
-         have missed the genesis hash.  */
-      if (child == gameGenesisHash || seqMismatch)
-        ReinitialiseState ();
-      return;
-
-    case State::OUT_OF_SYNC:
-      /* TODO: Handle this case in the future.  */
+      LOG (WARNING) << "Missed ZMQ notifications, reinitialising state";
+      ReinitialiseState ();
       return;
     }
 
-  LOG (DFATAL)
-      << "State " << static_cast<int> (state) << " not handled correctly";
+  /* Ignore notifications that are not relevant at the moment.  */
+  if (!IsReqtokenRelevant (data))
+    {
+      VLOG (1) << "Ignoring irrelevant attach notification";
+      return;
+    }
+
+  /* Handle the notification depending on the current state.  */
+  bool needReinit = false;
+  switch (state)
+    {
+    case State::PREGENESIS:
+      /* Check if we have reached the game's genesis height.  If we have,
+         reinitialise which will store the initial game state.  */
+      if (child == targetBlockHash)
+        needReinit = true;
+      break;
+
+    case State::CATCHING_UP:
+      if (!UpdateStateForAttach (parent, child, data))
+        needReinit = true;
+
+      /* If we are now at the last catching-up's target block hash,
+         reinitialise the state as well.  This will check the current best
+         tip and set the state to UP_TO_DATE or request more updates.  */
+      if (child == targetBlockHash)
+        needReinit = true;
+
+      break;
+
+    case State::UP_TO_DATE:
+      if (!UpdateStateForAttach (parent, child, data))
+        needReinit = true;
+      break;
+
+    case State::UNKNOWN:
+    case State::OUT_OF_SYNC:
+    default:
+      LOG (FATAL) << "Unexpected state: " << static_cast<int> (state);
+      break;
+    }
+
+  if (needReinit)
+    ReinitialiseState ();
 }
 
 void
@@ -81,6 +186,44 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
   uint256 child;
   CHECK (child.FromHex (data["child"].asString ()));
   VLOG (1) << "Detaching block " << child.ToHex ();
+
+  std::lock_guard<std::mutex> lock(mut);
+
+  /* If we missed notifications, always reinitialise the state to make sure
+     that all is again consistent.  */
+  if (seqMismatch)
+    {
+      LOG (WARNING) << "Missed ZMQ notifications, reinitialising state";
+      ReinitialiseState ();
+      return;
+    }
+
+  /* Ignore notifications that are not relevant at the moment.  */
+  if (!IsReqtokenRelevant (data))
+    {
+      VLOG (1) << "Ignoring irrelevant detach notification";
+      return;
+    }
+
+  /* Handle the notification depending on the current state.  */
+  switch (state)
+    {
+    case State::PREGENESIS:
+      /* Detaches are irrelevant (and unlikely).  */
+      break;
+
+    case State::CATCHING_UP:
+    case State::UP_TO_DATE:
+      if (!UpdateStateForDetach (parent, child, data))
+        ReinitialiseState ();
+      break;
+
+    case State::UNKNOWN:
+    case State::OUT_OF_SYNC:
+    default:
+      LOG (FATAL) << "Unexpected state: " << static_cast<int> (state);
+      break;
+    }
 }
 
 void
@@ -201,6 +344,38 @@ Game::Run ()
 }
 
 void
+Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
+                            const uint256& currentHash)
+{
+  CHECK (state == State::OUT_OF_SYNC);
+
+  uint256 daemonBestHash;
+  CHECK (daemonBestHash.FromHex (blockchainInfo["bestblockhash"].asString ()));
+
+  if (daemonBestHash == currentHash)
+    {
+      LOG (INFO) << "Game state matches current tip, we are up-to-date";
+      state = State::UP_TO_DATE;
+      return;
+    }
+
+  LOG (INFO)
+      << "Game state does not match current tip, requesting updates from "
+      << currentHash.ToHex ();
+  const Json::Value upd
+      = rpcClient->game_sendupdates (currentHash.ToHex (), gameId);
+
+  LOG (INFO)
+      << "Retrieving " << upd["steps"]["detach"].asInt () << " detach and "
+      << upd["steps"]["attach"].asInt () << " attach steps with reqtoken = "
+      << upd["reqtoken"];
+
+  state = State::CATCHING_UP;
+  CHECK (targetBlockHash.FromHex (upd["toblock"].asString ()));
+  reqToken = upd["reqtoken"].asString ();
+}
+
+void
 Game::ReinitialiseState ()
 {
   state = State::UNKNOWN;
@@ -211,10 +386,9 @@ Game::ReinitialiseState ()
   uint256 currentHash;
   if (storage->GetCurrentBlockHash (currentHash))
     {
-      LOG (INFO) << "We have a current game state";
+      LOG (INFO) << "We have a current game state, syncing from there";
       state = State::OUT_OF_SYNC;
-      /* TODO: Support catching up (and not just getting to an initial state)
-         in the future.  */
+      SyncFromCurrentState (data, currentHash);
       return;
     }
 
@@ -236,7 +410,7 @@ Game::ReinitialiseState ()
           << "Block height " << data["blocks"].asInt ()
           << " is before the genesis height " << genesisHeight;
       state = State::PREGENESIS;
-      gameGenesisHash = genesisHash;
+      targetBlockHash = genesisHash;
       return;
     }
 
@@ -248,9 +422,11 @@ Game::ReinitialiseState ()
     << "The game's genesis block hash and height do not match";
   storage->Clear ();
   storage->SetCurrentGameState (genesisHash, genesisData);
-  LOG (INFO) << "We are at the genesis height, storing initial game state";
+  LOG (INFO)
+      << "We are at the genesis height, storing initial game state for block "
+      << genesisHash.ToHex ();
   state = State::OUT_OF_SYNC;
-  /* TODO: Start catching up here.  */
+  SyncFromCurrentState (data, genesisHash);
 }
 
 } // namespace xaya
