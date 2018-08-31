@@ -294,6 +294,18 @@ protected:
   }
 
   static void
+  TrackGame (Game& g)
+  {
+    g.TrackGame ();
+  }
+
+  static void
+  UntrackGame (Game& g)
+  {
+    g.UntrackGame ();
+  }
+
+  static void
   ReinitialiseState (Game& g)
   {
     std::lock_guard<std::mutex> lock(g.mut);
@@ -427,18 +439,18 @@ TEST_F (TrackGameTests, CallsMade)
   Game g(GAME_ID);
   mockXayaServer.SetBestBlock (0, BlockHash (0));
   g.ConnectRpcClient (httpClient);
-  g.TrackGame ();
-  g.UntrackGame ();
+  TrackGame (g);
+  UntrackGame (g);
 }
 
 TEST_F (TrackGameTests, NoRpcConnection)
 {
   Game g(GAME_ID);
   EXPECT_DEATH (
-      g.TrackGame (),
+      TrackGame (g),
       "RPC client is not yet set up");
   EXPECT_DEATH (
-      g.UntrackGame (),
+      UntrackGame (g),
       "RPC client is not yet set up");
 }
 

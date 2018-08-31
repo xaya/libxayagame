@@ -182,6 +182,16 @@ private:
                     bool seqMismatch) override;
 
   /**
+   * Adds this game's ID to the tracked games of the core daemon.
+   */
+  void TrackGame ();
+
+  /**
+   * Removes this game's ID from the tracked games of the core daemon.
+   */
+  void UntrackGame ();
+
+  /**
    * Re-initialises the current game state.  This is called whenever we are not
    * sure, like when ZMQ notifications have been missed or during start up.
    * It checks the storage for the current game state and queries the RPC
@@ -239,16 +249,6 @@ public:
    * daemon.  Returns false if pubgameblocks is not enabled.
    */
   bool DetectZmqEndpoint ();
-
-  /**
-   * Adds this game's ID to the tracked games of the core daemon.
-   */
-  void TrackGame ();
-
-  /**
-   * Removes this game's ID from the tracked games of the core daemon.
-   */
-  void UntrackGame ();
 
   /**
    * Starts the ZMQ subscriber and other logic.  Must not be called before
