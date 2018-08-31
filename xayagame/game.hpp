@@ -225,7 +225,7 @@ public:
 
   /**
    * Sets the ZMQ endpoint that will be used to connect to the ZMQ interface
-   * of the Xaya daemon.  Must not be called anymore after StartZmq() or
+   * of the Xaya daemon.  Must not be called anymore after Start() or
    * Run() have been called.
    */
   void
@@ -251,30 +251,22 @@ public:
   void UntrackGame ();
 
   /**
-   * Starts the ZMQ subscriber in a new thread.  Must only be called after
+   * Starts the ZMQ subscriber and other logic.  Must not be called before
    * the ZMQ endpoint has been configured, and must not be called when
-   * ZMQ is already running.
+   * the game is already running.
    */
-  void
-  StartZmq ()
-  {
-    zmq.Start ();
-  }
+  void Start ();
 
   /**
-   * Stops the ZMQ subscriber.  Must only be called if it is currently running.
+   * Stops the ZMQ subscriber and other logic.  Must only be called if it is
+   * currently running.
    */
-  void
-  StopZmq ()
-  {
-    zmq.Stop ();
-  }
+  void Stop ();
 
   /**
-   * Runs the main event loop for the Game.  This starts all configured
-   * subsystems (ZMQ, RPC server) and blocks the calling thread until
-   * a stop of the server is requested.  Then those subsystems are stopped
-   * again and the method returns.
+   * Runs the main event loop for the Game.  This starts the game logic as
+   * Start does, blocks the calling thread until a stop of the server is
+   * requested, and then stops everything again.
    */
   void Run ();
 

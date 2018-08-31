@@ -172,30 +172,30 @@ Game::UntrackGame ()
 }
 
 void
+Game::Start ()
+{
+  TrackGame ();
+  zmq.Start ();
+
+  std::lock_guard<std::mutex> lock(mut);
+  ReinitialiseState ();
+}
+
+void
+Game::Stop ()
+{
+  zmq.Stop ();
+  UntrackGame ();
+}
+
+void
 Game::Run ()
 {
   CHECK (storage != nullptr && rules != nullptr)
       << "Storage and GameLogic must be set before starting the main loop";
 
-  const bool zmqStarted = zmq.IsEndpointSet ();
-  internal::MainLoop::Functor startAction = [this, zmqStarted] ()
-    {
-      TrackGame ();
-      if (zmqStarted)
-        StartZmq ();
-      else
-        LOG (INFO)
-            << "No ZMQ endpoint is set, not starting ZMQ from Game::Run()";
-
-      std::lock_guard<std::mutex> lock(mut);
-      ReinitialiseState ();
-    };
-  internal::MainLoop::Functor stopAction = [this, zmqStarted] ()
-    {
-      if (zmqStarted)
-        StopZmq ();
-      UntrackGame ();
-    };
+  internal::MainLoop::Functor startAction = [this] () { Start (); };
+  internal::MainLoop::Functor stopAction = [this] () { Stop (); };
 
   mainLoop.Run (startAction, stopAction);
 }
