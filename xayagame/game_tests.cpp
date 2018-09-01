@@ -110,7 +110,7 @@ public:
   MockXayaRpcServer () = delete;
 
   explicit MockXayaRpcServer (jsonrpc::AbstractServerConnector& conn)
-    : XayaRpcServerStub (conn)
+    : XayaRpcServerStub(conn)
   {
     /* By default, expect no calls to be made.  The calls that we expect
        should explicitly be specified in the individual tests.  */

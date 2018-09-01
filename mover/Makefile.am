@@ -14,9 +14,11 @@ noinst_HEADERS = \
   proto/mover.pb.h
 
 moverd_CXXFLAGS = \
-  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
+  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
+  $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
 moverd_LDADD = $(builddir)/libmover.la $(top_builddir)/xayagame/libxayagame.la \
-  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
+  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
+  $(GLOG_LIBS) $(PROTOBUF_LIBS)
 moverd_SOURCES = main.cpp
 
 check_PROGRAMS = tests

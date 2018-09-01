@@ -304,6 +304,18 @@ public:
   bool DetectZmqEndpoint ();
 
   /**
+   * Requests the server to stop; this may be called always, but only has
+   * an effect the Run() is currently blocking in the main loop.  This method
+   * is mainly meant to be exposed by the game daemon through its JSON-RPC
+   * interface.
+   */
+  void
+  RequestStop ()
+  {
+    mainLoop.Stop ();
+  }
+
+  /**
    * Starts the ZMQ subscriber and other logic.  Must not be called before
    * the ZMQ endpoint has been configured, and must not be called when
    * the game is already running.

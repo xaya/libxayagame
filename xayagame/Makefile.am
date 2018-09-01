@@ -1,24 +1,30 @@
 lib_LTLIBRARIES = libxayagame.la
 xayagamedir = $(includedir)/xayagame
 
-EXTRA_DIST = rpc-stubs/xaya.json
+EXTRA_DIST = rpc-stubs/game.json rpc-stubs/xaya.json
 
 libxayagame_la_CXXFLAGS = \
-  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(GLOG_CFLAGS) $(ZMQ_CFLAGS)
+  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
+  $(GLOG_CFLAGS) $(ZMQ_CFLAGS)
 libxayagame_la_LIBADD = \
-  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(GLOG_LIBS) $(ZMQ_LIBS)
+  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
+  $(GLOG_LIBS) $(ZMQ_LIBS)
 libxayagame_la_SOURCES = \
   game.cpp \
+  gamerpcserver.cpp \
   mainloop.cpp \
   storage.cpp \
   uint256.cpp \
   zmqsubscriber.cpp
 xayagame_HEADERS = \
   game.hpp \
+  gamerpcserver.hpp \
   mainloop.hpp \
   storage.hpp \
   uint256.hpp \
   zmqsubscriber.hpp \
+  rpc-stubs/gamerpcclient.h \
+  rpc-stubs/gamerpcserverstub.h \
   rpc-stubs/xayarpcclient.h \
   rpc-stubs/xayarpcserverstub.h
 
@@ -37,6 +43,11 @@ tests_SOURCES = \
   storage_tests.cpp \
   uint256_tests.cpp \
   zmqsubscriber_tests.cpp
+
+rpc-stubs/gamerpcclient.h: rpc-stubs/game.json
+	jsonrpcstub "$<" --cpp-client=GameRpcClient --cpp-client-file="$@"
+rpc-stubs/gamerpcserverstub.h: rpc-stubs/game.json
+	jsonrpcstub "$<" --cpp-server=GameRpcServerStub --cpp-server-file="$@"
 
 rpc-stubs/xayarpcclient.h: rpc-stubs/xaya.json
 	jsonrpcstub "$<" --cpp-client=XayaRpcClient --cpp-client-file="$@"

@@ -1,15 +1,20 @@
 #include "logic.hpp"
 
 #include "xayagame/game.hpp"
+#include "xayagame/gamerpcserver.hpp"
 #include "xayagame/storage.hpp"
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
+#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <google/protobuf/stubs/common.h>
 
 #include <glog/logging.h>
 
 #include <cstdlib>
+
+/** Port for the game's RPC server.  */
+constexpr unsigned GAME_RPC_PORT = 29050;
 
 int
 main (int argc, char** argv)
@@ -32,7 +37,12 @@ main (int argc, char** argv)
   mover::MoverLogic rules;
   game.SetGameLogic (&rules);
 
+  jsonrpc::HttpServer httpServer(GAME_RPC_PORT);
+  xaya::GameRpcServer rpcServer(game, httpServer);
+
+  rpcServer.StartListening ();
   game.Run ();
+  rpcServer.StopListening ();
 
   google::protobuf::ShutdownProtobufLibrary ();
   return EXIT_SUCCESS;
