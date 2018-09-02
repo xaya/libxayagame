@@ -16,4 +16,11 @@ GameRpcServer::stop ()
   game.RequestStop ();
 }
 
+Json::Value
+GameRpcServer::getcurrentstate ()
+{
+  LOG (INFO) << "RPC method called: getcurrentstate";
+  return game.GetCurrentJsonState ();
+}
+
 } // namespace xaya

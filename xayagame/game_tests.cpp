@@ -312,6 +312,14 @@ public:
     return EncodeMap (state);
   }
 
+  Json::Value
+  GameStateToJson (const GameStateData& state) override
+  {
+    Json::Value res(Json::objectValue);
+    res["state"] = state;
+    return res;
+  }
+
   static uint256
   GenesisBlockHash ()
   {
@@ -594,6 +602,27 @@ protected:
     EXPECT_EQ (storage.GetCurrentGameState (), "");
   }
 
+  /**
+   * Converts a string in the game-state format to a series of moves as they
+   * would appear in the block notification.
+   */
+  static Json::Value
+  Moves (const std::string& str)
+  {
+    Json::Value moves(Json::arrayValue);
+
+    CHECK_EQ (str.size () % 2, 0);
+    for (size_t i = 0; i < str.size (); i += 2)
+      {
+        Json::Value obj(Json::objectValue);
+        obj["name"] = str.substr (i, 1);
+        obj["move"] = str.substr (i + 1, 1);
+        moves.append (obj);
+      }
+
+    return moves;
+  }
+
 };
 
 TEST_F (InitialStateTests, BeforeGenesis)
@@ -671,26 +700,46 @@ TEST_F (InitialStateTests, MismatchingGenesisHash)
 
 /* ************************************************************************** */
 
-class SyncingTests : public GameTests
+using GetCurrentJsonStateTests = InitialStateTests;
+
+TEST_F (GetCurrentJsonStateTests, NoStateYet)
+{
+  const Json::Value state = g.GetCurrentJsonState ();
+  EXPECT_EQ (state["gameid"], GAME_ID);
+  EXPECT_EQ (state["chain"], UNITTEST_CHAIN);
+  EXPECT_EQ (state["state"], "unknown");
+  EXPECT_FALSE (state.isMember ("blockhash"));
+  EXPECT_FALSE (state.isMember ("gamestate"));
+}
+
+TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
+{
+  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
+                               TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+  CallBlockAttach (g, NO_REQ_TOKEN,
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+
+  const Json::Value state = g.GetCurrentJsonState ();
+  EXPECT_EQ (state["gameid"], GAME_ID);
+  EXPECT_EQ (state["chain"], UNITTEST_CHAIN);
+  EXPECT_EQ (state["state"], "up-to-date");
+  EXPECT_EQ (state["blockhash"], BlockHash (11).ToHex ());
+  EXPECT_EQ (state["gamestate"]["state"], "a0b1");
+}
+
+/* ************************************************************************** */
+
+class SyncingTests : public InitialStateTests
 {
 
 protected:
 
-  Game g;
-
   SyncingTests()
-    : g(GAME_ID)
   {
-    EXPECT_CALL (mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
-        .WillRepeatedly (Return (GAME_GENESIS_HASH));
-
     mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
                                  TestGame::GenesisBlockHash ());
-    g.ConnectRpcClient (httpClient);
-
-    g.SetStorage (&storage);
-    g.SetGameLogic (&rules);
-
     ReinitialiseState (g);
     EXPECT_EQ (GetState (g), State::UP_TO_DATE);
     ExpectGameState (TestGame::GenesisBlockHash (), "");
@@ -716,27 +765,6 @@ protected:
     res["toblock"] = toblock.ToHex ();
     res["reqtoken"] = reqtoken;
     return res;
-  }
-
-  /**
-   * Converts a string in the game-state format to a series of moves as they
-   * would appear in the block notification.
-   */
-  static Json::Value
-  Moves (const std::string& str)
-  {
-    Json::Value moves(Json::arrayValue);
-
-    CHECK_EQ (str.size () % 2, 0);
-    for (size_t i = 0; i < str.size (); i += 2)
-      {
-        Json::Value obj(Json::objectValue);
-        obj["name"] = str.substr (i, 1);
-        obj["move"] = str.substr (i + 1, 1);
-        moves.append (obj);
-      }
-
-    return moves;
   }
 
 };

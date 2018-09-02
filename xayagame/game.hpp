@@ -83,6 +83,13 @@ public:
                                           const Json::Value& blockData,
                                           const UndoData& undoData) = 0;
 
+  /**
+   * Converts an encoded game state to JSON format, which can be returned as
+   * game state through the external JSON-RPC interface.  The default
+   * implementation is to just return the raw GameStateData as string.
+   */
+  virtual Json::Value GameStateToJson (const GameStateData& state);
+
 };
 
 /**
@@ -252,6 +259,12 @@ private:
    */
   void ReinitialiseState ();
 
+  /**
+   * Converts a state enum value to a string for use in log messages and the
+   * JSON-RPC interface.
+   */
+  static std::string StateToString (State s);
+
   friend class GameTests;
 
 public:
@@ -314,6 +327,17 @@ public:
   {
     mainLoop.Stop ();
   }
+
+  /**
+   * Returns a JSON object that contains the current game state as well as
+   * some meta information (like the state of the game instance itself
+   * and the block the returned state corresponds to).
+   *
+   * This method is exposed by GameRpcServer externally (as the main external
+   * interface to a game daemon), and can be exposed by custom JSON-RPC servers
+   * as well.
+   */
+  Json::Value GetCurrentJsonState () const;
 
   /**
    * Starts the ZMQ subscriber and other logic.  Must not be called before

@@ -6,6 +6,8 @@
 
 #include <glog/logging.h>
 
+#include <sstream>
+
 namespace xaya
 {
 
@@ -23,6 +25,12 @@ GameLogic::SetChain (const std::string& c)
   chain = c;
 }
 
+Json::Value
+GameLogic::GameStateToJson (const GameStateData& state)
+{
+  return state;
+}
+
 Game::Game (const std::string& id)
   : gameId(id)
 {
@@ -30,6 +38,28 @@ Game::Game (const std::string& id)
 }
 
 jsonrpc::clientVersion_t Game::rpcClientVersion = jsonrpc::JSONRPC_CLIENT_V1;
+
+std::string
+Game::StateToString (const State s)
+{
+  switch (s)
+    {
+    case State::UNKNOWN:
+      return "unknown";
+    case State::PREGENESIS:
+      return "pregenesis";
+    case State::OUT_OF_SYNC:
+      return "out-of-sync";
+    case State::CATCHING_UP:
+      return "catching-up";
+    case State::UP_TO_DATE:
+      return "up-to-date";
+    }
+
+  std::ostringstream out;
+  out << "invalid-" << static_cast<int> (s);
+  return out.str ();
+}
 
 bool
 Game::UpdateStateForAttach (const uint256& parent, const uint256& child,
@@ -166,7 +196,7 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
     case State::UNKNOWN:
     case State::OUT_OF_SYNC:
     default:
-      LOG (FATAL) << "Unexpected state: " << static_cast<int> (state);
+      LOG (FATAL) << "Unexpected state: " << StateToString (state);
       break;
     }
 
@@ -221,7 +251,7 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
     case State::UNKNOWN:
     case State::OUT_OF_SYNC:
     default:
-      LOG (FATAL) << "Unexpected state: " << static_cast<int> (state);
+      LOG (FATAL) << "Unexpected state: " << StateToString (state);
       break;
     }
 }
@@ -294,6 +324,28 @@ Game::DetectZmqEndpoint ()
         return true;
       }
   return false;
+}
+
+Json::Value
+Game::GetCurrentJsonState () const
+{
+  std::unique_lock<std::mutex> lock(mut);
+
+  Json::Value res(Json::objectValue);
+  res["gameid"] = gameId;
+  res["chain"] = chain;
+  res["state"] = StateToString (state);
+
+  uint256 hash;
+  if (storage->GetCurrentBlockHash (hash))
+    {
+      res["blockhash"] = hash.ToHex ();
+
+      const GameStateData gameState = storage->GetCurrentGameState ();
+      res["gamestate"] = rules->GameStateToJson (gameState);
+    }
+
+  return res;
 }
 
 void

@@ -2,5 +2,10 @@
   {
     "name": "stop",
     "params": {}
+  },
+  {
+    "name": "getcurrentstate",
+    "params": {},
+    "returns": {}
   }
 ]

@@ -9,6 +9,7 @@
 
 #include "rpc-stubs/gamerpcserverstub.h"
 
+#include <json/json.h>
 #include <jsonrpccpp/server.h>
 
 namespace xaya
@@ -16,7 +17,7 @@ namespace xaya
 
 /**
  * Implementation of the basic RPC interface that games can expose.  It just
- * supports the generic "stop" and "getstate" methods, by calling the
+ * supports the generic "stop" and "getcurrentstate" methods, by calling the
  * corresponding functions on a Game instance.
  *
  * This can be used by games that only need this basic, general interface.
@@ -39,6 +40,8 @@ public:
   {}
 
   virtual void stop () override;
+
+  virtual Json::Value getcurrentstate () override;
 
 };
 
