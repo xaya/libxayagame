@@ -357,5 +357,37 @@ TEST_F (StateProcessingTests, MovingAround)
   )");
 }
 
+/* ************************************************************************** */
+
+TEST (GameStateToJsonTests, Works)
+{
+  MoverLogic rules;
+
+  proto::GameState statePb;
+  ASSERT_TRUE (TextFormat::ParseFromString (R"(
+    players: {key: "a", value: {x: 5, y: -2, dir: NONE}}
+    players: {key: "b", value: {x: 0, y: 0, dir: UP, steps_left: 42}}
+  )", &statePb));
+
+  GameStateData state;
+  ASSERT_TRUE (statePb.SerializeToString (&state));
+  const Json::Value json = rules.GameStateToJson (state);
+
+  Json::Value expectedJson;
+  std::istringstream in(R"(
+    {
+      "players":
+        {
+          "a": {"x": 5, "y": -2},
+          "b": {"x": 0, "y": 0, "dir": "up", "steps": 42}
+        }
+    }
+  )");
+  in >> expectedJson;
+
+  EXPECT_TRUE (json == expectedJson)
+      << "Actual:\n" << json << "\nExpected:\n" << expectedJson;
+}
+
 } // anonymous namespace
 } // namespace mover

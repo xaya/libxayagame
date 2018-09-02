@@ -47,6 +47,8 @@ public:
                                         const Json::Value& blockData,
                                         const xaya::UndoData& undo) override;
 
+  Json::Value GameStateToJson (const xaya::GameStateData& state) override;
+
 };
 
 } // namespace mover

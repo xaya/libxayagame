@@ -129,6 +129,36 @@ GetDirectionOffset (const proto::Direction dir, int& dx, int& dy)
     }
 }
 
+/**
+ * Converts a direction enum to the string returned in JSON game states for it.
+ */
+std::string
+DirectionToString (const proto::Direction dir)
+{
+  switch (dir)
+    {
+    case proto::NONE:
+      return "none";
+    case proto::RIGHT:
+      return "right";
+    case proto::LEFT:
+      return "left";
+    case proto::UP:
+      return "up";
+    case proto::DOWN:
+      return "down";
+    case proto::RIGHT_UP:
+      return "right-up";
+    case proto::RIGHT_DOWN:
+      return "right-down";
+    case proto::LEFT_UP:
+      return "left-up";
+    case proto::LEFT_DOWN:
+      return "left-down";
+    }
+  LOG (FATAL) << "Unexpected direction: " << dir;
+}
+
 } // anonymous namespace
 
 /**
@@ -312,6 +342,35 @@ MoverLogic::ProcessBackwards (const GameStateData& newState,
              << state.players_size () << " players";
 
   return oldState;
+}
+
+Json::Value
+MoverLogic::GameStateToJson (const GameStateData& encodedState)
+{
+  proto::GameState state;
+  CHECK (state.ParseFromString (encodedState));
+
+  Json::Value players(Json::objectValue);
+  for (const auto& playerEntry : state.players ())
+    {
+      const proto::PlayerState& p = playerEntry.second;
+
+      Json::Value playerJson(Json::objectValue);
+      playerJson["x"] = p.x ();
+      playerJson["y"] = p.y ();
+      if (p.dir () != proto::NONE)
+        {
+          playerJson["dir"] = DirectionToString (p.dir ());
+          playerJson["steps"] = static_cast<int> (p.steps_left ());
+        }
+
+      players[playerEntry.first] = playerJson;
+    }
+
+  Json::Value res(Json::objectValue);
+  res["players"] = players;
+
+  return res;
 }
 
 } // namespace mover
