@@ -9,6 +9,7 @@ Basic framework for integration tests of Xaya games.
 import game
 import xaya
 
+import argparse
 import logging
 import os.path
 import shutil
@@ -17,7 +18,7 @@ import time
 
 
 XAYAD_BINARY_DEFAULT = "/usr/local/bin/xayad"
-TMPDIR = "/tmp"
+DEFAULT_DIR = "/tmp"
 DIR_PREFIX = "xayagametest_"
 
 
@@ -31,14 +32,21 @@ class XayaGameTest (object):
   rpc.game.
   """
 
-  def __init__ (self, game_binary_default):
-    self.game_binary_default = game_binary_default
+  def __init__ (self, name, gameBinaryDefault):
+    desc = "Runs an integration test for the Xaya game %s." % name
+    parser = argparse.ArgumentParser (description=desc)
+    parser.add_argument ("--xayad_binary", default=XAYAD_BINARY_DEFAULT,
+                         help="xayad binary to use in the test")
+    parser.add_argument ("--game_daemon", default=gameBinaryDefault,
+                         help="game daemon binary to use in the test")
+    parser.add_argument ("--dir", default=DEFAULT_DIR,
+                         help="base directory for test runs")
+    self.args = parser.parse_args ()
 
   def main (self):
-    # TODO: Parse flags to override stuff.
-
     timefmt = "%Y%m%d_%H%M%S"
-    self.basedir = os.path.join (TMPDIR, DIR_PREFIX + time.strftime (timefmt))
+    self.basedir = os.path.join (self.args.dir,
+                                 DIR_PREFIX + time.strftime (timefmt))
     shutil.rmtree (self.basedir, ignore_errors=True)
     os.mkdir (self.basedir)
 
@@ -61,8 +69,8 @@ class XayaGameTest (object):
     mainLogger.addHandler (mainHandler)
     mainLogger.info ("Base directory for integration test: %s" % self.basedir)
 
-    self.xayanode = xaya.Node (self.basedir, XAYAD_BINARY_DEFAULT)
-    self.gamenode = game.Node (self.basedir, self.game_binary_default)
+    self.xayanode = xaya.Node (self.basedir, self.args.xayad_binary)
+    self.gamenode = game.Node (self.basedir, self.args.game_daemon)
 
     class RpcHandles:
       xaya = None
