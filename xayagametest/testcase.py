@@ -10,6 +10,7 @@ import game
 import xaya
 
 import argparse
+import json
 import logging
 import os.path
 import shutil
@@ -32,8 +33,10 @@ class XayaGameTest (object):
   rpc.game.
   """
 
-  def __init__ (self, name, gameBinaryDefault):
-    desc = "Runs an integration test for the Xaya game %s." % name
+  def __init__ (self, gameId, gameBinaryDefault):
+    self.gameId = gameId
+
+    desc = "Runs an integration test for the Xaya game g/%s." % gameId
     parser = argparse.ArgumentParser (description=desc)
     parser.add_argument ("--xayad_binary", default=XAYAD_BINARY_DEFAULT,
                          help="xayad binary to use in the test")
@@ -44,6 +47,10 @@ class XayaGameTest (object):
     self.args = parser.parse_args ()
 
   def main (self):
+    """
+    Executes the testcase, including setup and cleanup.
+    """
+
     timefmt = "%Y%m%d_%H%M%S"
     self.basedir = os.path.join (self.args.dir,
                                  DIR_PREFIX + time.strftime (timefmt))
@@ -64,10 +71,11 @@ class XayaGameTest (object):
     mainHandler = logging.StreamHandler (sys.stderr)
     mainHandler.setFormatter (logging.Formatter ("%(message)s"))
 
-    mainLogger = logging.getLogger ("main")
-    mainLogger.addHandler (logHandler)
-    mainLogger.addHandler (mainHandler)
-    mainLogger.info ("Base directory for integration test: %s" % self.basedir)
+    self.mainLogger = logging.getLogger ("main")
+    self.mainLogger.addHandler (logHandler)
+    self.mainLogger.addHandler (mainHandler)
+    self.mainLogger.info ("Base directory for integration test: %s"
+                            % self.basedir)
 
     self.xayanode = xaya.Node (self.basedir, self.args.xayad_binary)
     self.gamenode = game.Node (self.basedir, self.args.game_daemon)
@@ -77,23 +85,21 @@ class XayaGameTest (object):
       game = None
     self.rpc = RpcHandles ()
 
-    self.xayanode.start ()
-    self.rpc.xaya = self.xayanode.rpc
+    self.startXayaDaemon ()
     cleanup = False
     try:
-      self.gamenode.start (self.xayanode.rpcurl)
-      self.rpc.game = self.gamenode.rpc
+      self.startGameDaemon ()
       try:
         self.run ()
-        mainLogger.info ("Test succeeded")
+        self.mainLogger.info ("Test succeeded")
         cleanup = True
       except:
-        mainLogger.exception ("Test failed")
+        self.mainLogger.exception ("Test failed")
         self.log.info ("Not cleaning up base directory %s" % self.basedir)
       finally:
-        self.gamenode.stop ()
+        self.stopGameDaemon ()
     finally:
-      self.xayanode.stop ()
+      self.stopXayaDaemon ()
       if cleanup:
         self.log.info ("Cleaning up base directory in %s" % self.basedir)
         shutil.rmtree (self.basedir, ignore_errors=True)
@@ -101,3 +107,89 @@ class XayaGameTest (object):
 
   def run (self):
     self.log.warning ("Test 'run' method not overridden, this tests nothing")
+
+  def startXayaDaemon (self):
+    """
+    Starts the Xaya Core daemon.
+    """
+
+    self.xayanode.start ()
+    self.rpc.xaya = self.xayanode.rpc
+
+  def stopXayaDaemon (self):
+    """
+    Stops the Xaya Core daemon.
+    """
+
+    self.xayanode.stop ()
+
+  def startGameDaemon (self):
+    """
+    Starts the game daemon (again).  This can be used to test situations where
+    the game daemon is restarted and needs to catch up.
+    """
+
+    self.gamenode.start (self.xayanode.rpcurl)
+    self.rpc.game = self.gamenode.rpc
+
+  def stopGameDaemon (self):
+    """
+    Stops the game daemon.  This can be used for testing situations where
+    the game daemon is temporarily not running.
+    """
+
+    self.rpc.game = None
+    self.gamenode.stop ()
+
+  def sendMove (self, name, move):
+    """
+    Sends a given move for the name.  This calls name_register or name_update,
+    depending on whether the name exists already.  It also builds up the
+    full name value from self.gameId and move.
+    """
+
+    val = json.dumps ({"g": {self.gameId: move}})
+
+    try:
+      self.rpc.xaya.name_update ("p/" + name, val)
+    except:
+      self.log.info ("name_update for p/%s failed, trying name_register" % name)
+      self.rpc.xaya.name_register ("p/" + name, val)
+
+  def getGameState (self):
+    """
+    Returns the current game state.  Makes sure to wait for the game daemon
+    to sync up with Xaya's best block first.
+    """
+
+    bestblk = self.rpc.xaya.getbestblockhash ()
+    while True:
+      state = self.rpc.game.getcurrentstate ()
+      if state["gameid"] != self.gameId:
+        self.log.error ("Game state does not have expected game ID: %s vs %s"
+            % (state["gameid"], self.gameId))
+      if state["state"] == "up-to-date" and state["blockhash"] == bestblk:
+        return state["gamestate"]
+      self.log.warning (("Game state (%s, %s) does not match"
+                            +" the best block (%s), waiting")
+          % (state["state"], state["blockhash"], bestblk))
+      time.sleep (0.1)
+
+  def expectGameState (self, expected):
+    """
+    Expects that the current game state matches the given value.
+    """
+
+    actual = self.getGameState ()
+    if actual != expected:
+      self.mainLogger.error ("Mismatch in actual vs expected game state:\n"
+                                + "%s\n  vs\n%s"
+          % (json.dumps (actual, indent=2), json.dumps (expected, indent=2)))
+      raise AssertionError ("Actual game state does not match expectation")
+
+  def generate (self, n):
+    """
+    Generates n new blocks on the Xaya network.
+    """
+
+    self.rpc.xaya.generate (n)
