@@ -1,3 +1,5 @@
+SUBDIRS = gametest
+
 noinst_LTLIBRARIES = libmover.la
 bin_PROGRAMS = moverd
 
