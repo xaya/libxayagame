@@ -819,7 +819,7 @@ TEST_F (SyncingTests, UpToDateIgnoresReqtoken)
   ExpectGameState (BlockHash (12), "a2b1c3");
 }
 
-TEST_F (SyncingTests, CatchingUp)
+TEST_F (SyncingTests, CatchingUpForward)
 {
   EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
@@ -857,6 +857,40 @@ TEST_F (SyncingTests, CatchingUp)
                    Moves ("a2c3"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
+}
+
+TEST_F (SyncingTests, CatchingUpBackwards)
+{
+  EXPECT_CALL (mockXayaServer,
+               game_sendupdates (BlockHash (12).ToHex (), GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (TestGame::GenesisBlockHash (),
+                                              "reqtoken")));
+
+  CallBlockAttach (g, NO_REQ_TOKEN,
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
+                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (12), "a2b1c3");
+
+  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (12), "a2b1c3");
+
+  CallBlockDetach (g, "reqtoken", BlockHash (11), BlockHash (12),
+                   NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  CallBlockDetach (g, "reqtoken", TestGame::GenesisBlockHash (), BlockHash (11),
+                   NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
 }
 
 TEST_F (SyncingTests, MissedAttachWhileUpToDate)

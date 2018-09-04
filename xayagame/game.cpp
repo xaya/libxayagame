@@ -117,6 +117,9 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& child,
 
   storage->SetCurrentGameState (parent, oldState);
   storage->RemoveUndoData (child);
+  LOG (INFO)
+      << "Detached " << child.ToHex () << ", restored state for block "
+      << parent.ToHex ();
 
   return true;
 }
@@ -236,6 +239,7 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
     }
 
   /* Handle the notification depending on the current state.  */
+  bool needReinit = false;
   switch (state)
     {
     case State::PREGENESIS:
@@ -243,9 +247,22 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
       break;
 
     case State::CATCHING_UP:
+      if (!UpdateStateForDetach (parent, child, data))
+        needReinit = true;
+
+      /* We may reach a catching-up target also when detaching blocks.  This
+         happens, for instance, when a block was declared invalid and a couple
+         of blocks was just detached.  If a ZMQ message is missed at the
+         same time (*or if this was the very first detach notification*!),
+         then the client is catching-up while only detaching.  */
+      if (parent == targetBlockHash)
+        needReinit = true;
+
+      break;
+
     case State::UP_TO_DATE:
       if (!UpdateStateForDetach (parent, child, data))
-        ReinitialiseState ();
+        needReinit = true;
       break;
 
     case State::UNKNOWN:
@@ -254,6 +271,9 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
       LOG (FATAL) << "Unexpected state: " << StateToString (state);
       break;
     }
+
+  if (needReinit)
+    ReinitialiseState ();
 }
 
 void
@@ -420,7 +440,8 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
   LOG (INFO)
       << "Retrieving " << upd["steps"]["detach"].asInt () << " detach and "
       << upd["steps"]["attach"].asInt () << " attach steps with reqtoken = "
-      << upd["reqtoken"];
+      << upd["reqtoken"].asString ()
+      << ", leading to block " << upd["toblock"].asString ();
 
   state = State::CATCHING_UP;
   CHECK (targetBlockHash.FromHex (upd["toblock"].asString ()));
