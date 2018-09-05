@@ -15,9 +15,6 @@ import subprocess
 import time
 
 
-RPC_PORT = 28110
-
-
 class Node ():
   """
   An instance of a game daemon that is connected to a regtest Xaya Core node
@@ -30,9 +27,10 @@ class Node ():
   - provide at least the "stop" and "getcurrentstate" RPC methods.
   """
 
-  def __init__ (self, basedir, binary):
+  def __init__ (self, basedir, port, binary):
     self.log = logging.getLogger ("xayagametest.gamenode")
     self.datadir = os.path.join (basedir, "gamenode")
+    self.port = port
     self.binary = binary
 
     self.log.info ("Creating fresh data directory for the game node in %s"
@@ -50,12 +48,12 @@ class Node ():
     self.log.info ("Starting new game process")
     args = [self.binary]
     args.append ("--xaya_rpc_url=%s" % xayarpc)
-    args.append ("--game_rpc_port=%d" % RPC_PORT)
+    args.append ("--game_rpc_port=%d" % self.port)
     envVars = dict (os.environ)
     envVars["GLOG_log_dir"] = self.datadir
     self.proc = subprocess.Popen (args, env=envVars)
 
-    self.rpc = jsonrpclib.Server ("http://localhost:%d" % RPC_PORT)
+    self.rpc = jsonrpclib.Server ("http://localhost:%d" % self.port)
 
     self.log.info ("Waiting for the JSON-RPC server to be up...")
     while True:

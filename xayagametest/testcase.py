@@ -13,6 +13,7 @@ import argparse
 import json
 import logging
 import os.path
+import random
 import shutil
 import sys
 import time
@@ -51,9 +52,8 @@ class XayaGameTest (object):
     Executes the testcase, including setup and cleanup.
     """
 
-    timefmt = "%Y%m%d_%H%M%S"
-    self.basedir = os.path.join (self.args.dir,
-                                 DIR_PREFIX + time.strftime (timefmt))
+    randomSuffix = "%08x" % random.getrandbits (32)
+    self.basedir = os.path.join (self.args.dir, DIR_PREFIX + randomSuffix)
     shutil.rmtree (self.basedir, ignore_errors=True)
     os.mkdir (self.basedir)
 
@@ -77,8 +77,14 @@ class XayaGameTest (object):
     self.mainLogger.info ("Base directory for integration test: %s"
                             % self.basedir)
 
-    self.xayanode = xaya.Node (self.basedir, self.args.xayad_binary)
-    self.gamenode = game.Node (self.basedir, self.args.game_daemon)
+    basePort = random.randint (1024, 30000)
+    self.log.info ("Using port range %d..%d, hopefully it is free"
+        % (basePort, basePort + 2))
+
+    self.xayanode = xaya.Node (self.basedir, basePort, basePort + 1,
+                               self.args.xayad_binary)
+    self.gamenode = game.Node (self.basedir, basePort + 2,
+                               self.args.game_daemon)
 
     class RpcHandles:
       xaya = None

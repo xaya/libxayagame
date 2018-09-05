@@ -15,26 +15,23 @@ import subprocess
 import time
 
 
-RPC_PORT = 28100
-ZMQ_PORT = 28200
-
-
 class Node ():
   """
   An instance of the Xaya Core daemon that is running in regtest mode and
   used as component in an integration test of a Xaya game.
   """
 
-  def __init__ (self, basedir, binary):
+  def __init__ (self, basedir, rpcPort, zmqPort, binary):
     self.log = logging.getLogger ("xayagametest.xayanode")
     self.datadir = os.path.join (basedir, "xayanode")
     self.binary = binary
 
     self.config = {
+      "listen": False,
       "rpcuser": "xayagametest",
       "rpcpassword": "xayagametest",
-      "rpcport": RPC_PORT,
-      "zmqpubgameblocks": "tcp://127.0.0.1:%d" % ZMQ_PORT
+      "rpcport": rpcPort,
+      "zmqpubgameblocks": "tcp://127.0.0.1:%d" % zmqPort
     }
     self.rpcurl = ("http://%s:%s@localhost:%d"
         % (self.config["rpcuser"], self.config["rpcpassword"],
