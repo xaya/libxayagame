@@ -413,14 +413,17 @@ protected:
 
   static void
   CallBlockAttach (Game& g, const std::string& reqToken,
-                   const uint256& parentHash, const uint256& childHash,
+                   const uint256& parentHash, const uint256& blockHash,
                    const Json::Value& moves, const bool seqMismatch)
   {
+    Json::Value block(Json::objectValue);
+    block["hash"] = blockHash.ToHex ();
+    block["parent"] = parentHash.ToHex ();
+
     Json::Value data(Json::objectValue);
     if (!reqToken.empty ())
       data["reqtoken"] = reqToken;
-    data["parent"] = parentHash.ToHex ();
-    data["child"] = childHash.ToHex ();
+    data["block"] = block;
     data["moves"] = moves;
 
     g.BlockAttach (GAME_ID, data, seqMismatch);
@@ -428,14 +431,17 @@ protected:
 
   static void
   CallBlockDetach (Game& g, const std::string& reqToken,
-                   const uint256& parentHash, const uint256& childHash,
+                   const uint256& parentHash, const uint256& blockHash,
                    const bool seqMismatch)
   {
+    Json::Value block(Json::objectValue);
+    block["hash"] = blockHash.ToHex ();
+    block["parent"] = parentHash.ToHex ();
+
     Json::Value data(Json::objectValue);
     if (!reqToken.empty ())
       data["reqtoken"] = reqToken;
-    data["parent"] = parentHash.ToHex ();
-    data["child"] = childHash.ToHex ();
+    data["block"] = block;
 
     /* For our example test game, the moves are not used for rolling backwards.
        Thus just set an empty string.  */

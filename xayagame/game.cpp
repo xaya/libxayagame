@@ -62,7 +62,7 @@ Game::StateToString (const State s)
 }
 
 bool
-Game::UpdateStateForAttach (const uint256& parent, const uint256& child,
+Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
                             const Json::Value& blockData)
 {
   uint256 currentHash;
@@ -80,32 +80,32 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& child,
   const GameStateData newState
       = rules->ProcessForward (oldState, blockData, undo);
 
-  storage->SetCurrentGameState (child, newState);
-  storage->AddUndoData (child, undo);
-  LOG (INFO) << "Current game state is for block " << child.ToHex ();
+  storage->SetCurrentGameState (hash, newState);
+  storage->AddUndoData (hash, undo);
+  LOG (INFO) << "Current game state is for block " << hash.ToHex ();
 
   return true;
 }
 
 bool
-Game::UpdateStateForDetach (const uint256& parent, const uint256& child,
+Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
                             const Json::Value& blockData)
 {
   uint256 currentHash;
   CHECK (storage->GetCurrentBlockHash (currentHash));
-  if (currentHash != child)
+  if (currentHash != hash)
     {
       LOG (WARNING)
           << "Game state hash " << currentHash.ToHex ()
-          << " does not match detached block's child " << child.ToHex ();
+          << " does not match detached block's hash " << hash.ToHex ();
       return false;
     }
 
   UndoData undo;
-  if (!storage->GetUndoData (child, undo))
+  if (!storage->GetUndoData (hash, undo))
     {
       LOG (ERROR)
-          << "Failed to retrieve undo data for block " << child.ToHex ()
+          << "Failed to retrieve undo data for block " << hash.ToHex ()
           << ".  Need to resync from scratch.";
       storage->Clear ();
       return false;
@@ -116,9 +116,9 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& child,
       = rules->ProcessBackwards (newState, blockData, undo);
 
   storage->SetCurrentGameState (parent, oldState);
-  storage->RemoveUndoData (child);
+  storage->RemoveUndoData (hash);
   LOG (INFO)
-      << "Detached " << child.ToHex () << ", restored state for block "
+      << "Detached " << hash.ToHex () << ", restored state for block "
       << parent.ToHex ();
 
   return true;
@@ -145,10 +145,10 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
   VLOG (2) << "Attached:\n" << data;
 
   uint256 parent;
-  CHECK (parent.FromHex (data["parent"].asString ()));
-  uint256 child;
-  CHECK (child.FromHex (data["child"].asString ()));
-  VLOG (1) << "Attaching block " << child.ToHex ();
+  CHECK (parent.FromHex (data["block"]["parent"].asString ()));
+  uint256 hash;
+  CHECK (hash.FromHex (data["block"]["hash"].asString ()));
+  VLOG (1) << "Attaching block " << hash.ToHex ();
 
   std::lock_guard<std::mutex> lock(mut);
 
@@ -175,24 +175,24 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
     case State::PREGENESIS:
       /* Check if we have reached the game's genesis height.  If we have,
          reinitialise which will store the initial game state.  */
-      if (child == targetBlockHash)
+      if (hash == targetBlockHash)
         needReinit = true;
       break;
 
     case State::CATCHING_UP:
-      if (!UpdateStateForAttach (parent, child, data))
+      if (!UpdateStateForAttach (parent, hash, data))
         needReinit = true;
 
       /* If we are now at the last catching-up's target block hash,
          reinitialise the state as well.  This will check the current best
          tip and set the state to UP_TO_DATE or request more updates.  */
-      if (child == targetBlockHash)
+      if (hash == targetBlockHash)
         needReinit = true;
 
       break;
 
     case State::UP_TO_DATE:
-      if (!UpdateStateForAttach (parent, child, data))
+      if (!UpdateStateForAttach (parent, hash, data))
         needReinit = true;
       break;
 
@@ -215,10 +215,10 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
   VLOG (2) << "Detached:\n" << data;
 
   uint256 parent;
-  CHECK (parent.FromHex (data["parent"].asString ()));
-  uint256 child;
-  CHECK (child.FromHex (data["child"].asString ()));
-  VLOG (1) << "Detaching block " << child.ToHex ();
+  CHECK (parent.FromHex (data["block"]["parent"].asString ()));
+  uint256 hash;
+  CHECK (hash.FromHex (data["block"]["hash"].asString ()));
+  VLOG (1) << "Detaching block " << hash.ToHex ();
 
   std::lock_guard<std::mutex> lock(mut);
 
@@ -247,7 +247,7 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
       break;
 
     case State::CATCHING_UP:
-      if (!UpdateStateForDetach (parent, child, data))
+      if (!UpdateStateForDetach (parent, hash, data))
         needReinit = true;
 
       /* We may reach a catching-up target also when detaching blocks.  This
@@ -261,7 +261,7 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
       break;
 
     case State::UP_TO_DATE:
-      if (!UpdateStateForDetach (parent, child, data))
+      if (!UpdateStateForDetach (parent, hash, data))
         needReinit = true;
       break;
 
