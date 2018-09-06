@@ -80,9 +80,13 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
   const GameStateData newState
       = rules->ProcessForward (oldState, blockData, undo);
 
+  const unsigned height = blockData["block"]["height"].asUInt ();
+
   storage->SetCurrentGameState (hash, newState);
-  storage->AddUndoData (hash, undo);
-  LOG (INFO) << "Current game state is for block " << hash.ToHex ();
+  storage->AddUndoData (hash, height, undo);
+  LOG (INFO)
+      << "Current game state is at height " << height
+      << " (block " << hash.ToHex () << ")";
 
   return true;
 }

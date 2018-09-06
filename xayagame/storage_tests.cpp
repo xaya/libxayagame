@@ -69,15 +69,15 @@ TEST_F (MemoryStorageTests, UndoData)
   UndoData undo;
   EXPECT_FALSE (storage.GetUndoData (hash1, undo));
 
-  storage.AddUndoData (hash1, undo1);
+  storage.AddUndoData (hash1, 42, undo1);
   ASSERT_TRUE (storage.GetUndoData (hash1, undo));
   EXPECT_EQ (undo, undo1);
   EXPECT_FALSE (storage.GetUndoData (hash2, undo));
 
   /* Adding twice should be fine (just have no effect but also not crash).  */
-  storage.AddUndoData (hash1, undo1);
+  storage.AddUndoData (hash1, 50, undo1);
 
-  storage.AddUndoData (hash2, undo2);
+  storage.AddUndoData (hash2, 10, undo2);
   ASSERT_TRUE (storage.GetUndoData (hash1, undo));
   EXPECT_EQ (undo, undo1);
   ASSERT_TRUE (storage.GetUndoData (hash2, undo));
@@ -94,7 +94,7 @@ TEST_F (MemoryStorageTests, UndoData)
 TEST_F (MemoryStorageTests, Clear)
 {
   storage.SetCurrentGameState (hash1, state1);
-  storage.AddUndoData (hash1, undo1);
+  storage.AddUndoData (hash1, 18, undo1);
 
   uint256 hash;
   EXPECT_TRUE (storage.GetCurrentBlockHash (hash));
@@ -104,6 +104,56 @@ TEST_F (MemoryStorageTests, Clear)
   storage.Clear ();
   EXPECT_FALSE (storage.GetCurrentBlockHash (hash));
   EXPECT_FALSE (storage.GetUndoData (hash1, undo));
+}
+
+/**
+ * Tests specific for the pruning/removing of undo data in a storage.  Since
+ * the Storage interface itself does not require undo data to be removed when
+ * possible, this functionality is not tested as part of the core storage tests.
+ * The StoragePruningTests can be applied to implementations that wish to
+ * guarantee immediate removal of released undo data.
+ *
+ * TODO:  Similar to the MemoryStorageTests, this could be turned into a
+ * typed test in the future when we have more implementations to test.
+ */
+using StoragePruningTests = MemoryStorageTests;
+
+TEST_F (StoragePruningTests, ReleaseUndoData)
+{
+  storage.AddUndoData (hash1, 20, undo1);
+
+  UndoData undo;
+  EXPECT_TRUE (storage.GetUndoData (hash1, undo));
+
+  storage.ReleaseUndoData (hash1);
+  EXPECT_FALSE (storage.GetUndoData (hash1, undo));
+}
+
+TEST_F (StoragePruningTests, PruneUndoData)
+{
+  storage.AddUndoData (hash1, 42, undo1);
+  storage.AddUndoData (hash2, 43, undo2);
+
+  UndoData undo;
+  EXPECT_TRUE (storage.GetUndoData (hash1, undo));
+  EXPECT_TRUE (storage.GetUndoData (hash2, undo));
+
+  storage.PruneUndoData (41);
+  EXPECT_TRUE (storage.GetUndoData (hash1, undo));
+  EXPECT_TRUE (storage.GetUndoData (hash2, undo));
+
+  storage.PruneUndoData (42);
+  EXPECT_FALSE (storage.GetUndoData (hash1, undo));
+  EXPECT_TRUE (storage.GetUndoData (hash2, undo));
+
+  /* Add back hash1, so that we can test pruning of multiple elements.  */
+  storage.AddUndoData (hash1, 42, undo1);
+  EXPECT_TRUE (storage.GetUndoData (hash1, undo));
+  EXPECT_TRUE (storage.GetUndoData (hash2, undo));
+
+  storage.PruneUndoData (43);
+  EXPECT_FALSE (storage.GetUndoData (hash1, undo));
+  EXPECT_FALSE (storage.GetUndoData (hash2, undo));
 }
 
 } // anonymous namespace

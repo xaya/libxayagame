@@ -73,8 +73,13 @@ public:
    * Adds undo data for the given block hash.  If there is already undo data
    * for the given hash, then the passed-in data must be equivalent from the
    * game's point of view.  It is undefined which one is kept.
+   *
+   * Also the height can be stored by the implementation, to be used with
+   * PruneUndoData.  Apart from the ability to implement this function,
+   * the height is not needed for anything else.
    */
-  virtual void AddUndoData (const uint256& hash, const UndoData& data) = 0;
+  virtual void AddUndoData (const uint256& hash,
+                            unsigned height, const UndoData& data) = 0;
 
   /**
    * Allows the storage implementation to delete the undo data associated to
@@ -86,6 +91,18 @@ public:
     /* Do nothing by default.  This function can be overridden to free space
        for no longer required data (e.g. undo data of blocks that have been
        detached).  */
+  }
+
+  /**
+   * Allows the storage to release all undo data with heights up to (including)
+   * the given height.
+   */
+  virtual void
+  PruneUndoData (const unsigned height)
+  {
+    /* Do nothing by default.  This function can be overridden to free space
+       for very old undo data, which is unlikely to be needed again in the
+       future (because the blocks involved have many confirmations).  */
   }
 
 };
@@ -111,8 +128,20 @@ private:
   /** The current game state.  */
   GameStateData currentState;
 
+  /**
+   * Convenience struct to hold a block height together with undo data.
+   */
+  struct HeightAndUndoData
+  {
+    unsigned height;
+    UndoData data;
+  };
+
+  /** Type of the map holding undo data.  */
+  using UndoMap = std::map<uint256, HeightAndUndoData>;
+
   /** Undo data associated to block hashes we know about.  */
-  std::map<uint256, UndoData> undoData;
+  UndoMap undoData;
 
 public:
 
@@ -129,8 +158,10 @@ public:
                             const GameStateData& data) override;
 
   bool GetUndoData (const uint256& hash, UndoData& data) const override;
-  void AddUndoData (const uint256& hash, const UndoData& data) override;
+  void AddUndoData (const uint256& hash,
+                    unsigned height, const UndoData& data) override;
   void ReleaseUndoData (const uint256& hash) override;
+  void PruneUndoData (unsigned height) override;
 
 };
 
