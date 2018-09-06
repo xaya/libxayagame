@@ -49,20 +49,32 @@ MemoryStorage::GetUndoData (const uint256& hash, UndoData& data) const
   if (mit == undoData.end ())
     return false;
 
-  data = mit->second;
+  data = mit->second.data;
   return true;
 }
 
 void
-MemoryStorage::AddUndoData (const uint256& hash, const UndoData& data)
+MemoryStorage::AddUndoData (const uint256& hash,
+                            const unsigned height, const UndoData& data)
 {
-  undoData.emplace (hash, data);
+  HeightAndUndoData heightAndData = {height, data};
+  undoData.emplace (hash, std::move (heightAndData));
 }
 
 void
-MemoryStorage::RemoveUndoData (const uint256& hash)
+MemoryStorage::ReleaseUndoData (const uint256& hash)
 {
   undoData.erase (hash);
+}
+
+void
+MemoryStorage::PruneUndoData (const unsigned height)
+{
+  for (auto it = undoData.cbegin (); it != undoData.cend (); )
+    if (it->second.height <= height)
+      it = undoData.erase (it);
+    else
+      ++it;
 }
 
 } // namespace xaya
