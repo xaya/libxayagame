@@ -85,10 +85,10 @@ TEST_F (MemoryStorageTests, UndoData)
 
   /* Removing should be ok (not crash), but otherwise no effect is guaranteed
      (in particular, not that it will actually be removed).  */
-  storage.RemoveUndoData (hash1);
+  storage.ReleaseUndoData (hash1);
   ASSERT_TRUE (storage.GetUndoData (hash2, undo));
   EXPECT_EQ (undo, undo2);
-  storage.RemoveUndoData (hash2);
+  storage.ReleaseUndoData (hash2);
 }
 
 TEST_F (MemoryStorageTests, Clear)

@@ -60,7 +60,7 @@ MemoryStorage::AddUndoData (const uint256& hash, const UndoData& data)
 }
 
 void
-MemoryStorage::RemoveUndoData (const uint256& hash)
+MemoryStorage::ReleaseUndoData (const uint256& hash)
 {
   undoData.erase (hash);
 }

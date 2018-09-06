@@ -81,7 +81,7 @@ public:
    * the given block hash.
    */
   virtual void
-  RemoveUndoData (const uint256& hash)
+  ReleaseUndoData (const uint256& hash)
   {
     /* Do nothing by default.  This function can be overridden to free space
        for no longer required data (e.g. undo data of blocks that have been
@@ -130,7 +130,7 @@ public:
 
   bool GetUndoData (const uint256& hash, UndoData& data) const override;
   void AddUndoData (const uint256& hash, const UndoData& data) override;
-  void RemoveUndoData (const uint256& hash) override;
+  void ReleaseUndoData (const uint256& hash) override;
 
 };
 

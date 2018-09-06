@@ -116,7 +116,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
       = rules->ProcessBackwards (newState, blockData, undo);
 
   storage->SetCurrentGameState (parent, oldState);
-  storage->RemoveUndoData (hash);
+  storage->ReleaseUndoData (hash);
   LOG (INFO)
       << "Detached " << hash.ToHex () << ", restored state for block "
       << parent.ToHex ();
