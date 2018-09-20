@@ -347,6 +347,8 @@ Game::DetectZmqEndpoint ()
         SetZmqEndpoint (endpoint);
         return true;
       }
+
+  LOG (WARNING) << "No -zmqpubgameblocks notifier seems to be set up";
   return false;
 }
 
