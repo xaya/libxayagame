@@ -13,6 +13,7 @@ libxayagame_la_SOURCES = \
   game.cpp \
   gamerpcserver.cpp \
   mainloop.cpp \
+  pruningqueue.cpp \
   storage.cpp \
   uint256.cpp \
   zmqsubscriber.cpp
@@ -20,6 +21,7 @@ xayagame_HEADERS = \
   game.hpp \
   gamerpcserver.hpp \
   mainloop.hpp \
+  pruningqueue.hpp \
   storage.hpp \
   uint256.hpp \
   zmqsubscriber.hpp \
@@ -40,6 +42,7 @@ tests_LDADD = $(builddir)/libxayagame.la \
 tests_SOURCES = testutils.cpp \
   game_tests.cpp \
   mainloop_tests.cpp \
+  pruningqueue_tests.cpp \
   storage_tests.cpp \
   uint256_tests.cpp \
   zmqsubscriber_tests.cpp
