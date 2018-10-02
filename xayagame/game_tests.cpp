@@ -6,6 +6,8 @@
 
 #include "uint256.hpp"
 
+#include "testutils.hpp"
+
 #include "rpc-stubs/xayarpcserverstub.h"
 
 #include <json/json.h>
@@ -59,25 +61,6 @@ ParseJson (const std::string& str)
   std::istringstream in(str);
   in >> val;
   return val;
-}
-
-/**
- * Returns a uint256 based on the given number, to be used as block hashes
- * in tests.
- */
-uint256
-BlockHash (const unsigned num)
-{
-  std::string hex = "ab" + std::string (62, '0');
-
-  CHECK (num < 0x100);
-  std::sprintf (&hex[2], "%02x", num);
-  CHECK (hex[4] == 0);
-  hex[4] = '0';
-
-  uint256 res;
-  CHECK (res.FromHex (hex));
-  return res;
 }
 
 /* ************************************************************************** */

@@ -37,12 +37,13 @@ tests_CXXFLAGS = \
 tests_LDADD = $(builddir)/libxayagame.la \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(GTEST_LIBS) $(ZMQ_LIBS)
-tests_SOURCES = \
+tests_SOURCES = testutils.cpp \
   game_tests.cpp \
   mainloop_tests.cpp \
   storage_tests.cpp \
   uint256_tests.cpp \
   zmqsubscriber_tests.cpp
+check_HEADERS = testutils.hpp
 
 rpc-stubs/gamerpcclient.h: rpc-stubs/game.json
 	jsonrpcstub "$<" --cpp-client=GameRpcClient --cpp-client-file="$@"
