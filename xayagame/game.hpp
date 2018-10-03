@@ -6,6 +6,7 @@
 #define XAYAGAME_GAME_HPP
 
 #include "mainloop.hpp"
+#include "pruningqueue.hpp"
 #include "storage.hpp"
 #include "uint256.hpp"
 #include "zmqsubscriber.hpp"
@@ -191,6 +192,9 @@ private:
   /** The main loop.  */
   internal::MainLoop mainLoop;
 
+  /** The pruning queue if we are pruning.  */
+  std::unique_ptr<internal::PruningQueue> pruningQueue;
+
   /**
    * The JSON-RPC version to use for talking to Xaya Core.  The actual daemon
    * needs V1, but for the unit test (where the server is mocked and set up
@@ -300,6 +304,12 @@ public:
   void SetGameLogic (GameLogic* gl);
 
   /**
+   * Enables (or changes) pruning with the given number of blocks to keep.
+   * Must be called after the storage is set already.
+   */
+  void EnablePruning (unsigned nBlocks);
+
+  /**
    * Sets the ZMQ endpoint that will be used to connect to the ZMQ interface
    * of the Xaya daemon.  Must not be called anymore after Start() or
    * Run() have been called.
@@ -318,7 +328,7 @@ public:
 
   /**
    * Requests the server to stop; this may be called always, but only has
-   * an effect the Run() is currently blocking in the main loop.  This method
+   * an effect if the Run() is currently blocking in the main loop.  This method
    * is mainly meant to be exposed by the game daemon through its JSON-RPC
    * interface.
    */

@@ -945,5 +945,104 @@ TEST_F (SyncingTests, MissedAttachWhileCatchingUp)
 
 /* ************************************************************************** */
 
+class PruningTests : public SyncingTests
+{
+
+protected:
+
+  PruningTests ()
+  {
+    /* For the tests, we keep the last block.  This enables us to verify that
+       something is kept and do undos, but it also makes it easy to verify
+       that stuff gets pruned quickly.  */
+    g.EnablePruning (1);
+  }
+
+  /**
+   * Verifies that the undo data for the given hash is pruned.
+   */
+  void
+  AssertIsPruned (const uint256& hash) const
+  {
+    UndoData dummyUndo;
+    ASSERT_FALSE (storage.GetUndoData (hash, dummyUndo));
+  }
+
+  /**
+   * Verifies that the undo data for the given hash is not pruned.
+   */
+  void
+  AssertNotPruned (const uint256& hash) const
+  {
+    UndoData dummyUndo;
+    ASSERT_TRUE (storage.GetUndoData (hash, dummyUndo));
+  }
+
+};
+
+TEST_F (PruningTests, AttachDetach)
+{
+  CallBlockAttach (g, NO_REQ_TOKEN,
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+  AssertIsPruned (TestGame::GenesisBlockHash ());
+  AssertNotPruned (BlockHash (11));
+
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
+                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (12), "a2b1c3");
+  AssertIsPruned (BlockHash (11));
+  AssertNotPruned (BlockHash (12));
+
+  /* Detaching one block should work, as we keep one undo state.  */
+  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
+                   NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+}
+
+TEST_F (PruningTests, WithReqToken)
+{
+  CallBlockAttach (g, NO_REQ_TOKEN,
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+  AssertIsPruned (TestGame::GenesisBlockHash ());
+  AssertNotPruned (BlockHash (11));
+
+  CallBlockAttach (g, "foo", BlockHash (11), BlockHash (12),
+                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+  AssertNotPruned (BlockHash (11));
+}
+
+TEST_F (PruningTests, MissedZmq)
+{
+  EXPECT_CALL (mockXayaServer, game_sendupdates (_, GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
+
+  CallBlockAttach (g, NO_REQ_TOKEN,
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+  AssertIsPruned (TestGame::GenesisBlockHash ());
+  AssertNotPruned (BlockHash (11));
+
+  /* This will trigger a game_sendupdates and bring the state to catching-up,
+     but we don't care about it.  It should, most of all, not prune the last
+     block as it would without sequence mismatch.  */
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (12), BlockHash (13),
+                   Moves (""), SEQ_MISMATCH);
+  AssertNotPruned (BlockHash (11));
+}
+
+/* ************************************************************************** */
+
 } // anonymous namespace
 } // namespace xaya
