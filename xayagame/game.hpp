@@ -97,9 +97,9 @@ public:
  * ZMQ and RPC communication with the Xaya daemon as well as the RPC interface
  * of the game itself.
  *
- * To implement a game, create a subclass that overrides the pure virtual
- * methods with the actual game logic and then instantiate and Run() it
- * from the binary's main().
+ * To implement a game, create a subclass of GameLogic that overrides the pure
+ * virtual methods with the actual game logic.  Pass it to a new Game instance
+ * and Run() it from the binary's main().
  */
 class Game : private internal::ZmqListener
 {
