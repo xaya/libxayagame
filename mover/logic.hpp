@@ -7,7 +7,7 @@
 
 #include "proto/mover.pb.h"
 
-#include "xayagame/game.hpp"
+#include "xayagame/gamelogic.hpp"
 #include "xayagame/storage.hpp"
 
 #include <json/json.h>

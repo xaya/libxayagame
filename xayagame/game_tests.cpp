@@ -4,6 +4,7 @@
 
 #include "game.hpp"
 
+#include "gamelogic.hpp"
 #include "uint256.hpp"
 
 #include "testutils.hpp"

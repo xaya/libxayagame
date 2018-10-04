@@ -11,6 +11,7 @@ libxayagame_la_LIBADD = \
   $(GLOG_LIBS) $(ZMQ_LIBS)
 libxayagame_la_SOURCES = \
   game.cpp \
+  gamelogic.cpp \
   gamerpcserver.cpp \
   mainloop.cpp \
   pruningqueue.cpp \
@@ -19,6 +20,7 @@ libxayagame_la_SOURCES = \
   zmqsubscriber.cpp
 xayagame_HEADERS = \
   game.hpp \
+  gamelogic.hpp \
   gamerpcserver.hpp \
   mainloop.hpp \
   pruningqueue.hpp \

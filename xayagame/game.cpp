@@ -11,26 +11,6 @@
 namespace xaya
 {
 
-const std::string&
-GameLogic::GetChain () const
-{
-  CHECK (!chain.empty ());
-  return chain;
-}
-
-void
-GameLogic::SetChain (const std::string& c)
-{
-  CHECK (chain.empty () || chain == c);
-  chain = c;
-}
-
-Json::Value
-GameLogic::GameStateToJson (const GameStateData& state)
-{
-  return state;
-}
-
 Game::Game (const std::string& id)
   : gameId(id)
 {
