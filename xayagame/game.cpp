@@ -11,26 +11,6 @@
 namespace xaya
 {
 
-const std::string&
-GameLogic::GetChain () const
-{
-  CHECK (!chain.empty ());
-  return chain;
-}
-
-void
-GameLogic::SetChain (const std::string& c)
-{
-  CHECK (chain.empty () || chain == c);
-  chain = c;
-}
-
-Json::Value
-GameLogic::GameStateToJson (const GameStateData& state)
-{
-  return state;
-}
-
 Game::Game (const std::string& id)
   : gameId(id)
 {
@@ -162,6 +142,8 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
     {
       LOG (WARNING) << "Missed ZMQ notifications, reinitialising state";
       ReinitialiseState ();
+      if (pruningQueue != nullptr)
+        pruningQueue->Reset ();
       return;
     }
 
@@ -209,6 +191,11 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
 
   if (needReinit)
     ReinitialiseState ();
+
+  /* Attach the block in the pruning queue.  This is done after updating the
+     state so that a potential pruning with nBlocks=0 can take place.  */
+  if (pruningQueue != nullptr)
+    pruningQueue->AttachBlock (hash, data["block"]["height"].asUInt ());
 }
 
 void
@@ -232,6 +219,8 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
     {
       LOG (WARNING) << "Missed ZMQ notifications, reinitialising state";
       ReinitialiseState ();
+      if (pruningQueue != nullptr)
+        pruningQueue->Reset ();
       return;
     }
 
@@ -278,6 +267,10 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
 
   if (needReinit)
     ReinitialiseState ();
+
+  /* Detach the block in the pruning queue as well.  */
+  if (pruningQueue != nullptr)
+    pruningQueue->DetachBlock ();
 }
 
 void
@@ -313,6 +306,7 @@ Game::SetStorage (StorageInterface* s)
 {
   std::lock_guard<std::mutex> lock(mut);
   CHECK (!mainLoop.IsRunning ());
+  CHECK (pruningQueue == nullptr);
   storage = s;
 }
 
@@ -324,6 +318,20 @@ Game::SetGameLogic (GameLogic* gl)
   rules = gl;
   if (!chain.empty ())
     rules->SetChain (chain);
+}
+
+void
+Game::EnablePruning (const unsigned nBlocks)
+{
+  LOG (INFO) << "Enabling pruning with " << nBlocks << " blocks to keep";
+
+  std::lock_guard<std::mutex> lock(mut);
+  CHECK (storage != nullptr);
+
+  if (pruningQueue == nullptr)
+    pruningQueue = std::make_unique<internal::PruningQueue> (*storage, nBlocks);
+  else
+    pruningQueue->SetDesiredSize (nBlocks);
 }
 
 bool

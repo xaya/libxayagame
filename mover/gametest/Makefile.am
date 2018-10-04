@@ -4,5 +4,6 @@ AM_TESTS_ENVIRONMENT = \
 TESTS = \
   basic.py \
   catching_up.py \
+  pruning.py \
   reorg.py \
   stopped_xayad.py

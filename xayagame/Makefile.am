@@ -11,15 +11,19 @@ libxayagame_la_LIBADD = \
   $(GLOG_LIBS) $(ZMQ_LIBS)
 libxayagame_la_SOURCES = \
   game.cpp \
+  gamelogic.cpp \
   gamerpcserver.cpp \
   mainloop.cpp \
+  pruningqueue.cpp \
   storage.cpp \
   uint256.cpp \
   zmqsubscriber.cpp
 xayagame_HEADERS = \
   game.hpp \
+  gamelogic.hpp \
   gamerpcserver.hpp \
   mainloop.hpp \
+  pruningqueue.hpp \
   storage.hpp \
   uint256.hpp \
   zmqsubscriber.hpp \
@@ -39,7 +43,9 @@ tests_LDADD = $(builddir)/libxayagame.la \
   $(GLOG_LIBS) $(GTEST_LIBS) $(ZMQ_LIBS)
 tests_SOURCES = testutils.cpp \
   game_tests.cpp \
+  gamelogic_tests.cpp \
   mainloop_tests.cpp \
+  pruningqueue_tests.cpp \
   storage_tests.cpp \
   uint256_tests.cpp \
   zmqsubscriber_tests.cpp

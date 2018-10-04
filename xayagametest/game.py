@@ -40,7 +40,7 @@ class Node ():
 
     self.proc = None
 
-  def start (self, xayarpc):
+  def start (self, xayarpc, extraArgs=[]):
     if self.proc is not None:
       self.log.error ("Game process is already running, not starting again")
       return
@@ -49,6 +49,7 @@ class Node ():
     args = [self.binary]
     args.append ("--xaya_rpc_url=%s" % xayarpc)
     args.append ("--game_rpc_port=%d" % self.port)
+    args.extend (extraArgs)
     envVars = dict (os.environ)
     envVars["GLOG_log_dir"] = self.datadir
     self.proc = subprocess.Popen (args, env=envVars)
