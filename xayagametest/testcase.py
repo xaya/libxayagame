@@ -45,6 +45,8 @@ class XayaGameTest (object):
                          help="game daemon binary to use in the test")
     parser.add_argument ("--dir", default=DEFAULT_DIR,
                          help="base directory for test runs")
+    parser.add_argument ("--nocleanup", default=False, action="store_true",
+                         help="do not clean up logs after success")
     self.args = parser.parse_args ()
 
   def main (self):
@@ -98,7 +100,10 @@ class XayaGameTest (object):
       try:
         self.run ()
         self.mainLogger.info ("Test succeeded")
-        cleanup = True
+        if self.args.nocleanup:
+          self.mainLogger.info ("Not cleaning up logs as requested")
+        else:
+          cleanup = True
       except:
         self.mainLogger.exception ("Test failed")
         self.log.info ("Not cleaning up base directory %s" % self.basedir)
