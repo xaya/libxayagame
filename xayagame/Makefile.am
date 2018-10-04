@@ -43,6 +43,7 @@ tests_LDADD = $(builddir)/libxayagame.la \
   $(GLOG_LIBS) $(GTEST_LIBS) $(ZMQ_LIBS)
 tests_SOURCES = testutils.cpp \
   game_tests.cpp \
+  gamelogic_tests.cpp \
   mainloop_tests.cpp \
   pruningqueue_tests.cpp \
   storage_tests.cpp \

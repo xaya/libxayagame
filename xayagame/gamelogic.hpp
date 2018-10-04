@@ -84,6 +84,36 @@ public:
 
 };
 
+/**
+ * Subclass of GameLogic that can be used for games whose state is small enough
+ * so that it can be used as "undo data" itself (ideally together with pruning).
+ * This allows games to be implemented without undo logic, and may be the
+ * best and easiest solution for very simple games.
+ */
+class CachingGame : public GameLogic
+{
+
+protected:
+
+  /**
+   * Processes the game logic forward in time, but does not produce any
+   * undo data.  This function needs to be implemented by concrete games
+   * instead of ProcessForward and ProcessBackwards of GameLogic.
+   */
+  virtual GameStateData UpdateState (const GameStateData& oldState,
+                                     const Json::Value& blockData) = 0;
+
+public:
+
+  GameStateData ProcessForward (const GameStateData& oldState,
+                                const Json::Value& blockData,
+                                UndoData& undoData) override;
+  GameStateData ProcessBackwards (const GameStateData& newState,
+                                  const Json::Value& blockData,
+                                  const UndoData& undoData) override;
+
+};
+
 } // namespace xaya
 
 #endif // XAYAGAME_GAMELOGIC_HPP

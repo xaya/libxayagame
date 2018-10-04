@@ -29,4 +29,22 @@ GameLogic::GameStateToJson (const GameStateData& state)
   return state;
 }
 
+GameStateData
+CachingGame::ProcessForward (const GameStateData& oldState,
+                             const Json::Value& blockData,
+                             UndoData& undoData)
+{
+  const GameStateData newState = UpdateState (oldState, blockData);
+  undoData = UndoData (oldState);
+  return newState;
+}
+
+GameStateData
+CachingGame::ProcessBackwards (const GameStateData& newState,
+                               const Json::Value& blockData,
+                               const UndoData& undoData)
+{
+  return GameStateData (undoData);
+}
+
 } // namespace xaya
