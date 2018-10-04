@@ -28,6 +28,10 @@ DEFINE_int32 (game_rpc_port, 0,
               "The port at which the game daemon's JSON-RPC server will be"
               " start (if non-zero)");
 
+DEFINE_int32 (enable_pruning, -1,
+              "If non-negative (including zero), enable pruning of old undo"
+              " data and keep as many blocks as specified by the value");
+
 int
 main (int argc, char** argv)
 {
@@ -56,6 +60,9 @@ main (int argc, char** argv)
 
   mover::MoverLogic rules;
   game.SetGameLogic (&rules);
+
+  if (FLAGS_enable_pruning >= 0)
+    game.EnablePruning (FLAGS_enable_pruning);
 
   std::unique_ptr<jsonrpc::HttpServer> httpServer;
   std::unique_ptr<xaya::GameRpcServer> rpcServer;

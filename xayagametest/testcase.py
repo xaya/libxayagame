@@ -134,13 +134,13 @@ class XayaGameTest (object):
 
     self.xayanode.stop ()
 
-  def startGameDaemon (self):
+  def startGameDaemon (self, extraArgs=[]):
     """
     Starts the game daemon (again).  This can be used to test situations where
     the game daemon is restarted and needs to catch up.
     """
 
-    self.gamenode.start (self.xayanode.rpcurl)
+    self.gamenode.start (self.xayanode.rpcurl, extraArgs)
     self.rpc.game = self.gamenode.rpc
 
   def stopGameDaemon (self):
@@ -162,10 +162,10 @@ class XayaGameTest (object):
     val = json.dumps ({"g": {self.gameId: move}})
 
     try:
-      self.rpc.xaya.name_update ("p/" + name, val)
+      return self.rpc.xaya.name_update ("p/" + name, val)
     except:
       self.log.info ("name_update for p/%s failed, trying name_register" % name)
-      self.rpc.xaya.name_register ("p/" + name, val)
+      return self.rpc.xaya.name_register ("p/" + name, val)
 
   def getGameState (self):
     """

@@ -25,4 +25,4 @@ class MoverTest (XayaGameTest):
     Utility method to send a Mover move.
     """
 
-    self.sendMove (name, {"d": direction, "n": steps})
+    return self.sendMove (name, {"d": direction, "n": steps})
