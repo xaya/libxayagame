@@ -10,6 +10,7 @@ libxayagame_la_LIBADD = \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(ZMQ_LIBS)
 libxayagame_la_SOURCES = \
+  defaultmain.cpp \
   game.cpp \
   gamelogic.cpp \
   gamerpcserver.cpp \
@@ -19,6 +20,7 @@ libxayagame_la_SOURCES = \
   uint256.cpp \
   zmqsubscriber.cpp
 xayagame_HEADERS = \
+  defaultmain.hpp \
   game.hpp \
   gamelogic.hpp \
   gamerpcserver.hpp \

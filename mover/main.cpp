@@ -6,21 +6,14 @@
 
 #include "logic.hpp"
 
-#include "xayagame/game.hpp"
-#include "xayagame/gamerpcserver.hpp"
-#include "xayagame/storage.hpp"
-
-#include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
-
-#include <google/protobuf/stubs/common.h>
+#include "xayagame/defaultmain.hpp"
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
-#include <cstdlib>
+#include <google/protobuf/stubs/common.h>
+
 #include <iostream>
-#include <memory>
 
 DEFINE_string (xaya_rpc_url, "",
                "URL at which Xaya Core's JSON-RPC interface is available");
@@ -48,36 +41,14 @@ main (int argc, char** argv)
       return EXIT_FAILURE;
     }
 
-  const std::string jsonRpcUrl(FLAGS_xaya_rpc_url);
-  jsonrpc::HttpClient httpConnector(jsonRpcUrl);
-
-  xaya::Game game("mv");
-  game.ConnectRpcClient (httpConnector);
-  CHECK (game.DetectZmqEndpoint ());
-
-  xaya::MemoryStorage storage;
-  game.SetStorage (&storage);
+  xaya::GameDaemonConfiguration config;
+  config.XayaRpcUrl = FLAGS_xaya_rpc_url;
+  config.GameRpcPort = FLAGS_game_rpc_port;
+  config.EnablePruning = FLAGS_enable_pruning;
 
   mover::MoverLogic rules;
-  game.SetGameLogic (&rules);
-
-  if (FLAGS_enable_pruning >= 0)
-    game.EnablePruning (FLAGS_enable_pruning);
-
-  std::unique_ptr<jsonrpc::HttpServer> httpServer;
-  std::unique_ptr<xaya::GameRpcServer> rpcServer;
-  if (FLAGS_game_rpc_port != 0)
-    {
-      httpServer = std::make_unique<jsonrpc::HttpServer> (FLAGS_game_rpc_port);
-      rpcServer = std::make_unique<xaya::GameRpcServer> (game, *httpServer);
-    }
-
-  if (rpcServer != nullptr)
-    rpcServer->StartListening ();
-  game.Run ();
-  if (rpcServer != nullptr)
-    rpcServer->StopListening ();
+  const int res = xaya::DefaultMain (config, "mv", rules);
 
   google::protobuf::ShutdownProtobufLibrary ();
-  return EXIT_SUCCESS;
+  return res;
 }
