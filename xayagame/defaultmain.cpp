@@ -7,7 +7,6 @@
 #include "game.hpp"
 #include "gamerpcserver.hpp"
 #include "sqlitestorage.hpp"
-#include "storage.hpp"
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
@@ -65,8 +64,7 @@ CreateStorage (const GameDaemonConfiguration& config,
 } // anonymous namespace
 
 int
-DefaultMain (const GameDaemonConfiguration& config,
-             const std::string& gameId,
+DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
              GameLogic& rules)
 {
   try
@@ -119,6 +117,68 @@ DefaultMain (const GameDaemonConfiguration& config,
     }
 
   return EXIT_SUCCESS;
+}
+
+namespace
+{
+
+class CallbackGameLogic : public GameLogic
+{
+
+private:
+
+  /** The callback pointers.  */
+  const GameLogicCallbacks& callbacks;
+
+public:
+
+  explicit CallbackGameLogic (const GameLogicCallbacks& cb)
+    : callbacks(cb)
+  {}
+
+  GameStateData
+  GetInitialState (unsigned& height, std::string& hashHex)
+  {
+    CHECK (callbacks.GetInitialState != nullptr);
+    return callbacks.GetInitialState (GetChain (), height, hashHex);
+  }
+
+  GameStateData
+  ProcessForward (const GameStateData& oldState, const Json::Value& blockData,
+                  UndoData& undoData) override
+  {
+    CHECK (callbacks.ProcessForward != nullptr);
+    return callbacks.ProcessForward (GetChain (), oldState,
+                                     blockData, undoData);
+  }
+
+  GameStateData
+  ProcessBackwards (const GameStateData& oldState, const Json::Value& blockData,
+                    const UndoData& undoData) override
+  {
+    CHECK (callbacks.ProcessBackwards != nullptr);
+    return callbacks.ProcessBackwards (GetChain (), oldState,
+                                       blockData, undoData);
+  }
+
+  Json::Value
+  GameStateToJson (const GameStateData& state) override
+  {
+    if (callbacks.GameStateToJson != nullptr)
+      return callbacks.GameStateToJson (state);
+    return GameLogic::GameStateToJson (state);
+  }
+
+};
+
+} // anonymous namespace
+
+int
+DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
+             const GameLogicCallbacks& callbacks)
+{
+  CallbackGameLogic rules(callbacks);
+  return DefaultMain (config, gameId, rules);
 }
 
 } // namespace xaya
