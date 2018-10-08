@@ -312,6 +312,12 @@ public:
     return res;
   }
 
+  /* Mock the transaction methods.  They are not relevant for most tests, but
+     we want to test against expectations in specific tests.  */
+  MOCK_METHOD0 (BeginTransaction, void ());
+  MOCK_METHOD0 (CommitTransaction, void ());
+  MOCK_METHOD0 (RollbackTransaction, void ());
+
 };
 
 /* ************************************************************************** */
@@ -735,14 +741,22 @@ protected:
     ExpectGameState (TestGame::GenesisBlockHash (), "");
   }
 
+  static void
+  ExpectGameState (const StorageInterface& s,
+                   const uint256& expectedHash,
+                   const GameStateData& state)
+  {
+    uint256 hash;
+    ASSERT_TRUE (s.GetCurrentBlockHash (hash));
+    EXPECT_EQ (hash, expectedHash);
+    EXPECT_EQ (s.GetCurrentGameState (), state);
+  }
+
   void
   ExpectGameState (const uint256& expectedHash,
                    const GameStateData& state) const
   {
-    uint256 hash;
-    ASSERT_TRUE (storage.GetCurrentBlockHash (hash));
-    EXPECT_EQ (hash, expectedHash);
-    EXPECT_EQ (storage.GetCurrentGameState (), state);
+    ExpectGameState (storage, expectedHash, state);
   }
 
   /**
@@ -1041,6 +1055,119 @@ TEST_F (PruningTests, MissedZmq)
   CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (12), BlockHash (13),
                    Moves (""), SEQ_MISMATCH);
   AssertNotPruned (BlockHash (11));
+}
+
+/* ************************************************************************** */
+
+/**
+ * Helper subclass of MemoryStorage that allows us to fail (throw an exception)
+ * when setting the current state.
+ */
+class FallibleMemoryStorage : public MemoryStorage
+{
+
+private:
+
+  /** Whether or not SetCurrentGameState should fail.  */
+  bool shouldFail = false;
+
+public:
+
+  class Failure : public std::runtime_error
+  {
+
+  public:
+
+    Failure ()
+      : std::runtime_error("failing memory storage")
+    {}
+
+  };
+
+  /**
+   * Sets whether or not SetCurrentGameState calls should fail (throw an
+   * exception) when called instead of changing the game state.
+   */
+  void
+  SetShouldFail (const bool val)
+  {
+    shouldFail = val;
+  }
+
+  void
+  SetCurrentGameState (const uint256& hash, const GameStateData& data) override
+  {
+    if (shouldFail)
+      {
+        LOG (INFO) << "Failing call to SetCurrentGameState on purpose";
+        throw Failure ();
+      }
+    MemoryStorage::SetCurrentGameState (hash, data);
+  }
+
+};
+
+class GameLogicTransactionsTests : public SyncingTests
+{
+
+protected:
+
+  /** Alternative (fallible) storage used in the tests.  */
+  FallibleMemoryStorage fallibleStorage;
+
+  GameLogicTransactionsTests ()
+  {
+    LOG (INFO) << "Changing game to fallible storage";
+    g.SetStorage (&fallibleStorage);
+
+    ReinitialiseState (g);
+    EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+    ExpectGameState (storage, TestGame::GenesisBlockHash (), "");
+  }
+
+};
+
+TEST_F (GameLogicTransactionsTests, WorkingFine)
+{
+  {
+    InSequence dummy;
+    EXPECT_CALL (rules, BeginTransaction ()).Times (1);
+    EXPECT_CALL (rules, CommitTransaction ()).Times (1);
+    EXPECT_CALL (rules, RollbackTransaction ()).Times (0);
+  }
+
+  CallBlockAttach (g, NO_REQ_TOKEN,
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (fallibleStorage, BlockHash (11), "a0b1");
+}
+
+TEST_F (GameLogicTransactionsTests, WithFailure)
+{
+  {
+    InSequence dummy;
+    EXPECT_CALL (rules, BeginTransaction ()).Times (1);
+    EXPECT_CALL (rules, CommitTransaction ()).Times (0);
+    EXPECT_CALL (rules, RollbackTransaction ()).Times (1);
+  }
+
+  fallibleStorage.SetShouldFail (true);
+
+  try
+    {
+      CallBlockAttach (g, NO_REQ_TOKEN,
+                       TestGame::GenesisBlockHash (), BlockHash (11),
+                       Moves ("a0b1"), NO_SEQ_MISMATCH);
+      FAIL () << "No failure thrown from memory storage";
+    }
+  catch (const FallibleMemoryStorage::Failure& exc)
+    {
+      LOG (INFO) << "Caught expected memory failure";
+    }
+
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (fallibleStorage, TestGame::GenesisBlockHash (), "");
 }
 
 /* ************************************************************************** */

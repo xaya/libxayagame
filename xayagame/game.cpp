@@ -41,6 +41,61 @@ Game::StateToString (const State s)
   return out.str ();
 }
 
+namespace
+{
+
+/**
+ * Helper class to call BeginTransaction and either CommitTransaction or
+ * AbortTransaction on GameLogic using RAII.
+ */
+class GameTransactionHelper
+{
+
+private:
+
+  /** The game logic on which to call the functions.  */
+  GameLogic& game;
+
+  /**
+   * Whether the operation was successful.  If this is set to true at some
+   * point in time, then CommitTransaction will be called.  Otherwise, the
+   * transaction is aborted in the destructor.
+   */
+  bool success = false;
+
+public:
+
+  explicit GameTransactionHelper (GameLogic& g)
+    : game(g)
+  {
+    VLOG (1) << "Starting GameLogic transaction";
+    game.BeginTransaction ();
+  }
+
+  ~GameTransactionHelper ()
+  {
+    if (success)
+      {
+        VLOG (1) << "Committing GameLogic transaction";
+        game.CommitTransaction ();
+      }
+    else
+      {
+        VLOG (1) << "Aborting GameLogic transaction";
+        game.RollbackTransaction ();
+      }
+  }
+
+  void
+  SetSuccess ()
+  {
+    success = true;
+  }
+
+};
+
+} // anonymous namespace
+
 bool
 Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
                             const Json::Value& blockData)
@@ -56,14 +111,21 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
     }
 
   const GameStateData oldState = storage->GetCurrentGameState ();
-  UndoData undo;
-  const GameStateData newState
-      = rules->ProcessForward (oldState, blockData, undo);
-
   const unsigned height = blockData["block"]["height"].asUInt ();
 
-  storage->SetCurrentGameState (hash, newState);
-  storage->AddUndoData (hash, height, undo);
+  {
+    GameTransactionHelper tx(*rules);
+
+    UndoData undo;
+    const GameStateData newState
+        = rules->ProcessForward (oldState, blockData, undo);
+
+    storage->AddUndoData (hash, height, undo);
+    storage->SetCurrentGameState (hash, newState);
+
+    tx.SetSuccess ();
+  }
+
   LOG (INFO)
       << "Current game state is at height " << height
       << " (block " << hash.ToHex () << ")";
@@ -96,11 +158,19 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
     }
 
   const GameStateData newState = storage->GetCurrentGameState ();
-  const GameStateData oldState
-      = rules->ProcessBackwards (newState, blockData, undo);
 
-  storage->SetCurrentGameState (parent, oldState);
-  storage->ReleaseUndoData (hash);
+  {
+    GameTransactionHelper tx(*rules);
+
+    const GameStateData oldState
+        = rules->ProcessBackwards (newState, blockData, undo);
+
+    storage->SetCurrentGameState (parent, oldState);
+    storage->ReleaseUndoData (hash);
+
+    tx.SetSuccess ();
+  }
+
   LOG (INFO)
       << "Detached " << hash.ToHex () << ", restored state for block "
       << parent.ToHex ();

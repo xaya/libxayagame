@@ -29,6 +29,24 @@ GameLogic::GameStateToJson (const GameStateData& state)
   return state;
 }
 
+void
+GameLogic::BeginTransaction ()
+{
+  /* Nothing is done in the default implementation.  */
+}
+
+void
+GameLogic::CommitTransaction ()
+{
+  /* Nothing is done in the default implementation.  */
+}
+
+void
+GameLogic::RollbackTransaction ()
+{
+  /* Nothing is done in the default implementation.  */
+}
+
 GameStateData
 CachingGame::ProcessForward (const GameStateData& oldState,
                              const Json::Value& blockData,
