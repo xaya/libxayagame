@@ -6,6 +6,9 @@
 #define XAYAGAME_DEFAULTMAIN_HPP
 
 #include "gamelogic.hpp"
+#include "storage.hpp"
+
+#include <json/json.h>
 
 #include <string>
 
@@ -70,6 +73,44 @@ struct GameDaemonConfiguration
 int DefaultMain (const GameDaemonConfiguration& config,
                  const std::string& gameId,
                  GameLogic& rules);
+
+/**
+ * Struct that holds function pointers for implementations of the
+ * various GameLogic functions.  This can be passed directly to the
+ * below DefaultMain variant, which allows writing game rules without
+ * actually subclassing GameLogic.
+ *
+ * All fields here match the function of the same name in GameLogic.
+ */
+struct GameLogicCallbacks
+{
+
+  /* The following functions are mandatory and must be explicitly set
+     to a non-null value.  */
+  GameStateData (*GetInitialState) (Chain chain, unsigned& height,
+                                    std::string& hashHex) = nullptr;
+  GameStateData (*ProcessForward) (Chain chain, const GameStateData& oldState,
+                                   const Json::Value& blockData,
+                                   UndoData& undoData) = nullptr;
+  GameStateData (*ProcessBackwards) (Chain chain, const GameStateData& newState,
+                                     const Json::Value& blockData,
+                                     const UndoData& undoData) = nullptr;
+
+  /* These functions are optional and can be kept as null, in which case
+     their default implementation from GameLogic will be used.  */
+  Json::Value (*GameStateToJson) (const GameStateData& state) = nullptr;
+
+};
+
+/**
+ * Runs a DefaultMain, but with callbacks that specify the game rules instead
+ * of a GameLogic instance.  This makes it possible to build games without
+ * even subclassing GameLogic, simply by providing two functions that handle
+ * the game logic.
+ */
+int DefaultMain (const GameDaemonConfiguration& config,
+                 const std::string& gameId,
+                 const GameLogicCallbacks& callbacks);
 
 } // namespace xaya
 
