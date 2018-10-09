@@ -6,6 +6,7 @@
 
 #include <glog/logging.h>
 
+#include <algorithm>
 #include <cstdio>
 
 namespace xaya
@@ -70,6 +71,12 @@ uint256::FromHex (const std::string& hex)
 
   data = std::move (newData);
   return true;
+}
+
+void
+uint256::FromBlob (const unsigned char* blob)
+{
+  std::copy (blob, blob + NUM_BYTES, data.data ());
 }
 
 } // namespace xaya
