@@ -51,7 +51,7 @@ tests_SOURCES = testutils.cpp \
   storage_tests.cpp \
   uint256_tests.cpp \
   zmqsubscriber_tests.cpp
-check_HEADERS = testutils.hpp
+check_HEADERS = testutils.hpp storage_tests.hpp
 
 rpc-stubs/gamerpcclient.h: rpc-stubs/game.json
 	jsonrpcstub "$<" --cpp-client=GameRpcClient --cpp-client-file="$@"
