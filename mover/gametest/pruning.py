@@ -7,14 +7,10 @@ from mover import MoverTest
 
 """
 Tests basic operation with pruning enabled.
-
-Note that this test mainly ensures that things still "work" with pruning
-enabled.  It can't verify that data gets pruned, and it also can't verify
-that not too much is pruned.  The latter is because even if too much gets
-removed, things are fine as the game "just" resyncs from scratch.  However,
-in that case an ERROR is logged, which can be noticed at least manually
-when running the test.
 """
+
+# Regexp for the log that is printed when a pruned block would be needed.
+FAILED_GETTING_UNDO = 'Failed to retrieve undo data'
 
 
 class PruningTest (MoverTest):
@@ -41,6 +37,9 @@ class PruningTest (MoverTest):
       "b": {"x": -1, "y": 1},
     }})
 
+    self.stopGameDaemon ()
+    assert not self.gamenode.logMatches (FAILED_GETTING_UNDO)
+
     # Enable pruning while keeping at least one block, so that we can reorg.
     self.setPruning (1)
 
@@ -61,6 +60,25 @@ class PruningTest (MoverTest):
       "a": {"x": 1, "y": 0},
       "b": {"x": 0, "y": 0},
     }})
+
+    self.stopGameDaemon ()
+    assert not self.gamenode.logMatches (FAILED_GETTING_UNDO)
+
+    # Produce a longer reorg, which leads to a resync from scratch.  This still
+    # "works" (due to the resync), but prints a log message that we can look for
+    # to ensure things work as expected.
+    self.setPruning (1)
+
+    blk = self.rpc.xaya.getbestblockhash ()
+    self.generate (1)
+    self.expectGameState ({"players": {
+      "a": {"x": 1, "y": 0},
+      "b": {"x": 0, "y": 0},
+    }})
+    self.rpc.xaya.invalidateblock (blk)
+
+    self.stopGameDaemon ()
+    assert self.gamenode.logMatches (FAILED_GETTING_UNDO)
 
   def setPruning (self, value):
     """

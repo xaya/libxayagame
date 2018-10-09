@@ -10,6 +10,7 @@ import jsonrpclib
 import logging
 import os
 import os.path
+import re
 import shutil
 import subprocess
 import time
@@ -76,3 +77,24 @@ class Node ():
     self.log.info ("Waiting for game process to stop...")
     self.proc.wait ()
     self.proc = None
+
+  def logMatches (self, expr):
+    """
+    Checks if a line of the current INFO log for the game daemon matches
+    the given regexp (as string).
+    """
+
+    # If the daemon is currently running, some log lines may be cached and
+    # the test becomes flaky.  Force the user to stop the game daemon before
+    # looking through the logs.
+    assert self.proc is None
+
+    obj = re.compile (expr)
+    logfile = os.path.join (self.datadir,
+                            os.path.basename (self.binary) + ".INFO")
+
+    for line in open (logfile, 'r'):
+      if obj.search (line):
+        return True
+
+    return False
