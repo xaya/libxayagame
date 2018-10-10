@@ -17,6 +17,7 @@ libxayagame_la_SOURCES = \
   gamerpcserver.cpp \
   mainloop.cpp \
   pruningqueue.cpp \
+  sqlitegame.cpp \
   sqlitestorage.cpp \
   storage.cpp \
   uint256.cpp \
@@ -28,6 +29,7 @@ xayagame_HEADERS = \
   gamerpcserver.hpp \
   mainloop.hpp \
   pruningqueue.hpp \
+  sqlitegame.hpp \
   sqlitestorage.hpp \
   storage.hpp \
   uint256.hpp \
