@@ -73,6 +73,11 @@ protected:
   virtual void SetupSchema ();
 
   /**
+   * Returns the handle of the SQLite database.
+   */
+  sqlite3* GetDatabase ();
+
+  /**
    * Prepares an SQL statement given as string and stores it in the cache,
    * or retrieves the existing statement from the cache.  The prepared statement
    * is also reset, so that it can be reused right away.
@@ -81,6 +86,13 @@ protected:
    * SQLiteStorage object, not by the caller.
    */
   sqlite3_stmt* PrepareStatement (const std::string& sql) const;
+
+  /**
+   * Steps a given statement and expects no results (i.e. for an update).
+   * Can also be used for statements where we expect exactly one result to
+   * verify that no more are there.
+   */
+  static void StepWithNoResult (sqlite3_stmt* stmt);
 
 public:
 
