@@ -41,6 +41,19 @@ struct GameDaemonConfiguration
    */
   int EnablePruning = -1;
 
+  /**
+   * The storage type to be used.  Can be "memory" (default) or "sqlite".
+   */
+  std::string StorageType = "memory";
+
+  /**
+   * The base data directory for persistent storage.  Must be set unless memory
+   * storage is selected.  The game ID is added as an additional directory part
+   * to it, so that multiple libxayagame-based games can be in the same base
+   * data directory.
+   */
+  std::string DataDirectory;
+
 };
 
 /**

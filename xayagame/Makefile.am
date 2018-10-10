@@ -8,7 +8,8 @@ libxayagame_la_CXXFLAGS = \
   $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(ZMQ_CFLAGS)
 libxayagame_la_LIBADD = \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(GLOG_LIBS) $(SQLITE3_LIBS) $(ZMQ_LIBS)
+  $(GLOG_LIBS) $(SQLITE3_LIBS) $(ZMQ_LIBS) \
+  -lstdc++fs
 libxayagame_la_SOURCES = \
   defaultmain.cpp \
   game.cpp \
