@@ -19,9 +19,12 @@ namespace xaya
 class uint256 final
 {
 
-private:
+public:
 
   static constexpr size_t NUM_BYTES = 256 / 8;
+
+private:
+
   using Array = std::array<unsigned char, NUM_BYTES>;
 
   /** The raw bytes, stored as big-endian.  */
@@ -49,17 +52,20 @@ public:
    */
   bool FromHex (const std::string& hex);
 
-  const_iterator
-  begin () const
+  /**
+   * Returns a pointer to the data blob that holds the raw binary data.
+   * Its length is NUM_BYTES.
+   */
+  const unsigned char*
+  GetBlob () const
   {
-    return data.begin ();
+    return data.data ();
   }
 
-  const_iterator
-  end () const
-  {
-    return data.end ();
-  }
+  /**
+   * Sets the data from a raw blob of bytes, which must be of length NUM_BYTES.
+   */
+  void FromBlob (const unsigned char* blob);
 
   friend bool
   operator== (const uint256& a, const uint256& b)

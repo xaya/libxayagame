@@ -18,12 +18,19 @@
 DEFINE_string (xaya_rpc_url, "",
                "URL at which Xaya Core's JSON-RPC interface is available");
 DEFINE_int32 (game_rpc_port, 0,
-              "The port at which the game daemon's JSON-RPC server will be"
+              "the port at which the game daemon's JSON-RPC server will be"
               " start (if non-zero)");
 
 DEFINE_int32 (enable_pruning, -1,
-              "If non-negative (including zero), enable pruning of old undo"
+              "if non-negative (including zero), enable pruning of old undo"
               " data and keep as many blocks as specified by the value");
+
+DEFINE_string (storage_type, "memory",
+               "the type of storage to use for game data (memory or sqlite)");
+DEFINE_string (datadir, "",
+               "base data directory for game data (will be extended by the"
+               " game ID and chain); must be set if --storage_type is not"
+               " memory");
 
 int
 main (int argc, char** argv)
@@ -41,10 +48,19 @@ main (int argc, char** argv)
       return EXIT_FAILURE;
     }
 
+  if (FLAGS_datadir.empty () && FLAGS_storage_type != "memory")
+    {
+      std::cerr << "Error: --datadir must be specified for non-memory storage"
+                << std::endl;
+      return EXIT_FAILURE;
+    }
+
   xaya::GameDaemonConfiguration config;
   config.XayaRpcUrl = FLAGS_xaya_rpc_url;
   config.GameRpcPort = FLAGS_game_rpc_port;
   config.EnablePruning = FLAGS_enable_pruning;
+  config.StorageType = FLAGS_storage_type;
+  config.DataDirectory = FLAGS_datadir;
 
   mover::MoverLogic rules;
   const int res = xaya::DefaultMain (config, "mv", rules);

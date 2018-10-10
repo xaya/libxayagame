@@ -19,12 +19,11 @@ TEST (Uint256Tests, FromValidHex)
   uint256 obj;
   ASSERT_TRUE (obj.FromHex ("42" + std::string (60, '0') + "aF"));
 
-  auto it = obj.begin ();
-  EXPECT_EQ (*it++, 0x42);
-  for (size_t i = 1; i < 31; ++i)
-    EXPECT_EQ (*it++, 0x00);
-  EXPECT_EQ (*it++, 0xAF);
-  EXPECT_EQ (it, obj.end ());
+  auto* ptr = obj.GetBlob ();
+  EXPECT_EQ (*ptr++, 0x42);
+  for (size_t i = 1; i < uint256::NUM_BYTES - 1; ++i)
+    EXPECT_EQ (*ptr++, 0x00);
+  EXPECT_EQ (*ptr++, 0xAF);
 }
 
 TEST (Uint256Tests, FromInvalidHex)
@@ -69,6 +68,16 @@ TEST (Uint256Tests, Comparison)
   EXPECT_TRUE (low1 < high);
   EXPECT_FALSE (low1 < low2);
   EXPECT_FALSE (high < low1);
+}
+
+TEST (Uint256Tests, FromBlob)
+{
+  uint256 obj;
+  ASSERT_TRUE (obj.FromHex ("42" + std::string (60, '0') + "24"));
+
+  uint256 copy;
+  copy.FromBlob (obj.GetBlob ());
+  EXPECT_TRUE (obj == copy);
 }
 
 } // anonymous namespace

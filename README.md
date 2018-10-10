@@ -33,6 +33,8 @@ for the configuration and/or build to be successful:
   and `libjsonrpccpp-tools`.
 - [`ZeroMQ C++ bindings`](http://zeromq.org/bindings:cpp):
   Available in the Debian package `libzmq3-dev`.
+- [`SQLite3`](https://www.sqlite.org/):
+  In Debian, the `libsqlite3-dev` package can be installed.
 - [`glog`](https://github.com/google/glog):
   Available for Debian as `libgoogle-glog-dev`.
 - [`gflags`](https://github.com/gflags/gflags):

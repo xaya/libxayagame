@@ -5,10 +5,11 @@ EXTRA_DIST = rpc-stubs/game.json rpc-stubs/xaya.json
 
 libxayagame_la_CXXFLAGS = \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
-  $(GLOG_CFLAGS) $(ZMQ_CFLAGS)
+  $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(ZMQ_CFLAGS)
 libxayagame_la_LIBADD = \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(GLOG_LIBS) $(ZMQ_LIBS)
+  $(GLOG_LIBS) $(SQLITE3_LIBS) $(ZMQ_LIBS) \
+  -lstdc++fs
 libxayagame_la_SOURCES = \
   defaultmain.cpp \
   game.cpp \
@@ -16,6 +17,7 @@ libxayagame_la_SOURCES = \
   gamerpcserver.cpp \
   mainloop.cpp \
   pruningqueue.cpp \
+  sqlitestorage.cpp \
   storage.cpp \
   uint256.cpp \
   zmqsubscriber.cpp
@@ -26,6 +28,7 @@ xayagame_HEADERS = \
   gamerpcserver.hpp \
   mainloop.hpp \
   pruningqueue.hpp \
+  sqlitestorage.hpp \
   storage.hpp \
   uint256.hpp \
   zmqsubscriber.hpp \
@@ -48,10 +51,11 @@ tests_SOURCES = testutils.cpp \
   gamelogic_tests.cpp \
   mainloop_tests.cpp \
   pruningqueue_tests.cpp \
+  sqlitestorage_tests.cpp \
   storage_tests.cpp \
   uint256_tests.cpp \
   zmqsubscriber_tests.cpp
-check_HEADERS = testutils.hpp
+check_HEADERS = testutils.hpp storage_tests.hpp
 
 rpc-stubs/gamerpcclient.h: rpc-stubs/game.json
 	jsonrpcstub "$<" --cpp-client=GameRpcClient --cpp-client-file="$@"

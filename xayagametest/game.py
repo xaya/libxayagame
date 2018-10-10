@@ -24,8 +24,9 @@ class Node ():
   It is implemented for the Mover game daemon included with libxayagame, but
   other game daemons are supported as well if they:
 
-  - Have the --xaya_rpc_url and --game_rpc_port flags that moverd has, and
-  - provide at least the "stop" and "getcurrentstate" RPC methods.
+  * Have the --xaya_rpc_url, --game_rpc_port and --datadir flags that moverd
+    has, and
+  * provide at least the "stop" and "getcurrentstate" RPC methods.
   """
 
   def __init__ (self, basedir, port, binary):
@@ -50,6 +51,7 @@ class Node ():
     args = [self.binary]
     args.append ("--xaya_rpc_url=%s" % xayarpc)
     args.append ("--game_rpc_port=%d" % self.port)
+    args.append ("--datadir=%s" % self.datadir)
     args.extend (extraArgs)
     envVars = dict (os.environ)
     envVars["GLOG_log_dir"] = self.datadir
