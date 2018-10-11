@@ -104,6 +104,8 @@ public:
 
   ~SQLiteStorage ();
 
+  void Initialise () override;
+
   /**
    * Clears the storage.  This deletes and re-creates the full database,
    * and does not only delete from the tables that SQLiteStorage itself uses.

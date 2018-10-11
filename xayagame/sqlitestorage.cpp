@@ -74,8 +74,6 @@ SQLiteStorage::SQLiteStorage (const std::string& f)
     LOG (WARNING) << "Failed to set up SQLite error handler: " << rc;
   else
     LOG (INFO) << "Configured SQLite error handler";
-
-  OpenDatabase ();
 }
 
 SQLiteStorage::~SQLiteStorage ()
@@ -179,6 +177,14 @@ SQLiteStorage::SetupSchema ()
   )", nullptr, nullptr, nullptr);
   if (rc != SQLITE_OK)
     LOG (FATAL) << "Failed to set up database schema: " << rc;
+}
+
+void
+SQLiteStorage::Initialise ()
+{
+  StorageInterface::Initialise ();
+  if (db == nullptr)
+    OpenDatabase ();
 }
 
 void

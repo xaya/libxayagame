@@ -10,6 +10,12 @@ namespace xaya
 {
 
 void
+StorageInterface::Initialise ()
+{
+  /* Nothing is done here, but can be overridden by subclasses.  */
+}
+
+void
 MemoryStorage::Clear ()
 {
   hasState = false;

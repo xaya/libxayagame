@@ -378,6 +378,9 @@ Game::SetStorage (StorageInterface* s)
   CHECK (!mainLoop.IsRunning ());
   CHECK (pruningQueue == nullptr);
   storage = s;
+
+  LOG (INFO) << "Storage has been added to Game, initialising it now";
+  storage->Initialise ();
 }
 
 void
