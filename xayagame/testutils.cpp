@@ -7,7 +7,6 @@
 #include <glog/logging.h>
 
 #include <cstdio>
-#include <string>
 
 namespace xaya
 {
@@ -25,6 +24,46 @@ BlockHash (unsigned num)
   uint256 res;
   CHECK (res.FromHex (hex));
   return res;
+}
+
+void
+GameTestFixture::CallBlockAttach (Game& g, const std::string& reqToken,
+                                  const uint256& parentHash,
+                                  const uint256& blockHash,
+                                  const Json::Value& moves,
+                                  const bool seqMismatch) const
+{
+  Json::Value block(Json::objectValue);
+  block["hash"] = blockHash.ToHex ();
+  block["parent"] = parentHash.ToHex ();
+
+  Json::Value data(Json::objectValue);
+  if (!reqToken.empty ())
+    data["reqtoken"] = reqToken;
+  data["block"] = block;
+  data["moves"] = moves;
+
+  g.BlockAttach (gameId, data, seqMismatch);
+}
+
+void
+GameTestFixture::CallBlockDetach (Game& g, const std::string& reqToken,
+                                  const uint256& parentHash,
+                                  const uint256& blockHash,
+                                  const Json::Value& moves,
+                                  const bool seqMismatch) const
+{
+  Json::Value block(Json::objectValue);
+  block["hash"] = blockHash.ToHex ();
+  block["parent"] = parentHash.ToHex ();
+
+  Json::Value data(Json::objectValue);
+  if (!reqToken.empty ())
+    data["reqtoken"] = reqToken;
+  data["block"] = block;
+  data["moves"] = moves;
+
+  g.BlockDetach (gameId, data, seqMismatch);
 }
 
 } // namespace xaya

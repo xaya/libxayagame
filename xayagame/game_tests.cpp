@@ -322,9 +322,7 @@ public:
 
 /* ************************************************************************** */
 
-} // anonymous namespace
-
-class GameTests : public testing::Test
+class GameTests : public GameTestFixture
 {
 
 protected:
@@ -341,16 +339,9 @@ protected:
   /** Game rules for the test game.  */
   TestGame rules;
 
-  static void
-  SetUpTestCase ()
-  {
-    /* Use JSON-RPC V2 by the RPC client in Game.  It seems that V1 to V1
-       does not work with jsonrpccpp for some reason.  */
-    Game::rpcClientVersion = jsonrpc::JSONRPC_CLIENT_V2;
-  }
-
   GameTests ()
-    : httpServer(HTTP_PORT), mockXayaServer(httpServer),
+    : GameTestFixture(GAME_ID),
+      httpServer(HTTP_PORT), mockXayaServer(httpServer),
       httpClient(GetHttpUrl ())
   {
     mockXayaServer.StartListening ();
@@ -366,84 +357,18 @@ protected:
     mockXayaServer.StopListening ();
   }
 
-  /* Make some private internals of Game accessible to tests.  */
-
-  using State = Game::State;
-
-  static std::string
-  GetZmqEndpoint (const Game& g)
-  {
-    return g.zmq.addr;
-  }
-
-  static State
-  GetState (const Game& g)
-  {
-    return g.state;
-  }
-
-  static void
-  TrackGame (Game& g)
-  {
-    g.TrackGame ();
-  }
-
-  static void
-  UntrackGame (Game& g)
-  {
-    g.UntrackGame ();
-  }
-
-  static void
-  ReinitialiseState (Game& g)
-  {
-    std::lock_guard<std::mutex> lock(g.mut);
-    g.ReinitialiseState ();
-  }
-
-  static void
-  CallBlockAttach (Game& g, const std::string& reqToken,
-                   const uint256& parentHash, const uint256& blockHash,
-                   const Json::Value& moves, const bool seqMismatch)
-  {
-    Json::Value block(Json::objectValue);
-    block["hash"] = blockHash.ToHex ();
-    block["parent"] = parentHash.ToHex ();
-
-    Json::Value data(Json::objectValue);
-    if (!reqToken.empty ())
-      data["reqtoken"] = reqToken;
-    data["block"] = block;
-    data["moves"] = moves;
-
-    g.BlockAttach (GAME_ID, data, seqMismatch);
-  }
-
-  static void
+  void
   CallBlockDetach (Game& g, const std::string& reqToken,
                    const uint256& parentHash, const uint256& blockHash,
-                   const bool seqMismatch)
+                   const bool seqMismatch) const
   {
-    Json::Value block(Json::objectValue);
-    block["hash"] = blockHash.ToHex ();
-    block["parent"] = parentHash.ToHex ();
-
-    Json::Value data(Json::objectValue);
-    if (!reqToken.empty ())
-      data["reqtoken"] = reqToken;
-    data["block"] = block;
-
     /* For our example test game, the moves are not used for rolling backwards.
        Thus just set an empty string.  */
-    data["moves"] = "";
-
-    g.BlockDetach (GAME_ID, data, seqMismatch);
+    GameTestFixture::CallBlockDetach (g, reqToken, parentHash, blockHash,
+                                      "", seqMismatch);
   }
 
 };
-
-namespace
-{
 
 /* ************************************************************************** */
 
