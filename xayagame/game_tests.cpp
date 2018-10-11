@@ -322,7 +322,7 @@ public:
 
 /* ************************************************************************** */
 
-class GameTests : public GameTestFixture
+class GameTests : public GameTestWithBlockchain
 {
 
 protected:
@@ -340,7 +340,7 @@ protected:
   TestGame rules;
 
   GameTests ()
-    : GameTestFixture(GAME_ID),
+    : GameTestWithBlockchain(GAME_ID),
       httpServer(HTTP_PORT), mockXayaServer(httpServer),
       httpClient(GetHttpUrl ())
   {
@@ -577,14 +577,12 @@ TEST_F (InitialStateTests, WaitingForGenesis)
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer.SetBestBlock (9, BlockHash (9));
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (8), BlockHash (9),
-                   emptyMoves, NO_SEQ_MISMATCH);
+  SetStartingBlock (BlockHash (8));
+  AttachBlock (g, BlockHash (9), emptyMoves);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   BlockHash (9), TestGame::GenesisBlockHash (),
-                   emptyMoves, NO_SEQ_MISMATCH);
+  AttachBlock (g, TestGame::GenesisBlockHash (), emptyMoves);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectInitialStateInStorage ();
 }
@@ -597,8 +595,8 @@ TEST_F (InitialStateTests, MissedNotification)
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer.SetBestBlock (9, BlockHash (9));
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (8), BlockHash (9),
-                   emptyMoves, NO_SEQ_MISMATCH);
+  SetStartingBlock (BlockHash (8));
+  AttachBlock (g, BlockHash (9), emptyMoves);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer.SetBestBlock (20, TestGame::GenesisBlockHash ());
@@ -638,9 +636,8 @@ TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
   mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
                                TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  SetStartingBlock (TestGame::GenesisBlockHash ());
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
 
   const Json::Value state = g.GetCurrentJsonState ();
   EXPECT_EQ (state["gameid"], GAME_ID);
@@ -661,6 +658,7 @@ protected:
   {
     mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
                                  TestGame::GenesisBlockHash ());
+    SetStartingBlock (TestGame::GenesisBlockHash ());
     ReinitialiseState (g);
     EXPECT_EQ (GetState (g), State::UP_TO_DATE);
     ExpectGameState (TestGame::GenesisBlockHash (), "");
@@ -700,34 +698,26 @@ protected:
 
 TEST_F (SyncingTests, UpToDateOperation)
 {
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (12), Moves ("a2c3"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
 
-  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   NO_SEQ_MISMATCH);
+  DetachBlock (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockDetach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   NO_SEQ_MISMATCH);
+  DetachBlock (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (TestGame::GenesisBlockHash (), "");
 }
 
 TEST_F (SyncingTests, UpToDateIgnoresReqtoken)
 {
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
@@ -742,8 +732,7 @@ TEST_F (SyncingTests, UpToDateIgnoresReqtoken)
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (12), Moves ("a2c3"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
 }
@@ -795,14 +784,11 @@ TEST_F (SyncingTests, CatchingUpBackwards)
       .WillOnce (Return (SendupdatesResponse (TestGame::GenesisBlockHash (),
                                               "reqtoken")));
 
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (12), Moves ("a2c3"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
 
@@ -922,33 +908,27 @@ protected:
 
 TEST_F (PruningTests, AttachDetach)
 {
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
   AssertIsPruned (TestGame::GenesisBlockHash ());
   AssertNotPruned (BlockHash (11));
 
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (12), Moves ("a2c3"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
   AssertIsPruned (BlockHash (11));
   AssertNotPruned (BlockHash (12));
 
   /* Detaching one block should work, as we keep one undo state.  */
-  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   NO_SEQ_MISMATCH);
+  DetachBlock (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 }
 
 TEST_F (PruningTests, WithReqToken)
 {
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
   AssertIsPruned (TestGame::GenesisBlockHash ());
@@ -966,9 +946,7 @@ TEST_F (PruningTests, MissedZmq)
   EXPECT_CALL (mockXayaServer, game_sendupdates (_, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
 
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
   AssertIsPruned (TestGame::GenesisBlockHash ());
@@ -1061,9 +1039,7 @@ TEST_F (GameLogicTransactionsTests, WorkingFine)
     EXPECT_CALL (rules, RollbackTransaction ()).Times (0);
   }
 
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (fallibleStorage, BlockHash (11), "a0b1");
 }
@@ -1081,9 +1057,7 @@ TEST_F (GameLogicTransactionsTests, WithFailure)
 
   try
     {
-      CallBlockAttach (g, NO_REQ_TOKEN,
-                       TestGame::GenesisBlockHash (), BlockHash (11),
-                       Moves ("a0b1"), NO_SEQ_MISMATCH);
+      AttachBlock (g, BlockHash (11), Moves ("a0b1"));
       FAIL () << "No failure thrown from memory storage";
     }
   catch (const FallibleMemoryStorage::Failure& exc)

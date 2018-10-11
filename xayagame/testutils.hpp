@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <mutex>
+#include <vector>
 #include <string>
 
 namespace xaya
@@ -102,6 +103,51 @@ protected:
   void CallBlockDetach (Game& g, const std::string& reqToken,
                         const uint256& parentHash, const uint256& blockHash,
                         const Json::Value& moves, const bool seqMismatch) const;
+
+};
+
+/**
+ * An extension to the GameTestFixture that keeps track of its own "blockchain"
+ * in a stack of block hashes and associated move objects.  This can be
+ * used to test basic situations of consistent attaches/detaches more easily
+ * than with CallBlockAttach and CallBlockDetach.
+ */
+class GameTestWithBlockchain : public GameTestFixture
+{
+
+private:
+
+  /** Stack of attached block hashes.  */
+  std::vector<uint256> blockHashes;
+  /**
+   * Stack of corresponding move objects (the bottom-most entry in
+   * blockHashes was set by SetStartingBlock and doesn't have any moves
+   * associated to it).
+   */
+  std::vector<Json::Value> moveStack;
+
+public:
+
+  using GameTestFixture::GameTestFixture;
+
+  /**
+   * Resets the "blockchain" to have the given starting block (need not be
+   * the real genesis block, it is just the block from where the next attach
+   * will be done).
+   */
+  void SetStartingBlock (const uint256& hash);
+
+  /**
+   * Attaches the given next block on top of the current blockchain stack.
+   * This calls BlockAttach on the game instance with no request token (empty
+   * string) and without sequence mismatch.
+   */
+  void AttachBlock (Game& g, const uint256& hash, const Json::Value& moves);
+
+  /**
+   * Detaches the current top block from the simulated blockchain.
+   */
+  void DetachBlock (Game& g);
 
 };
 

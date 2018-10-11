@@ -66,4 +66,33 @@ GameTestFixture::CallBlockDetach (Game& g, const std::string& reqToken,
   g.BlockDetach (gameId, data, seqMismatch);
 }
 
+void
+GameTestWithBlockchain::SetStartingBlock (const uint256& hash)
+{
+  blockHashes = {hash};
+  moveStack.clear ();
+}
+
+void
+GameTestWithBlockchain::AttachBlock (Game& g, const uint256& hash,
+                                     const Json::Value& moves)
+{
+  CHECK (!blockHashes.empty ()) << "No starting block has been set";
+  CallBlockAttach (g, "", blockHashes.back (), hash, moves, false);
+  blockHashes.push_back (hash);
+  moveStack.push_back (moves);
+}
+
+void
+GameTestWithBlockchain::DetachBlock (Game& g)
+{
+  CHECK (!blockHashes.empty ());
+  CHECK (!moveStack.empty ());
+
+  const uint256 hash = blockHashes.back ();
+  blockHashes.pop_back ();
+  CallBlockDetach (g, "", blockHashes.back (), hash, moveStack.back (), false);
+  moveStack.pop_back ();
+}
+
 } // namespace xaya
