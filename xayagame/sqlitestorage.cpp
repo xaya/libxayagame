@@ -24,19 +24,6 @@ SQLiteErrorLogger (void* arg, const int errCode, const char* msg)
 }
 
 /**
- * Steps a given statement and expects no results (i.e. for an update).
- * Can also be used for statements where we expect exactly one result to
- * verify that no more are there.
- */
-void
-StepWithNoResult (sqlite3_stmt* stmt)
-{
-  const int rc = sqlite3_step (stmt);
-  if (rc != SQLITE_DONE)
-    LOG (FATAL) << "Expected SQLITE_DONE, got: " << rc;
-}
-
-/**
  * Binds a BLOB corresponding to an uint256 value to a statement parameter.
  * The value is bound using SQLITE_STATIC, so the uint256's data must not be
  * changed until the statement execution has finished.
@@ -87,8 +74,6 @@ SQLiteStorage::SQLiteStorage (const std::string& f)
     LOG (WARNING) << "Failed to set up SQLite error handler: " << rc;
   else
     LOG (INFO) << "Configured SQLite error handler";
-
-  OpenDatabase ();
 }
 
 SQLiteStorage::~SQLiteStorage ()
@@ -129,6 +114,13 @@ SQLiteStorage::CloseDatabase ()
   db = nullptr;
 }
 
+sqlite3*
+SQLiteStorage::GetDatabase ()
+{
+  CHECK (db != nullptr);
+  return db;
+}
+
 sqlite3_stmt*
 SQLiteStorage::PrepareStatement (const std::string& sql) const
 {
@@ -157,6 +149,19 @@ SQLiteStorage::PrepareStatement (const std::string& sql) const
   return res;
 }
 
+/**
+ * Steps a given statement and expects no results (i.e. for an update).
+ * Can also be used for statements where we expect exactly one result to
+ * verify that no more are there.
+ */
+void
+SQLiteStorage::StepWithNoResult (sqlite3_stmt* stmt)
+{
+  const int rc = sqlite3_step (stmt);
+  if (rc != SQLITE_DONE)
+    LOG (FATAL) << "Expected SQLITE_DONE, got: " << rc;
+}
+
 void
 SQLiteStorage::SetupSchema ()
 {
@@ -171,7 +176,15 @@ SQLiteStorage::SetupSchema ()
          `height` INTEGER);
   )", nullptr, nullptr, nullptr);
   if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to set up database schema";
+    LOG (FATAL) << "Failed to set up database schema: " << rc;
+}
+
+void
+SQLiteStorage::Initialise ()
+{
+  StorageInterface::Initialise ();
+  if (db == nullptr)
+    OpenDatabase ();
 }
 
 void
@@ -238,27 +251,23 @@ void
 SQLiteStorage::SetCurrentGameState (const uint256& hash,
                                     const GameStateData& data)
 {
-  StepWithNoResult (PrepareStatement ("SAVEPOINT `xayagame`"));
-
-  StepWithNoResult (PrepareStatement (R"(
-    DELETE FROM `xayagame_current` WHERE `key` IN ('blockhash', 'gamestate')
-  )"));
+  StepWithNoResult (PrepareStatement ("SAVEPOINT `xayagame-setcurrentstate`"));
 
   sqlite3_stmt* stmt = PrepareStatement (R"(
-    INSERT INTO `xayagame_current` (`key`, `value`)
+    INSERT OR REPLACE INTO `xayagame_current` (`key`, `value`)
       VALUES ('blockhash', ?1)
   )");
   BindUint256 (stmt, 1, hash);
   StepWithNoResult (stmt);
 
   stmt = PrepareStatement (R"(
-    INSERT INTO `xayagame_current` (`key`, `value`)
+    INSERT OR REPLACE INTO `xayagame_current` (`key`, `value`)
       VALUES ('gamestate', ?1)
   )");
   BindStringBlob (stmt, 1, data);
   StepWithNoResult (stmt);
 
-  StepWithNoResult (PrepareStatement ("RELEASE `xayagame`"));
+  StepWithNoResult (PrepareStatement ("RELEASE `xayagame-setcurrentstate`"));
 }
 
 bool
@@ -286,7 +295,7 @@ SQLiteStorage::AddUndoData (const uint256& hash,
                             const unsigned height, const UndoData& data)
 {
   auto* stmt = PrepareStatement (R"(
-    INSERT OR IGNORE INTO `xayagame_undo` (`hash`, `data`, `height`)
+    INSERT OR REPLACE INTO `xayagame_undo` (`hash`, `data`, `height`)
       VALUES (?1, ?2, ?3)
   )");
 

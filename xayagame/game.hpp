@@ -200,7 +200,7 @@ private:
    */
   static std::string StateToString (State s);
 
-  friend class GameTests;
+  friend class GameTestFixture;
 
 public:
 

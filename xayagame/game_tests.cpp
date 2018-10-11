@@ -312,13 +312,17 @@ public:
     return res;
   }
 
+  /* Mock the transaction methods.  They are not relevant for most tests, but
+     we want to test against expectations in specific tests.  */
+  MOCK_METHOD0 (BeginTransaction, void ());
+  MOCK_METHOD0 (CommitTransaction, void ());
+  MOCK_METHOD0 (RollbackTransaction, void ());
+
 };
 
 /* ************************************************************************** */
 
-} // anonymous namespace
-
-class GameTests : public testing::Test
+class GameTests : public GameTestWithBlockchain
 {
 
 protected:
@@ -335,16 +339,9 @@ protected:
   /** Game rules for the test game.  */
   TestGame rules;
 
-  static void
-  SetUpTestCase ()
-  {
-    /* Use JSON-RPC V2 by the RPC client in Game.  It seems that V1 to V1
-       does not work with jsonrpccpp for some reason.  */
-    Game::rpcClientVersion = jsonrpc::JSONRPC_CLIENT_V2;
-  }
-
   GameTests ()
-    : httpServer(HTTP_PORT), mockXayaServer(httpServer),
+    : GameTestWithBlockchain(GAME_ID),
+      httpServer(HTTP_PORT), mockXayaServer(httpServer),
       httpClient(GetHttpUrl ())
   {
     mockXayaServer.StartListening ();
@@ -360,84 +357,18 @@ protected:
     mockXayaServer.StopListening ();
   }
 
-  /* Make some private internals of Game accessible to tests.  */
-
-  using State = Game::State;
-
-  static std::string
-  GetZmqEndpoint (const Game& g)
-  {
-    return g.zmq.addr;
-  }
-
-  static State
-  GetState (const Game& g)
-  {
-    return g.state;
-  }
-
-  static void
-  TrackGame (Game& g)
-  {
-    g.TrackGame ();
-  }
-
-  static void
-  UntrackGame (Game& g)
-  {
-    g.UntrackGame ();
-  }
-
-  static void
-  ReinitialiseState (Game& g)
-  {
-    std::lock_guard<std::mutex> lock(g.mut);
-    g.ReinitialiseState ();
-  }
-
-  static void
-  CallBlockAttach (Game& g, const std::string& reqToken,
-                   const uint256& parentHash, const uint256& blockHash,
-                   const Json::Value& moves, const bool seqMismatch)
-  {
-    Json::Value block(Json::objectValue);
-    block["hash"] = blockHash.ToHex ();
-    block["parent"] = parentHash.ToHex ();
-
-    Json::Value data(Json::objectValue);
-    if (!reqToken.empty ())
-      data["reqtoken"] = reqToken;
-    data["block"] = block;
-    data["moves"] = moves;
-
-    g.BlockAttach (GAME_ID, data, seqMismatch);
-  }
-
-  static void
+  void
   CallBlockDetach (Game& g, const std::string& reqToken,
                    const uint256& parentHash, const uint256& blockHash,
-                   const bool seqMismatch)
+                   const bool seqMismatch) const
   {
-    Json::Value block(Json::objectValue);
-    block["hash"] = blockHash.ToHex ();
-    block["parent"] = parentHash.ToHex ();
-
-    Json::Value data(Json::objectValue);
-    if (!reqToken.empty ())
-      data["reqtoken"] = reqToken;
-    data["block"] = block;
-
     /* For our example test game, the moves are not used for rolling backwards.
        Thus just set an empty string.  */
-    data["moves"] = "";
-
-    g.BlockDetach (GAME_ID, data, seqMismatch);
+    GameTestFixture::CallBlockDetach (g, reqToken, parentHash, blockHash,
+                                      "", seqMismatch);
   }
 
 };
-
-namespace
-{
 
 /* ************************************************************************** */
 
@@ -646,14 +577,12 @@ TEST_F (InitialStateTests, WaitingForGenesis)
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer.SetBestBlock (9, BlockHash (9));
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (8), BlockHash (9),
-                   emptyMoves, NO_SEQ_MISMATCH);
+  SetStartingBlock (BlockHash (8));
+  AttachBlock (g, BlockHash (9), emptyMoves);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   BlockHash (9), TestGame::GenesisBlockHash (),
-                   emptyMoves, NO_SEQ_MISMATCH);
+  AttachBlock (g, TestGame::GenesisBlockHash (), emptyMoves);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectInitialStateInStorage ();
 }
@@ -666,8 +595,8 @@ TEST_F (InitialStateTests, MissedNotification)
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer.SetBestBlock (9, BlockHash (9));
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (8), BlockHash (9),
-                   emptyMoves, NO_SEQ_MISMATCH);
+  SetStartingBlock (BlockHash (8));
+  AttachBlock (g, BlockHash (9), emptyMoves);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer.SetBestBlock (20, TestGame::GenesisBlockHash ());
@@ -707,9 +636,8 @@ TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
   mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
                                TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  SetStartingBlock (TestGame::GenesisBlockHash ());
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
 
   const Json::Value state = g.GetCurrentJsonState ();
   EXPECT_EQ (state["gameid"], GAME_ID);
@@ -730,19 +658,28 @@ protected:
   {
     mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
                                  TestGame::GenesisBlockHash ());
+    SetStartingBlock (TestGame::GenesisBlockHash ());
     ReinitialiseState (g);
     EXPECT_EQ (GetState (g), State::UP_TO_DATE);
     ExpectGameState (TestGame::GenesisBlockHash (), "");
+  }
+
+  static void
+  ExpectGameState (const StorageInterface& s,
+                   const uint256& expectedHash,
+                   const GameStateData& state)
+  {
+    uint256 hash;
+    ASSERT_TRUE (s.GetCurrentBlockHash (hash));
+    EXPECT_EQ (hash, expectedHash);
+    EXPECT_EQ (s.GetCurrentGameState (), state);
   }
 
   void
   ExpectGameState (const uint256& expectedHash,
                    const GameStateData& state) const
   {
-    uint256 hash;
-    ASSERT_TRUE (storage.GetCurrentBlockHash (hash));
-    EXPECT_EQ (hash, expectedHash);
-    EXPECT_EQ (storage.GetCurrentGameState (), state);
+    ExpectGameState (storage, expectedHash, state);
   }
 
   /**
@@ -761,34 +698,26 @@ protected:
 
 TEST_F (SyncingTests, UpToDateOperation)
 {
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (12), Moves ("a2c3"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
 
-  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   NO_SEQ_MISMATCH);
+  DetachBlock (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockDetach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   NO_SEQ_MISMATCH);
+  DetachBlock (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (TestGame::GenesisBlockHash (), "");
 }
 
 TEST_F (SyncingTests, UpToDateIgnoresReqtoken)
 {
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
@@ -803,8 +732,7 @@ TEST_F (SyncingTests, UpToDateIgnoresReqtoken)
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (12), Moves ("a2c3"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
 }
@@ -856,14 +784,11 @@ TEST_F (SyncingTests, CatchingUpBackwards)
       .WillOnce (Return (SendupdatesResponse (TestGame::GenesisBlockHash (),
                                               "reqtoken")));
 
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (12), Moves ("a2c3"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
 
@@ -983,33 +908,27 @@ protected:
 
 TEST_F (PruningTests, AttachDetach)
 {
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
   AssertIsPruned (TestGame::GenesisBlockHash ());
   AssertNotPruned (BlockHash (11));
 
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (12), Moves ("a2c3"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
   AssertIsPruned (BlockHash (11));
   AssertNotPruned (BlockHash (12));
 
   /* Detaching one block should work, as we keep one undo state.  */
-  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
-                   NO_SEQ_MISMATCH);
+  DetachBlock (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 }
 
 TEST_F (PruningTests, WithReqToken)
 {
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
   AssertIsPruned (TestGame::GenesisBlockHash ());
@@ -1027,9 +946,7 @@ TEST_F (PruningTests, MissedZmq)
   EXPECT_CALL (mockXayaServer, game_sendupdates (_, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
 
-  CallBlockAttach (g, NO_REQ_TOKEN,
-                   TestGame::GenesisBlockHash (), BlockHash (11),
-                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
   AssertIsPruned (TestGame::GenesisBlockHash ());
@@ -1041,6 +958,115 @@ TEST_F (PruningTests, MissedZmq)
   CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (12), BlockHash (13),
                    Moves (""), SEQ_MISMATCH);
   AssertNotPruned (BlockHash (11));
+}
+
+/* ************************************************************************** */
+
+/**
+ * Helper subclass of MemoryStorage that allows us to fail (throw an exception)
+ * when setting the current state.
+ */
+class FallibleMemoryStorage : public MemoryStorage
+{
+
+private:
+
+  /** Whether or not SetCurrentGameState should fail.  */
+  bool shouldFail = false;
+
+public:
+
+  class Failure : public std::runtime_error
+  {
+
+  public:
+
+    Failure ()
+      : std::runtime_error("failing memory storage")
+    {}
+
+  };
+
+  /**
+   * Sets whether or not SetCurrentGameState calls should fail (throw an
+   * exception) when called instead of changing the game state.
+   */
+  void
+  SetShouldFail (const bool val)
+  {
+    shouldFail = val;
+  }
+
+  void
+  SetCurrentGameState (const uint256& hash, const GameStateData& data) override
+  {
+    if (shouldFail)
+      {
+        LOG (INFO) << "Failing call to SetCurrentGameState on purpose";
+        throw Failure ();
+      }
+    MemoryStorage::SetCurrentGameState (hash, data);
+  }
+
+};
+
+class GameLogicTransactionsTests : public SyncingTests
+{
+
+protected:
+
+  /** Alternative (fallible) storage used in the tests.  */
+  FallibleMemoryStorage fallibleStorage;
+
+  GameLogicTransactionsTests ()
+  {
+    LOG (INFO) << "Changing game to fallible storage";
+    g.SetStorage (&fallibleStorage);
+
+    ReinitialiseState (g);
+    EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+    ExpectGameState (storage, TestGame::GenesisBlockHash (), "");
+  }
+
+};
+
+TEST_F (GameLogicTransactionsTests, WorkingFine)
+{
+  {
+    InSequence dummy;
+    EXPECT_CALL (rules, BeginTransaction ()).Times (1);
+    EXPECT_CALL (rules, CommitTransaction ()).Times (1);
+    EXPECT_CALL (rules, RollbackTransaction ()).Times (0);
+  }
+
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (fallibleStorage, BlockHash (11), "a0b1");
+}
+
+TEST_F (GameLogicTransactionsTests, WithFailure)
+{
+  {
+    InSequence dummy;
+    EXPECT_CALL (rules, BeginTransaction ()).Times (1);
+    EXPECT_CALL (rules, CommitTransaction ()).Times (0);
+    EXPECT_CALL (rules, RollbackTransaction ()).Times (1);
+  }
+
+  fallibleStorage.SetShouldFail (true);
+
+  try
+    {
+      AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+      FAIL () << "No failure thrown from memory storage";
+    }
+  catch (const FallibleMemoryStorage::Failure& exc)
+    {
+      LOG (INFO) << "Caught expected memory failure";
+    }
+
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (fallibleStorage, TestGame::GenesisBlockHash (), "");
 }
 
 /* ************************************************************************** */

@@ -78,12 +78,15 @@ TEST_F (PersistentSQLiteStorageTests, PersistsData)
 {
   {
     SQLiteStorage storage(filename);
+    storage.Initialise ();
+
     storage.SetCurrentGameState (hash, state);
     storage.AddUndoData (hash, 42, undo);
   }
 
   {
     SQLiteStorage storage(filename);
+    storage.Initialise ();
 
     uint256 h;
     ASSERT_TRUE (storage.GetCurrentBlockHash (h));
@@ -99,6 +102,8 @@ TEST_F (PersistentSQLiteStorageTests, PersistsData)
 TEST_F (PersistentSQLiteStorageTests, ClearWithOnDiskFile)
 {
   SQLiteStorage storage(filename);
+  storage.Initialise ();
+
   storage.SetCurrentGameState (hash, state);
   storage.AddUndoData (hash, 42, undo);
 

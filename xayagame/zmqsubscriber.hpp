@@ -21,7 +21,7 @@
 namespace xaya
 {
 
-class GameTests;
+class GameTestFixture;
 
 namespace internal
 {
@@ -104,7 +104,7 @@ private:
   static void Listen (ZmqSubscriber* self);
 
   friend class BasicZmqSubscriberTests;
-  friend class xaya::GameTests;
+  friend class xaya::GameTestFixture;
 
 public:
 

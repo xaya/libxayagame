@@ -40,6 +40,12 @@ public:
   virtual ~StorageInterface () = default;
 
   /**
+   * Called after the storage has been attached to a game.  This can be used
+   * to open external resources if necessary.
+   */
+  virtual void Initialise ();
+
+  /**
    * Removes all data, corresponding to a full reset of the state
    * (e.g. for starting a sync from scratch).
    */

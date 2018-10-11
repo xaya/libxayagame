@@ -17,6 +17,7 @@ libxayagame_la_SOURCES = \
   gamerpcserver.cpp \
   mainloop.cpp \
   pruningqueue.cpp \
+  sqlitegame.cpp \
   sqlitestorage.cpp \
   storage.cpp \
   uint256.cpp \
@@ -28,6 +29,7 @@ xayagame_HEADERS = \
   gamerpcserver.hpp \
   mainloop.hpp \
   pruningqueue.hpp \
+  sqlitegame.hpp \
   sqlitestorage.hpp \
   storage.hpp \
   uint256.hpp \
@@ -42,15 +44,16 @@ TESTS = tests
 
 tests_CXXFLAGS = \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
-  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(ZMQ_CFLAGS)
+  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS) $(ZMQ_CFLAGS)
 tests_LDADD = $(builddir)/libxayagame.la \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(GLOG_LIBS) $(GTEST_LIBS) $(ZMQ_LIBS)
+  $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(ZMQ_LIBS)
 tests_SOURCES = testutils.cpp \
   game_tests.cpp \
   gamelogic_tests.cpp \
   mainloop_tests.cpp \
   pruningqueue_tests.cpp \
+  sqlitegame_tests.cpp \
   sqlitestorage_tests.cpp \
   storage_tests.cpp \
   uint256_tests.cpp \

@@ -41,6 +41,7 @@ protected:
   {
     CHECK (hash1.FromHex ("01" + std::string (62, '0')));
     CHECK (hash2.FromHex ("02" + std::string (62, '0')));
+    this->storage.Initialise ();
   }
 
 };
