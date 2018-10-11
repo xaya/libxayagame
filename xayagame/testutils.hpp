@@ -87,6 +87,13 @@ protected:
     g.ReinitialiseState ();
   }
 
+  static void
+  ForceState (Game& g, const State s)
+  {
+    std::lock_guard<std::mutex> lock(g.mut);
+    g.state = s;
+  }
+
   /**
    * Calls BlockAttach on the given game instance.  The function takes care
    * of setting up the blockData JSON object correctly based on the building
