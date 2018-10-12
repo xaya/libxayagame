@@ -808,6 +808,41 @@ TEST_F (SyncingTests, CatchingUpBackwards)
   ExpectGameState (TestGame::GenesisBlockHash (), "");
 }
 
+TEST_F (SyncingTests, CatchingUpMultistep)
+{
+  /* Tests the situation where a single game_sendupdates call is not enough
+     to bring the game state fully up to date.  Xaya Core's
+     -maxgameblockattaches limit is one reason why this may happen
+     (https://github.com/xaya/xaya/pull/66).  */
+
+  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (BlockHash (12), "token 1")));
+  EXPECT_CALL (mockXayaServer,
+               game_sendupdates (BlockHash (12).ToHex (), GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (BlockHash (13), "token 2")));
+
+  mockXayaServer.SetBestBlock (13, BlockHash (13));
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
+
+  CallBlockAttach (g, "token 1",
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  CallBlockAttach (g, "token 1", BlockHash (11), BlockHash (12),
+                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (12), "a2b1c3");
+
+  CallBlockAttach (g, "token 2", BlockHash (12), BlockHash (13),
+                   Moves ("a7"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (13), "a7b1c3");
+}
+
 TEST_F (SyncingTests, MissedAttachWhileUpToDate)
 {
   EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
