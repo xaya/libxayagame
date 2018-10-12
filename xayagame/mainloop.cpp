@@ -6,10 +6,18 @@
 
 #include <glog/logging.h>
 
+#include <cstring>
+
 namespace xaya
 {
 namespace internal
 {
+
+MainLoop::MainLoop ()
+{
+  std::memset (&sigtermHandler, 0, sizeof (sigtermHandler));
+  sigtermHandler.sa_handler = &MainLoop::HandleInterrupt;
+}
 
 MainLoop::~MainLoop ()
 {
@@ -76,7 +84,6 @@ MainLoop::Run (const Functor& start, const Functor& stop)
     CHECK (instanceForSignals == nullptr)
         << "Another main loop is already running";
     instanceForSignals = this;
-    sigtermHandler.sa_handler = &MainLoop::HandleInterrupt;
     for (const int sig : signals)
       if (sigaction (sig, &sigtermHandler, nullptr) != 0)
         LOG (FATAL) << "Installing signal handler failed for signal " << sig;

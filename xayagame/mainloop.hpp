@@ -39,7 +39,10 @@ private:
   /** Condition variable to signal the main loop to stop.  */
   std::condition_variable cv;
 
-  /** The installed sigaction handler for SIGTERM.  */
+  /**
+   * The sigaction handler for SIGTERM/SIGINT that will be installed while
+   * the main loop is running.
+   */
   struct sigaction sigtermHandler;
 
   /**
@@ -55,7 +58,7 @@ public:
   /** Type for start/stop functors (as convenience).  */
   using Functor = std::function<void ()>;
 
-  MainLoop () = default;
+  MainLoop ();
   ~MainLoop ();
 
   MainLoop (const MainLoop&) = delete;
