@@ -352,22 +352,34 @@ Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
   rpcClient = std::move (newClient);
 
   const Json::Value info = rpcClient->getblockchaininfo ();
-  const std::string newChain = info["chain"].asString ();
-  CHECK (chain.empty () || chain == newChain)
-      << "Previous RPC connection had chain " << chain << ", now we have "
-      << newChain;
+  const std::string newChainStr = info["chain"].asString ();
+  Chain newChain;
+  if (newChainStr == "main")
+    newChain = Chain::MAIN;
+  else if (newChainStr == "test")
+    newChain = Chain::TEST;
+  else if (newChainStr == "regtest")
+    newChain = Chain::REGTEST;
+  else
+    LOG (FATAL)
+        << "Unexpected chain type returned by Xaya Core: " << newChainStr;
+
+  CHECK (chain == Chain::UNKNOWN || chain == newChain)
+      << "Previous RPC connection had chain "
+      << ChainToString (chain) << ", now we have "
+      << ChainToString (newChain);
   chain = newChain;
-  LOG (INFO) << "Connected to RPC daemon with chain " << chain;
+  LOG (INFO) << "Connected to RPC daemon with chain " << ChainToString (chain);
 
   if (rules != nullptr)
     rules->SetChain (chain);
 }
 
-const std::string&
+Chain
 Game::GetChain () const
 {
   std::lock_guard<std::mutex> lock(mut);
-  CHECK (!chain.empty ());
+  CHECK (chain != Chain::UNKNOWN);
   return chain;
 }
 
@@ -389,7 +401,7 @@ Game::SetGameLogic (GameLogic* gl)
   std::lock_guard<std::mutex> lock(mut);
   CHECK (!mainLoop.IsRunning ());
   rules = gl;
-  if (!chain.empty ())
+  if (chain != Chain::UNKNOWN)
     rules->SetChain (chain);
 }
 
@@ -440,7 +452,7 @@ Game::GetCurrentJsonState () const
 
   Json::Value res(Json::objectValue);
   res["gameid"] = gameId;
-  res["chain"] = chain;
+  res["chain"] = ChainToString (chain);
   res["state"] = StateToString (state);
 
   uint256 hash;

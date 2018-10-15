@@ -14,6 +14,7 @@
 
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
+using xaya::Chain;
 using xaya::GameStateData;
 using xaya::UndoData;
 
@@ -179,7 +180,7 @@ TEST (InitialStateTests, IsEmpty)
      the game state is empty.  */
   const proto::GameState expectedState;
 
-  for (const std::string& chain : {"main", "test", "regtest"})
+  for (const auto chain : {Chain::MAIN, Chain::TEST, Chain::REGTEST})
     {
       MoverLogic rules;
       rules.SetChain (chain);
@@ -244,7 +245,7 @@ protected:
 
   StateProcessingTests ()
   {
-    rules.SetChain ("main");
+    rules.SetChain (Chain::MAIN);
 
     unsigned height;
     std::string hashHex;

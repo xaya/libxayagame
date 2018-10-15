@@ -15,6 +15,24 @@ namespace xaya
 {
 
 /**
+ * The possible chains on which a game can be in the Xaya network.
+ */
+enum class Chain
+{
+  UNKNOWN = 0,
+  MAIN = 1,
+  TEST = 2,
+  REGTEST = 3,
+};
+
+/**
+ * Converts a chain enum value to a string, to be used for printing
+ * messages or (for instance) for setting the data directory based
+ * on the chain.
+ */
+std::string ChainToString (Chain c);
+
+/**
  * The interface for actual games.  Implementing classes define the rules
  * of an actual game so that it can be plugged into libxayagame to form
  * a complete game engine.
@@ -32,17 +50,17 @@ class GameLogic
 private:
 
   /**
-   * The chain ("main", "test" or "regtest") that the game is running on.
-   * This may influence the rules and is provided via GetChain.
+   * The chain that the game is running on.  This may influence the rules
+   * and is provided via GetChain.
    */
-  std::string chain;
+  Chain chain = Chain::UNKNOWN;
 
 protected:
 
   /**
    * Returns the chain the game is running on.
    */
-  const std::string& GetChain () const;
+  Chain GetChain () const;
 
 public:
 
@@ -56,7 +74,7 @@ public:
    * If the chain was already set, it must not be changed to a different value
    * during the lifetime of the object.
    */
-  void SetChain (const std::string& c);
+  void SetChain (Chain c);
 
   /**
    * Returns the initial state (as well as the associated block height

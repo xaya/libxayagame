@@ -86,8 +86,8 @@ private:
    */
   mutable std::mutex mut;
 
-  /** The chain type (main, test, regtest) to which the game is connected.  */
-  std::string chain;
+  /** The chain type to which the game is connected.  */
+  Chain chain = Chain::UNKNOWN;
 
   /** The game's current state.  */
   State state = State::UNKNOWN;
@@ -216,11 +216,11 @@ public:
   void ConnectRpcClient (jsonrpc::IClientConnector& conn);
 
   /**
-   * Returns the chain (network type, "main", "test" or "regtest") of the
+   * Returns the chain (network) type as enum of the
    * connected Xaya daemon.  This can be used to set up the storage database
    * correctly, for instance.  Must not be called before ConnectRpcClient.
    */
-  const std::string& GetChain () const;
+  Chain GetChain () const;
 
   /**
    * Sets the storage interface to use.  This must be called before starting

@@ -6,6 +6,7 @@
 
 #include <glog/logging.h>
 
+using xaya::Chain;
 using xaya::GameStateData;
 using xaya::UndoData;
 
@@ -15,26 +16,29 @@ namespace mover
 GameStateData
 MoverLogic::GetInitialState (unsigned& height, std::string& hashHex)
 {
-  if (GetChain () == "main")
+  switch (GetChain ())
     {
+    case Chain::MAIN:
       height = 125000;
       hashHex
           = "2aed5640a3be8a2f32cdea68c3d72d7196a7efbfe2cbace34435a3eef97561f2";
-    }
-  else if (GetChain () == "test")
-    {
+      break;
+
+    case Chain::TEST:
       height = 10000;
       hashHex
           = "73d771be03c37872bc8ccd92b8acb8d7aa3ac0323195006fb3d3476784981a37";
-    }
-  else if (GetChain () == "regtest")
-    {
+      break;
+
+    case Chain::REGTEST:
       height = 0;
       hashHex
           = "6f750b36d22f1dc3d0a6e483af45301022646dfc3b3ba2187865f5a7d6d83ab1";
+      break;
+
+    default:
+      LOG (FATAL) << "Unexpected chain: " << ChainToString (GetChain ());
     }
-  else
-    LOG (FATAL) << "Unexpected chain: " << GetChain ();
 
   /* In all cases, the initial game state is just empty.  */
   proto::GameState state;

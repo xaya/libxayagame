@@ -32,7 +32,7 @@ namespace fs = std::experimental::filesystem;
  */
 std::unique_ptr<StorageInterface>
 CreateStorage (const GameDaemonConfiguration& config,
-               const std::string& gameId, const std::string& chain)
+               const std::string& gameId, const Chain chain)
 {
   if (config.StorageType == "memory")
     return std::make_unique<MemoryStorage> ();
@@ -40,7 +40,9 @@ CreateStorage (const GameDaemonConfiguration& config,
   CHECK (!config.DataDirectory.empty ())
       << "DataDirectory must be set if non-memory storage is used";
   const fs::path gameDir
-      = fs::path (config.DataDirectory) / fs::path (gameId) / fs::path (chain);
+      = fs::path (config.DataDirectory)
+          / fs::path (gameId)
+          / fs::path (ChainToString (chain));
 
   if (fs::is_directory (gameDir))
     LOG (INFO) << "Using existing data directory: " << gameDir;

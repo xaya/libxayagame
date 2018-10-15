@@ -40,8 +40,6 @@ constexpr int HTTP_PORT = 32100;
 
 constexpr const char GAME_ID[] = "test-game";
 
-constexpr const char UNITTEST_CHAIN[] = "unittest";
-
 constexpr const char NO_REQ_TOKEN[] = "";
 
 constexpr bool SEQ_MISMATCH = true;
@@ -85,7 +83,7 @@ private:
 
   /* Data for the current blockchain tip, as should be returned from
      the getblockchaininfo call.  */
-  std::string chain = UNITTEST_CHAIN;
+  Chain chain = Chain::MAIN;
   int height = -1;
   uint256 bestBlock;
 
@@ -117,7 +115,7 @@ public:
    * other chain values is desired.
    */
   void
-  SetChain (const std::string& c)
+  SetChain (const Chain c)
   {
     std::lock_guard<std::mutex> lock(mut);
     chain = c;
@@ -141,7 +139,7 @@ public:
     std::lock_guard<std::mutex> lock(mut);
 
     Json::Value res(Json::objectValue);
-    res["chain"] = chain;
+    res["chain"] = ChainToString (chain);
     res["blocks"] = height;
     res["bestblockhash"] = bestBlock.ToHex ();
 
@@ -238,7 +236,7 @@ public:
   GameStateData
   GetInitialState (unsigned& height, std::string& hashHex) override
   {
-    CHECK_EQ (GetChain (), UNITTEST_CHAIN);
+    CHECK (GetChain () == Chain::MAIN);
     height = GAME_GENESIS_HEIGHT;
     hashHex = GAME_GENESIS_HASH;
     return EncodeMap (Map ());
@@ -248,7 +246,7 @@ public:
   ProcessForward (const GameStateData& oldState, const Json::Value& blockData,
                   UndoData& undoData) override
   {
-    CHECK_EQ (GetChain (), UNITTEST_CHAIN);
+    CHECK (GetChain () == Chain::MAIN);
 
     Map state = DecodeMap (oldState);
     Map undo;
@@ -280,7 +278,7 @@ public:
   ProcessBackwards (const GameStateData& newState, const Json::Value& blockData,
                     const UndoData& undoData) override
   {
-    CHECK_EQ (GetChain (), UNITTEST_CHAIN);
+    CHECK (GetChain () == Chain::MAIN);
 
     Map state = DecodeMap (newState);
     const Map undo = DecodeMap (undoData);
@@ -379,7 +377,7 @@ TEST_F (ChainDetectionTests, ChainDetected)
   Game g(GAME_ID);
   mockXayaServer.SetBestBlock (0, BlockHash (0));
   g.ConnectRpcClient (httpClient);
-  EXPECT_EQ (g.GetChain (), UNITTEST_CHAIN);
+  EXPECT_TRUE (g.GetChain () == Chain::MAIN);
 }
 
 TEST_F (ChainDetectionTests, ReconnectionPossible)
@@ -388,7 +386,7 @@ TEST_F (ChainDetectionTests, ReconnectionPossible)
   mockXayaServer.SetBestBlock (0, BlockHash (0));
   g.ConnectRpcClient (httpClient);
   g.ConnectRpcClient (httpClient);
-  EXPECT_EQ (g.GetChain (), UNITTEST_CHAIN);
+  EXPECT_TRUE (g.GetChain () == Chain::MAIN);
 }
 
 TEST_F (ChainDetectionTests, ReconnectionToWrongChain)
@@ -405,7 +403,7 @@ TEST_F (ChainDetectionTests, ReconnectionToWrongChain)
       mockXayaServer.StartListening ();
       mockXayaServer.SetBestBlock (0, BlockHash (0));
       g.ConnectRpcClient (httpClient);
-      mockXayaServer.SetChain ("otherchain");
+      mockXayaServer.SetChain (Chain::TEST);
       g.ConnectRpcClient (httpClient);
     },
     "Previous RPC connection had chain");
@@ -625,7 +623,7 @@ TEST_F (GetCurrentJsonStateTests, NoStateYet)
 {
   const Json::Value state = g.GetCurrentJsonState ();
   EXPECT_EQ (state["gameid"], GAME_ID);
-  EXPECT_EQ (state["chain"], UNITTEST_CHAIN);
+  EXPECT_EQ (state["chain"], "main");
   EXPECT_EQ (state["state"], "unknown");
   EXPECT_FALSE (state.isMember ("blockhash"));
   EXPECT_FALSE (state.isMember ("gamestate"));
@@ -641,7 +639,7 @@ TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
 
   const Json::Value state = g.GetCurrentJsonState ();
   EXPECT_EQ (state["gameid"], GAME_ID);
-  EXPECT_EQ (state["chain"], UNITTEST_CHAIN);
+  EXPECT_EQ (state["chain"], "main");
   EXPECT_EQ (state["state"], "up-to-date");
   EXPECT_EQ (state["blockhash"], BlockHash (11).ToHex ());
   EXPECT_EQ (state["gamestate"]["state"], "a0b1");

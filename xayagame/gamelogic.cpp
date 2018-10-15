@@ -9,17 +9,36 @@
 namespace xaya
 {
 
-const std::string&
+std::string
+ChainToString (const Chain c)
+{
+  switch (c)
+    {
+    case Chain::UNKNOWN:
+      return "unknown";
+    case Chain::MAIN:
+      return "main";
+    case Chain::TEST:
+      return "test";
+    case Chain::REGTEST:
+      return "regtest";
+    }
+
+  LOG (FATAL) << "Invalid chain enum value: " << static_cast<int> (c);
+}
+
+Chain
 GameLogic::GetChain () const
 {
-  CHECK (!chain.empty ());
+  CHECK (chain != Chain::UNKNOWN);
   return chain;
 }
 
 void
-GameLogic::SetChain (const std::string& c)
+GameLogic::SetChain (const Chain c)
 {
-  CHECK (chain.empty () || chain == c);
+  CHECK (chain == Chain::UNKNOWN || chain == c);
+  CHECK (c != Chain::UNKNOWN);
   chain = c;
 }
 
