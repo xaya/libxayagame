@@ -8,7 +8,9 @@
 /* This file is an implementation detail of Game and should not be
    used directly by external code!  */
 
+#ifndef _WIN32
 #include <signal.h>
+#endif // !_WIN32
 
 #include <condition_variable>
 #include <functional>
@@ -39,11 +41,13 @@ private:
   /** Condition variable to signal the main loop to stop.  */
   std::condition_variable cv;
 
+#ifndef _WIN32
   /**
    * The sigaction handler for SIGTERM/SIGINT that will be installed while
    * the main loop is running.
    */
   struct sigaction sigtermHandler;
+#endif // !_WIN32
 
   /**
    * Handles the SIGTERM signal and notifies the running main loop to stop
