@@ -46,15 +46,15 @@ namespace
 
 /**
  * Helper class to call BeginTransaction and either CommitTransaction or
- * AbortTransaction on GameLogic using RAII.
+ * AbortTransaction on a storage implementation using RAII.
  */
 class GameTransactionHelper
 {
 
 private:
 
-  /** The game logic on which to call the functions.  */
-  GameLogic& game;
+  /** The storage on which to call the functions.  */
+  StorageInterface& storage;
 
   /**
    * Whether the operation was successful.  If this is set to true at some
@@ -65,24 +65,24 @@ private:
 
 public:
 
-  explicit GameTransactionHelper (GameLogic& g)
-    : game(g)
+  explicit GameTransactionHelper (StorageInterface& s)
+    : storage(s)
   {
-    VLOG (1) << "Starting GameLogic transaction";
-    game.BeginTransaction ();
+    VLOG (1) << "Starting storage transaction";
+    storage.BeginTransaction ();
   }
 
   ~GameTransactionHelper ()
   {
     if (success)
       {
-        VLOG (1) << "Committing GameLogic transaction";
-        game.CommitTransaction ();
+        VLOG (1) << "Committing storage transaction";
+        storage.CommitTransaction ();
       }
     else
       {
-        VLOG (1) << "Aborting GameLogic transaction";
-        game.RollbackTransaction ();
+        VLOG (1) << "Aborting storage transaction";
+        storage.RollbackTransaction ();
       }
   }
 
@@ -114,7 +114,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
   const unsigned height = blockData["block"]["height"].asUInt ();
 
   {
-    GameTransactionHelper tx(*rules);
+    GameTransactionHelper tx(*storage);
 
     UndoData undo;
     const GameStateData newState
@@ -160,7 +160,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
   const GameStateData newState = storage->GetCurrentGameState ();
 
   {
-    GameTransactionHelper tx(*rules);
+    GameTransactionHelper tx(*storage);
 
     const GameStateData oldState
         = rules->ProcessBackwards (newState, blockData, undo);
@@ -593,7 +593,11 @@ Game::ReinitialiseState ()
   CHECK (blockHash == genesisHash)
     << "The game's genesis block hash and height do not match";
   storage->Clear ();
-  storage->SetCurrentGameState (genesisHash, genesisData);
+  {
+    GameTransactionHelper tx(*storage);
+    storage->SetCurrentGameState (genesisHash, genesisData);
+    tx.SetSuccess ();
+  }
   LOG (INFO)
       << "We are at the genesis height, storing initial game state for block "
       << genesisHash.ToHex ();

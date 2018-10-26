@@ -111,6 +111,32 @@ public:
        future (because the blocks involved have many confirmations).  */
   }
 
+  /**
+   * Tells the storage that a change to the state is about to be made
+   * (because a new block is being attached or detached).
+   *
+   * Transactions will not be nested, i.e. this function is only called when
+   * the last transaction has either been committed or rolled back.
+   *
+   * By default, this function does nothing.  If the storage implementation
+   * supports a transaction mechanism to keep multiple changes consistent,
+   * it can override the method to start such a transaction.
+   */
+  virtual void BeginTransaction ();
+
+  /**
+   * Tells the storage that all state changes related to the previously started
+   * transaction have been completed successfully.
+   */
+  virtual void CommitTransaction ();
+
+  /**
+   * Tells the storage that there was an error during the state changes for the
+   * previously started transaction, and all changes made since then should
+   * be reverted if possible.
+   */
+  virtual void RollbackTransaction ();
+
 };
 
 /**

@@ -35,6 +35,8 @@ INSTANTIATE_TYPED_TEST_CASE_P (SQLite, BasicStorageTests,
                                InMemorySQLiteStorage);
 INSTANTIATE_TYPED_TEST_CASE_P (SQLite, PruningStorageTests,
                                InMemorySQLiteStorage);
+INSTANTIATE_TYPED_TEST_CASE_P (SQLite, TransactingStorageTests,
+                               InMemorySQLiteStorage);
 
 /**
  * Tests for SQLiteStorage with a temporary on-disk database file (instead of
@@ -80,8 +82,10 @@ TEST_F (PersistentSQLiteStorageTests, PersistsData)
     SQLiteStorage storage(filename);
     storage.Initialise ();
 
+    storage.BeginTransaction ();
     storage.SetCurrentGameState (hash, state);
     storage.AddUndoData (hash, 42, undo);
+    storage.CommitTransaction ();
   }
 
   {
@@ -104,8 +108,10 @@ TEST_F (PersistentSQLiteStorageTests, ClearWithOnDiskFile)
   SQLiteStorage storage(filename);
   storage.Initialise ();
 
+  storage.BeginTransaction ();
   storage.SetCurrentGameState (hash, state);
   storage.AddUndoData (hash, 42, undo);
+  storage.CommitTransaction ();
 
   uint256 h;
   UndoData val;

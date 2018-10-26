@@ -310,12 +310,6 @@ public:
     return res;
   }
 
-  /* Mock the transaction methods.  They are not relevant for most tests, but
-     we want to test against expectations in specific tests.  */
-  MOCK_METHOD0 (BeginTransaction, void ());
-  MOCK_METHOD0 (CommitTransaction, void ());
-  MOCK_METHOD0 (RollbackTransaction, void ());
-
 };
 
 /* ************************************************************************** */
@@ -1041,6 +1035,12 @@ public:
     MemoryStorage::SetCurrentGameState (hash, data);
   }
 
+  /* Mock the transaction methods.  They are not relevant for most tests, but
+     we want to test against expectations in specific tests.  */
+  MOCK_METHOD0 (BeginTransaction, void ());
+  MOCK_METHOD0 (CommitTransaction, void ());
+  MOCK_METHOD0 (RollbackTransaction, void ());
+
 };
 
 class GameLogicTransactionsTests : public SyncingTests
@@ -1067,9 +1067,9 @@ TEST_F (GameLogicTransactionsTests, WorkingFine)
 {
   {
     InSequence dummy;
-    EXPECT_CALL (rules, BeginTransaction ()).Times (1);
-    EXPECT_CALL (rules, CommitTransaction ()).Times (1);
-    EXPECT_CALL (rules, RollbackTransaction ()).Times (0);
+    EXPECT_CALL (fallibleStorage, BeginTransaction ()).Times (1);
+    EXPECT_CALL (fallibleStorage, CommitTransaction ()).Times (1);
+    EXPECT_CALL (fallibleStorage, RollbackTransaction ()).Times (0);
   }
 
   AttachBlock (g, BlockHash (11), Moves ("a0b1"));
@@ -1081,9 +1081,9 @@ TEST_F (GameLogicTransactionsTests, WithFailure)
 {
   {
     InSequence dummy;
-    EXPECT_CALL (rules, BeginTransaction ()).Times (1);
-    EXPECT_CALL (rules, CommitTransaction ()).Times (0);
-    EXPECT_CALL (rules, RollbackTransaction ()).Times (1);
+    EXPECT_CALL (fallibleStorage, BeginTransaction ()).Times (1);
+    EXPECT_CALL (fallibleStorage, CommitTransaction ()).Times (0);
+    EXPECT_CALL (fallibleStorage, RollbackTransaction ()).Times (1);
   }
 
   fallibleStorage.SetShouldFail (true);

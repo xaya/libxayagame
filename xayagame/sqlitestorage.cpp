@@ -251,6 +251,8 @@ void
 SQLiteStorage::SetCurrentGameState (const uint256& hash,
                                     const GameStateData& data)
 {
+  CHECK (startedTransaction);
+
   StepWithNoResult (PrepareStatement ("SAVEPOINT `xayagame-setcurrentstate`"));
 
   sqlite3_stmt* stmt = PrepareStatement (R"(
@@ -294,6 +296,8 @@ void
 SQLiteStorage::AddUndoData (const uint256& hash,
                             const unsigned height, const UndoData& data)
 {
+  CHECK (startedTransaction);
+
   auto* stmt = PrepareStatement (R"(
     INSERT OR REPLACE INTO `xayagame_undo` (`hash`, `data`, `height`)
       VALUES (?1, ?2, ?3)
@@ -312,6 +316,8 @@ SQLiteStorage::AddUndoData (const uint256& hash,
 void
 SQLiteStorage::ReleaseUndoData (const uint256& hash)
 {
+  CHECK (startedTransaction);
+
   auto* stmt = PrepareStatement (R"(
     DELETE FROM `xayagame_undo` WHERE `hash` = ?1
   )");
@@ -323,6 +329,8 @@ SQLiteStorage::ReleaseUndoData (const uint256& hash)
 void
 SQLiteStorage::PruneUndoData (const unsigned height)
 {
+  CHECK (startedTransaction);
+
   auto* stmt = PrepareStatement (R"(
     DELETE FROM `xayagame_undo` WHERE `height` <= ?1
   )");
@@ -332,6 +340,30 @@ SQLiteStorage::PruneUndoData (const unsigned height)
     LOG (FATAL) << "Failed to bind block height value: " << rc;
 
   StepWithNoResult (stmt);
+}
+
+void
+SQLiteStorage::BeginTransaction ()
+{
+  CHECK (!startedTransaction);
+  startedTransaction = true;
+  StepWithNoResult (PrepareStatement ("SAVEPOINT `xayagame-sqlitegame`"));
+}
+
+void
+SQLiteStorage::CommitTransaction ()
+{
+  StepWithNoResult (PrepareStatement ("RELEASE `xayagame-sqlitegame`"));
+  CHECK (startedTransaction);
+  startedTransaction = false;
+}
+
+void
+SQLiteStorage::RollbackTransaction ()
+{
+  StepWithNoResult (PrepareStatement ("ROLLBACK TO `xayagame-sqlitegame`"));
+  CHECK (startedTransaction);
+  startedTransaction = false;
 }
 
 } // namespace xaya

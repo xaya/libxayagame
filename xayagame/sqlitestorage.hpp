@@ -48,6 +48,13 @@ private:
   mutable std::map<std::string, sqlite3_stmt*> preparedStatements;
 
   /**
+   * Set to true when we have a currently open transaction.  This is used to
+   * verify that BeginTransaction is not called in a nested way.  (Savepoints
+   * would in theory support that, but we exclude it nevertheless.)
+   */
+  bool startedTransaction = false;
+
+  /**
    * Opens the database at filename into the handle.  It is an error if the
    * handle is already opened.
    */
@@ -124,6 +131,10 @@ public:
                     unsigned height, const UndoData& data) override;
   void ReleaseUndoData (const uint256& hash) override;
   void PruneUndoData (unsigned height) override;
+
+  void BeginTransaction () override;
+  void CommitTransaction () override;
+  void RollbackTransaction () override;
 
 };
 
