@@ -16,6 +16,24 @@ StorageInterface::Initialise ()
 }
 
 void
+StorageInterface::BeginTransaction ()
+{
+  /* Nothing is done in the default implementation.  */
+}
+
+void
+StorageInterface::CommitTransaction ()
+{
+  /* Nothing is done in the default implementation.  */
+}
+
+void
+StorageInterface::RollbackTransaction ()
+{
+  /* Nothing is done in the default implementation.  */
+}
+
+void
 MemoryStorage::Clear ()
 {
   hasState = false;

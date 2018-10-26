@@ -127,10 +127,6 @@ public:
                                   const Json::Value& blockData,
                                   const UndoData& undo) override;
 
-  void BeginTransaction () override;
-  void CommitTransaction () override;
-  void RollbackTransaction () override;
-
   Json::Value GameStateToJson (const GameStateData& state) override;
 
 };

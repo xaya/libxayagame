@@ -9,6 +9,7 @@
 #include "mainloop.hpp"
 #include "pruningqueue.hpp"
 #include "storage.hpp"
+#include "transactionmanager.hpp"
 #include "uint256.hpp"
 #include "zmqsubscriber.hpp"
 
@@ -120,6 +121,15 @@ private:
   /** The game rules in use.  */
   GameLogic* rules = nullptr;
 
+  /**
+   * Desired size for batches of atomic transactions while the game is
+   * catching up.  <= 1 means no batching even in these situations.
+   */
+  unsigned transactionBatchSize = 1000;
+
+  /** The manager for batched atomic transactions.  */
+  internal::TransactionManager transactionManager;
+
   /** The main loop.  */
   internal::MainLoop mainLoop;
 
@@ -225,6 +235,10 @@ public:
   /**
    * Sets the storage interface to use.  This must be called before starting
    * the main loop, and may not be called while it is running.
+   *
+   * Important:  The storage instance associated to the Game here needs to
+   * remain valid until after the Game instance has been destructed!  This is
+   * so that potentially batched transactions can still be flushed.
    */
   void SetStorage (StorageInterface* s);
 

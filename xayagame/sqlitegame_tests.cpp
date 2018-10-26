@@ -240,7 +240,9 @@ InitialiseState (Game& game, ChatGame& rules)
   uint256 hash;
   ASSERT_TRUE (hash.FromHex (hashHex));
 
+  rules.GetStorage ()->BeginTransaction ();
   rules.GetStorage ()->SetCurrentGameState (hash, state);
+  rules.GetStorage ()->CommitTransaction ();
 }
 
 /**
@@ -374,7 +376,9 @@ TEST_F (GameStateStringTests, BlockHash)
 
 TEST_F (GameStateStringTests, InitialWrongHash)
 {
+  rules.GetStorage ()->BeginTransaction ();
   rules.GetStorage ()->SetCurrentGameState (BlockHash (42), "");
+  rules.GetStorage ()->CommitTransaction ();
   EXPECT_DEATH (
       rules.GameStateToJson ("initial"),
       "does not match the game's initial block");

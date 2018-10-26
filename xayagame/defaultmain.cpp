@@ -72,32 +72,38 @@ DefaultMain (const GameDaemonConfiguration& config,
   const std::string jsonRpcUrl(config.XayaRpcUrl);
   jsonrpc::HttpClient httpConnector(jsonRpcUrl);
 
-  Game game(gameId);
-  game.ConnectRpcClient (httpConnector);
-  CHECK (game.DetectZmqEndpoint ());
+  auto game = std::make_unique<Game> (gameId);
+  game->ConnectRpcClient (httpConnector);
+  CHECK (game->DetectZmqEndpoint ());
 
   std::unique_ptr<StorageInterface> storage
-      = CreateStorage (config, gameId, game.GetChain ());
-  game.SetStorage (storage.get ());
+      = CreateStorage (config, gameId, game->GetChain ());
+  game->SetStorage (storage.get ());
 
-  game.SetGameLogic (&rules);
+  game->SetGameLogic (&rules);
 
   if (config.EnablePruning >= 0)
-    game.EnablePruning (config.EnablePruning);
+    game->EnablePruning (config.EnablePruning);
 
   std::unique_ptr<jsonrpc::HttpServer> httpServer;
   std::unique_ptr<GameRpcServer> rpcServer;
   if (config.GameRpcPort != 0)
     {
       httpServer = std::make_unique<jsonrpc::HttpServer> (config.GameRpcPort);
-      rpcServer = std::make_unique<GameRpcServer> (game, *httpServer);
+      rpcServer = std::make_unique<GameRpcServer> (*game, *httpServer);
     }
 
   if (rpcServer != nullptr)
     rpcServer->StartListening ();
-  game.Run ();
+  game->Run ();
   if (rpcServer != nullptr)
     rpcServer->StopListening ();
+
+  /* We need to make sure that the Game instance is destructed before the
+     storage is.  That is necessary, since destructing the Game instance
+     may still cause some batched transactions to be flushed, and this
+     needs the storage intact.  */
+  game.reset ();
 
   return EXIT_SUCCESS;
 }

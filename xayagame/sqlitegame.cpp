@@ -38,37 +38,6 @@ private:
   SQLiteGame& game;
 
   /**
-   * Set to true when we have a currently open transaction.  This is used to
-   * verify that BeginTransaction is not called in a nested way.  (Savepoints
-   * would in theory support that, but we exclude it nevertheless.)
-   */
-  bool startedTransaction = false;
-
-  void
-  BeginTransaction ()
-  {
-    CHECK (!startedTransaction);
-    startedTransaction = true;
-    StepWithNoResult (PrepareStatement ("SAVEPOINT `xayagame-sqlitegame`"));
-  }
-
-  void
-  CommitTransaction ()
-  {
-    StepWithNoResult (PrepareStatement ("RELEASE `xayagame-sqlitegame`"));
-    CHECK (startedTransaction);
-    startedTransaction = false;
-  }
-
-  void
-  RollbackTransaction ()
-  {
-    StepWithNoResult (PrepareStatement ("ROLLBACK TO `xayagame-sqlitegame`"));
-    CHECK (startedTransaction);
-    startedTransaction = false;
-  }
-
-  /**
    * Verifies that the database state corresponds to the given "current state"
    * from libxayagame.  The function also makes sure to call InitialiseState
    * if the passed-in state is the initial-keyword and the database's state
@@ -366,24 +335,6 @@ SQLiteGame::ProcessBackwards (const GameStateData& newState,
   changeset.Apply (database->GetDatabase ());
 
   return BLOCKHASH_STATE + blockData["block"]["parent"].asString ();
-}
-
-void
-SQLiteGame::BeginTransaction ()
-{
-  database->BeginTransaction ();
-}
-
-void
-SQLiteGame::CommitTransaction ()
-{
-  database->CommitTransaction ();
-}
-
-void
-SQLiteGame::RollbackTransaction ()
-{
-  database->RollbackTransaction ();
 }
 
 Json::Value

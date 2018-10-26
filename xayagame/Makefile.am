@@ -20,6 +20,7 @@ libxayagame_la_SOURCES = \
   sqlitegame.cpp \
   sqlitestorage.cpp \
   storage.cpp \
+  transactionmanager.cpp \
   uint256.cpp \
   zmqsubscriber.cpp
 xayagame_HEADERS = \
@@ -32,8 +33,10 @@ xayagame_HEADERS = \
   sqlitegame.hpp \
   sqlitestorage.hpp \
   storage.hpp \
+  transactionmanager.hpp \
   uint256.hpp \
   zmqsubscriber.hpp \
+  \
   rpc-stubs/gamerpcclient.h \
   rpc-stubs/gamerpcserverstub.h \
   rpc-stubs/xayarpcclient.h \
@@ -56,6 +59,7 @@ tests_SOURCES = testutils.cpp \
   sqlitegame_tests.cpp \
   sqlitestorage_tests.cpp \
   storage_tests.cpp \
+  transactionmanager_tests.cpp \
   uint256_tests.cpp \
   zmqsubscriber_tests.cpp
 check_HEADERS = testutils.hpp storage_tests.hpp

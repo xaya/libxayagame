@@ -43,6 +43,13 @@ std::string ChainToString (Chain c);
  * some handle (e.g. the block hash) as GameStateData.  The ProcessForward
  * and ProcessBackwards functions are then responsible for updating the
  * external data structure accordingly.
+ *
+ * To make sure that changes to the externally-kept game state are consistent
+ * with the state that libxayagame keeps, games should leverage the transactions
+ * mechanism present in StorageInterface.  For instance, they can define a
+ * custom storage implementation that keeps both the external game-state data
+ * and the libxayagame-stored data, and allows atomic transactions spanning
+ * both of them.
  */
 class GameLogic
 {
@@ -107,34 +114,6 @@ public:
   virtual GameStateData ProcessBackwards (const GameStateData& newState,
                                           const Json::Value& blockData,
                                           const UndoData& undoData) = 0;
-
-  /**
-   * Tells the game that a change to the game state is about to be made
-   * (because a new block is being attached or detached).
-   *
-   * Transactions will not be nested, i.e. this function is only called when
-   * the last transaction has either been committed or rolled back.
-   *
-   * By default, this function does nothing.  If the game logic keeps track
-   * of state in an external data structure, it can use this function together
-   * with CommitTransaction and RollbackTransaction to ensure consistency
-   * between the state it keeps and the state that libxayagame keeps in its
-   * storage.
-   */
-  virtual void BeginTransaction ();
-
-  /**
-   * Tells the game that all state changes related to the previously started
-   * transaction have been completed successfully.
-   */
-  virtual void CommitTransaction ();
-
-  /**
-   * Tells the game that there was an error during the state changes for the
-   * previously started transaction, and all changes made to internal states
-   * since then should be reverted if possible.
-   */
-  virtual void RollbackTransaction ();
 
   /**
    * Converts an encoded game state to JSON format, which can be returned as
