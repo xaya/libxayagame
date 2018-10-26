@@ -1063,27 +1063,67 @@ protected:
 
 };
 
-TEST_F (GameLogicTransactionsTests, WorkingFine)
+TEST_F (GameLogicTransactionsTests, UpToDate)
 {
   {
     InSequence dummy;
-    EXPECT_CALL (fallibleStorage, BeginTransaction ()).Times (1);
-    EXPECT_CALL (fallibleStorage, CommitTransaction ()).Times (1);
+
     EXPECT_CALL (fallibleStorage, RollbackTransaction ()).Times (0);
+
+    EXPECT_CALL (fallibleStorage, BeginTransaction ());
+    EXPECT_CALL (fallibleStorage, CommitTransaction ());
+
+    EXPECT_CALL (fallibleStorage, BeginTransaction ());
+    EXPECT_CALL (fallibleStorage, CommitTransaction ());
   }
 
   AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (fallibleStorage, BlockHash (11), "a0b1");
+
+  AttachBlock (g, BlockHash (12), Moves ("a2c3"));
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (fallibleStorage, BlockHash (12), "a2b1c3");
 }
 
-TEST_F (GameLogicTransactionsTests, WithFailure)
+TEST_F (GameLogicTransactionsTests, CatchingUpBatched)
 {
   {
     InSequence dummy;
-    EXPECT_CALL (fallibleStorage, BeginTransaction ()).Times (1);
+
+    EXPECT_CALL (fallibleStorage, RollbackTransaction ()).Times (0);
+
+    EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+        .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
+
+    EXPECT_CALL (fallibleStorage, BeginTransaction ());
+    EXPECT_CALL (fallibleStorage, CommitTransaction ());
+  }
+
+  mockXayaServer.SetBestBlock (12, BlockHash (12));
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (storage, TestGame::GenesisBlockHash (), "");
+
+  CallBlockAttach (g, "reqtoken",
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (fallibleStorage, BlockHash (11), "a0b1");
+
+  CallBlockAttach (g, "reqtoken", BlockHash (11), BlockHash (12),
+                   Moves ("a2c3"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (fallibleStorage, BlockHash (12), "a2b1c3");
+}
+
+TEST_F (GameLogicTransactionsTests, FailureRollsBack)
+{
+  {
+    InSequence dummy;
     EXPECT_CALL (fallibleStorage, CommitTransaction ()).Times (0);
-    EXPECT_CALL (fallibleStorage, RollbackTransaction ()).Times (1);
+    EXPECT_CALL (fallibleStorage, BeginTransaction ());
+    EXPECT_CALL (fallibleStorage, RollbackTransaction ());
   }
 
   fallibleStorage.SetShouldFail (true);

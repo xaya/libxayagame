@@ -46,15 +46,15 @@ namespace
 
 /**
  * Helper class to call BeginTransaction and either CommitTransaction or
- * AbortTransaction on a storage implementation using RAII.
+ * AbortTransaction on the transaction manager using RAII.
  */
 class GameTransactionHelper
 {
 
 private:
 
-  /** The storage on which to call the functions.  */
-  StorageInterface& storage;
+  /** The manager on which to call the functions.  */
+  internal::TransactionManager& manager;
 
   /**
    * Whether the operation was successful.  If this is set to true at some
@@ -65,25 +65,18 @@ private:
 
 public:
 
-  explicit GameTransactionHelper (StorageInterface& s)
-    : storage(s)
+  explicit GameTransactionHelper (internal::TransactionManager& m)
+    : manager(m)
   {
-    VLOG (1) << "Starting storage transaction";
-    storage.BeginTransaction ();
+    manager.BeginTransaction ();
   }
 
   ~GameTransactionHelper ()
   {
     if (success)
-      {
-        VLOG (1) << "Committing storage transaction";
-        storage.CommitTransaction ();
-      }
+      manager.CommitTransaction ();
     else
-      {
-        VLOG (1) << "Aborting storage transaction";
-        storage.RollbackTransaction ();
-      }
+      manager.RollbackTransaction ();
   }
 
   void
@@ -114,7 +107,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
   const unsigned height = blockData["block"]["height"].asUInt ();
 
   {
-    GameTransactionHelper tx(*storage);
+    GameTransactionHelper tx(transactionManager);
 
     UndoData undo;
     const GameStateData newState
@@ -160,7 +153,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
   const GameStateData newState = storage->GetCurrentGameState ();
 
   {
-    GameTransactionHelper tx(*storage);
+    GameTransactionHelper tx(transactionManager);
 
     const GameStateData oldState
         = rules->ProcessBackwards (newState, blockData, undo);
@@ -393,6 +386,8 @@ Game::SetStorage (StorageInterface* s)
 
   LOG (INFO) << "Storage has been added to Game, initialising it now";
   storage->Initialise ();
+
+  transactionManager.SetStorage (*storage);
 }
 
 void
@@ -527,6 +522,7 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
     {
       LOG (INFO) << "Game state matches current tip, we are up-to-date";
       state = State::UP_TO_DATE;
+      transactionManager.SetBatchSize (1);
       return;
     }
 
@@ -543,6 +539,8 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
       << ", leading to block " << upd["toblock"].asString ();
 
   state = State::CATCHING_UP;
+  transactionManager.SetBatchSize (transactionBatchSize);
+
   CHECK (targetBlockHash.FromHex (upd["toblock"].asString ()));
   reqToken = upd["reqtoken"].asString ();
 }
@@ -594,7 +592,7 @@ Game::ReinitialiseState ()
     << "The game's genesis block hash and height do not match";
   storage->Clear ();
   {
-    GameTransactionHelper tx(*storage);
+    GameTransactionHelper tx(transactionManager);
     storage->SetCurrentGameState (genesisHash, genesisData);
     tx.SetSuccess ();
   }
