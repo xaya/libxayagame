@@ -13,16 +13,17 @@ CLEANFILES = $(RPC_STUBS)
 
 libxayagame_la_CXXFLAGS = \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
-  $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(ZMQ_CFLAGS)
+  $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
 libxayagame_la_LIBADD = \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(GLOG_LIBS) $(SQLITE3_LIBS) $(ZMQ_LIBS) \
+  $(GLOG_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS) \
   -lstdc++fs
 libxayagame_la_SOURCES = \
   defaultmain.cpp \
   game.cpp \
   gamelogic.cpp \
   gamerpcserver.cpp \
+  lmdbstorage.cpp \
   mainloop.cpp \
   pruningqueue.cpp \
   sqlitegame.cpp \
@@ -36,6 +37,7 @@ xayagame_HEADERS = \
   game.hpp \
   gamelogic.hpp \
   gamerpcserver.hpp \
+  lmdbstorage.hpp \
   mainloop.hpp \
   pruningqueue.hpp \
   sqlitegame.hpp \
@@ -55,13 +57,14 @@ TESTS = tests
 
 tests_CXXFLAGS = \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
-  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS) $(ZMQ_CFLAGS)
+  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
 tests_LDADD = $(builddir)/libxayagame.la \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(ZMQ_LIBS)
+  $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS)
 tests_SOURCES = testutils.cpp \
   game_tests.cpp \
   gamelogic_tests.cpp \
+  lmdbstorage_tests.cpp \
   mainloop_tests.cpp \
   pruningqueue_tests.cpp \
   sqlitegame_tests.cpp \

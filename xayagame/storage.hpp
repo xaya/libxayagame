@@ -48,6 +48,10 @@ public:
   /**
    * Removes all data, corresponding to a full reset of the state
    * (e.g. for starting a sync from scratch).
+   *
+   * In contrast to the other functions that modify data, *no* transaction is
+   * started with BeginTransaction before this function is called.  It should
+   * by itself make sure that all data is completely removed atomically.
    */
   virtual void Clear () = 0;
 
