@@ -41,54 +41,6 @@ Game::StateToString (const State s)
   return out.str ();
 }
 
-namespace
-{
-
-/**
- * Helper class to call BeginTransaction and either CommitTransaction or
- * AbortTransaction on the transaction manager using RAII.
- */
-class GameTransactionHelper
-{
-
-private:
-
-  /** The manager on which to call the functions.  */
-  internal::TransactionManager& manager;
-
-  /**
-   * Whether the operation was successful.  If this is set to true at some
-   * point in time, then CommitTransaction will be called.  Otherwise, the
-   * transaction is aborted in the destructor.
-   */
-  bool success = false;
-
-public:
-
-  explicit GameTransactionHelper (internal::TransactionManager& m)
-    : manager(m)
-  {
-    manager.BeginTransaction ();
-  }
-
-  ~GameTransactionHelper ()
-  {
-    if (success)
-      manager.CommitTransaction ();
-    else
-      manager.RollbackTransaction ();
-  }
-
-  void
-  SetSuccess ()
-  {
-    success = true;
-  }
-
-};
-
-} // anonymous namespace
-
 bool
 Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
                             const Json::Value& blockData)
@@ -107,7 +59,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
   const unsigned height = blockData["block"]["height"].asUInt ();
 
   {
-    GameTransactionHelper tx(transactionManager);
+    internal::ActiveTransaction tx(transactionManager);
 
     UndoData undo;
     const GameStateData newState
@@ -153,7 +105,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
   const GameStateData newState = storage->GetCurrentGameState ();
 
   {
-    GameTransactionHelper tx(transactionManager);
+    internal::ActiveTransaction tx(transactionManager);
 
     const GameStateData oldState
         = rules->ProcessBackwards (newState, blockData, undo);
@@ -592,7 +544,7 @@ Game::ReinitialiseState ()
     << "The game's genesis block hash and height do not match";
   storage->Clear ();
   {
-    GameTransactionHelper tx(transactionManager);
+    internal::ActiveTransaction tx(transactionManager);
     storage->SetCurrentGameState (genesisHash, genesisData);
     tx.SetSuccess ();
   }

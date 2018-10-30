@@ -115,5 +115,19 @@ TransactionManager::RollbackTransaction ()
   batchedCommits = 0;
 }
 
+ActiveTransaction::ActiveTransaction (TransactionManager& m)
+  : manager(m)
+{
+  manager.BeginTransaction ();
+}
+
+ActiveTransaction::~ActiveTransaction ()
+{
+  if (success)
+    manager.CommitTransaction ();
+  else
+    manager.RollbackTransaction ();
+}
+
 } // namespace internal
 } // namespace xaya

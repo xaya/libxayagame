@@ -101,6 +101,38 @@ public:
 
 };
 
+/**
+ * Helper class that starts a transaction and either commits or aborts it
+ * later based on RAII semantics.
+ */
+class ActiveTransaction
+{
+
+private:
+
+  /** The manager on which to call the functions.  */
+  TransactionManager& manager;
+
+  /**
+   * Whether the operation was successful.  If this is set to true at some
+   * point in time, then CommitTransaction will be called.  Otherwise, the
+   * transaction is aborted in the destructor.
+   */
+  bool success = false;
+
+public:
+
+  explicit ActiveTransaction (TransactionManager& m);
+  ~ActiveTransaction ();
+
+  void
+  SetSuccess ()
+  {
+    success = true;
+  }
+
+};
+
 } // namespace internal
 } // namespace xaya
 
