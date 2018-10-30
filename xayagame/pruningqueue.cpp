@@ -11,8 +11,9 @@ namespace xaya
 namespace internal
 {
 
-PruningQueue::PruningQueue (StorageInterface& s, const unsigned n)
-  : storage(s), nBlocks(n)
+PruningQueue::PruningQueue (StorageInterface& s, TransactionManager& tm,
+                            const unsigned n)
+  : storage(s), transactionManager(tm), nBlocks(n)
 {
   LOG (INFO) << "Created empty pruning queue with desired size " << nBlocks;
 }
@@ -28,11 +29,19 @@ PruningQueue::PruneIfTooLong ()
     return;
 
   VLOG (1) << "Pruning " << (hashes.size () - nBlocks) << " old blocks";
+
+  /* We use just one transaction for pruning all blocks to avoid excessive
+     transaction creation.  This means that if a failure occurs, it may be
+     that the deletion of data from the storage is rolled back while the
+     in-memory queue thinks it is deleted.  But that is no big deal, as
+     we will re-prune anyway on the next startup at the latest.  */
+  ActiveTransaction tx(transactionManager);
   while (hashes.size () > nBlocks)
     {
       storage.ReleaseUndoData (hashes.front ());
       hashes.pop_front ();
     }
+  tx.SetSuccess ();
 }
 
 void
@@ -72,7 +81,11 @@ PruningQueue::AttachBlock (const uint256& hash, const unsigned height)
              " the front height " << frontHeight;
 
       if (frontHeight > 0)
-        storage.PruneUndoData (frontHeight - 1);
+        {
+          ActiveTransaction tx(transactionManager);
+          storage.PruneUndoData (frontHeight - 1);
+          tx.SetSuccess ();
+        }
       initialPruningDone = true;
     }
 

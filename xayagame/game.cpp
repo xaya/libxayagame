@@ -362,7 +362,9 @@ Game::EnablePruning (const unsigned nBlocks)
   CHECK (storage != nullptr);
 
   if (pruningQueue == nullptr)
-    pruningQueue = std::make_unique<internal::PruningQueue> (*storage, nBlocks);
+    pruningQueue = std::make_unique<internal::PruningQueue> (*storage,
+                                                             transactionManager,
+                                                             nBlocks);
   else
     pruningQueue->SetDesiredSize (nBlocks);
 }

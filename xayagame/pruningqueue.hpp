@@ -9,6 +9,7 @@
    used directly by external code!  */
 
 #include "storage.hpp"
+#include "transactionmanager.hpp"
 #include "uint256.hpp"
 
 #include <deque>
@@ -32,6 +33,12 @@ private:
    * as appropriate.
    */
   StorageInterface& storage;
+
+  /**
+   * The transaction manager that is used for starting/committing transactions
+   * when changing the storage.
+   */
+  TransactionManager& transactionManager;
 
   /** The desired number of blocks to keep before pruning.  */
   unsigned nBlocks;
@@ -61,7 +68,8 @@ public:
    * Creates a new pruning queue for the given storage reference and desired
    * number of blocks to keep.  The queue is empty at the beginning.
    */
-  explicit PruningQueue (StorageInterface& s, unsigned n);
+  explicit PruningQueue (StorageInterface& s, TransactionManager& tm,
+                         unsigned n);
 
   /**
    * Changes the number of desired blocks.  If the new value is smaller

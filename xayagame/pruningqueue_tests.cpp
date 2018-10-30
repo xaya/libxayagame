@@ -5,6 +5,7 @@
 #include "pruningqueue.hpp"
 
 #include "storage.hpp"
+#include "transactionmanager.hpp"
 #include "uint256.hpp"
 
 #include "testutils.hpp"
@@ -28,11 +29,16 @@ protected:
   /** Memory storage used to test if it gets pruned.  */
   MemoryStorage storage;
 
+  /** Transaction manager that is used.  */
+  TransactionManager transactionManager;
+
   /** Next height of the simulated blockchain.  */
   unsigned nextHeight = 0;
 
   PruningQueueTests ()
   {
+    transactionManager.SetStorage (storage);
+
     /* Store some undo data into storage, just in case.  The existence
        of more data than we attach blocks in the test does not hurt, as we
        explicitly retrieve and verify only data in a specified range anyway.  */
@@ -47,11 +53,14 @@ protected:
   InitUnprunedState (const unsigned height)
   {
     storage.Clear ();
+
+    ActiveTransaction tx(transactionManager);
     for (unsigned i = 0; i <= height; ++i)
       {
         const uint256 hash = BlockHash (i);
         storage.AddUndoData (hash, i, hash.ToHex ());
       }
+    tx.SetSuccess ();
   }
 
   /**
@@ -129,7 +138,7 @@ protected:
 
 TEST_F (PruningQueueTests, AttachingFromGenesis)
 {
-  PruningQueue queue(storage, 10);
+  PruningQueue queue(storage, transactionManager, 10);
 
   AttachBlocks (queue, 100);
   AssertFirstNonPruned (90);
@@ -137,7 +146,7 @@ TEST_F (PruningQueueTests, AttachingFromGenesis)
 
 TEST_F (PruningQueueTests, InitialPruning)
 {
-  PruningQueue queue(storage, 10);
+  PruningQueue queue(storage, transactionManager, 10);
 
   nextHeight = 10;
   AttachBlocks (queue, 9);
@@ -149,7 +158,7 @@ TEST_F (PruningQueueTests, InitialPruning)
 
 TEST_F (PruningQueueTests, DetachingBeforeStart)
 {
-  PruningQueue queue(storage, 10);
+  PruningQueue queue(storage, transactionManager, 10);
 
   nextHeight = 10;
   AttachBlocks (queue, 1);
@@ -164,7 +173,7 @@ TEST_F (PruningQueueTests, DetachingBeforeStart)
 
 TEST_F (PruningQueueTests, DetachingDuringOperation)
 {
-  PruningQueue queue(storage, 10);
+  PruningQueue queue(storage, transactionManager, 10);
 
   AttachBlocks (queue, 50);
   AssertFirstNonPruned (40);
@@ -179,7 +188,7 @@ TEST_F (PruningQueueTests, DetachingDuringOperation)
 
 TEST_F (PruningQueueTests, Reset)
 {
-  PruningQueue queue(storage, 10);
+  PruningQueue queue(storage, transactionManager, 10);
 
   AttachBlocks (queue, 50);
   AssertFirstNonPruned (40);
@@ -197,7 +206,7 @@ using SetDesiredSizeTests = PruningQueueTests;
 
 TEST_F (SetDesiredSizeTests, MakeLarger)
 {
-  PruningQueue queue(storage, 10);
+  PruningQueue queue(storage, transactionManager, 10);
 
   AttachBlocks (queue, 50);
   AssertFirstNonPruned (40);
@@ -212,7 +221,7 @@ TEST_F (SetDesiredSizeTests, MakeLarger)
 
 TEST_F (SetDesiredSizeTests, TriggersInitialPruning)
 {
-  PruningQueue queue(storage, 10);
+  PruningQueue queue(storage, transactionManager, 10);
 
   nextHeight = 10;
   AttachBlocks (queue, 9);
@@ -230,7 +239,7 @@ TEST_F (SetDesiredSizeTests, TriggersInitialPruning)
 
 TEST_F (SetDesiredSizeTests, TriggersRegularPruning)
 {
-  PruningQueue queue(storage, 10);
+  PruningQueue queue(storage, transactionManager, 10);
 
   AttachBlocks (queue, 50);
   AssertFirstNonPruned (40);
@@ -258,7 +267,7 @@ protected:
 
 TEST_F (ZeroNBlocksTests, FromGenesis)
 {
-  PruningQueue queue(storage, 0);
+  PruningQueue queue(storage, transactionManager, 0);
 
   AttachBlocks (queue, 10);
   AssertAllPruned ();
@@ -266,7 +275,7 @@ TEST_F (ZeroNBlocksTests, FromGenesis)
 
 TEST_F (ZeroNBlocksTests, LateStart)
 {
-  PruningQueue queue(storage, 0);
+  PruningQueue queue(storage, transactionManager, 0);
 
   nextHeight = 10;
   AttachBlocks (queue, 1);
@@ -275,7 +284,7 @@ TEST_F (ZeroNBlocksTests, LateStart)
 
 TEST_F (ZeroNBlocksTests, Detaches)
 {
-  PruningQueue queue(storage, 0);
+  PruningQueue queue(storage, transactionManager, 0);
 
   AttachBlocks (queue, 10);
   AssertAllPruned ();
