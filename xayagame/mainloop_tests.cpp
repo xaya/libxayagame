@@ -132,7 +132,7 @@ TEST_F (MainLoopTests, LoopWithInterrupt)
   EXPECT_FALSE (stopCalled);
   EXPECT_TRUE (loop.IsRunning ());
 
-  HandleInterrupt (SIGINT);
+  HandleInterrupt (0);
   ASSERT_NE (loopThread, nullptr);
   loopThread->join ();
   EXPECT_TRUE (startCalled);

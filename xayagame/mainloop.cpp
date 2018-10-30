@@ -128,7 +128,7 @@ MainLoop::Stop ()
 }
 
 void
-MainLoop::HandleInterrupt (int signum)
+MainLoop::HandleInterrupt (const int signum)
 {
   std::lock_guard<std::mutex> lock(instanceForSignalsMutex);
   if (instanceForSignals == nullptr)

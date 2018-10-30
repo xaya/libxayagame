@@ -8,7 +8,9 @@
 /* This file is an implementation detail of Game and should not be
    used directly by external code!  */
 
+#ifndef _WIN32
 #include <signal.h>
+#endif // !_WIN32
 
 #include <condition_variable>
 #include <functional>
