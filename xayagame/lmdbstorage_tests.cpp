@@ -162,13 +162,28 @@ INSTANTIATE_TYPED_TEST_CASE_P (LMDB, TransactingStorageTests,
                                TempLMDBStorage);
 
 /**
- * Tests the LMDBStorage's persistence between closing and reopening the
- * database in a given directory.
+ * Tests for things specific to LMDB.  The fixture manages a temporary directory
+ * but otherwise leaves handling of the LMDBStorage to the test itself.
  */
-TEST (PersistentLMDBStorageTests, PersistsData)
+class LMDBStorageTests : public testing::Test
 {
+
+private:
+
   TemporaryDirectory dir;
 
+protected:
+
+  const std::string
+  GetDir () const
+  {
+    return dir.GetPath ();
+  }
+
+};
+
+TEST_F (LMDBStorageTests, PersistsData)
+{
   uint256 hash;
   CHECK (hash.FromHex ("99" + std::string (62, '0')));
 
@@ -176,7 +191,7 @@ TEST (PersistentLMDBStorageTests, PersistsData)
   const UndoData undo = "some undo data";
 
   {
-    LMDBStorage storage(dir.GetPath ());
+    LMDBStorage storage(GetDir ());
     storage.Initialise ();
 
     storage.BeginTransaction ();
@@ -186,7 +201,7 @@ TEST (PersistentLMDBStorageTests, PersistsData)
   }
 
   {
-    LMDBStorage storage(dir.GetPath ());
+    LMDBStorage storage(GetDir ());
     storage.Initialise ();
 
     uint256 h;
@@ -198,6 +213,47 @@ TEST (PersistentLMDBStorageTests, PersistsData)
     ASSERT_TRUE (storage.GetUndoData (hash, val));
     EXPECT_EQ (val, undo);
   }
+}
+
+TEST_F (LMDBStorageTests, ResizingMap)
+{
+  LMDBStorage storage(GetDir ());
+  storage.Initialise ();
+
+  /* The default map size is 1 MiB.  Each undo entry has at least a size of
+     64 bytes, as that corresponds to the raw data of block hash and
+     undo string.  So writing 2^20 / 2^6 = 2^14 undo entries to the
+     map certainly exceeds the size and requires that the database handles
+     resizing by itself.  */
+  unsigned resized = 0;
+  for (unsigned i = 0; i < (1 << 14); ++i)
+    {
+      std::string hex(64, '0');
+      std::sprintf (&hex[0], "%08x", i);
+      CHECK (hex[8] == 0);
+      hex[8] = '0';
+
+      uint256 hash;
+      CHECK (hash.FromHex (hex));
+
+      bool success = false;
+      while (!success)
+        try
+          {
+            storage.BeginTransaction ();
+            storage.AddUndoData (hash, i, UndoData (32, 'x'));
+            storage.CommitTransaction ();
+            success = true;
+          }
+        catch (const StorageInterface::RetryWithNewTransaction& exc)
+          {
+            storage.RollbackTransaction ();
+            ++resized;
+          }
+    }
+
+  LOG (INFO) << "Resized the LMDB map " << resized << " times";
+  CHECK_GT (resized, 0);
 }
 
 } // anonymous namespace

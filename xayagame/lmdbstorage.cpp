@@ -21,6 +21,13 @@ constexpr char KEY_CURRENT_STATE = 's';
  * byte order as returned from uint256::GetBlob).
  */
 constexpr char KEY_PREFIX_UNDO = 'u';
+/**
+ * Single-character key for the number of resizes made.  This number is not
+ * really needed, but we do keep it around so that we commit actual writes
+ * after each resize to make sure the new size is persisted.  The number is
+ * stored as big-endian, using UNDO_HEIGHT_BYTES bytes.
+ */
+constexpr char KEY_NUM_RESIZES = 'r';
 
 /**
  * Number of bytes that encode the height for stored undo data, preceding
@@ -28,19 +35,6 @@ constexpr char KEY_PREFIX_UNDO = 'u';
  * in big-endian order.
  */
 constexpr size_t UNDO_HEIGHT_BYTES = 4;
-
-/**
- * Checks that the error code is zero.  If it is not, LOG(FATAL)'s with the
- * LMDB translation of the error code to a string.
- */
-void
-CheckOk (const int code)
-{
-  if (code == 0)
-    return;
-
-  LOG (FATAL) << "LMDB error: " << mdb_strerror (code);
-}
 
 } // anonymous namespace
 
@@ -56,13 +50,45 @@ LMDBStorage::LMDBStorage (const std::string& dir)
 
 LMDBStorage::~LMDBStorage ()
 {
-  mdb_env_close (env);
+  if (env != nullptr)
+    {
+      mdb_env_close (env);
+      LOG (INFO) << "Closed LMDB environment";
+    }
 
   /* This function should only be called when no transaction is open.
      Close the environment first just in case, so if the check fails, it
      is already "properly" closed.  That doesn't really matter in practice,
      but the check for being a nullptr can be done afterwards just fine.  */
   CHECK (startedTxn == nullptr);
+
+  /* When needsResize is set, it should always be reset soon after by the
+     following RollbackTransaction call.  It should never be left true until
+     the object gets destructed, at the very least.  */
+  CHECK (!needsResize);
+}
+
+void
+LMDBStorage::CheckOk (const int code) const
+{
+  if (code == 0)
+    return;
+
+  /* If the map is full, throw a RetryWithNewTransaction exception.  We also
+     set a flag that tells us to resize the map in the following
+     RollbackTransaction call that will be made when the stack unwinds.  There
+     we do the actual resizing, so that we are sure there is no currently
+     open transaction.  */
+  if (code == MDB_MAP_FULL)
+    {
+      LOG (WARNING) << "The LMDB map needs to be resized";
+      CHECK (!needsResize)
+          << "We got another MDB_MAP_FULL error while waiting for the resize";
+      needsResize = true;
+      throw StorageInterface::RetryWithNewTransaction ("LMDB needs resize");
+    }
+
+  LOG (FATAL) << "LMDB error: " << mdb_strerror (code);
 }
 
 void
@@ -70,18 +96,32 @@ LMDBStorage::Initialise ()
 {
   LOG (INFO) << "Opening LMDB database at " << directory;
   CheckOk (mdb_env_open (env, directory.c_str (), 0, 0644));
+
+  MDB_envinfo stat;
+  CheckOk (mdb_env_info (env, &stat));
+  LOG (INFO)
+      << "LMDB has currently a map size of "
+      << (stat.me_mapsize >> 20) << " MiB";
 }
 
 void
 LMDBStorage::Clear ()
 {
   CHECK (startedTxn == nullptr);
-  BeginTransaction ();
-
   LOG (INFO) << "Emptying the entire LMDB database to clear the storage";
-  CheckOk (mdb_drop (startedTxn, dbi, 0));
 
-  CommitTransaction ();
+  BeginTransaction ();
+  try
+    {
+      CheckOk (mdb_drop (startedTxn, dbi, 0));
+      CommitTransaction ();
+    }
+  catch (...)
+    {
+      RollbackTransaction ();
+      throw;
+    }
+
   CHECK (startedTxn == nullptr);
 }
 
@@ -138,12 +178,49 @@ ValueToString (const MDB_val& data, const size_t stripBytes)
 }
 
 /**
+ * Encodes a given number as big-endian bytes.
+ */
+void
+EncodeUnsigned (unsigned num, unsigned char* bytes)
+{
+  for (size_t i = 0; i < UNDO_HEIGHT_BYTES; ++i)
+    {
+      bytes[UNDO_HEIGHT_BYTES - i - 1] = (num & 0xFF);
+      num >>= 8;
+    }
+  CHECK_EQ (num, 0);
+}
+
+/**
+ * Decodes big-endian bytes as unsigned integer.
+ */
+unsigned
+DecodeUnsigned (const unsigned char* bytes)
+{
+  unsigned num = 0;
+  for (size_t i = 0; i < UNDO_HEIGHT_BYTES; ++i)
+    {
+      num <<= 8;
+      num |= bytes[i];
+    }
+  return num;
+}
+
+} // anonymous namespace
+
+/**
  * Utility class that manages a read-only transaction using RAII mechanics.
  */
-class ReadTransaction
+class LMDBStorage::ReadTransaction
 {
 
 private:
+
+  /**
+   * LMDBStorage instance this is part of.  This is used to call CheckOk
+   * on that instance.
+   */
+  const LMDBStorage& storage;
 
   /** The underlying LMDB transaction handle.  */
   MDB_txn* txn = nullptr;
@@ -161,27 +238,29 @@ private:
 public:
 
   /**
-   * Constructs a read transaction in the given environment.  The passed in
-   * transaction is used as parent if not null; this ensures that state changed
-   * in it is seen already by the reader.
+   * Constructs a read transaction for the given LMDBStorage.  If the instance
+   * has a currently open transaction, then that one is used for reading to
+   * ensure that already-modified state is seen.
    */
-  explicit ReadTransaction (MDB_env* env, MDB_txn* parentTxn)
+  explicit ReadTransaction (const LMDBStorage& s)
+    : storage(s)
   {
-    if (parentTxn == nullptr)
+    if (storage.startedTxn == nullptr)
       {
         ownTx = true;
         VLOG (1) << "Starting a new read-only LMDB transaction";
-        CheckOk (mdb_txn_begin (env, parentTxn, MDB_RDONLY, &txn));
+        storage.CheckOk (mdb_txn_begin (storage.env, nullptr,
+                                        MDB_RDONLY, &txn));
       }
     else
       {
         ownTx = false;
         VLOG (1) << "Reusing the parent transaction for reading";
-        txn = parentTxn;
+        txn = storage.startedTxn;
       }
 
     CHECK (txn != nullptr);
-    CheckOk (mdb_dbi_open (txn, nullptr, 0, &dbi));
+    storage.CheckOk (mdb_dbi_open (txn, nullptr, 0, &dbi));
   }
 
   ~ReadTransaction ()
@@ -207,17 +286,17 @@ public:
       return true;
     if (code == MDB_NOTFOUND)
       return false;
-    LOG (FATAL) << "LMDB error while reading: " << mdb_strerror (code);
+
+    storage.CheckOk (code);
+    LOG (FATAL) << "CheckOk should have failed with code " << code;
   }
 
 };
 
-} // anonymous namespace
-
 bool
 LMDBStorage::GetCurrentBlockHash (uint256& hash) const
 {
-  ReadTransaction tx(env, startedTxn);
+  ReadTransaction tx(*this);
 
   MDB_val key;
   SingleByteValue (KEY_CURRENT_HASH, key);
@@ -236,7 +315,7 @@ LMDBStorage::GetCurrentBlockHash (uint256& hash) const
 GameStateData
 LMDBStorage::GetCurrentGameState () const
 {
-  ReadTransaction tx(env, startedTxn);
+  ReadTransaction tx(*this);
 
   MDB_val key;
   SingleByteValue (KEY_CURRENT_STATE, key);
@@ -272,7 +351,7 @@ LMDBStorage::SetCurrentGameState (const uint256& hash,
 bool
 LMDBStorage::GetUndoData (const uint256& hash, UndoData& undo) const
 {
-  ReadTransaction tx(env, startedTxn);
+  ReadTransaction tx(*this);
 
   MDB_val key;
   const std::string strKey = KeyForUndoData (hash);
@@ -302,15 +381,9 @@ LMDBStorage::AddUndoData (const uint256& hash,
   CheckOk (mdb_put (startedTxn, dbi, &key, &data, MDB_RESERVE));
 
   CHECK (data.mv_data != nullptr);
-  char* bytes = static_cast<char*> (data.mv_data);
+  unsigned char* bytes = static_cast<unsigned char*> (data.mv_data);
   std::copy (undo.begin (), undo.end (), bytes + UNDO_HEIGHT_BYTES);
-
-  unsigned h = height;
-  for (size_t i = 0; i < UNDO_HEIGHT_BYTES; ++i)
-    {
-      bytes[UNDO_HEIGHT_BYTES - i - 1] = (h & 0xFF);
-      h >>= 8;
-    }
+  EncodeUnsigned (height, bytes);
 }
 
 void
@@ -326,37 +399,40 @@ LMDBStorage::ReleaseUndoData (const uint256& hash)
   if (code == 0)
     return;
   if (code == MDB_NOTFOUND)
-    LOG (WARNING)
-        << "Attempted to delete non-existant undo data for hash "
-        << hash.ToHex ();
-  else
-    LOG (FATAL) << "LMDB error deleting undo data: " << mdb_strerror (code);
+    {
+      LOG (WARNING)
+          << "Attempted to delete non-existant undo data for hash "
+          << hash.ToHex ();
+      return;
+    }
+  CheckOk (code);
 }
-
-namespace
-{
 
 /**
  * Utility class that manages an LMDB cursor using RAII.
  */
-class LMDBCursor
+class LMDBStorage::Cursor
 {
 
 private:
+
+  /** The underlying LMDBStorage instance.  */
+  LMDBStorage& storage;
 
   /** The underlying cursor handle.  */
   MDB_cursor* cursor = nullptr;
 
 public:
 
-  explicit LMDBCursor (MDB_txn* txn, MDB_dbi dbi)
+  explicit Cursor (LMDBStorage& s, MDB_txn* txn, MDB_dbi dbi)
+    : storage(s)
   {
     CHECK (txn != nullptr);
-    CheckOk (mdb_cursor_open (txn, dbi, &cursor));
+    storage.CheckOk (mdb_cursor_open (txn, dbi, &cursor));
     CHECK (cursor != nullptr);
   }
 
-  ~LMDBCursor ()
+  ~Cursor ()
   {
     CHECK (cursor != nullptr);
     mdb_cursor_close (cursor);
@@ -377,7 +453,8 @@ public:
     if (code == MDB_NOTFOUND)
       return false;
 
-    LOG (FATAL) << "LMDB error with cursor seek: " << mdb_strerror (code);
+    storage.CheckOk (code);
+    LOG (FATAL) << "CheckOk should have failed with code " << code;
   }
 
   /**
@@ -394,7 +471,8 @@ public:
     if (code == MDB_NOTFOUND)
       return false;
 
-    LOG (FATAL) << "LMDB error with cursor next: " << mdb_strerror (code);
+    storage.CheckOk (code);
+    LOG (FATAL) << "CheckOk should have failed with code " << code;
   }
 
 
@@ -405,17 +483,15 @@ public:
   Delete ()
   {
     CHECK (cursor != nullptr);
-    CheckOk (mdb_cursor_del (cursor, 0));
+    storage.CheckOk (mdb_cursor_del (cursor, 0));
   }
 
 };
 
-} // anonymous namespace
-
 void
 LMDBStorage::PruneUndoData (unsigned height)
 {
-  LMDBCursor cursor(startedTxn, dbi);
+  Cursor cursor(*this, startedTxn, dbi);
 
   MDB_val key;
   SingleByteValue (KEY_PREFIX_UNDO, key);
@@ -432,12 +508,7 @@ LMDBStorage::PruneUndoData (unsigned height)
           << "Invalid data stored in LMDB database for undo entry";
       const unsigned char* bytes
           = static_cast<const unsigned char*> (data.mv_data);
-      unsigned h = 0;
-      for (size_t i = 0; i < UNDO_HEIGHT_BYTES; ++i)
-        {
-          h <<= 8;
-          h |= bytes[i];
-        }
+      const unsigned h = DecodeUnsigned (bytes);
 
       if (h <= height)
         {
@@ -452,7 +523,9 @@ LMDBStorage::PruneUndoData (unsigned height)
 void
 LMDBStorage::BeginTransaction ()
 {
+  CHECK (!needsResize);
   CHECK (startedTxn == nullptr);
+
   VLOG (1) << "Starting a new LMDB transaction";
   CheckOk (mdb_txn_begin (env, nullptr, 0, &startedTxn));
   CHECK (startedTxn != nullptr);
@@ -464,19 +537,117 @@ LMDBStorage::BeginTransaction ()
 void
 LMDBStorage::CommitTransaction ()
 {
+  CHECK (!needsResize);
   CHECK (startedTxn != nullptr);
   VLOG (1) << "Committing the current LMDB transaction";
-  CheckOk (mdb_txn_commit (startedTxn));
-  startedTxn = nullptr;
+
+  try
+    {
+      CheckOk (mdb_txn_commit (startedTxn));
+      startedTxn = nullptr;
+    }
+  catch (...)
+    {
+      /* Even if mdb_txn_commit fails, the txn data is freed.  Thus we have
+         to make sure that it is set to null anyway, and that it won't be
+         passed to mdb_txn_abort anymore by cleanup handling.  */
+      LOG (WARNING) << "mdb_txn_commit failed, setting txn handle to null";
+      startedTxn = nullptr;
+      throw;
+    }
 }
 
 void
 LMDBStorage::RollbackTransaction ()
 {
-  CHECK (startedTxn != nullptr);
-  VLOG (1) << "Aborting the current LMDB transaction";
-  mdb_txn_abort (startedTxn);
-  startedTxn = nullptr;
+  /* If mdb_txn_commit failed, we may end up in a situation in which the
+     txn handle is already freed and set to null, but the cleanup handling
+     still calls RollbackTransaction.  In that case, simply ignore the request
+     and return now without doing anything.  */
+  if (startedTxn == nullptr)
+    LOG (WARNING)
+        << "RollbackTransaction called without a currently-active"
+           " transaction.  This is ok if mdb_txn_commit just failed.";
+  else
+    {
+      VLOG (1) << "Aborting the current LMDB transaction";
+      mdb_txn_abort (startedTxn);
+      startedTxn = nullptr;
+    }
+  CHECK (startedTxn == nullptr);
+
+  if (needsResize)
+    {
+      needsResize = false;
+      Resize ();
+    }
+
+  CHECK (startedTxn == nullptr);
+  CHECK (!needsResize);
+}
+
+void
+LMDBStorage::Resize ()
+{
+  CHECK (startedTxn == nullptr);
+
+  MDB_envinfo stat;
+  CheckOk (mdb_env_info (env, &stat));
+  const size_t newSize = (stat.me_mapsize << 1);
+
+  LOG (INFO)
+      << "Resizing LMDB map from " << (stat.me_mapsize >> 20) << " MiB to "
+      << (newSize >> 20) << " MiB";
+  needsResize = false;
+
+  mdb_dbi_close (env, dbi);
+  CheckOk (mdb_env_set_mapsize (env, newSize));
+
+  CheckOk (mdb_env_info (env, &stat));
+  LOG (INFO) << "New size: " << stat.me_mapsize;
+
+  /* The LMDB map size is only persisted in the environment once a write
+     transaction has been committed.  To satisfy this requirement immediately,
+     we keep a counter of how many resizes have been made in the database.
+     Increment that now.  */
+  BeginTransaction ();
+  try
+    {
+      MDB_val key;
+      SingleByteValue (KEY_NUM_RESIZES, key);
+
+      unsigned numResizes = 0;
+      {
+        ReadTransaction tx(*this);
+
+        MDB_val data;
+        if (tx.ReadData (key, data))
+          {
+            CHECK_EQ (data.mv_size, UNDO_HEIGHT_BYTES);
+            const unsigned char* bytes
+                = static_cast<const unsigned char*> (data.mv_data);
+            numResizes = DecodeUnsigned (bytes);
+          }
+      }
+      ++numResizes;
+      LOG (INFO) << "This is resize number " << numResizes;
+
+      MDB_val data;
+      data.mv_size = UNDO_HEIGHT_BYTES;
+      data.mv_data = nullptr;
+      CheckOk (mdb_put (startedTxn, dbi, &key, &data, MDB_RESERVE));
+
+      CHECK (data.mv_data != nullptr);
+      unsigned char* bytes = static_cast<unsigned char*> (data.mv_data);
+      EncodeUnsigned (numResizes, bytes);
+
+      CommitTransaction ();
+    }
+  catch (...)
+    {
+      RollbackTransaction ();
+      throw;
+    }
 }
 
 } // namespace xaya

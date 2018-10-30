@@ -23,6 +23,9 @@ class LMDBStorage : public StorageInterface
 
 private:
 
+  class ReadTransaction;
+  class Cursor;
+
   /**
    * Directory for the database.  This is used to open the environment
    * in the Initialise() function call.
@@ -41,6 +44,27 @@ private:
    * a transaction is started (startedTxn is not null).
    */
   MDB_dbi dbi;
+
+  /**
+   * Special flag that is set to true if we encountered an MDB_MAP_FULL error
+   * and need to resize the LMDB map after aborting the current transaction
+   * (in the next call to RollbackTransaction that is expected to happen
+   * "soon").
+   */
+  mutable bool needsResize = false;
+
+  /**
+   * Checks that the error code is zero.  If it is not, LOG(FATAL)'s with the
+   * LMDB translation of the error code to a string.  This also takes care of
+   * handling MDB_MAP_FULL as a special case, requesting a resize in that case.
+   */
+  void CheckOk (int code) const;
+
+  /**
+   * Increases the database map size.  This must only be called if no current
+   * transaction is active (i.e. startedTxn == nullptr).
+   */
+  void Resize ();
 
 public:
 
