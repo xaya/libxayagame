@@ -6,6 +6,7 @@
 
 #include "game.hpp"
 #include "gamerpcserver.hpp"
+#include "lmdbstorage.hpp"
 #include "sqlitestorage.hpp"
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
@@ -50,6 +51,17 @@ CreateStorage (const GameDaemonConfiguration& config,
     {
       LOG (INFO) << "Creating data directory: " << gameDir;
       CHECK (fs::create_directories (gameDir));
+    }
+
+  if (config.StorageType == "lmdb")
+    {
+      const fs::path lmdbDir = gameDir / fs::path ("lmdb");
+      if (!fs::is_directory (lmdbDir))
+        {
+          LOG (INFO) << "Creating directory for LMDB environment: " << lmdbDir;
+          CHECK (fs::create_directories (lmdbDir));
+        }
+      return std::make_unique<LMDBStorage> (lmdbDir.string ());
     }
 
   if (config.StorageType == "sqlite")
