@@ -98,6 +98,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
       LOG (ERROR)
           << "Failed to retrieve undo data for block " << hash.ToHex ()
           << ".  Need to resync from scratch.";
+      transactionManager.TryAbortTransaction ();
       storage->Clear ();
       return false;
     }
@@ -542,6 +543,7 @@ Game::ReinitialiseState ()
   CHECK (blockHash.FromHex (blockHashHex));
   CHECK (blockHash == genesisHash)
     << "The game's genesis block hash and height do not match";
+  transactionManager.TryAbortTransaction ();
   storage->Clear ();
   {
     internal::ActiveTransaction tx(transactionManager);

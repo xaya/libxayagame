@@ -115,6 +115,21 @@ TransactionManager::RollbackTransaction ()
   batchedCommits = 0;
 }
 
+void
+TransactionManager::TryAbortTransaction ()
+{
+  CHECK (storage != nullptr);
+
+  if (inTransaction || batchedCommits > 0)
+    {
+      LOG (INFO) << "Aborting current transaction and batched commits";
+      storage->RollbackTransaction ();
+    }
+
+  inTransaction = false;
+  batchedCommits = 0;
+}
+
 ActiveTransaction::ActiveTransaction (TransactionManager& m)
   : manager(m)
 {

@@ -99,6 +99,13 @@ public:
    */
   void RollbackTransaction ();
 
+  /**
+   * Aborts the current transaction in the backing storage if there is one
+   * open.  This makes sure that afterwards there is no open transaction
+   * either in the manager or the underlying storage.
+   */
+  void TryAbortTransaction ();
+
 };
 
 /**

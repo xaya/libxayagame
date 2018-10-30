@@ -162,6 +162,49 @@ TEST_F (TransactionManagerTests, SetStorageFlushes)
   tm.RollbackTransaction ();
 }
 
+using TryAbortTransactionTests = TransactionManagerTests;
+
+TEST_F (TryAbortTransactionTests, NoActiveTransaction)
+{
+  tm.TryAbortTransaction ();
+
+  /* Calling clear on the storage verifies that we don't have an active
+     transaction in it at the moment.  */
+  storage.Clear ();
+}
+
+TEST_F (TryAbortTransactionTests, BatchedCommits)
+{
+  {
+    InSequence dummy;
+
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, RollbackTransactionMock ());
+  }
+
+  tm.SetBatchSize (10);
+
+  tm.BeginTransaction ();
+  tm.CommitTransaction ();
+
+  tm.TryAbortTransaction ();
+  storage.Clear ();
+}
+
+TEST_F (TryAbortTransactionTests, ActiveTransaction)
+{
+  {
+    InSequence dummy;
+
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, RollbackTransactionMock ());
+  }
+
+  tm.BeginTransaction ();
+  tm.TryAbortTransaction ();
+  storage.Clear ();
+}
+
 using SetBatchSizeTests = TransactionManagerTests;
 
 TEST_F (SetBatchSizeTests, TriggersFlush)
