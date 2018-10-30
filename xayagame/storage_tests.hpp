@@ -127,8 +127,23 @@ TYPED_TEST_P (BasicStorageTests, Clear)
   EXPECT_FALSE (this->storage.GetUndoData (this->hash1, undo));
 }
 
+TYPED_TEST_P (BasicStorageTests, ReadInTransaction)
+{
+  this->storage.BeginTransaction ();
+  this->storage.SetCurrentGameState (this->hash1, this->state1);
+  this->storage.AddUndoData (this->hash1, 18, this->undo1);
+
+  uint256 hash;
+  EXPECT_TRUE (this->storage.GetCurrentBlockHash (hash));
+  UndoData undo;
+  EXPECT_TRUE (this->storage.GetUndoData (this->hash1, undo));
+
+  this->storage.RollbackTransaction ();
+}
+
 REGISTER_TYPED_TEST_CASE_P (BasicStorageTests,
-                            Empty, CurrentState, StoringUndoData, Clear);
+                            Empty, CurrentState, StoringUndoData,
+                            Clear, ReadInTransaction);
 
 /**
  * Tests specific for the pruning/removing of undo data in a storage.  Since
