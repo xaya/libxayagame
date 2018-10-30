@@ -36,6 +36,8 @@ StorageInterface::RollbackTransaction ()
 void
 MemoryStorage::Clear ()
 {
+  CHECK (!startedTxn);
+
   hasState = false;
   undoData.clear ();
 }
@@ -61,6 +63,8 @@ void
 MemoryStorage::SetCurrentGameState (const uint256& hash,
                                     const GameStateData& data)
 {
+  CHECK (startedTxn);
+
   hasState = true;
   currentBlock = hash;
   currentState = data;
@@ -81,6 +85,8 @@ void
 MemoryStorage::AddUndoData (const uint256& hash,
                             const unsigned height, const UndoData& data)
 {
+  CHECK (startedTxn);
+
   HeightAndUndoData heightAndData = {height, data};
   undoData.emplace (hash, std::move (heightAndData));
 }
@@ -88,17 +94,43 @@ MemoryStorage::AddUndoData (const uint256& hash,
 void
 MemoryStorage::ReleaseUndoData (const uint256& hash)
 {
+  CHECK (startedTxn);
   undoData.erase (hash);
 }
 
 void
 MemoryStorage::PruneUndoData (const unsigned height)
 {
+  CHECK (startedTxn);
+
   for (auto it = undoData.cbegin (); it != undoData.cend (); )
     if (it->second.height <= height)
       it = undoData.erase (it);
     else
       ++it;
+}
+
+void
+MemoryStorage::BeginTransaction ()
+{
+  CHECK (!startedTxn);
+  startedTxn = true;
+}
+
+void
+MemoryStorage::CommitTransaction ()
+{
+  CHECK (startedTxn);
+  startedTxn = false;
+}
+
+void
+MemoryStorage::RollbackTransaction ()
+{
+  CHECK (startedTxn);
+  startedTxn = false;
+
+  LOG (WARNING) << "Memory storage is not capable of rolling back transactions";
 }
 
 } // namespace xaya

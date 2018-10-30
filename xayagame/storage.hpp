@@ -175,6 +175,15 @@ private:
   /** Undo data associated to block hashes we know about.  */
   UndoMap undoData;
 
+  /**
+   * Whether or not a transaction has currently been started.  The storage
+   * itself does not support transaction rollbacks, but it keeps track of
+   * whether or not transactions have been started.  This is used to verify
+   * correct transaction state for the various operations, to ensure that
+   * the calling code works fine in tests (for instance).
+   */
+  bool startedTxn = false;
+
 public:
 
   MemoryStorage () = default;
@@ -194,6 +203,10 @@ public:
                     unsigned height, const UndoData& data) override;
   void ReleaseUndoData (const uint256& hash) override;
   void PruneUndoData (unsigned height) override;
+
+  void BeginTransaction () override;
+  void CommitTransaction () override;
+  void RollbackTransaction () override;
 
 };
 
