@@ -95,11 +95,13 @@ class XayaGameTest (object):
 
     self.startXayaDaemon ()
     cleanup = False
+    success = False
     try:
       self.startGameDaemon ()
       try:
         self.run ()
         self.mainLogger.info ("Test succeeded")
+        success = True
         if self.args.nocleanup:
           self.mainLogger.info ("Not cleaning up logs as requested")
         else:
@@ -115,6 +117,9 @@ class XayaGameTest (object):
         self.log.info ("Cleaning up base directory in %s" % self.basedir)
         shutil.rmtree (self.basedir, ignore_errors=True)
       logging.shutdown ()
+
+    if not success:
+      sys.exit ("Test failed")
 
   def run (self):
     self.log.warning ("Test 'run' method not overridden, this tests nothing")
@@ -203,4 +208,5 @@ class XayaGameTest (object):
     Generates n new blocks on the Xaya network.
     """
 
-    self.rpc.xaya.generate (n)
+    addr = self.rpc.xaya.getnewaddress ()
+    self.rpc.xaya.generatetoaddress (n, addr)
