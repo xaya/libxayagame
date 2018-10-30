@@ -1,3 +1,7 @@
-ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS} -Im4
+ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS} -I m4
 
+if WINDOWS
+SUBDIRS = xayagame
+else
 SUBDIRS = xayagame mover
+endif

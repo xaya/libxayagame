@@ -15,8 +15,10 @@ namespace internal
 
 MainLoop::MainLoop ()
 {
+#ifndef _WIN32
   std::memset (&sigtermHandler, 0, sizeof (sigtermHandler));
   sigtermHandler.sa_handler = &MainLoop::HandleInterrupt;
+#endif // !_WIN32
 }
 
 MainLoop::~MainLoop ()
@@ -78,15 +80,20 @@ MainLoop::Run (const Functor& start, const Functor& stop)
   std::unique_lock<std::mutex> mainLoopLock(mut);
   CHECK (!running) << "Main loop is already running, cannot start it again";
 
+#ifndef _WIN32
   const int signals[] = {SIGTERM, SIGINT};
+#endif // !_WIN32
   {
     std::lock_guard<std::mutex> instanceLock(instanceForSignalsMutex);
     CHECK (instanceForSignals == nullptr)
         << "Another main loop is already running";
     instanceForSignals = this;
+
+#ifndef _WIN32
     for (const int sig : signals)
       if (sigaction (sig, &sigtermHandler, nullptr) != 0)
         LOG (FATAL) << "Installing signal handler failed for signal " << sig;
+#endif // !_WIN32
   }
 
   shouldStop = false;
@@ -103,9 +110,12 @@ MainLoop::Run (const Functor& start, const Functor& stop)
   {
     std::lock_guard<std::mutex> instanceLock(instanceForSignalsMutex);
     instanceForSignals = nullptr;
+
+#ifndef _WIN32
     for (const int sig : signals)
       if (sigaction (sig, nullptr, nullptr) != 0)
         LOG (FATAL) << "Uninstalling signal handler failed for signal " << sig;
+#endif // !_WIN32
   }
 }
 

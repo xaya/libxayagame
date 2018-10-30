@@ -13,7 +13,11 @@
 #include "uint256.hpp"
 #include "zmqsubscriber.hpp"
 
-#include "rpc-stubs/xayarpcclient.h"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated"
+ #include "rpc-stubs/xayarpcclient.h"
+#pragma GCC diagnostic pop
+
 
 #include <json/json.h>
 #include <jsonrpccpp/client.h>

@@ -3,6 +3,7 @@ xayagamedir = $(includedir)/xayagame
 
 EXTRA_DIST = rpc-stubs/game.json rpc-stubs/xaya.json
 
+
 libxayagame_la_CXXFLAGS = \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
   $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(ZMQ_CFLAGS)
@@ -10,6 +11,19 @@ libxayagame_la_LIBADD = \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(SQLITE3_LIBS) $(ZMQ_LIBS) \
   -lstdc++fs
+  
+
+# When building for windows, jsonrpccpp library can only be build without hredis;
+# So we need to make sure, the -lhredis flag is not passed
+# Also, lets pass -no-undefined to make sure we have zero undefined symbols
+# Else mingw will not be able to build shared libraries
+if WINDOWS
+  libxayagame_la_LDFLAGS = $(JSONCPP_LDFLAGS) $(JSONRPCCLIENT_LDFLAGS) $(JSONRPCSERVER_LDFLAGS) \
+  $(GLOG_LDFLAGS) $(SQLITE3_LDFLAGS) $(ZMQ_LDFLAGS) -no-undefined
+endif 
+#END WINDOWS   
+
+  
 libxayagame_la_SOURCES = \
   defaultmain.cpp \
   game.cpp \
@@ -42,34 +56,39 @@ xayagame_HEADERS = \
   rpc-stubs/xayarpcclient.h \
   rpc-stubs/xayarpcserverstub.h
 
-check_PROGRAMS = tests
-TESTS = tests
+if WINDOWS
 
-tests_CXXFLAGS = \
-  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
-  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS) $(ZMQ_CFLAGS)
-tests_LDADD = $(builddir)/libxayagame.la \
-  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(ZMQ_LIBS)
-tests_SOURCES = testutils.cpp \
-  game_tests.cpp \
-  gamelogic_tests.cpp \
-  mainloop_tests.cpp \
-  pruningqueue_tests.cpp \
-  sqlitegame_tests.cpp \
-  sqlitestorage_tests.cpp \
-  storage_tests.cpp \
-  transactionmanager_tests.cpp \
-  uint256_tests.cpp \
-  zmqsubscriber_tests.cpp
-check_HEADERS = testutils.hpp storage_tests.hpp
+else  
+  
+	check_PROGRAMS = tests
+	TESTS = tests
 
-rpc-stubs/gamerpcclient.h: rpc-stubs/game.json
-	jsonrpcstub "$<" --cpp-client=GameRpcClient --cpp-client-file="$@"
-rpc-stubs/gamerpcserverstub.h: rpc-stubs/game.json
-	jsonrpcstub "$<" --cpp-server=GameRpcServerStub --cpp-server-file="$@"
+	tests_CXXFLAGS = \
+	  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
+	  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS) $(ZMQ_CFLAGS)
+	tests_LDADD = $(builddir)/libxayagame.la \
+	  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
+	  $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(ZMQ_LIBS)
+	tests_SOURCES = testutils.cpp \
+	  game_tests.cpp \
+	  gamelogic_tests.cpp \
+	  mainloop_tests.cpp \
+	  pruningqueue_tests.cpp \
+	  sqlitegame_tests.cpp \
+	  sqlitestorage_tests.cpp \
+	  storage_tests.cpp \
+	  transactionmanager_tests.cpp \
+	  uint256_tests.cpp \
+	  zmqsubscriber_tests.cpp
+	check_HEADERS = testutils.hpp storage_tests.hpp
 
-rpc-stubs/xayarpcclient.h: rpc-stubs/xaya.json
-	jsonrpcstub "$<" --cpp-client=XayaRpcClient --cpp-client-file="$@"
-rpc-stubs/xayarpcserverstub.h: rpc-stubs/xaya.json
-	jsonrpcstub "$<" --cpp-server=XayaRpcServerStub --cpp-server-file="$@"
+	rpc-stubs/gamerpcclient.h: rpc-stubs/game.json
+		jsonrpcstub "$<" --cpp-client=GameRpcClient --cpp-client-file="$@"
+	rpc-stubs/gamerpcserverstub.h: rpc-stubs/game.json
+		jsonrpcstub "$<" --cpp-server=GameRpcServerStub --cpp-server-file="$@"
+
+	rpc-stubs/xayarpcclient.h: rpc-stubs/xaya.json
+		jsonrpcstub "$<" --cpp-client=XayaRpcClient --cpp-client-file="$@"
+	rpc-stubs/xayarpcserverstub.h: rpc-stubs/xaya.json
+		jsonrpcstub "$<" --cpp-server=XayaRpcServerStub --cpp-server-file="$@"
+endif
