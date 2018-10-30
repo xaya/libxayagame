@@ -22,11 +22,7 @@ namespace
 
 using testing::InSequence;
 
-/**
- * Simple subclass of MemoryStorage that mocks the transaction methods
- * so we can verify calls to them using gmock.
- */
-class MockedStorage : public MemoryStorage
+class MockedStorage : public TxMockedMemoryStorage
 {
 
 public:
@@ -35,14 +31,10 @@ public:
   {
     /* By default, expect no calls to be made.  The calls that we expect
        should explicitly be specified in the individual tests.  */
-    EXPECT_CALL (*this, BeginTransaction ()).Times (0);
-    EXPECT_CALL (*this, CommitTransaction ()).Times (0);
-    EXPECT_CALL (*this, RollbackTransaction ()).Times (0);
+    EXPECT_CALL (*this, BeginTransactionMock ()).Times (0);
+    EXPECT_CALL (*this, CommitTransactionMock ()).Times (0);
+    EXPECT_CALL (*this, RollbackTransactionMock ()).Times (0);
   }
-
-  MOCK_METHOD0 (BeginTransaction, void ());
-  MOCK_METHOD0 (CommitTransaction, void ());
-  MOCK_METHOD0 (RollbackTransaction, void ());
 
 };
 
@@ -70,14 +62,14 @@ TEST_F (TransactionManagerTests, NoBatching)
   {
     InSequence dummy;
 
-    EXPECT_CALL (storage, BeginTransaction ());
-    EXPECT_CALL (storage, CommitTransaction ());
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, CommitTransactionMock ());
 
-    EXPECT_CALL (storage, BeginTransaction ());
-    EXPECT_CALL (storage, RollbackTransaction ());
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, RollbackTransactionMock ());
 
-    EXPECT_CALL (storage, BeginTransaction ());
-    EXPECT_CALL (storage, CommitTransaction ());
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, CommitTransactionMock ());
   }
 
   tm.SetBatchSize (1);
@@ -96,8 +88,8 @@ TEST_F (TransactionManagerTests, BasicBatching)
 {
   {
     InSequence dummy;
-    EXPECT_CALL (storage, BeginTransaction ());
-    EXPECT_CALL (storage, CommitTransaction ());
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, CommitTransactionMock ());
   }
 
   tm.SetBatchSize (2);
@@ -113,8 +105,8 @@ TEST_F (TransactionManagerTests, Rollback)
 {
   {
     InSequence dummy;
-    EXPECT_CALL (storage, BeginTransaction ());
-    EXPECT_CALL (storage, RollbackTransaction ());
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, RollbackTransactionMock ());
   }
 
   tm.SetBatchSize (10);
@@ -130,8 +122,8 @@ TEST_F (TransactionManagerTests, DestructorTriggersFlush)
 {
   {
     InSequence dummy;
-    EXPECT_CALL (storage, BeginTransaction ());
-    EXPECT_CALL (storage, CommitTransaction ());
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, CommitTransactionMock ());
   }
 
   /* We need to use a custom instance, so that it gets destructed right
@@ -152,11 +144,11 @@ TEST_F (TransactionManagerTests, SetStorageFlushes)
   {
     InSequence dummy;
 
-    EXPECT_CALL (storage, BeginTransaction ());
-    EXPECT_CALL (storage, CommitTransaction ());
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, CommitTransactionMock ());
 
-    EXPECT_CALL (secondStorage, BeginTransaction ());
-    EXPECT_CALL (secondStorage, RollbackTransaction ());
+    EXPECT_CALL (secondStorage, BeginTransactionMock ());
+    EXPECT_CALL (secondStorage, RollbackTransactionMock ());
   }
 
   tm.SetBatchSize (10);
@@ -177,11 +169,11 @@ TEST_F (SetBatchSizeTests, TriggersFlush)
   {
     InSequence dummy;
 
-    EXPECT_CALL (storage, BeginTransaction ());
-    EXPECT_CALL (storage, CommitTransaction ());
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, CommitTransactionMock ());
 
-    EXPECT_CALL (storage, BeginTransaction ());
-    EXPECT_CALL (storage, RollbackTransaction ());
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, RollbackTransactionMock ());
   }
 
   tm.SetBatchSize (10);
@@ -203,8 +195,8 @@ TEST_F (SetBatchSizeTests, NoFlushWhenTransactionInProgress)
   {
     InSequence dummy;
 
-    EXPECT_CALL (storage, BeginTransaction ());
-    EXPECT_CALL (storage, RollbackTransaction ());
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (storage, RollbackTransactionMock ());
   }
 
   tm.SetBatchSize (10);

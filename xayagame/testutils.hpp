@@ -8,10 +8,12 @@
 /* Shared utility functions for unit tests of xayagame.  */
 
 #include "game.hpp"
+#include "storage.hpp"
 #include "uint256.hpp"
 
 #include <json/json.h>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <mutex>
@@ -26,6 +28,46 @@ namespace xaya
  * in tests.
  */
 uint256 BlockHash (unsigned num);
+
+/**
+ * Memory storage instance that has mocks for verifying the transaction
+ * methods that are called.
+ */
+class TxMockedMemoryStorage : public MemoryStorage
+{
+
+public:
+
+  /* Mock the transaction methods.  We still want to call through to the base
+     class' method, thus we mock other methods and call them together with
+     the base class method from the overridden real methods.  */
+  MOCK_METHOD0 (BeginTransactionMock, void ());
+  MOCK_METHOD0 (CommitTransactionMock, void ());
+  MOCK_METHOD0 (RollbackTransactionMock, void ());
+
+  void
+  BeginTransaction () override
+  {
+    MemoryStorage::BeginTransaction ();
+    BeginTransactionMock ();
+  }
+
+  void
+  CommitTransaction () override
+  {
+    MemoryStorage::CommitTransaction ();
+    CommitTransactionMock ();
+  }
+
+  void
+  RollbackTransaction () override
+  {
+    MemoryStorage::RollbackTransaction ();
+    RollbackTransactionMock ();
+  }
+
+};
+
 
 /**
  * Simple test fixture for tests that interact with a Game instance.  It is

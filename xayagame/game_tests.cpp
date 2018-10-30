@@ -993,7 +993,7 @@ TEST_F (PruningTests, MissedZmq)
  * Helper subclass of MemoryStorage that allows us to fail (throw an exception)
  * when setting the current state.
  */
-class FallibleMemoryStorage : public MemoryStorage
+class FallibleMemoryStorage : public TxMockedMemoryStorage
 {
 
 private:
@@ -1035,12 +1035,6 @@ public:
     MemoryStorage::SetCurrentGameState (hash, data);
   }
 
-  /* Mock the transaction methods.  They are not relevant for most tests, but
-     we want to test against expectations in specific tests.  */
-  MOCK_METHOD0 (BeginTransaction, void ());
-  MOCK_METHOD0 (CommitTransaction, void ());
-  MOCK_METHOD0 (RollbackTransaction, void ());
-
 };
 
 class GameLogicTransactionsTests : public SyncingTests
@@ -1068,13 +1062,13 @@ TEST_F (GameLogicTransactionsTests, UpToDate)
   {
     InSequence dummy;
 
-    EXPECT_CALL (fallibleStorage, RollbackTransaction ()).Times (0);
+    EXPECT_CALL (fallibleStorage, RollbackTransactionMock ()).Times (0);
 
-    EXPECT_CALL (fallibleStorage, BeginTransaction ());
-    EXPECT_CALL (fallibleStorage, CommitTransaction ());
+    EXPECT_CALL (fallibleStorage, BeginTransactionMock ());
+    EXPECT_CALL (fallibleStorage, CommitTransactionMock ());
 
-    EXPECT_CALL (fallibleStorage, BeginTransaction ());
-    EXPECT_CALL (fallibleStorage, CommitTransaction ());
+    EXPECT_CALL (fallibleStorage, BeginTransactionMock ());
+    EXPECT_CALL (fallibleStorage, CommitTransactionMock ());
   }
 
   AttachBlock (g, BlockHash (11), Moves ("a0b1"));
@@ -1091,13 +1085,13 @@ TEST_F (GameLogicTransactionsTests, CatchingUpBatched)
   {
     InSequence dummy;
 
-    EXPECT_CALL (fallibleStorage, RollbackTransaction ()).Times (0);
+    EXPECT_CALL (fallibleStorage, RollbackTransactionMock ()).Times (0);
 
     EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
         .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
 
-    EXPECT_CALL (fallibleStorage, BeginTransaction ());
-    EXPECT_CALL (fallibleStorage, CommitTransaction ());
+    EXPECT_CALL (fallibleStorage, BeginTransactionMock ());
+    EXPECT_CALL (fallibleStorage, CommitTransactionMock ());
   }
 
   mockXayaServer.SetBestBlock (12, BlockHash (12));
@@ -1121,9 +1115,9 @@ TEST_F (GameLogicTransactionsTests, FailureRollsBack)
 {
   {
     InSequence dummy;
-    EXPECT_CALL (fallibleStorage, CommitTransaction ()).Times (0);
-    EXPECT_CALL (fallibleStorage, BeginTransaction ());
-    EXPECT_CALL (fallibleStorage, RollbackTransaction ());
+    EXPECT_CALL (fallibleStorage, CommitTransactionMock ()).Times (0);
+    EXPECT_CALL (fallibleStorage, BeginTransactionMock ());
+    EXPECT_CALL (fallibleStorage, RollbackTransactionMock ());
   }
 
   fallibleStorage.SetShouldFail (true);
