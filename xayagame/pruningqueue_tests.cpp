@@ -60,7 +60,7 @@ protected:
         const uint256 hash = BlockHash (i);
         storage.AddUndoData (hash, i, hash.ToHex ());
       }
-    tx.SetSuccess ();
+    tx.Commit ();
   }
 
   /**

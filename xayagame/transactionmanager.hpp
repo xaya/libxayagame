@@ -48,6 +48,12 @@ private:
   bool inTransaction = false;
 
   /**
+   * Set to true if committing a batch of transactions failed and we are
+   * waiting for the cleanup to call RollbackTransaction.
+   */
+  bool commitFailed = false;
+
+  /**
    * Flushes the current batch of transactions to the underlying storage.
    * This must not be called if a transaction is in progress.
    */
@@ -121,22 +127,23 @@ private:
   TransactionManager& manager;
 
   /**
-   * Whether the operation was successful.  If this is set to true at some
-   * point in time, then CommitTransaction will be called.  Otherwise, the
-   * transaction is aborted in the destructor.
+   * If set to true, this means that the active transaction has already been
+   * committed successfully and no other cleanup is needed.  If this remains
+   * false when the object is destructed, it will be aborted instead.
    */
-  bool success = false;
+  bool committed = false;
 
 public:
 
   explicit ActiveTransaction (TransactionManager& m);
   ~ActiveTransaction ();
 
-  void
-  SetSuccess ()
-  {
-    success = true;
-  }
+  /**
+   * Tries to commit the currently active transaction.  If it is successful,
+   * then the ActiveTransaction instance will no longer try to roll back
+   * the transaction in its destructor.
+   */
+  void Commit ();
 
 };
 

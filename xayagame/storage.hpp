@@ -127,6 +127,9 @@ public:
   /**
    * Tells the storage that all state changes related to the previously started
    * transaction have been completed successfully.
+   *
+   * This function may fail (throw an exception).  In that case,
+   * RollbackTransaction will be called during the cleanup.
    */
   virtual void CommitTransaction ();
 

@@ -68,7 +68,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
     storage->AddUndoData (hash, height, undo);
     storage->SetCurrentGameState (hash, newState);
 
-    tx.SetSuccess ();
+    tx.Commit ();
   }
 
   LOG (INFO)
@@ -114,7 +114,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
     storage->SetCurrentGameState (parent, oldState);
     storage->ReleaseUndoData (hash);
 
-    tx.SetSuccess ();
+    tx.Commit ();
   }
 
   LOG (INFO)
@@ -550,7 +550,7 @@ Game::ReinitialiseState ()
   {
     internal::ActiveTransaction tx(transactionManager);
     storage->SetCurrentGameState (genesisHash, genesisData);
-    tx.SetSuccess ();
+    tx.Commit ();
   }
   LOG (INFO)
       << "We are at the genesis height, storing initial game state for block "

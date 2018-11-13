@@ -13,6 +13,8 @@
 
 #include <glog/logging.h>
 
+#include <stdexcept>
+
 namespace xaya
 {
 namespace internal
@@ -160,6 +162,59 @@ TEST_F (TransactionManagerTests, SetStorageFlushes)
   tm.SetStorage (secondStorage);
   tm.BeginTransaction ();
   tm.RollbackTransaction ();
+}
+
+/**
+ * Storage instance that throws an exception when committing.
+ */
+class CommittingFailsStorage : public MockedStorage
+{
+
+public:
+
+  class Failure : public std::runtime_error
+  {
+
+  public:
+
+    Failure ()
+      : std::runtime_error("commit failed")
+    {}
+
+  };
+
+  void
+  CommitTransaction () override
+  {
+    CommitTransactionMock ();
+    throw Failure ();
+  }
+
+};
+
+TEST_F (TransactionManagerTests, CommitFails)
+{
+  CommittingFailsStorage fallibleStorage;
+
+  {
+    InSequence dummy;
+    EXPECT_CALL (fallibleStorage, BeginTransactionMock ());
+    EXPECT_CALL (fallibleStorage, CommitTransactionMock ());
+    EXPECT_CALL (fallibleStorage, RollbackTransactionMock ());
+  }
+
+  tm.SetStorage (fallibleStorage);
+
+  try
+    {
+      ActiveTransaction tx(tm);
+      tx.Commit ();
+      FAIL () << "Expected exception was not thrown";
+    }
+  catch (const CommittingFailsStorage::Failure& exc)
+    {
+      LOG (INFO) << "Caught expected commit failure";
+    }
 }
 
 using TryAbortTransactionTests = TransactionManagerTests;

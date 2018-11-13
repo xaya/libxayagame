@@ -41,7 +41,7 @@ PruningQueue::PruneIfTooLong ()
       storage.ReleaseUndoData (hashes.front ());
       hashes.pop_front ();
     }
-  tx.SetSuccess ();
+  tx.Commit ();
 }
 
 void
@@ -84,7 +84,7 @@ PruningQueue::AttachBlock (const uint256& hash, const unsigned height)
         {
           ActiveTransaction tx(transactionManager);
           storage.PruneUndoData (frontHeight - 1);
-          tx.SetSuccess ();
+          tx.Commit ();
         }
       initialPruningDone = true;
     }

@@ -26,6 +26,7 @@ void
 TransactionManager::Flush ()
 {
   CHECK (!inTransaction);
+  CHECK (!commitFailed);
 
   LOG (INFO)
       << "Committing " << batchedCommits
@@ -34,7 +35,15 @@ TransactionManager::Flush ()
   if (batchedCommits > 0)
     {
       if (storage != nullptr)
-        storage->CommitTransaction ();
+        try
+          {
+            storage->CommitTransaction ();
+          }
+        catch (...)
+          {
+            commitFailed = true;
+            throw;
+          }
       batchedCommits = 0;
     }
 }
@@ -69,6 +78,7 @@ void
 TransactionManager::BeginTransaction ()
 {
   CHECK (storage != nullptr);
+  CHECK (!commitFailed);
 
   CHECK (!inTransaction);
   inTransaction = true;
@@ -86,6 +96,7 @@ void
 TransactionManager::CommitTransaction ()
 {
   CHECK (storage != nullptr);
+  CHECK (!commitFailed);
 
   CHECK (inTransaction);
   inTransaction = false;
@@ -104,8 +115,9 @@ TransactionManager::RollbackTransaction ()
 {
   CHECK (storage != nullptr);
 
-  CHECK (inTransaction);
+  CHECK (inTransaction || commitFailed);
   inTransaction = false;
+  commitFailed = false;
 
   LOG (INFO)
       << "Rolling back current and " << batchedCommits
@@ -120,13 +132,14 @@ TransactionManager::TryAbortTransaction ()
 {
   CHECK (storage != nullptr);
 
-  if (inTransaction || batchedCommits > 0)
+  if (inTransaction || commitFailed || batchedCommits > 0)
     {
       LOG (INFO) << "Aborting current transaction and batched commits";
       storage->RollbackTransaction ();
     }
 
   inTransaction = false;
+  commitFailed = false;
   batchedCommits = 0;
 }
 
@@ -136,11 +149,17 @@ ActiveTransaction::ActiveTransaction (TransactionManager& m)
   manager.BeginTransaction ();
 }
 
+void
+ActiveTransaction::Commit ()
+{
+  CHECK (!committed);
+  manager.CommitTransaction ();
+  committed = true;
+}
+
 ActiveTransaction::~ActiveTransaction ()
 {
-  if (success)
-    manager.CommitTransaction ();
-  else
+  if (!committed)
     manager.RollbackTransaction ();
 }
 
