@@ -14,6 +14,9 @@ AX_CXX_COMPILE_STDCXX([14], [noext])
 AX_CHECK_COMPILE_FLAG([-Wall], [CXXFLAGS+=" -Wall"])
 AX_CHECK_COMPILE_FLAG([-Werror], [CXXFLAGS+=" -Werror"])
 AX_CHECK_COMPILE_FLAG([-pedantic], [CXXFLAGS+=" -pedantic"])
+AX_CHECK_COMPILE_FLAG([-Wno-deprecated], [CXXFLAGS+=" -Wno-deprecated"])
+
+CXXFLAGS+=" -DGLOG_NO_ABBREVIATED_SEVERITIES"
 
 PKG_CHECK_MODULES([JSONCPP], [jsoncpp])
 PKG_CHECK_MODULES([JSONRPCCLIENT], [libjsonrpccpp-client])
@@ -32,6 +35,7 @@ AC_CONFIG_FILES([
   mover/Makefile \
   mover/gametest/Makefile
 ])
+
 AC_OUTPUT
 
 echo
