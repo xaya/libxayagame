@@ -11,7 +11,7 @@ really persisted and not synced again on a restart).
 """
 
 # Regexp for the log that is printed when we sync from scratch.
-SYNCING_FROM_SCRATCH = 'storing initial game state'
+SYNCING_FROM_SCRATCH = 'stored initial game state'
 
 
 class PersistenceTest (MoverTest):
