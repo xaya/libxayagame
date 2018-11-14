@@ -5,6 +5,9 @@ bin_PROGRAMS = moverd
 
 EXTRA_DIST = proto/mover.proto
 
+BUILT_SOURCES = proto/mover.pb.h
+CLEANFILES = proto/mover.pb.h proto/mover.pb.cc
+
 libmover_la_CXXFLAGS = $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
 libmover_la_LIBADD = $(top_builddir)/xayagame/libxayagame.la \
   $(JSONCPP_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
@@ -35,5 +38,5 @@ tests_LDADD = $(builddir)/libmover.la \
 tests_SOURCES = \
   logic_tests.cpp
 
-proto/mover.pb.h proto/mover.pb.cc: proto/mover.proto
+proto/mover.pb.h proto/mover.pb.cc: $(srcdir)/proto/mover.proto
 	protoc --cpp_out=. "$<"
