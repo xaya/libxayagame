@@ -36,6 +36,7 @@ PKG_CHECK_MODULES([ZMQ], [libzmq])
 AC_CONFIG_FILES([
   Makefile \
   xayagame/Makefile \
+  xayagametest/Makefile \
   mover/Makefile \
   mover/gametest/Makefile
 ])
