@@ -8,6 +8,7 @@
 #include "uint256.hpp"
 
 #include <map>
+#include <stdexcept>
 #include <string>
 
 namespace xaya
@@ -37,6 +38,8 @@ class StorageInterface
 
 public:
 
+  class RetryWithNewTransaction;
+
   virtual ~StorageInterface () = default;
 
   /**
@@ -48,6 +51,10 @@ public:
   /**
    * Removes all data, corresponding to a full reset of the state
    * (e.g. for starting a sync from scratch).
+   *
+   * In contrast to the other functions that modify data, *no* transaction is
+   * started with BeginTransaction before this function is called.  It should
+   * by itself make sure that all data is completely removed atomically.
    */
   virtual void Clear () = 0;
 
@@ -139,6 +146,32 @@ public:
    * be reverted if possible.
    */
   virtual void RollbackTransaction ();
+
+};
+
+/**
+ * Exception that can be thrown by StorageInterface implementations if some
+ * operation (e.g. an update) fails but the Game instance may retry and that
+ * may succeed.  After the storage throws this exception, the Game instance
+ * still calls RollbackTransaction() on the storage (as it always does in
+ * case of errors) before retrying.  It may also decide to not retry and
+ * just crash the process.
+ *
+ * An example situation where this is useful is LMDB map resizing:  When the
+ * size of an LMDB database gets too large, update operations fail.  In this
+ * case, the map needs to be resized.  The storage cannot do that directly
+ * itself, though, as it needs to cancel the current transction first and
+ * then the Game instance would be left in an inconsistent state.  Thus it can
+ * just throw RetryWithNewTransaction, let the Game abort the current
+ * transaction, then resize the map and finally let the Game reinitialise
+ * itself and continue updating.
+ */
+class StorageInterface::RetryWithNewTransaction : public std::runtime_error
+{
+
+public:
+
+  using std::runtime_error::runtime_error;
 
 };
 

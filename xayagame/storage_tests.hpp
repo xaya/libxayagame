@@ -25,15 +25,31 @@ template <typename T>
   class BasicStorageTests : public testing::Test
 {
 
+private:
+
+  /**
+   * Extend the given string with some "binary data" (nul bytes, non-ASCII
+   * bytes) to make sure that binary is handled properly.
+   */
+  static std::string
+  ExtendWithBinary (const std::string& str)
+  {
+    std::string res = str;
+    res.append (1, '\0');
+    res.append (1, '\xFF');
+    res.append ("postfix");
+    return res;
+  }
+
 protected:
 
   uint256 hash1, hash2;
 
-  const GameStateData state1 = "state 1";
-  const GameStateData state2 = "state 2";
+  const GameStateData state1 = ExtendWithBinary ("state 1");
+  const GameStateData state2 = ExtendWithBinary ("state 2");
 
-  const UndoData undo1 = "undo 1";
-  const UndoData undo2 = "undo 2";
+  const UndoData undo1 = ExtendWithBinary ("undo 1");
+  const UndoData undo2 = ExtendWithBinary ("undo 2");
 
   T storage;
 
@@ -209,8 +225,32 @@ TYPED_TEST_P (PruningStorageTests, PruneUndoData)
   EXPECT_FALSE (this->storage.GetUndoData (this->hash2, undo));
 }
 
+TYPED_TEST_P (PruningStorageTests, MultibyteHeight)
+{
+  /* In this test, we store undo data for heights that require multiple
+     bytes and bytes larger than 127 to encode.  This verifies that storing
+     works fine for cases where the height is encoded into bytes manually.  */
+
+  const unsigned height = (42 << 24) + 250;
+
+  this->storage.BeginTransaction ();
+  this->storage.AddUndoData (this->hash1, height, this->undo1);
+  this->storage.AddUndoData (this->hash2, height + 1, this->undo2);
+  this->storage.CommitTransaction ();
+
+  UndoData undo;
+  EXPECT_TRUE (this->storage.GetUndoData (this->hash1, undo));
+  EXPECT_TRUE (this->storage.GetUndoData (this->hash2, undo));
+
+  this->storage.BeginTransaction ();
+  this->storage.PruneUndoData (height);
+  this->storage.CommitTransaction ();
+  EXPECT_FALSE (this->storage.GetUndoData (this->hash1, undo));
+  EXPECT_TRUE (this->storage.GetUndoData (this->hash2, undo));
+}
+
 REGISTER_TYPED_TEST_CASE_P (PruningStorageTests,
-                            ReleaseUndoData, PruneUndoData);
+                            ReleaseUndoData, PruneUndoData, MultibyteHeight);
 
 /**
  * Tests the transaction mechanism in a storage implementation.  This can

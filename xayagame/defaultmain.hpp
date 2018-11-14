@@ -45,7 +45,8 @@ struct GameDaemonConfiguration
   int EnablePruning = -1;
 
   /**
-   * The storage type to be used.  Can be "memory" (default) or "sqlite".
+   * The storage type to be used.  Can be "memory" (default), "lmdb"
+   * or "sqlite".
    */
   std::string StorageType = "memory";
 

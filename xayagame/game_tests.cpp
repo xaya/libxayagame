@@ -1138,5 +1138,145 @@ TEST_F (GameLogicTransactionsTests, FailureRollsBack)
 
 /* ************************************************************************** */
 
+/**
+ * MemoryStorage instance that can be made to fail with RetryWithNewTransaction
+ * so that we can test the retry logic in Game.
+ */
+class RetryMemoryStorage : public MemoryStorage
+{
+
+private:
+
+  /** Number of retry failures that have been thrown.  */
+  unsigned numFailures = 0;
+
+  /**
+   * Whether or not to fail the next SetCurrentGameState with a retry
+   * request.  The flag will always be set to false after a failure,
+   * so that the retry actually works.
+   */
+  bool retryNext = false;
+
+public:
+
+  RetryMemoryStorage () = default;
+
+  unsigned
+  GetNumFailures () const
+  {
+    return numFailures;
+  }
+
+  void
+  RetryNext ()
+  {
+    ASSERT_FALSE (retryNext);
+    LOG (INFO) << "Will fail next update with RetryWithNewTransaction";
+    retryNext = true;
+  }
+
+  void
+  SetCurrentGameState (const uint256& hash, const GameStateData& state) override
+  {
+    if (retryNext)
+      {
+        ++numFailures;
+        retryNext = false;
+        LOG (INFO) << "Failing update for the " << numFailures << "th time";
+        throw StorageInterface::RetryWithNewTransaction ("retry commit");
+      }
+
+    MemoryStorage::SetCurrentGameState (hash, state);
+  }
+
+};
+
+class GameStorageRetryTests : public SyncingTests
+{
+
+protected:
+
+  /** Alternative, "retryable" storage used in the tests.  */
+  RetryMemoryStorage retryStorage;
+
+  GameStorageRetryTests ()
+  {
+    LOG (INFO) << "Changing game to retry storage";
+    g.SetStorage (&retryStorage);
+
+    ReinitialiseState (g);
+    EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+    ExpectGameState (retryStorage, TestGame::GenesisBlockHash (), "");
+  }
+
+};
+
+TEST_F (GameStorageRetryTests, InitialState)
+{
+  /* The test fixture constructor already sets the initial state.  So in order
+     to make sure it is actually committed to the database below, clear the
+     storage now.  */
+  retryStorage.Clear ();
+
+  EXPECT_EQ (retryStorage.GetNumFailures (), 0);
+  retryStorage.RetryNext ();
+  ReinitialiseState (g);
+  EXPECT_EQ (retryStorage.GetNumFailures (), 1);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (retryStorage, TestGame::GenesisBlockHash (), "");
+}
+
+TEST_F (GameStorageRetryTests, AttachBlock)
+{
+  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (BlockHash (11), "reqtoken")));
+  mockXayaServer.SetBestBlock (11, BlockHash (11));
+
+  EXPECT_EQ (retryStorage.GetNumFailures (), 0);
+  retryStorage.RetryNext ();
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  EXPECT_EQ (retryStorage.GetNumFailures (), 1);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (retryStorage, TestGame::GenesisBlockHash (), "");
+
+  CallBlockAttach (g, "reqtoken",
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (retryStorage.GetNumFailures (), 1);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (retryStorage, BlockHash (11), "a0b1");
+
+}
+
+TEST_F (GameStorageRetryTests, DetachBlock)
+{
+  EXPECT_CALL (mockXayaServer,
+               game_sendupdates (BlockHash (11).ToHex (), GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (TestGame::GenesisBlockHash (),
+                                              "reqtoken")));
+  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  EXPECT_EQ (retryStorage.GetNumFailures (), 0);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (retryStorage, BlockHash (11), "a0b1");
+
+  retryStorage.RetryNext ();
+  DetachBlock (g);
+  EXPECT_EQ (retryStorage.GetNumFailures (), 1);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (retryStorage, BlockHash (11), "a0b1");
+
+  CallBlockDetach (g, "reqtoken",
+                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   NO_SEQ_MISMATCH);
+  EXPECT_EQ (retryStorage.GetNumFailures (), 1);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (retryStorage, TestGame::GenesisBlockHash (), "");
+
+}
+
+/* ************************************************************************** */
+
 } // anonymous namespace
 } // namespace xaya

@@ -11,15 +11,18 @@ really persisted and not synced again on a restart).
 """
 
 # Regexp for the log that is printed when we sync from scratch.
-SYNCING_FROM_SCRATCH = 'storing initial game state'
-
-# Storage type to use for persistence.
-PERSISTENT_STORAGE = "sqlite"
+SYNCING_FROM_SCRATCH = 'stored initial game state'
 
 
 class PersistenceTest (MoverTest):
 
+  def __init__ (self, storageType):
+    super (PersistenceTest, self).__init__ ()
+    self.storageType = storageType
+
   def run (self):
+    self.log.info ("Testing storage type '%s'..." % self.storageType)
+
     self.generate (101)
     self.move ("a", "k", 2)
     self.move ("b", "y", 1)
@@ -33,14 +36,14 @@ class PersistenceTest (MoverTest):
     # Restart with persistent storage.  Since we had memory storage before,
     # this is expected to sync from scratch.
     self.log.info ("Enabling persistent storage, should sync from scratch")
-    self.restartWithStorageType (PERSISTENT_STORAGE)
+    self.restartWithStorageType (self.storageType)
     self.expectGameState (expectedState)
     self.stopGameDaemon ()
     assert self.gamenode.logMatches (SYNCING_FROM_SCRATCH)
 
     # Restart again, this time it should no longer sync from scratch.
     self.log.info ("Restarting game daemon, should have kept data")
-    self.restartWithStorageType (PERSISTENT_STORAGE)
+    self.restartWithStorageType (self.storageType)
     self.expectGameState (expectedState)
     self.stopGameDaemon ()
     assert not self.gamenode.logMatches (SYNCING_FROM_SCRATCH)
@@ -53,7 +56,3 @@ class PersistenceTest (MoverTest):
     self.log.info ("Restarting with --storage_type=%s" % value)
     self.stopGameDaemon ()
     self.startGameDaemon (extraArgs=["--storage_type=%s" % value])
-
-
-if __name__ == "__main__":
-  PersistenceTest ().main ()

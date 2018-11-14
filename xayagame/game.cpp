@@ -170,48 +170,56 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
       return;
     }
 
-  /* Handle the notification depending on the current state.  */
   bool needReinit = false;
-  switch (state)
+  try
     {
-    case State::PREGENESIS:
-      /* Check if we have reached the game's genesis height.  If we have,
-         reinitialise which will store the initial game state.  */
-      if (hash == targetBlockHash)
-        needReinit = true;
-      break;
+      /* Handle the notification depending on the current state.  */
+      switch (state)
+        {
+        case State::PREGENESIS:
+          /* Check if we have reached the game's genesis height.  If we have,
+             reinitialise which will store the initial game state.  */
+          if (hash == targetBlockHash)
+            needReinit = true;
+          break;
 
-    case State::CATCHING_UP:
-      if (!UpdateStateForAttach (parent, hash, data))
-        needReinit = true;
+        case State::CATCHING_UP:
+          if (!UpdateStateForAttach (parent, hash, data))
+            needReinit = true;
 
-      /* If we are now at the last catching-up's target block hash,
-         reinitialise the state as well.  This will check the current best
-         tip and set the state to UP_TO_DATE or request more updates.  */
-      if (hash == targetBlockHash)
-        needReinit = true;
+          /* If we are now at the last catching-up's target block hash,
+             reinitialise the state as well.  This will check the current best
+             tip and set the state to UP_TO_DATE or request more updates.  */
+          if (hash == targetBlockHash)
+            needReinit = true;
 
-      break;
+          break;
 
-    case State::UP_TO_DATE:
-      if (!UpdateStateForAttach (parent, hash, data))
-        needReinit = true;
-      break;
+        case State::UP_TO_DATE:
+          if (!UpdateStateForAttach (parent, hash, data))
+            needReinit = true;
+          break;
 
-    case State::UNKNOWN:
-    case State::OUT_OF_SYNC:
-    default:
-      LOG (FATAL) << "Unexpected state: " << StateToString (state);
-      break;
+        case State::UNKNOWN:
+        case State::OUT_OF_SYNC:
+        default:
+          LOG (FATAL) << "Unexpected state: " << StateToString (state);
+          break;
+        }
+
+      /* Attach the block in the pruning queue.  This is done after updating the
+         state so that a potential pruning with nBlocks=0 can take place.  */
+      if (pruningQueue != nullptr)
+        pruningQueue->AttachBlock (hash, data["block"]["height"].asUInt ());
+    }
+  catch (const StorageInterface::RetryWithNewTransaction& exc)
+    {
+      LOG (WARNING) << "Storage update failed, retrying: " << exc.what ();
+      needReinit = true;
     }
 
   if (needReinit)
     ReinitialiseState ();
-
-  /* Attach the block in the pruning queue.  This is done after updating the
-     state so that a potential pruning with nBlocks=0 can take place.  */
-  if (pruningQueue != nullptr)
-    pruningQueue->AttachBlock (hash, data["block"]["height"].asUInt ());
 }
 
 void
@@ -247,46 +255,55 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
       return;
     }
 
-  /* Handle the notification depending on the current state.  */
   bool needReinit = false;
-  switch (state)
+  try
     {
-    case State::PREGENESIS:
-      /* Detaches are irrelevant (and unlikely).  */
-      break;
+      /* Handle the notification depending on the current state.  */
+      switch (state)
+        {
+        case State::PREGENESIS:
+          /* Detaches are irrelevant (and unlikely).  */
+          break;
 
-    case State::CATCHING_UP:
-      if (!UpdateStateForDetach (parent, hash, data))
-        needReinit = true;
+        case State::CATCHING_UP:
+          if (!UpdateStateForDetach (parent, hash, data))
+            needReinit = true;
 
-      /* We may reach a catching-up target also when detaching blocks.  This
-         happens, for instance, when a block was declared invalid and a couple
-         of blocks was just detached.  If a ZMQ message is missed at the
-         same time (*or if this was the very first detach notification*!),
-         then the client is catching-up while only detaching.  */
-      if (parent == targetBlockHash)
-        needReinit = true;
+          /* We may reach a catching-up target also when detaching blocks.  This
+             happens, for instance, when a block was declared invalid and a
+             couple of blocks was just detached.  If a ZMQ message is missed
+             at the same time (*or if this was the very first detach
+             notification*!), then the client is catching-up while only
+             detaching.  */
+          if (parent == targetBlockHash)
+            needReinit = true;
 
-      break;
+          break;
 
-    case State::UP_TO_DATE:
-      if (!UpdateStateForDetach (parent, hash, data))
-        needReinit = true;
-      break;
+        case State::UP_TO_DATE:
+          if (!UpdateStateForDetach (parent, hash, data))
+            needReinit = true;
+          break;
 
-    case State::UNKNOWN:
-    case State::OUT_OF_SYNC:
-    default:
-      LOG (FATAL) << "Unexpected state: " << StateToString (state);
-      break;
+        case State::UNKNOWN:
+        case State::OUT_OF_SYNC:
+        default:
+          LOG (FATAL) << "Unexpected state: " << StateToString (state);
+          break;
+        }
+
+      /* Detach the block in the pruning queue as well.  */
+      if (pruningQueue != nullptr)
+        pruningQueue->DetachBlock ();
+    }
+  catch (const StorageInterface::RetryWithNewTransaction& exc)
+    {
+      LOG (WARNING) << "Storage update failed, retrying: " << exc.what ();
+      needReinit = true;
     }
 
   if (needReinit)
     ReinitialiseState ();
-
-  /* Detach the block in the pruning queue as well.  */
-  if (pruningQueue != nullptr)
-    pruningQueue->DetachBlock ();
 }
 
 void
@@ -547,13 +564,20 @@ Game::ReinitialiseState ()
     << "The game's genesis block hash and height do not match";
   transactionManager.TryAbortTransaction ();
   storage->Clear ();
-  {
-    internal::ActiveTransaction tx(transactionManager);
-    storage->SetCurrentGameState (genesisHash, genesisData);
-    tx.Commit ();
-  }
+  while (true)
+    try
+      {
+        internal::ActiveTransaction tx(transactionManager);
+        storage->SetCurrentGameState (genesisHash, genesisData);
+        tx.Commit ();
+        break;
+      }
+    catch (const StorageInterface::RetryWithNewTransaction& exc)
+      {
+        LOG (WARNING) << "Storage update failed, retrying: " << exc.what ();
+      }
   LOG (INFO)
-      << "We are at the genesis height, storing initial game state for block "
+      << "We are at the genesis height, stored initial game state for block "
       << genesisHash.ToHex ();
   state = State::OUT_OF_SYNC;
   SyncFromCurrentState (data, genesisHash);
