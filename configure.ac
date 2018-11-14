@@ -6,6 +6,7 @@ AC_CONFIG_HEADERS([config.h])
 
 AC_PROG_CXX
 AM_PROG_AR
+AM_PATH_PYTHON
 
 AC_LANG([C++])
 LT_INIT
@@ -36,6 +37,7 @@ PKG_CHECK_MODULES([ZMQ], [libzmq])
 AC_CONFIG_FILES([
   Makefile \
   xayagame/Makefile \
+  xayagametest/Makefile \
   mover/Makefile \
   mover/gametest/Makefile
 ])

@@ -14,10 +14,10 @@ class MoverTest (XayaGameTest):
   """
 
   def __init__ (self):
-    srcdir = os.getenv ("srcdir")
-    if srcdir is None:
-      srcdir = "."
-    moverd = os.path.join (srcdir, "..", "moverd")
+    top_builddir = os.getenv ("top_builddir")
+    if top_builddir is None:
+      top_builddir = "../.."
+    moverd = os.path.join (top_builddir, "mover", "moverd")
     super (MoverTest, self).__init__ ("mv", moverd)
 
   def move (self, name, direction, steps):

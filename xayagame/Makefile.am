@@ -3,6 +3,14 @@ xayagamedir = $(includedir)/xayagame
 
 EXTRA_DIST = rpc-stubs/game.json rpc-stubs/xaya.json
 
+RPC_STUBS = \
+  rpc-stubs/gamerpcclient.h \
+  rpc-stubs/gamerpcserverstub.h \
+  rpc-stubs/xayarpcclient.h \
+  rpc-stubs/xayarpcserverstub.h
+BUILT_SOURCES = $(RPC_STUBS)
+CLEANFILES = $(RPC_STUBS)
+
 libxayagame_la_CXXFLAGS = \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
   $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(ZMQ_CFLAGS)
@@ -64,12 +72,12 @@ tests_SOURCES = testutils.cpp \
   zmqsubscriber_tests.cpp
 check_HEADERS = testutils.hpp storage_tests.hpp
 
-rpc-stubs/gamerpcclient.h: rpc-stubs/game.json
+rpc-stubs/gamerpcclient.h: $(srcdir)/rpc-stubs/game.json
 	jsonrpcstub "$<" --cpp-client=GameRpcClient --cpp-client-file="$@"
-rpc-stubs/gamerpcserverstub.h: rpc-stubs/game.json
+rpc-stubs/gamerpcserverstub.h: $(srcdir)/rpc-stubs/game.json
 	jsonrpcstub "$<" --cpp-server=GameRpcServerStub --cpp-server-file="$@"
 
-rpc-stubs/xayarpcclient.h: rpc-stubs/xaya.json
+rpc-stubs/xayarpcclient.h: $(srcdir)/rpc-stubs/xaya.json
 	jsonrpcstub "$<" --cpp-client=XayaRpcClient --cpp-client-file="$@"
-rpc-stubs/xayarpcserverstub.h: rpc-stubs/xaya.json
+rpc-stubs/xayarpcserverstub.h: $(srcdir)/rpc-stubs/xaya.json
 	jsonrpcstub "$<" --cpp-server=XayaRpcServerStub --cpp-server-file="$@"
