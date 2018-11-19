@@ -16,6 +16,20 @@ namespace xaya
 {
 
 /**
+ * Possible choices for the game's JSON-RPC server that should be
+ * started by the main function.
+ */
+enum class RpcServerType
+{
+  /** Do not start any JSON-RPC server.  */
+  NONE = 0,
+  /** Start a JSON-RPC server listening through HTTP.  */
+  HTTP = 1,
+  /** Start a JSON-RPC server listening through a plain TCP socket.  */
+  TCP = 2,
+};
+
+/**
  * Basic configuration parameters for running a game daemon.  This corresponds
  * to the default command-line flags, but allows to set them programmatically
  * from a context where actual dependence on gflags would not be possible.
@@ -32,8 +46,14 @@ struct GameDaemonConfiguration
   std::string XayaRpcUrl;
 
   /**
+   * The type of JSON-RPC server that should be started for the game
+   * (if any).
+   */
+  RpcServerType GameRpcServer = RpcServerType::NONE;
+
+  /**
    * The RPC port at which the game daemon's own JSON-RPC server should be
-   * started.  If zero (the default), no server is started.
+   * started.  This must be set if GameRpcServer is set to HTTP or TCP.
    */
   int GameRpcPort = 0;
 

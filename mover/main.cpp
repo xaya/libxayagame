@@ -57,7 +57,11 @@ main (int argc, char** argv)
 
   xaya::GameDaemonConfiguration config;
   config.XayaRpcUrl = FLAGS_xaya_rpc_url;
-  config.GameRpcPort = FLAGS_game_rpc_port;
+  if (FLAGS_game_rpc_port != 0)
+    {
+      config.GameRpcServer = xaya::RpcServerType::HTTP;
+      config.GameRpcPort = FLAGS_game_rpc_port;
+    }
   config.EnablePruning = FLAGS_enable_pruning;
   config.StorageType = FLAGS_storage_type;
   config.DataDirectory = FLAGS_datadir;

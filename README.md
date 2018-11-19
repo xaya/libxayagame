@@ -29,8 +29,9 @@ for the configuration and/or build to be successful:
   Available for Debian-based operating systems in the `libjsoncpp-dev`
   package.
 - [`jsonrpccpp`](https://github.com/cinemast/libjson-rpc-cpp/):
-  For Debian-based systems, install `libjsonrpccpp-dev`
-  and `libjsonrpccpp-tools`.
+  The packages `libjsonrpccpp-dev` and `libjsonrpccpp-tools` on
+  Debian 9 "Stretch" are not suitable.  Instead, build from source
+  and make sure to configure with `-DTCP_SOCKET_SERVER_SERVER=YES`.
 - [`ZeroMQ C++ bindings`](http://zeromq.org/bindings:cpp):
   Available in the Debian package `libzmq3-dev`.
 - [SQLite3](https://www.sqlite.org/) with the

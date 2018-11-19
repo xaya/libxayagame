@@ -10,6 +10,7 @@
 #include "sqlitestorage.hpp"
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
+#include <jsonrpccpp/server/connectors/tcpsocketserver.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <glog/logging.h>
@@ -73,6 +74,39 @@ CreateStorage (const GameDaemonConfiguration& config,
   LOG (FATAL) << "Invalid storage type selected: " << config.StorageType;
 }
 
+/**
+ * Constructs the server connector for the JSON-RPC server (if any) based
+ * on the configuration.
+ */
+std::unique_ptr<jsonrpc::AbstractServerConnector>
+CreateRpcServerConnector (const GameDaemonConfiguration& config)
+{
+  switch (config.GameRpcServer)
+    {
+    case RpcServerType::NONE:
+      return nullptr;
+
+    case RpcServerType::HTTP:
+      CHECK (config.GameRpcPort != 0)
+          << "GameRpcPort must be specified for HTTP server type";
+      LOG (INFO)
+          << "Starting JSON-RPC HTTP server at port " << config.GameRpcPort;
+      return std::make_unique<jsonrpc::HttpServer> (config.GameRpcPort);
+
+    case RpcServerType::TCP:
+      CHECK (config.GameRpcPort != 0)
+          << "GameRpcPort must be specified for TCP server type";
+      LOG (INFO)
+          << "Starting JSON-RPC TCP server at port " << config.GameRpcPort;
+      return std::make_unique<jsonrpc::TcpSocketServer> ("127.0.0.1",
+                                                         config.GameRpcPort);
+    }
+
+  LOG (FATAL)
+      << "Invalid GameRpcServer value: "
+      << static_cast<int> (config.GameRpcServer);
+}
+
 } // anonymous namespace
 
 int
@@ -98,14 +132,14 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);
 
-      std::unique_ptr<jsonrpc::HttpServer> httpServer;
+      auto serverConnector = CreateRpcServerConnector (config);
       std::unique_ptr<GameRpcServer> rpcServer;
-      if (config.GameRpcPort != 0)
-        {
-          httpServer
-              = std::make_unique<jsonrpc::HttpServer> (config.GameRpcPort);
-          rpcServer = std::make_unique<GameRpcServer> (*game, *httpServer);
-        }
+      if (serverConnector == nullptr)
+          LOG (WARNING)
+              << "No connector has been set up for the game RPC server,"
+                 " no RPC interface will be available";
+      else
+          rpcServer = std::make_unique<GameRpcServer> (*game, *serverConnector);
 
       if (rpcServer != nullptr)
         rpcServer->StartListening ();
