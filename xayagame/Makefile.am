@@ -1,6 +1,8 @@
 lib_LTLIBRARIES = libxayagame.la
 xayagamedir = $(includedir)/xayagame
 
+pkgconfig_DATA = libxayagame.pc
+
 EXTRA_DIST = rpc-stubs/game.json rpc-stubs/xaya.json
 
 RPC_STUBS = \

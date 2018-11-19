@@ -7,6 +7,7 @@ AC_CONFIG_HEADERS([config.h])
 AC_PROG_CXX
 AM_PROG_AR
 AM_PATH_PYTHON
+PKG_INSTALLDIR
 
 AC_LANG([C++])
 LT_INIT
@@ -23,24 +24,33 @@ AX_CHECK_COMPILE_FLAG([-Wno-deprecated], [CXXFLAGS+=" -Wno-deprecated"])
 # See https://hpc.nih.gov/development/glog.html.
 CXXFLAGS+=" -DGLOG_NO_ABBREVIATED_SEVERITIES"
 
-PKG_CHECK_MODULES([JSONCPP], [jsoncpp])
-PKG_CHECK_MODULES([JSONRPCCLIENT], [libjsonrpccpp-client])
-PKG_CHECK_MODULES([JSONRPCSERVER], [libjsonrpccpp-server])
-PKG_CHECK_MODULES([GLOG], [libglog])
+# Public dependencies (exposed in the headers of libxayagame to
+# users of the library).
+AX_PKG_CHECK_MODULES([JSONCPP], [jsoncpp], [])
+AX_PKG_CHECK_MODULES([JSONRPCCLIENT], [libjsonrpccpp-client], [])
+AX_PKG_CHECK_MODULES([JSONRPCSERVER], [libjsonrpccpp-server], [])
+AX_PKG_CHECK_MODULES([SQLITE3], [sqlite3], [],
+  [SQLITE3_CFLAGS+=" -DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"])
+AX_PKG_CHECK_MODULES([LMDB], [lmdb], [])
+
+# Private dependencies of the library itself.
+AX_PKG_CHECK_MODULES([GLOG], [], [libglog])
+AX_PKG_CHECK_MODULES([ZMQ], [], [libzmq])
+
+# Private dependencies that are not needed for libxayagame, but only for
+# the unit tests of the moverd binary.
 PKG_CHECK_MODULES([GFLAGS], [gflags])
 PKG_CHECK_MODULES([GTEST], [gmock gtest_main])
 PKG_CHECK_MODULES([PROTOBUF], [protobuf])
-PKG_CHECK_MODULES([SQLITE3], [sqlite3],
-  [SQLITE3_CFLAGS+=" -DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"])
-PKG_CHECK_MODULES([LMDB], [lmdb])
-PKG_CHECK_MODULES([ZMQ], [libzmq])
 
 AC_CONFIG_FILES([
   Makefile \
   xayagame/Makefile \
   xayagametest/Makefile \
   mover/Makefile \
-  mover/gametest/Makefile
+  mover/gametest/Makefile \
+  \
+  xayagame/libxayagame.pc
 ])
 AC_OUTPUT
 
