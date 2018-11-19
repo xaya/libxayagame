@@ -1,5 +1,8 @@
 lib_LTLIBRARIES = libxayagame.la
 xayagamedir = $(includedir)/xayagame
+rpcstubdir = $(xayagamedir)/rpc-stubs
+
+pkgconfig_DATA = libxayagame.pc
 
 EXTRA_DIST = rpc-stubs/game.json rpc-stubs/xaya.json
 
@@ -45,8 +48,8 @@ xayagame_HEADERS = \
   storage.hpp \
   transactionmanager.hpp \
   uint256.hpp \
-  zmqsubscriber.hpp \
-  \
+  zmqsubscriber.hpp
+rpcstub_HEADERS = \
   rpc-stubs/gamerpcclient.h \
   rpc-stubs/gamerpcserverstub.h \
   rpc-stubs/xayarpcclient.h \
