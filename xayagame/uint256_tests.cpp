@@ -80,5 +80,28 @@ TEST (Uint256Tests, FromBlob)
   EXPECT_TRUE (obj == copy);
 }
 
+TEST (Uint256Tests, IsNull)
+{
+  uint256 obj;
+  ASSERT_TRUE (obj.FromHex (std::string (64, '0')));
+  EXPECT_TRUE (obj.IsNull ());
+
+  ASSERT_TRUE (obj.FromHex ("01" + std::string (62, '0')));
+  EXPECT_FALSE (obj.IsNull ());
+  ASSERT_TRUE (obj.FromHex (std::string (62, '0') + "01"));
+  EXPECT_FALSE (obj.IsNull ());
+}
+
+TEST (Uint256Tests, SetNull)
+{
+  uint256 obj;
+  ASSERT_TRUE (obj.FromHex (std::string (64, '8')));
+  EXPECT_FALSE (obj.IsNull ());
+
+  obj.SetNull ();
+  EXPECT_TRUE (obj.IsNull ());
+  EXPECT_EQ (obj.ToHex (), std::string (64, '0'));
+}
+
 } // anonymous namespace
 } // namespace xaya

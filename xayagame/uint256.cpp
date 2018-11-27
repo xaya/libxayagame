@@ -79,4 +79,17 @@ uint256::FromBlob (const unsigned char* blob)
   std::copy (blob, blob + NUM_BYTES, data.data ());
 }
 
+bool
+uint256::IsNull () const
+{
+  return std::all_of (data.begin (), data.end (),
+                      [] (const Array::value_type val) { return val == 0; });
+}
+
+void
+uint256::SetNull ()
+{
+  std::fill (data.begin (), data.end (), 0);
+}
+
 } // namespace xaya
