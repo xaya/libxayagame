@@ -7,5 +7,10 @@
     "name": "getcurrentstate",
     "params": {},
     "returns": {}
+  },
+  {
+    "name": "waitforchange",
+    "params": {},
+    "returns": {}
   }
 ]

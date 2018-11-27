@@ -18,6 +18,7 @@
 #include <json/json.h>
 #include <jsonrpccpp/client.h>
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -84,8 +85,16 @@ private:
    * Mutex guarding internal state.  This is necessary at least in theory since
    * changes might be made from the ZMQ listener on the ZMQ subscriber's
    * worker thread in addition to the main thread.
+   *
+   * It is also used as lock for the waitforchange condition variable.
    */
   mutable std::mutex mut;
+
+  /**
+   * Condition variable that is signalled whenever the game state is changed
+   * (due to attached/detached blocks or the initial state becoming known).
+   */
+  mutable std::condition_variable cvStateChanged;
 
   /** The chain type to which the game is connected.  */
   Chain chain = Chain::UNKNOWN;
@@ -205,6 +214,12 @@ private:
   void ReinitialiseState ();
 
   /**
+   * Notifies potentially-waiting threads that the state has changed.  Callers
+   * must hold the mut lock.
+   */
+  void NotifyStateChange () const;
+
+  /**
    * Converts a state enum value to a string for use in log messages and the
    * JSON-RPC interface.
    */
@@ -293,6 +308,26 @@ public:
    * as well.
    */
   Json::Value GetCurrentJsonState () const;
+
+  /**
+   * Blocks the calling thread until a change to the game state has
+   * (potentially) been made.  This can be used to implement long-polling
+   * RPC methods, e.g. for front-ends.  Note that this function may return
+   * spuriously in situations when there is no new state.
+   *
+   * If a non-null pointer is passed in, then the new current block is
+   * returned in it.  This is set to null if there is not yet any known
+   * state associated to a block (during initial sync).
+   *
+   * After this function returns, clients will likely want to check if the
+   * new current state matches what they already have.  If not, they should
+   * use e.g. GetCurrentJsonState to look up the new state and rect to it.
+   *
+   * This function should only be called when the ZMQ subscriber is running.
+   * Otherwise, it will simply return immediately, as there are no changes
+   * expected anyway.
+   */
+  void WaitForChange (uint256* currentBlock = nullptr) const;
 
   /**
    * Starts the ZMQ subscriber and other logic.  Must not be called before
