@@ -4,9 +4,10 @@
 
 #include "mainloop.hpp"
 
+#include "testutils.hpp"
+
 #include <gtest/gtest.h>
 
-#include <chrono>
 #include <memory>
 #include <thread>
 
@@ -39,16 +40,6 @@ protected:
         EXPECT_FALSE (flag);
         flag = true;
       };
-  }
-
-  /**
-   * Sleep for "some time" to give the main loop thread time to run and simulate
-   * some delay in a real application.
-   */
-  static void
-  SleepSome ()
-  {
-    std::this_thread::sleep_for (std::chrono::milliseconds (10));
   }
 
   /**

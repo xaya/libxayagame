@@ -6,7 +6,9 @@
 
 #include <glog/logging.h>
 
+#include <chrono>
 #include <cstdio>
+#include <thread>
 
 namespace xaya
 {
@@ -24,6 +26,12 @@ BlockHash (unsigned num)
   uint256 res;
   CHECK (res.FromHex (hex));
   return res;
+}
+
+void
+SleepSome ()
+{
+  std::this_thread::sleep_for (std::chrono::milliseconds (10));
 }
 
 void
