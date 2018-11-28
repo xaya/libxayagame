@@ -23,4 +23,20 @@ GameRpcServer::getcurrentstate ()
   return game.GetCurrentJsonState ();
 }
 
+Json::Value
+GameRpcServer::waitforchange ()
+{
+  LOG (INFO) << "RPC method called: waitforchange";
+
+  uint256 block;
+  game.WaitForChange (&block);
+
+  /* If there is no best block so far, return JSON null.  */
+  if (block.IsNull ())
+    return Json::Value ();
+
+  /* Otherwise, return the block hash.  */
+  return block.ToHex ();
+}
+
 } // namespace xaya

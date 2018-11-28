@@ -33,6 +33,7 @@ namespace
 {
 
 using testing::_;
+using testing::AnyNumber;
 using testing::InSequence;
 using testing::Return;
 
@@ -637,6 +638,149 @@ TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
   EXPECT_EQ (state["state"], "up-to-date");
   EXPECT_EQ (state["blockhash"], BlockHash (11).ToHex ());
   EXPECT_EQ (state["gamestate"]["state"], "a0b1");
+}
+
+/* ************************************************************************** */
+
+class WaitForChangeTests : public InitialStateTests
+{
+
+private:
+
+  /** The thread that is used to call WaitForChange.  */
+  std::unique_ptr<std::thread> waiter;
+
+protected:
+
+  WaitForChangeTests ()
+  {
+    /* Since WaitForChange only really blocks when there is an active
+       ZMQ subscriber, we need to set up a fake one.  So we can just use
+       some address where hopefully no publishers are; we won't need
+       actual notifications (as we fake them with explicit calls).  */
+
+    const Json::Value notifications = ParseJson (R"(
+      [
+        {"type": "pubgameblocks", "address": "tcp://127.0.0.1:32101"}
+      ]
+    )");
+    EXPECT_CALL (mockXayaServer, getzmqnotifications ())
+        .WillOnce (Return (notifications));
+
+    EXPECT_CALL (mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
+
+    CHECK (g.DetectZmqEndpoint ());
+    g.Start ();
+
+    SetStartingBlock (TestGame::GenesisBlockHash ());
+  }
+
+  /**
+   * Calls WaitForChange on a newly started thread, passing the given
+   * uint256 output pointer (can be null).
+   */
+  void
+  CallWaitForChange (uint256* bestBlock)
+  {
+    ASSERT_EQ (waiter, nullptr);
+    waiter = std::make_unique<std::thread> ([this, bestBlock] ()
+      {
+        g.WaitForChange (bestBlock);
+      });
+  }
+
+  /**
+   * Verifies that a waiter has been started and received the notification
+   * of a new state already (or waits for it to receive it).
+   */
+  void
+  JoinWaiter ()
+  {
+    ASSERT_NE (waiter, nullptr);
+    waiter->join ();
+    waiter.reset ();
+  }
+
+};
+
+TEST_F (WaitForChangeTests, ZmqNotRunning)
+{
+  g.Stop ();
+
+  CallWaitForChange (nullptr);
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, StopWakesUpWaiters)
+{
+  CallWaitForChange (nullptr);
+  g.Stop ();
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, InitialState)
+{
+  CallWaitForChange (nullptr);
+  SleepSome ();
+
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, BlockAttach)
+{
+  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+
+  CallWaitForChange (nullptr);
+  SleepSome ();
+  AttachBlock (g, BlockHash (11), Moves (""));
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, BlockDetach)
+{
+  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  AttachBlock (g, BlockHash (11), Moves (""));
+
+  CallWaitForChange (nullptr);
+  SleepSome ();
+  DetachBlock (g);
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, ReturnsNoBestBlock)
+{
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  uint256 bestBlock;
+  CallWaitForChange (&bestBlock);
+  g.Stop ();
+  JoinWaiter ();
+
+  EXPECT_TRUE (bestBlock.IsNull ());
+}
+
+TEST_F (WaitForChangeTests, ReturnsBestBlock)
+{
+  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+
+  uint256 bestBlock;
+  CallWaitForChange (&bestBlock);
+  g.Stop ();
+  JoinWaiter ();
+
+  EXPECT_FALSE (bestBlock.IsNull ());
+  EXPECT_TRUE (bestBlock == TestGame::GenesisBlockHash ());
 }
 
 /* ************************************************************************** */

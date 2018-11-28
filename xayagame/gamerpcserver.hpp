@@ -43,6 +43,8 @@ public:
 
   virtual Json::Value getcurrentstate () override;
 
+  virtual Json::Value waitforchange () override;
+
 };
 
 } // namespace xaya

@@ -67,6 +67,17 @@ public:
    */
   void FromBlob (const unsigned char* blob);
 
+  /**
+   * Checks if this number is all-zeros, which is used as "null" value.
+   */
+  bool IsNull () const;
+
+  /**
+   * Sets the value to all-zeros, corresponding to a "null" value (since this
+   * is a hash that will never occur in practice).
+   */
+  void SetNull ();
+
   friend bool
   operator== (const uint256& a, const uint256& b)
   {

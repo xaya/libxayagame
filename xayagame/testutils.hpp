@@ -30,6 +30,13 @@ namespace xaya
 uint256 BlockHash (unsigned num);
 
 /**
+ * Sleep for "some time" to give other threads time to run and simulate
+ * some delay in a real application.  This is a hack, but it works well for
+ * some test situations we need.
+ */
+void SleepSome ();
+
+/**
  * Memory storage instance that has mocks for verifying the transaction
  * methods that are called.
  */

@@ -74,6 +74,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
   LOG (INFO)
       << "Current game state is at height " << height
       << " (block " << hash.ToHex () << ")";
+  NotifyStateChange ();
 
   return true;
 }
@@ -120,6 +121,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
   LOG (INFO)
       << "Detached " << hash.ToHex () << ", restored state for block "
       << parent.ToHex ();
+  NotifyStateChange ();
 
   return true;
 }
@@ -435,6 +437,35 @@ Game::GetCurrentJsonState () const
 }
 
 void
+Game::NotifyStateChange () const
+{
+  /* Callers are expected to already hold the mut lock here (as that is the
+     typical case when they make changes to the state anyway).  */
+  VLOG (1) << "Notifying waiting threads about state change...";
+  cvStateChanged.notify_all ();
+}
+
+void
+Game::WaitForChange (uint256* currentBlock) const
+{
+  std::unique_lock<std::mutex> lock(mut);
+
+  if (zmq.IsRunning ())
+    {
+      VLOG (1) << "Waiting for state change on condition variable...";
+      cvStateChanged.wait (lock);
+      VLOG (1) << "Potential state change detected in WaitForChange";
+    }
+  else
+    LOG (WARNING)
+        << "WaitForChange called with no active ZMQ listener,"
+           " returning immediately";
+
+  if (currentBlock != nullptr && !storage->GetCurrentBlockHash (*currentBlock))
+    currentBlock->SetNull ();
+}
+
+void
 Game::TrackGame ()
 {
   std::lock_guard<std::mutex> lock(mut);
@@ -467,6 +498,10 @@ Game::Stop ()
 {
   zmq.Stop ();
   UntrackGame ();
+
+  /* Make sure to wake up all listeners waiting for a state update (as there
+     won't be one anymore).  */
+  NotifyStateChange ();
 }
 
 void
@@ -562,6 +597,7 @@ Game::ReinitialiseState ()
   CHECK (blockHash.FromHex (blockHashHex));
   CHECK (blockHash == genesisHash)
     << "The game's genesis block hash and height do not match";
+
   transactionManager.TryAbortTransaction ();
   storage->Clear ();
   while (true)
@@ -576,9 +612,12 @@ Game::ReinitialiseState ()
       {
         LOG (WARNING) << "Storage update failed, retrying: " << exc.what ();
       }
+
   LOG (INFO)
       << "We are at the genesis height, stored initial game state for block "
       << genesisHash.ToHex ();
+  NotifyStateChange ();
+
   state = State::OUT_OF_SYNC;
   SyncFromCurrentState (data, genesisHash);
 }
