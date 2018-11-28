@@ -57,7 +57,7 @@ class Node ():
     envVars["GLOG_log_dir"] = self.datadir
     self.proc = subprocess.Popen (args, env=envVars)
 
-    self.rpc = jsonrpclib.Server ("http://localhost:%d" % self.port)
+    self.rpc = self.createRpc ()
 
     self.log.info ("Waiting for the JSON-RPC server to be up...")
     while True:
@@ -79,6 +79,15 @@ class Node ():
     self.log.info ("Waiting for game process to stop...")
     self.proc.wait ()
     self.proc = None
+
+  def createRpc (self):
+    """
+    Returns a freshly created JSON-RPC connection for this node.  This can
+    be used if multiple threads need to send RPCs in parallel.
+    """
+
+    return jsonrpclib.Server ("http://localhost:%d" % self.port)
+
 
   def logMatches (self, expr):
     """
