@@ -344,4 +344,16 @@ SQLiteGame::GameStateToJson (const GameStateData& state)
   return GetStateAsJson (database->GetDatabase ());
 }
 
+Json::Value
+SQLiteGame::GetCustomStateData (const Game& game, const std::string& jsonField,
+                                const std::function<Json::Value (sqlite3*)>& cb)
+{
+  return game.GetCustomStateData (jsonField,
+      [this, &cb] (const GameStateData& state)
+        {
+          database->EnsureCurrentState (state);
+          return cb (database->GetDatabase ());
+        });
+}
+
 } // namespace xaya
