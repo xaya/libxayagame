@@ -104,6 +104,13 @@ protected:
   virtual Json::Value GetStateAsJson (sqlite3* db) = 0;
 
   /**
+   * Prepares an SQLite statement in the underlying database and returns
+   * the prepared statement.  The returned statement is owned and managed
+   * by the SQLiteStorage and must not be freed manually!
+   */
+  sqlite3_stmt* PrepareStatement (const std::string& sql) const;
+
+  /**
    * Extracts custom state data from the database (as done by a callback
    * that queries the data).  This calls GetCustomStateData on the Game
    * instance and provides a callback that handles the "game state" string

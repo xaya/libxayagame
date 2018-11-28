@@ -161,6 +161,12 @@ SQLiteGame::SetupSchema (sqlite3* db)
      is done in Storage::SetupSchema already before calling here.  */
 }
 
+sqlite3_stmt*
+SQLiteGame::PrepareStatement (const std::string& sql) const
+{
+  return database->PrepareStatement (sql);
+}
+
 StorageInterface*
 SQLiteGame::GetStorage ()
 {
