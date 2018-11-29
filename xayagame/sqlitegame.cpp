@@ -161,6 +161,12 @@ SQLiteGame::SetupSchema (sqlite3* db)
      is done in Storage::SetupSchema already before calling here.  */
 }
 
+sqlite3_stmt*
+SQLiteGame::PrepareStatement (const std::string& sql) const
+{
+  return database->PrepareStatement (sql);
+}
+
 StorageInterface*
 SQLiteGame::GetStorage ()
 {
@@ -342,6 +348,18 @@ SQLiteGame::GameStateToJson (const GameStateData& state)
 {
   database->EnsureCurrentState (state);
   return GetStateAsJson (database->GetDatabase ());
+}
+
+Json::Value
+SQLiteGame::GetCustomStateData (const Game& game, const std::string& jsonField,
+                                const std::function<Json::Value (sqlite3*)>& cb)
+{
+  return game.GetCustomStateData (jsonField,
+      [this, &cb] (const GameStateData& state)
+        {
+          database->EnsureCurrentState (state);
+          return cb (database->GetDatabase ());
+        });
 }
 
 } // namespace xaya

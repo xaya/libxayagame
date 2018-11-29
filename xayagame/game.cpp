@@ -415,7 +415,9 @@ Game::DetectZmqEndpoint ()
 }
 
 Json::Value
-Game::GetCurrentJsonState () const
+Game::GetCustomStateData (
+    const std::string& jsonField,
+    const std::function<Json::Value (const GameStateData&)>& cb) const
 {
   std::unique_lock<std::mutex> lock(mut);
 
@@ -430,10 +432,20 @@ Game::GetCurrentJsonState () const
       res["blockhash"] = hash.ToHex ();
 
       const GameStateData gameState = storage->GetCurrentGameState ();
-      res["gamestate"] = rules->GameStateToJson (gameState);
+      res[jsonField] = cb (gameState);
     }
 
   return res;
+}
+
+Json::Value
+Game::GetCurrentJsonState () const
+{
+  return GetCustomStateData ("gamestate",
+      [this] (const GameStateData& state)
+        {
+          return rules->GameStateToJson (state);
+        });
 }
 
 void

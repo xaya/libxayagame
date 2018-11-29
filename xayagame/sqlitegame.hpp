@@ -5,6 +5,7 @@
 #ifndef XAYAGAME_SQLITEGAME_HPP
 #define XAYAGAME_SQLITEGAME_HPP
 
+#include "game.hpp"
 #include "gamelogic.hpp"
 #include "storage.hpp"
 
@@ -12,6 +13,7 @@
 
 #include <json/json.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -100,6 +102,24 @@ protected:
    * to be returned by the game daemon's JSON-RPC interface.
    */
   virtual Json::Value GetStateAsJson (sqlite3* db) = 0;
+
+  /**
+   * Prepares an SQLite statement in the underlying database and returns
+   * the prepared statement.  The returned statement is owned and managed
+   * by the SQLiteStorage and must not be freed manually!
+   */
+  sqlite3_stmt* PrepareStatement (const std::string& sql) const;
+
+  /**
+   * Extracts custom state data from the database (as done by a callback
+   * that queries the data).  This calls GetCustomStateData on the Game
+   * instance and provides a callback that handles the "game state" string
+   * in the same way as GameStateToJson does, before calling the user function
+   * to actually retrieve the data.
+   */
+  Json::Value GetCustomStateData (
+      const Game& game, const std::string& jsonField,
+      const std::function<Json::Value (sqlite3*)>& cb);
 
 public:
 

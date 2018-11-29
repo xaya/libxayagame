@@ -19,6 +19,7 @@
 #include <jsonrpccpp/client.h>
 
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -297,6 +298,21 @@ public:
   {
     mainLoop.Stop ();
   }
+
+  /**
+   * Returns a JSON object that contains information about the current
+   * syncing state, some meta information (game ID, chain) and custom
+   * information extracted by a callback function from the current
+   * game state.  That data is placed at a custom field in the returned
+   * JSON object.
+   *
+   * This function can be used to implement custom "getter" RPC methods
+   * that do not need to return the full game state but just some part
+   * of it that is interesting at the moment.
+   */
+  Json::Value GetCustomStateData (
+      const std::string& jsonField,
+      const std::function<Json::Value (const GameStateData&)>& cb) const;
 
   /**
    * Returns a JSON object that contains the current game state as well as
