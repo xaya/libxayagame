@@ -122,7 +122,8 @@ class XayaGameTest (object):
       sys.exit ("Test failed")
 
   def run (self):
-    self.log.warning ("Test 'run' method not overridden, this tests nothing")
+    self.mainLogger.warning (
+        "Test 'run' method not overridden, this tests nothing")
 
   def startXayaDaemon (self):
     """
