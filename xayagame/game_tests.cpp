@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -100,6 +100,7 @@ public:
     EXPECT_CALL (*this, getzmqnotifications ()).Times (0);
     EXPECT_CALL (*this, trackedgames (_, _)).Times (0);
     EXPECT_CALL (*this, getblockhash (_)).Times (0);
+    EXPECT_CALL (*this, getblockheader (_)).Times (0);
     EXPECT_CALL (*this, game_sendupdates (_, _)).Times (0);
   }
 
@@ -107,6 +108,7 @@ public:
   MOCK_METHOD2 (trackedgames, void (const std::string& command,
                                     const std::string& gameid));
   MOCK_METHOD1 (getblockhash, std::string (int height));
+  MOCK_METHOD1 (getblockheader, Json::Value (const std::string& hash));
   MOCK_METHOD2 (game_sendupdates, Json::Value (const std::string& fromblock,
                                                const std::string& gameid));
 
@@ -623,7 +625,23 @@ TEST_F (GetCurrentJsonStateTests, NoStateYet)
   EXPECT_EQ (state["chain"], "main");
   EXPECT_EQ (state["state"], "unknown");
   EXPECT_FALSE (state.isMember ("blockhash"));
+  EXPECT_FALSE (state.isMember ("height"));
   EXPECT_FALSE (state.isMember ("gamestate"));
+}
+
+TEST_F (GetCurrentJsonStateTests, InitialState)
+{
+  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
+                               TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+
+  const Json::Value state = g.GetCurrentJsonState ();
+  EXPECT_EQ (state["gameid"], GAME_ID);
+  EXPECT_EQ (state["chain"], "main");
+  EXPECT_EQ (state["state"], "up-to-date");
+  EXPECT_EQ (state["blockhash"], GAME_GENESIS_HASH);
+  EXPECT_EQ (state["height"].asInt (), GAME_GENESIS_HEIGHT);
+  EXPECT_EQ (state["gamestate"]["state"], "");
 }
 
 TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
@@ -640,6 +658,39 @@ TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
   EXPECT_EQ (state["state"], "up-to-date");
   EXPECT_EQ (state["blockhash"], BlockHash (11).ToHex ());
   EXPECT_EQ (state["gamestate"]["state"], "a0b1");
+
+  /* The expected cached height is two, since we only attached two blocks
+     (even though we use BlockHash(11) for it).  */
+  EXPECT_EQ (state["height"].asInt (), 2);
+}
+
+TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
+{
+  Json::Value blockHeaderData(Json::objectValue);
+  blockHeaderData["height"] = 42;
+  EXPECT_CALL (mockXayaServer, getblockheader (GAME_GENESIS_HASH))
+      .WillOnce (Return (blockHeaderData));
+
+  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
+                               TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+
+  /* Use another game instance (but with the same underlying storage) to
+     simulate startup without a cached height (but persisted current game
+     state).  */
+  Game freshGame(GAME_ID);
+  freshGame.ConnectRpcClient (httpClient);
+  freshGame.SetStorage (&storage);
+  freshGame.SetGameLogic (&rules);
+  ReinitialiseState (freshGame);
+
+  const Json::Value state = freshGame.GetCurrentJsonState ();
+  EXPECT_EQ (state["gameid"], GAME_ID);
+  EXPECT_EQ (state["chain"], "main");
+  EXPECT_EQ (state["state"], "up-to-date");
+  EXPECT_EQ (state["blockhash"], GAME_GENESIS_HASH);
+  EXPECT_EQ (state["height"].asInt (), 42);
+  EXPECT_EQ (state["gamestate"]["state"], "");
 }
 
 /* ************************************************************************** */

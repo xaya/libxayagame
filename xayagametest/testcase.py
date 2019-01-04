@@ -1,4 +1,4 @@
-# Copyright (C) 2018 The Xaya developers
+# Copyright (C) 2018-2019 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -180,12 +180,12 @@ class XayaGameTest (object):
     """
 
     bestblk = self.rpc.xaya.getbestblockhash ()
+    bestheight = self.rpc.xaya.getblockcount ()
     while True:
       state = self.rpc.game.getcurrentstate ()
-      if state["gameid"] != self.gameId:
-        self.log.error ("Game state does not have expected game ID: %s vs %s"
-            % (state["gameid"], self.gameId))
+      assert state["gameid"] == self.gameId
       if state["state"] == "up-to-date" and state["blockhash"] == bestblk:
+        assert state["height"] == bestheight
         return state["gamestate"]
       self.log.warning (("Game state (%s, %s) does not match"
                             +" the best block (%s), waiting")

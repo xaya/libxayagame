@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -66,7 +66,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
         = rules->ProcessForward (oldState, blockData, undo);
 
     storage->AddUndoData (hash, height, undo);
-    storage->SetCurrentGameState (hash, newState);
+    storage->SetCurrentGameStateWithHeight (hash, height, newState);
 
     tx.Commit ();
   }
@@ -112,7 +112,10 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
     const GameStateData oldState
         = rules->ProcessBackwards (newState, blockData, undo);
 
-    storage->SetCurrentGameState (parent, oldState);
+    const unsigned height = blockData["block"]["height"].asUInt ();
+    CHECK_GT (height, 0);
+
+    storage->SetCurrentGameStateWithHeight (parent, height - 1, oldState);
     storage->ReleaseUndoData (hash);
 
     tx.Commit ();
@@ -348,16 +351,45 @@ Game::GetChain () const
   return chain;
 }
 
+namespace
+{
+
+/**
+ * Hash-to-height translation function that calls Xaya Core by RPC.
+ */
+unsigned
+GetHeightForBlockHash (XayaRpcClient& rpc, const uint256& hash)
+{
+  const Json::Value data = rpc.getblockheader (hash.ToHex ());
+  CHECK (data.isMember ("height"));
+  const int height = data["height"].asInt ();
+  CHECK_GE (height, 0);
+  return height;
+}
+
+} // anonymous namespace
+
 void
 Game::SetStorage (StorageInterface* s)
 {
   std::lock_guard<std::mutex> lock(mut);
   CHECK (!mainLoop.IsRunning ());
   CHECK (pruningQueue == nullptr);
-  storage = s;
+
+  storage = std::make_unique<internal::StorageWithCachedHeight> (*s,
+      [this] (const uint256& hash) {
+        CHECK (rpcClient != nullptr);
+        return GetHeightForBlockHash (*rpcClient, hash);
+      });
 
   LOG (INFO) << "Storage has been added to Game, initialising it now";
   storage->Initialise ();
+
+  if (chain == Chain::REGTEST)
+    {
+      LOG (INFO) << "Enabling height-cache cross-checks for regtest mode";
+      storage->EnableCrossChecks ();
+    }
 
   transactionManager.SetStorage (*storage);
 }
@@ -427,9 +459,11 @@ Game::GetCustomStateData (
   res["state"] = StateToString (state);
 
   uint256 hash;
-  if (storage->GetCurrentBlockHash (hash))
+  unsigned height;
+  if (storage->GetCurrentBlockHashWithHeight (hash, height))
     {
       res["blockhash"] = hash.ToHex ();
+      res["height"] = height;
 
       const GameStateData gameState = storage->GetCurrentGameState ();
       res[jsonField] = cb (gameState);
@@ -616,7 +650,8 @@ Game::ReinitialiseState ()
     try
       {
         internal::ActiveTransaction tx(transactionManager);
-        storage->SetCurrentGameState (genesisHash, genesisData);
+        storage->SetCurrentGameStateWithHeight (genesisHash, genesisHeight,
+                                                genesisData);
         tx.Commit ();
         break;
       }
