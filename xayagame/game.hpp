@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,6 +6,7 @@
 #define XAYAGAME_GAME_HPP
 
 #include "gamelogic.hpp"
+#include "heightcache.hpp"
 #include "mainloop.hpp"
 #include "pruningqueue.hpp"
 #include "storage.hpp"
@@ -125,8 +126,8 @@ private:
   /** The ZMQ subscriber.  */
   internal::ZmqSubscriber zmq;
 
-  /** Storage system in use.  */
-  StorageInterface* storage = nullptr;
+  /** The height-caching storage we use.  */
+  std::unique_ptr<internal::StorageWithCachedHeight> storage;
 
   /** The game rules in use.  */
   GameLogic* rules = nullptr;

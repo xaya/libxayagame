@@ -26,6 +26,14 @@
     "returns": "hash"
   },
   {
+    "name": "getblockheader",
+    "params":
+      {
+        "blockhash": "hash"
+      },
+    "returns": {}
+  },
+  {
     "name": "game_sendupdates",
     "params":
       {

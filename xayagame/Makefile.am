@@ -26,6 +26,7 @@ libxayagame_la_SOURCES = \
   game.cpp \
   gamelogic.cpp \
   gamerpcserver.cpp \
+  heightcache.cpp \
   lmdbstorage.cpp \
   mainloop.cpp \
   pruningqueue.cpp \
@@ -40,6 +41,7 @@ xayagame_HEADERS = \
   game.hpp \
   gamelogic.hpp \
   gamerpcserver.hpp \
+  heightcache.hpp \
   lmdbstorage.hpp \
   mainloop.hpp \
   pruningqueue.hpp \
@@ -67,6 +69,7 @@ tests_LDADD = $(builddir)/libxayagame.la \
 tests_SOURCES = testutils.cpp \
   game_tests.cpp \
   gamelogic_tests.cpp \
+  heightcache_tests.cpp \
   lmdbstorage_tests.cpp \
   mainloop_tests.cpp \
   pruningqueue_tests.cpp \

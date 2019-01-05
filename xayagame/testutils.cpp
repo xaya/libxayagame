@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -38,12 +38,14 @@ void
 GameTestFixture::CallBlockAttach (Game& g, const std::string& reqToken,
                                   const uint256& parentHash,
                                   const uint256& blockHash,
+                                  const unsigned height,
                                   const Json::Value& moves,
                                   const bool seqMismatch) const
 {
   Json::Value block(Json::objectValue);
   block["hash"] = blockHash.ToHex ();
   block["parent"] = parentHash.ToHex ();
+  block["height"] = height;
 
   Json::Value data(Json::objectValue);
   if (!reqToken.empty ())
@@ -58,12 +60,14 @@ void
 GameTestFixture::CallBlockDetach (Game& g, const std::string& reqToken,
                                   const uint256& parentHash,
                                   const uint256& blockHash,
+                                  const unsigned height,
                                   const Json::Value& moves,
                                   const bool seqMismatch) const
 {
   Json::Value block(Json::objectValue);
   block["hash"] = blockHash.ToHex ();
   block["parent"] = parentHash.ToHex ();
+  block["height"] = height;
 
   Json::Value data(Json::objectValue);
   if (!reqToken.empty ())
@@ -86,7 +90,9 @@ GameTestWithBlockchain::AttachBlock (Game& g, const uint256& hash,
                                      const Json::Value& moves)
 {
   CHECK (!blockHashes.empty ()) << "No starting block has been set";
-  CallBlockAttach (g, "", blockHashes.back (), hash, moves, false);
+  CallBlockAttach (g, "",
+                   blockHashes.back (), hash, blockHashes.size () + 1,
+                   moves, false);
   blockHashes.push_back (hash);
   moveStack.push_back (moves);
 }
@@ -99,7 +105,9 @@ GameTestWithBlockchain::DetachBlock (Game& g)
 
   const uint256 hash = blockHashes.back ();
   blockHashes.pop_back ();
-  CallBlockDetach (g, "", blockHashes.back (), hash, moveStack.back (), false);
+  CallBlockDetach (g, "",
+                   blockHashes.back (), hash, blockHashes.size () + 1,
+                   moveStack.back (), false);
   moveStack.pop_back ();
 }
 

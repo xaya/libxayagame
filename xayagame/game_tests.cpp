@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -100,6 +100,7 @@ public:
     EXPECT_CALL (*this, getzmqnotifications ()).Times (0);
     EXPECT_CALL (*this, trackedgames (_, _)).Times (0);
     EXPECT_CALL (*this, getblockhash (_)).Times (0);
+    EXPECT_CALL (*this, getblockheader (_)).Times (0);
     EXPECT_CALL (*this, game_sendupdates (_, _)).Times (0);
   }
 
@@ -107,6 +108,7 @@ public:
   MOCK_METHOD2 (trackedgames, void (const std::string& command,
                                     const std::string& gameid));
   MOCK_METHOD1 (getblockhash, std::string (int height));
+  MOCK_METHOD1 (getblockheader, Json::Value (const std::string& hash));
   MOCK_METHOD2 (game_sendupdates, Json::Value (const std::string& fromblock,
                                                const std::string& gameid));
 
@@ -353,11 +355,13 @@ protected:
   void
   CallBlockDetach (Game& g, const std::string& reqToken,
                    const uint256& parentHash, const uint256& blockHash,
+                   const unsigned height,
                    const bool seqMismatch) const
   {
     /* For our example test game, the moves are not used for rolling backwards.
        Thus just set an empty string.  */
-    GameTestFixture::CallBlockDetach (g, reqToken, parentHash, blockHash,
+    GameTestFixture::CallBlockDetach (g, reqToken,
+                                      parentHash, blockHash, height,
                                       "", seqMismatch);
   }
 
@@ -593,7 +597,7 @@ TEST_F (InitialStateTests, MissedNotification)
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer.SetBestBlock (20, TestGame::GenesisBlockHash ());
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20),
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20), 20,
                    emptyMoves, SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectInitialStateInStorage ();
@@ -621,7 +625,23 @@ TEST_F (GetCurrentJsonStateTests, NoStateYet)
   EXPECT_EQ (state["chain"], "main");
   EXPECT_EQ (state["state"], "unknown");
   EXPECT_FALSE (state.isMember ("blockhash"));
+  EXPECT_FALSE (state.isMember ("height"));
   EXPECT_FALSE (state.isMember ("gamestate"));
+}
+
+TEST_F (GetCurrentJsonStateTests, InitialState)
+{
+  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
+                               TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+
+  const Json::Value state = g.GetCurrentJsonState ();
+  EXPECT_EQ (state["gameid"], GAME_ID);
+  EXPECT_EQ (state["chain"], "main");
+  EXPECT_EQ (state["state"], "up-to-date");
+  EXPECT_EQ (state["blockhash"], GAME_GENESIS_HASH);
+  EXPECT_EQ (state["height"].asInt (), GAME_GENESIS_HEIGHT);
+  EXPECT_EQ (state["gamestate"]["state"], "");
 }
 
 TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
@@ -638,6 +658,39 @@ TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
   EXPECT_EQ (state["state"], "up-to-date");
   EXPECT_EQ (state["blockhash"], BlockHash (11).ToHex ());
   EXPECT_EQ (state["gamestate"]["state"], "a0b1");
+
+  /* The expected cached height is two, since we only attached two blocks
+     (even though we use BlockHash(11) for it).  */
+  EXPECT_EQ (state["height"].asInt (), 2);
+}
+
+TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
+{
+  Json::Value blockHeaderData(Json::objectValue);
+  blockHeaderData["height"] = 42;
+  EXPECT_CALL (mockXayaServer, getblockheader (GAME_GENESIS_HASH))
+      .WillOnce (Return (blockHeaderData));
+
+  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
+                               TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+
+  /* Use another game instance (but with the same underlying storage) to
+     simulate startup without a cached height (but persisted current game
+     state).  */
+  Game freshGame(GAME_ID);
+  freshGame.ConnectRpcClient (httpClient);
+  freshGame.SetStorage (&storage);
+  freshGame.SetGameLogic (&rules);
+  ReinitialiseState (freshGame);
+
+  const Json::Value state = freshGame.GetCurrentJsonState ();
+  EXPECT_EQ (state["gameid"], GAME_ID);
+  EXPECT_EQ (state["chain"], "main");
+  EXPECT_EQ (state["state"], "up-to-date");
+  EXPECT_EQ (state["blockhash"], GAME_GENESIS_HASH);
+  EXPECT_EQ (state["height"].asInt (), 42);
+  EXPECT_EQ (state["gamestate"]["state"], "");
 }
 
 /* ************************************************************************** */
@@ -858,13 +911,14 @@ TEST_F (SyncingTests, UpToDateIgnoresReqtoken)
   ExpectGameState (BlockHash (11), "a0b1");
 
   /* Attach ignored because of its reqtoken.  */
-  CallBlockAttach (g, "foo", BlockHash (11), BlockHash (12),
+  CallBlockAttach (g, "foo", BlockHash (11), BlockHash (12), 12,
                    Moves ("a5"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
   /* Detach ignored because of its reqtoken.  */
-  CallBlockDetach (g, "foo", BlockHash (12), BlockHash (11), NO_SEQ_MISMATCH);
+  CallBlockDetach (g, "foo", BlockHash (11), BlockHash (12), 12,
+                   NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
 
@@ -884,30 +938,30 @@ TEST_F (SyncingTests, CatchingUpForward)
   ExpectGameState (TestGame::GenesisBlockHash (), "");
 
   CallBlockAttach (g, "reqtoken",
-                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   TestGame::GenesisBlockHash (), BlockHash (11), 11,
                    Moves ("a0b1"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (11), "a0b1");
 
   /* Attach ignored because of its reqtoken.  */
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12),
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12), 12,
                    Moves ("a5"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (11), "a0b1");
 
   /* Attach ignored because of its reqtoken.  */
-  CallBlockAttach (g, "other req", BlockHash (1), BlockHash (2),
+  CallBlockAttach (g, "other req", BlockHash (1), BlockHash (2), 2,
                    Moves ("a6"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (11), "a0b1");
 
   /* Detach ignored because of its reqtoken.  */
-  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (12), BlockHash (11),
+  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (11), BlockHash (12), 12,
                    NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockAttach (g, "reqtoken", BlockHash (11), BlockHash (12),
+  CallBlockAttach (g, "reqtoken", BlockHash (11), BlockHash (12), 12,
                    Moves ("a2c3"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
@@ -933,12 +987,13 @@ TEST_F (SyncingTests, CatchingUpBackwards)
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (12), "a2b1c3");
 
-  CallBlockDetach (g, "reqtoken", BlockHash (11), BlockHash (12),
+  CallBlockDetach (g, "reqtoken", BlockHash (11), BlockHash (12), 12,
                    NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockDetach (g, "reqtoken", TestGame::GenesisBlockHash (), BlockHash (11),
+  CallBlockDetach (g, "reqtoken",
+                   TestGame::GenesisBlockHash (), BlockHash (11), 11,
                    NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (TestGame::GenesisBlockHash (), "");
@@ -963,17 +1018,17 @@ TEST_F (SyncingTests, CatchingUpMultistep)
   ExpectGameState (TestGame::GenesisBlockHash (), "");
 
   CallBlockAttach (g, "token 1",
-                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   TestGame::GenesisBlockHash (), BlockHash (11), 11,
                    Moves ("a0b1"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockAttach (g, "token 1", BlockHash (11), BlockHash (12),
+  CallBlockAttach (g, "token 1", BlockHash (11), BlockHash (12), 12,
                    Moves ("a2c3"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (12), "a2b1c3");
 
-  CallBlockAttach (g, "token 2", BlockHash (12), BlockHash (13),
+  CallBlockAttach (g, "token 2", BlockHash (12), BlockHash (13), 13,
                    Moves ("a7"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (13), "a7b1c3");
@@ -985,7 +1040,7 @@ TEST_F (SyncingTests, MissedAttachWhileUpToDate)
       .WillOnce (Return (SendupdatesResponse (BlockHash (20), "reqtoken")));
 
   mockXayaServer.SetBestBlock (20, BlockHash (20));
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20),
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20), 20,
                    Moves ("a1"), SEQ_MISMATCH);
 
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
@@ -998,7 +1053,7 @@ TEST_F (SyncingTests, MissedDetachWhileUpToDate)
       .WillOnce (Return (SendupdatesResponse (BlockHash (20), "reqtoken")));
 
   mockXayaServer.SetBestBlock (20, BlockHash (20));
-  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20),
+  CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20), 20,
                    SEQ_MISMATCH);
 
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
@@ -1021,7 +1076,7 @@ TEST_F (SyncingTests, MissedAttachWhileCatchingUp)
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (TestGame::GenesisBlockHash (), "");
 
-  CallBlockAttach (g, "a", TestGame::GenesisBlockHash (), BlockHash (11),
+  CallBlockAttach (g, "a", TestGame::GenesisBlockHash (), BlockHash (11), 11,
                    Moves ("a0b1"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (11), "a0b1");
@@ -1029,12 +1084,12 @@ TEST_F (SyncingTests, MissedAttachWhileCatchingUp)
   /* This attach with a sequence mismatch triggers another reinitialisation,
      so that we make the second game_sendupdates call and from then on wait
      for the "b" reqtoken.  */
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (12), BlockHash (13),
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (12), BlockHash (13), 13,
                    Moves ("a5"), SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (11), "a0b1");
 
-  CallBlockAttach (g, "b", BlockHash (11), BlockHash (12),
+  CallBlockAttach (g, "b", BlockHash (11), BlockHash (12), 12,
                    Moves ("a2c3"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
@@ -1105,7 +1160,7 @@ TEST_F (PruningTests, WithReqToken)
   AssertIsPruned (TestGame::GenesisBlockHash ());
   AssertNotPruned (BlockHash (11));
 
-  CallBlockAttach (g, "foo", BlockHash (11), BlockHash (12),
+  CallBlockAttach (g, "foo", BlockHash (11), BlockHash (12), 12,
                    Moves ("a2c3"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (11), "a0b1");
@@ -1126,7 +1181,7 @@ TEST_F (PruningTests, MissedZmq)
   /* This will trigger a game_sendupdates and bring the state to catching-up,
      but we don't care about it.  It should, most of all, not prune the last
      block as it would without sequence mismatch.  */
-  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (12), BlockHash (13),
+  CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (12), BlockHash (13), 13,
                    Moves (""), SEQ_MISMATCH);
   AssertNotPruned (BlockHash (11));
 }
@@ -1244,12 +1299,12 @@ TEST_F (GameLogicTransactionsTests, CatchingUpBatched)
   ExpectGameState (storage, TestGame::GenesisBlockHash (), "");
 
   CallBlockAttach (g, "reqtoken",
-                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   TestGame::GenesisBlockHash (), BlockHash (11), 11,
                    Moves ("a0b1"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (fallibleStorage, BlockHash (11), "a0b1");
 
-  CallBlockAttach (g, "reqtoken", BlockHash (11), BlockHash (12),
+  CallBlockAttach (g, "reqtoken", BlockHash (11), BlockHash (12), 12,
                    Moves ("a2c3"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (fallibleStorage, BlockHash (12), "a2b1c3");
@@ -1384,7 +1439,7 @@ TEST_F (GameStorageRetryTests, AttachBlock)
   ExpectGameState (retryStorage, TestGame::GenesisBlockHash (), "");
 
   CallBlockAttach (g, "reqtoken",
-                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   TestGame::GenesisBlockHash (), BlockHash (11), 11,
                    Moves ("a0b1"), NO_SEQ_MISMATCH);
   EXPECT_EQ (retryStorage.GetNumFailures (), 1);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
@@ -1412,7 +1467,7 @@ TEST_F (GameStorageRetryTests, DetachBlock)
   ExpectGameState (retryStorage, BlockHash (11), "a0b1");
 
   CallBlockDetach (g, "reqtoken",
-                   TestGame::GenesisBlockHash (), BlockHash (11),
+                   TestGame::GenesisBlockHash (), BlockHash (11), 11,
                    NO_SEQ_MISMATCH);
   EXPECT_EQ (retryStorage.GetNumFailures (), 1);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
