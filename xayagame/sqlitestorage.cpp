@@ -173,13 +173,15 @@ SQLiteStorage::SetupSchema ()
 {
   LOG (INFO) << "Setting up database schema if it does not exist yet";
   const int rc = sqlite3_exec (db, R"(
-    CREATE TABLE IF NOT EXISTS `xayagame_current`
-        (`key` TEXT PRIMARY KEY,
-         `value` BLOB);
-    CREATE TABLE IF NOT EXISTS `xayagame_undo`
-        (`hash` BLOB PRIMARY KEY,
-         `data` BLOB,
-         `height` INTEGER);
+    CREATE TABLE IF NOT EXISTS `xayagame_current` (
+        `key` TEXT PRIMARY KEY,
+        `value` BLOB
+    ) WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS `xayagame_undo` (
+        `hash` BLOB PRIMARY KEY,
+        `data` BLOB,
+        `height` INTEGER
+    ) WITHOUT ROWID;
   )", nullptr, nullptr, nullptr);
   if (rc != SQLITE_OK)
     LOG (FATAL) << "Failed to set up database schema: " << rc;

@@ -29,7 +29,9 @@ CXXFLAGS+=" -DGLOG_NO_ABBREVIATED_SEVERITIES"
 AX_PKG_CHECK_MODULES([JSONCPP], [jsoncpp], [])
 AX_PKG_CHECK_MODULES([JSONRPCCLIENT], [libjsonrpccpp-client], [])
 AX_PKG_CHECK_MODULES([JSONRPCSERVER], [libjsonrpccpp-server], [])
-AX_PKG_CHECK_MODULES([SQLITE3], [sqlite3], [],
+# SQLite 3.17.0 is the minimum version at which the session extension supports
+# WITHOUT ROWID tables.
+AX_PKG_CHECK_MODULES([SQLITE3], [sqlite3 >= 3.17.0], [],
   [SQLITE3_CFLAGS+=" -DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"])
 AX_PKG_CHECK_MODULES([LMDB], [lmdb], [])
 

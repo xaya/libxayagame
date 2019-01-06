@@ -104,9 +104,10 @@ protected:
   SetupSchema (sqlite3* db) override
   {
     ExecuteWithNoResult (db, R"(
-      CREATE TABLE IF NOT EXISTS `chat`
-          (`user` TEXT PRIMARY KEY,
-           `msg` TEXT);
+      CREATE TABLE IF NOT EXISTS `chat` (
+          `user` TEXT PRIMARY KEY,
+          `msg` TEXT
+      ) WITHOUT ROWID;
     )");
   }
 

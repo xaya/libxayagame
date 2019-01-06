@@ -36,7 +36,9 @@ for the configuration and/or build to be successful:
   Available in the Debian package `libzmq3-dev`.
 - [SQLite3](https://www.sqlite.org/) with the
   [session extension](https://www.sqlite.org/sessionintro.html).
-  In Debian, the `libsqlite3-dev` package can be installed.
+  At least version 3.17.0 is needed, which is newer than the version
+  included in Debian 9 "Stretch".  For Ubuntu and Debian 10 "Buster" onwards,
+  the `libsqlite3-dev` package can be installed.
   Alternatively, build from source and configure with `--enable-session`.
 - [LMDB](https://symas.com/lmdb):  Available for Debian in the
   `liblmdb-dev` package.

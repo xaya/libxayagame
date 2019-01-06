@@ -55,9 +55,10 @@ protected:
     SQLiteStorage::SetupSchema ();
 
     const int rc = sqlite3_exec (GetDatabase (), R"(
-      CREATE TABLE IF NOT EXISTS `xayagame_gamevars`
-          (`onlyonerow` INTEGER PRIMARY KEY,
-           `gamestate_initialised` INTEGER);
+      CREATE TABLE IF NOT EXISTS `xayagame_gamevars` (
+          `onlyonerow` INTEGER PRIMARY KEY,
+          `gamestate_initialised` INTEGER
+      ) WITHOUT ROWID;
       INSERT OR IGNORE INTO `xayagame_gamevars`
           (`onlyonerow`, `gamestate_initialised`) VALUES (1, 0);
     )", nullptr, nullptr, nullptr);
