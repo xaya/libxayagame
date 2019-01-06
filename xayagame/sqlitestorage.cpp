@@ -68,6 +68,12 @@ GetStringBlob (sqlite3_stmt* stmt, const int ind)
 SQLiteStorage::SQLiteStorage (const std::string& f)
   : filename(f)
 {
+  LOG (INFO)
+      << "Using SQLite version " << SQLITE_VERSION
+      << " (library version: " << sqlite3_libversion () << ")";
+  CHECK_EQ (SQLITE_VERSION_NUMBER, sqlite3_libversion_number ())
+      << "Mismatch between header and library SQLite versions";
+
   const int rc
       = sqlite3_config (SQLITE_CONFIG_LOG, &SQLiteErrorLogger, nullptr);
   if (rc != SQLITE_OK)
