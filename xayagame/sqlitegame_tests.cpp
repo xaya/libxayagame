@@ -28,7 +28,7 @@ namespace
 
 /* ************************************************************************** */
 
-/** Game ID of the chat game.  */
+/** Game ID of the test game.  */
 constexpr const char* GAME_ID = "chat";
 
 /** The block height at which the initial state is defined.  */
@@ -44,17 +44,50 @@ GenesisHash ()
 }
 
 /**
- * Example game using SQLite:  A simple chat "game".  The state is simply a
- * table in the database mapping the user's account name in Xaya to a string,
- * and moves are JSON-arrays of strings that update the state sequentially.
- * (This is somewhat pointless as always the last entry will prevail, but
- * it verifies that the rollback mechanism handles multiple changes to
- * a single row correctly.)
+ * Exception thrown if an SQL operation is meant to fail for testing
+ * error recovery.
  */
-class ChatGame : public SQLiteGame
+class Failure : public std::runtime_error
 {
 
-private:
+public:
+
+  Failure ()
+    : std::runtime_error ("failed SQL operation")
+  {}
+
+};
+
+/**
+ * Callback for sqlite3_exec that expects not to be called.
+ */
+static int
+ExpectNoResult (void* data, int columns, char** strs, char** names)
+{
+  LOG (FATAL) << "Expected no result from DB query";
+}
+
+/**
+ * Executes the given SQL statement on the database, expecting no results.
+ * If there are results or there is any error, CHECK-fails.
+ */
+static void
+ExecuteWithNoResult (sqlite3* db, const std::string& sql)
+{
+  const int rc = sqlite3_exec (db, sql.c_str (),
+                               &ExpectNoResult, nullptr, nullptr);
+  CHECK_EQ (rc, SQLITE_OK) << "Failed to query database";
+}
+
+/**
+ * Basic SQLite game template for the test games that we use.  It implements
+ * common functionality, like the initial hash/height (which can be the same
+ * for all test games) and the "request to fail" flag.
+ */
+class TestGame : public SQLiteGame
+{
+
+protected:
 
   /**
    * Whether or not SQL-routines (initialisation and update of the DB-based
@@ -62,40 +95,64 @@ private:
    */
   bool shouldFail = false;
 
-  /**
-   * Callback for sqlite3_exec that expects not to be called.
-   */
-  static int
-  ExpectNoResult (void* data, int columns, char** strs, char** names)
+  void
+  GetInitialStateBlock (unsigned& height, std::string& hashHex) const override
   {
-    LOG (FATAL) << "Expected no result from DB query";
+    height = GENESIS_HEIGHT;
+    hashHex = GenesisHash ().ToHex ();
   }
 
+  explicit TestGame (const std::string& f)
+    : SQLiteGame (f)
+  {}
+
+public:
+
+  TestGame () = delete;
+  TestGame (const TestGame&) = delete;
+  void operator= (const TestGame&) = delete;
+
   /**
-   * Callback that builds up a Map object with data from the `chat` table.
+   * Sets a flag that makes SQL methods of the game (initialisation and
+   * update of the DB-based state) throw an exception if true.  This can be
+   * used to test error handling and atomicity of updates.
+   */
+  void
+  SetShouldFail (const bool v)
+  {
+    shouldFail = v;
+  }
+
+};
+
+/* ************************************************************************** */
+
+/**
+ * Example game using SQLite:  A simple chat "game".  The state is simply a
+ * table in the database mapping the user's account name in Xaya to a string,
+ * and moves are JSON-arrays of strings that update the state sequentially.
+ * (This is somewhat pointless as always the last entry will prevail, but
+ * it verifies that the rollback mechanism handles multiple changes to
+ * a single row correctly.)
+ */
+class ChatGame : public TestGame
+{
+
+private:
+
+  /**
+   * Callback that builds up a State object with data from the `chat` table.
    */
   static int
   SaveToMap (void* ptr, int columns, char** strs, char** names)
   {
-    Map* m = static_cast<Map*> (ptr);
+    State* s = static_cast<State*> (ptr);
     CHECK_EQ (columns, 2);
     CHECK_EQ (std::string (names[0]), "user");
     CHECK_EQ (std::string (names[1]), "msg");
-    CHECK (m->count (strs[0]) == 0);
-    m->emplace (strs[0], strs[1]);
+    CHECK (s->count (strs[0]) == 0);
+    s->emplace (strs[0], strs[1]);
     return 0;
-  }
-
-  /**
-   * Executes the given SQL statement on the database, expecting no results.
-   * If there are results or there is any error, CHECK-fails.
-   */
-  static void
-  ExecuteWithNoResult (sqlite3* db, const std::string& sql)
-  {
-    const int rc = sqlite3_exec (db, sql.c_str (),
-                                 &ExpectNoResult, nullptr, nullptr);
-    CHECK_EQ (rc, SQLITE_OK) << "Failed to query database";
   }
 
 protected:
@@ -108,13 +165,6 @@ protected:
           (`user` TEXT PRIMARY KEY,
            `msg` TEXT);
     )");
-  }
-
-  void
-  GetInitialStateBlock (unsigned& height, std::string& hashHex) const override
-  {
-    height = GENESIS_HEIGHT;
-    hashHex = GenesisHash ().ToHex ();
   }
 
   void
@@ -157,7 +207,7 @@ protected:
   Json::Value
   GetStateAsJson (sqlite3* db) override
   {
-    Map data;
+    State data;
     const int rc = sqlite3_exec (db, R"(
       SELECT `user`, `msg` FROM `chat`
     )", &SaveToMap, &data, nullptr);
@@ -171,26 +221,18 @@ protected:
 
 public:
 
-  /**
-   * Exception thrown if an SQL operation is meant to fail for testing
-   * error recovery.
-   */
-  class Failure : public std::runtime_error
-  {
-
-  public:
-
-    Failure ()
-      : std::runtime_error ("failed SQL operation")
-    {}
-
-  };
-
   /** Type holding a game state as in-memory map (for easy handling).  */
-  using Map = std::map<std::string, std::string>;
+  using State = std::map<std::string, std::string>;
+
+  /**
+   * Convenience type to hold moves before they are converted to JSON using
+   * the Move() function.  This is a vector instead of a map, as each player
+   * can send more than one message (and it will get put into a JSON array).
+   */
+  using MoveSet = std::vector<std::pair<std::string, std::string>>;
 
   explicit ChatGame (const std::string& f)
-    : SQLiteGame (f)
+    : TestGame (f)
   {}
 
   /**
@@ -198,12 +240,12 @@ public:
    * GameStateData) matches the Map object.
    */
   void
-  ExpectState (const GameStateData& state, const Map& m)
+  ExpectState (const GameStateData& state, const State& s)
   {
     const Json::Value jsonState = GameStateToJson (state);
     ASSERT_TRUE (jsonState.isObject ());
-    ASSERT_EQ (jsonState.size (), m.size ());
-    for (const auto& entry : m)
+    ASSERT_EQ (jsonState.size (), s.size ());
+    for (const auto& entry : s)
       {
         ASSERT_TRUE (jsonState.isMember (entry.first));
         ASSERT_EQ (jsonState[entry.first].asString (), entry.second);
@@ -211,14 +253,29 @@ public:
   }
 
   /**
-   * Sets a flag that makes SQL methods of the game (initialisation and
-   * update of the DB-based state) throw an exception if true.  This can be
-   * used to test error handling and atomicity of updates.
+   * Builds a JSON object holding the moves represented by the MoveSet.
    */
-  void
-  SetShouldFail (const bool v)
+  static Json::Value
+  Moves (const MoveSet& moves)
   {
-    shouldFail = v;
+    std::map<std::string, Json::Value> perPlayer;
+    for (const auto& m : moves)
+      {
+        if (perPlayer.count (m.first) == 0)
+          perPlayer.emplace (m.first, Json::arrayValue);
+        perPlayer[m.first].append (m.second);
+      }
+
+    Json::Value res(Json::arrayValue);
+    for (const auto& p : perPlayer)
+      {
+        Json::Value obj(Json::objectValue);
+        obj["name"] = p.first;
+        obj["move"] = p.second;
+        res.append (obj);
+      }
+
+    return res;
   }
 
 };
@@ -231,7 +288,7 @@ public:
  * from Game's point of view.
  */
 void
-InitialiseState (Game& game, ChatGame& rules)
+InitialiseState (Game& game, SQLiteGame& rules)
 {
   unsigned height;
   std::string hashHex;
@@ -245,46 +302,14 @@ InitialiseState (Game& game, ChatGame& rules)
   rules.GetStorage ()->CommitTransaction ();
 }
 
-/**
- * Convenience type to hold moves before they are converted to JSON using
- * the Move() function.  This is a vector instead of a map, as each player
- * can send more than one message (and it will get put into a JSON array).
- */
-using MoveSet = std::vector<std::pair<std::string, std::string>>;
-
-/**
- * Builds a JSON object holding the moves represented by the MoveSet.
- */
-Json::Value
-Moves (const MoveSet& moves)
-{
-  std::map<std::string, Json::Value> perPlayer;
-  for (const auto& m : moves)
-    {
-      if (perPlayer.count (m.first) == 0)
-        perPlayer.emplace (m.first, Json::arrayValue);
-      perPlayer[m.first].append (m.second);
-    }
-
-  Json::Value res(Json::arrayValue);
-  for (const auto& p : perPlayer)
-    {
-      Json::Value obj(Json::objectValue);
-      obj["name"] = p.first;
-      obj["move"] = p.second;
-      res.append (obj);
-    }
-
-  return res;
-}
-
-class SQLiteGameTests : public GameTestWithBlockchain
+template <typename G>
+  class SQLiteGameTests : public GameTestWithBlockchain
 {
 
 protected:
 
   Game game;
-  ChatGame rules;
+  G rules;
 
   SQLiteGameTests ()
     : GameTestWithBlockchain(GAME_ID),
@@ -308,17 +333,17 @@ protected:
    * the given Map object.
    */
   void
-  ExpectState (const ChatGame::Map& m)
+  ExpectState (const typename G::State& s)
   {
     const GameStateData state = rules.GetStorage ()->GetCurrentGameState ();
-    rules.ExpectState (state, m);
+    rules.ExpectState (state, s);
   }
 
 };
 
 /* ************************************************************************** */
 
-using StateInitialisationTests = SQLiteGameTests;
+using StateInitialisationTests = SQLiteGameTests<ChatGame>;
 
 TEST_F (StateInitialisationTests, HeightAndHash)
 {
@@ -348,7 +373,7 @@ TEST_F (StateInitialisationTests, ErrorHandling)
       ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
       FAIL () << "No exception was thrown";
     }
-  catch (const ChatGame::Failure& exc)
+  catch (const Failure& exc)
     {}
 
   rules.SetShouldFail (false);
@@ -357,7 +382,7 @@ TEST_F (StateInitialisationTests, ErrorHandling)
 
 /* ************************************************************************** */
 
-using GameStateStringTests = SQLiteGameTests;
+using GameStateStringTests = SQLiteGameTests<ChatGame>;
 
 TEST_F (GameStateStringTests, Initial)
 {
@@ -400,13 +425,13 @@ TEST_F (GameStateStringTests, InvalidString)
 
 /* ************************************************************************** */
 
-using MovingTests = SQLiteGameTests;
+using MovingTests = SQLiteGameTests<ChatGame>;
 
 TEST_F (MovingTests, ForwardAndBackward)
 {
   ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
 
-  AttachBlock (game, BlockHash (11), Moves ({
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({
     {"domob", "new"},
     {"a", "x"},
     {"a", "y"},
@@ -417,7 +442,7 @@ TEST_F (MovingTests, ForwardAndBackward)
     {"foo", "bar"},
   });
 
-  AttachBlock (game, BlockHash (12), Moves ({{"a", "z"}}));
+  AttachBlock (game, BlockHash (12), ChatGame::Moves ({{"a", "z"}}));
   ExpectState ({
     {"a", "z"},
     {"domob", "new"},
@@ -442,15 +467,17 @@ TEST_F (MovingTests, ErrorHandling)
   rules.SetShouldFail (true);
   try
     {
-      AttachBlock (game, BlockHash (11), Moves ({{"domob", "failed"}}));
+      AttachBlock (game, BlockHash (11), ChatGame::Moves ({
+        {"domob", "failed"}
+      }));
       FAIL () << "No exception was thrown";
     }
-  catch (const ChatGame::Failure& exc)
+  catch (const Failure& exc)
     {}
   ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
 
   rules.SetShouldFail (false);
-  AttachBlock (game, BlockHash (11), Moves ({
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({
     {"domob", "new"},
     {"a", "x"},
     {"a", "y"},
@@ -517,10 +544,10 @@ protected:
   }
 
   void
-  ExpectState (const ChatGame::Map& m)
+  ExpectState (const ChatGame::State& s)
   {
     const GameStateData state = rules->GetStorage ()->GetCurrentGameState ();
-    rules->ExpectState (state, m);
+    rules->ExpectState (state, s);
   }
 
 };
@@ -529,7 +556,7 @@ TEST_F (PersistenceTests, KeepsData)
 {
   ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
 
-  AttachBlock (game, BlockHash (11), Moves ({{"domob", "new"}}));
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({{"domob", "new"}}));
   ExpectState ({
     {"domob", "new"},
     {"foo", "bar"},
