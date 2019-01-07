@@ -17,9 +17,11 @@
 #include <glog/logging.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace xaya
 {
@@ -566,6 +568,232 @@ TEST_F (PersistenceTests, KeepsData)
   ExpectState ({
     {"domob", "new"},
     {"foo", "bar"},
+  });
+}
+
+/* ************************************************************************** */
+
+/**
+ * Example game where each name that sends a move is simply inserted into
+ * two database tables with a generated integer ID.  This is used to verify
+ * that database rollbacks and transaction atomicity with exceptions work fine
+ * for auto-generated IDs.
+ */
+class InsertGame : public TestGame
+{
+
+private:
+
+  /** Type used to represent data of one of the two map tables.  */
+  using Map = std::map<std::string, int>;
+
+  /**
+   * Callback that builds up a map of (name, id) pairs from the SELECT query
+   * on one of the two tables.
+   */
+  static int
+  SaveToMap (void* ptr, int columns, char** strs, char** names)
+  {
+    Map* m = static_cast<Map*> (ptr);
+    CHECK_EQ (columns, 2);
+    CHECK_EQ (std::string (names[0]), "id");
+    CHECK_EQ (std::string (names[1]), "name");
+    CHECK (m->count (strs[1]) == 0);
+    m->emplace (strs[1], std::atoi (strs[0]));
+    return 0;
+  }
+
+protected:
+
+  void
+  SetupSchema (sqlite3* db) override
+  {
+    ExecuteWithNoResult (db, R"(
+      CREATE TABLE IF NOT EXISTS `first` (
+          `id` INTEGER PRIMARY KEY,
+          `name` TEXT
+      );
+      CREATE TABLE IF NOT EXISTS `second` (
+          `id` INTEGER PRIMARY KEY,
+          `name` TEXT
+      );
+    )");
+  }
+
+  void
+  InitialiseState (sqlite3* db) override
+  {
+    /* To verify proper intialisation, the initial state is not empty but
+       has some pre-existing data and IDs.  */
+
+    ExecuteWithNoResult (db, R"(
+      INSERT INTO `first` (`id`, `name`) VALUES (2, 'domob');
+      INSERT INTO `second` (`id`, `name`) VALUES (5, 'domob');
+    )");
+  }
+
+  void
+  UpdateState (sqlite3* db, const Json::Value& blockData) override
+  {
+    for (const auto& m : blockData["moves"])
+      {
+        const std::string name = m["name"].asString ();
+        ExecuteWithNoResult (db, R"(
+          INSERT INTO `first` (`name`) VALUES
+        (')" + name + "')");
+        ExecuteWithNoResult (db, R"(
+          INSERT INTO `second` (`name`) VALUES
+        (')" + name + "')");
+      }
+
+    if (shouldFail)
+      throw Failure ();
+  }
+
+  Json::Value
+  GetStateAsJson (sqlite3* db) override
+  {
+    Map first;
+    int rc = sqlite3_exec (db, R"(
+      SELECT `id`, `name` FROM `first`
+    )", &SaveToMap, &first, nullptr);
+    CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve first table";
+
+    Map second;
+    rc = sqlite3_exec (db, R"(
+      SELECT `id`, `name` FROM `second`
+    )", &SaveToMap, &second, nullptr);
+    CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve second table";
+    CHECK_EQ (first.size (), second.size ());
+
+    Json::Value res(Json::objectValue);
+    for (const auto& entry : first)
+      {
+        const auto mitSecond = second.find (entry.first);
+        CHECK (mitSecond != second.end ());
+
+        Json::Value pair(Json::arrayValue);
+        pair.append (entry.second);
+        pair.append (mitSecond->second);
+
+        res[entry.first] = pair;
+      }
+    return res;
+  }
+
+public:
+
+  /**
+   * Type holding a game state as in-memory map (for easy handling).  The state
+   * is characterised by a map from names to the IDs in the two tables.
+   */
+  using State = std::map<std::string, std::pair<int, int>>;
+
+  /**
+   * Convenience type to hold moves before they are converted to JSON using
+   * the Move() function.  This is just a list of player names that are
+   * to be inserted.
+   */
+  using MoveSet = std::vector<std::string>;
+
+  explicit InsertGame (const std::string& f)
+    : TestGame (f)
+  {}
+
+  /**
+   * Expects that the current game state (corresponding to the given
+   * GameStateData) matches the Map object.
+   */
+  void
+  ExpectState (const GameStateData& state, const State& s)
+  {
+    const Json::Value jsonState = GameStateToJson (state);
+    ASSERT_TRUE (jsonState.isObject ());
+    ASSERT_EQ (jsonState.size (), s.size ());
+    for (const auto& entry : s)
+      {
+        ASSERT_TRUE (jsonState.isMember (entry.first));
+
+        const auto& pair = jsonState[entry.first];
+        ASSERT_TRUE (pair.isArray ());
+        ASSERT_EQ (pair.size (), 2);
+        EXPECT_EQ (pair[0].asInt (), entry.second.first);
+        EXPECT_EQ (pair[1].asInt (), entry.second.second);;
+      }
+  }
+
+  /**
+   * Builds a JSON object holding the moves represented by the MoveSet.
+   */
+  static Json::Value
+  Moves (const MoveSet& moves)
+  {
+    Json::Value res(Json::arrayValue);
+    for (const auto& m : moves)
+      {
+        Json::Value obj(Json::objectValue);
+        obj["name"] = m;
+        obj["move"] = true;
+        res.append (obj);
+      }
+
+    return res;
+  }
+
+};
+
+using GeneratedIdTests = SQLiteGameTests<InsertGame>;
+
+TEST_F (GeneratedIdTests, ForwardAndBackward)
+{
+  ExpectState ({{"domob", {2, 5}}});
+
+  AttachBlock (game, BlockHash (11), InsertGame::Moves ({"foo", "bar"}));
+  ExpectState ({
+    {"domob", {2, 5}},
+    {"foo", {3, 6}},
+    {"bar", {4, 7}},
+  });
+
+  DetachBlock (game);
+  ExpectState ({{"domob", {2, 5}}});
+
+  AttachBlock (game, BlockHash (11), InsertGame::Moves ({"foo", "baz"}));
+  ExpectState ({
+    {"domob", {2, 5}},
+    {"foo", {3, 6}},
+    {"baz", {4, 7}},
+  });
+
+  AttachBlock (game, BlockHash (11), InsertGame::Moves ({"abc"}));
+  ExpectState ({
+    {"domob", {2, 5}},
+    {"foo", {3, 6}},
+    {"baz", {4, 7}},
+    {"abc", {5, 8}},
+  });
+}
+
+TEST_F (GeneratedIdTests, ErrorHandling)
+{
+  ExpectState ({{"domob", {2, 5}}});
+
+  rules.SetShouldFail (true);
+  try
+    {
+      AttachBlock (game, BlockHash (11), InsertGame::Moves ({"foo", "bar"}));
+      FAIL () << "No exception was thrown";
+    }
+  catch (const Failure& exc)
+    {}
+  ExpectState ({{"domob", {2, 5}}});
+
+  rules.SetShouldFail (false);
+  AttachBlock (game, BlockHash (11), InsertGame::Moves ({"foo", "bar"}));
+  ExpectState ({
+    {"domob", {2, 5}},
+    {"foo", {3, 6}},
+    {"bar", {4, 7}},
   });
 }
 
