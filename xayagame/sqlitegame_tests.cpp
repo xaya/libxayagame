@@ -618,6 +618,9 @@ protected:
           `name` TEXT
       );
     )");
+
+    /* Just make sure that we can access the IDs also here.  */
+    CHECK_EQ (Ids ("test").GetNext (), 1);
   }
 
   void
@@ -630,6 +633,16 @@ protected:
       INSERT INTO `first` (`id`, `name`) VALUES (2, 'domob');
       INSERT INTO `second` (`id`, `name`) VALUES (5, 'domob');
     )");
+
+    Ids ("first").ReserveUpTo (2);
+    Ids ("second").ReserveUpTo (9);
+
+    /* A second call with a smaller value should still be fine and not
+       change anything.  */
+    Ids ("second").ReserveUpTo (4);
+
+    /* Verify also the "test" ID range.  */
+    CHECK_EQ (Ids ("test").GetNext (), 2);
   }
 
   void
@@ -638,12 +651,18 @@ protected:
     for (const auto& m : blockData["moves"])
       {
         const std::string name = m["name"].asString ();
+
+        std::ostringstream firstId;
+        firstId << Ids ("first").GetNext ();
+        std::ostringstream secondId;
+        secondId << Ids ("second").GetNext ();
+
         ExecuteWithNoResult (db, R"(
-          INSERT INTO `first` (`name`) VALUES
-        (')" + name + "')");
+          INSERT INTO `first` (`id`, `name`) VALUES
+        ()" + firstId.str () + ", '" + name + "')");
         ExecuteWithNoResult (db, R"(
-          INSERT INTO `second` (`name`) VALUES
-        (')" + name + "')");
+          INSERT INTO `second` (`id`, `name`) VALUES
+        ()" + secondId.str () + ", '" + name + "')");
       }
 
     if (shouldFail)
@@ -751,8 +770,8 @@ TEST_F (GeneratedIdTests, ForwardAndBackward)
   AttachBlock (game, BlockHash (11), InsertGame::Moves ({"foo", "bar"}));
   ExpectState ({
     {"domob", {2, 5}},
-    {"foo", {3, 6}},
-    {"bar", {4, 7}},
+    {"foo", {3, 10}},
+    {"bar", {4, 11}},
   });
 
   DetachBlock (game);
@@ -761,16 +780,16 @@ TEST_F (GeneratedIdTests, ForwardAndBackward)
   AttachBlock (game, BlockHash (11), InsertGame::Moves ({"foo", "baz"}));
   ExpectState ({
     {"domob", {2, 5}},
-    {"foo", {3, 6}},
-    {"baz", {4, 7}},
+    {"foo", {3, 10}},
+    {"baz", {4, 11}},
   });
 
   AttachBlock (game, BlockHash (11), InsertGame::Moves ({"abc"}));
   ExpectState ({
     {"domob", {2, 5}},
-    {"foo", {3, 6}},
-    {"baz", {4, 7}},
-    {"abc", {5, 8}},
+    {"foo", {3, 10}},
+    {"baz", {4, 11}},
+    {"abc", {5, 12}},
   });
 }
 
@@ -792,8 +811,8 @@ TEST_F (GeneratedIdTests, ErrorHandling)
   AttachBlock (game, BlockHash (11), InsertGame::Moves ({"foo", "bar"}));
   ExpectState ({
     {"domob", {2, 5}},
-    {"foo", {3, 6}},
-    {"bar", {4, 7}},
+    {"foo", {3, 10}},
+    {"bar", {4, 11}},
   });
 }
 

@@ -13,6 +13,72 @@
 namespace xaya
 {
 
+/* ************************************************************************** */
+
+/**
+ * Definition for ActiveAutoIds of SQLiteGame.  This class holds a set of
+ * currently-active AutoId instances together with their string keys.  It
+ * also manages the construction and destruction through RAII.
+ *
+ * The object also manages the activeIds reference in an owning
+ * SQLiteGame instance:  It is set to "this" when constructed and
+ * reset to null when destructed.
+ */
+class SQLiteGame::ActiveAutoIds
+{
+
+private:
+
+  /** Reference to owning SQLiteGame instance.  */
+  SQLiteGame& game;
+
+  /** The map of AutoId values.  */
+  std::map<std::string, std::unique_ptr<AutoId>> instances;
+
+public:
+
+  explicit ActiveAutoIds (SQLiteGame& g);
+  ~ActiveAutoIds ();
+
+  ActiveAutoIds () = delete;
+  ActiveAutoIds (const ActiveAutoIds&) = delete;
+  void operator= (const ActiveAutoIds&) = delete;
+
+  AutoId& Get (const std::string& key);
+
+};
+
+SQLiteGame::ActiveAutoIds::ActiveAutoIds (SQLiteGame& g)
+  : game(g)
+{
+  CHECK (g.activeIds == nullptr);
+  g.activeIds = this;
+}
+
+SQLiteGame::ActiveAutoIds::~ActiveAutoIds ()
+{
+  CHECK (game.activeIds == this);
+  game.activeIds = nullptr;
+
+  for (auto& entry : instances)
+    entry.second->Sync (game, entry.first);
+}
+
+SQLiteGame::AutoId&
+SQLiteGame::ActiveAutoIds::Get (const std::string& key)
+{
+  const auto mit = instances.find (key);
+  if (mit != instances.end ())
+    return *mit->second;
+
+  std::unique_ptr<AutoId> newId(new AutoId (game, key));
+  const auto res = instances.emplace (key, std::move (newId));
+  CHECK (res.second);
+  return *res.first->second;
+}
+
+/* ************************************************************************** */
+
 namespace
 {
 
@@ -60,6 +126,11 @@ protected:
            `gamestate_initialised` INTEGER);
       INSERT OR IGNORE INTO `xayagame_gamevars`
           (`onlyonerow`, `gamestate_initialised`) VALUES (1, 0);
+
+      CREATE TABLE IF NOT EXISTS `xayagame_autoids` (
+          `key` TEXT PRIMARY KEY,
+          `nextid` INTEGER
+      );
     )", nullptr, nullptr, nullptr);
     CHECK_EQ (rc, SQLITE_OK) << "Failed to set up SQLiteGame's database schema";
 
@@ -69,6 +140,7 @@ protected:
     sqlite3_limit (GetDatabase (), SQLITE_LIMIT_ATTACHED, 0);
     LOG (INFO) << "Set allowed number of attached databases to zero";
 
+    ActiveAutoIds ids(game);
     game.SetupSchema (GetDatabase ());
   }
 
@@ -130,6 +202,7 @@ SQLiteGame::Storage::EnsureCurrentState (const GameStateData& state)
   StepWithNoResult (PrepareStatement ("SAVEPOINT `xayagame-stateinit`"));
   try
     {
+      ActiveAutoIds ids(game);
       game.InitialiseState (GetDatabase ());
       StepWithNoResult (PrepareStatement (R"(
         UPDATE `xayagame_gamevars` SET `gamestate_initialised` = 1
@@ -144,6 +217,8 @@ SQLiteGame::Storage::EnsureCurrentState (const GameStateData& state)
       throw;
     }
 }
+
+/* ************************************************************************** */
 
 SQLiteGame::SQLiteGame (const std::string& f)
   : database(std::make_unique<Storage> (*this, f))
@@ -251,7 +326,10 @@ SQLiteGame::ProcessForward (const GameStateData& oldState,
   database->EnsureCurrentState (oldState);
 
   SQLiteSession session(database->GetDatabase ());
-  UpdateState (database->GetDatabase (), blockData);
+  {
+    ActiveAutoIds ids(*this);
+    UpdateState (database->GetDatabase (), blockData);
+  }
   undo = session.ExtractChangeset ();
 
   return BLOCKHASH_STATE + blockData["block"]["hash"].asString ();
@@ -343,6 +421,14 @@ SQLiteGame::ProcessBackwards (const GameStateData& newState,
   return BLOCKHASH_STATE + blockData["block"]["parent"].asString ();
 }
 
+SQLiteGame::AutoId&
+SQLiteGame::Ids (const std::string& key)
+{
+  CHECK (activeIds != nullptr)
+      << "Ids() can only be used while the game logic is active";
+  return activeIds->Get (key);
+}
+
 Json::Value
 SQLiteGame::GameStateToJson (const GameStateData& state)
 {
@@ -361,5 +447,81 @@ SQLiteGame::GetCustomStateData (const Game& game, const std::string& jsonField,
           return cb (database->GetDatabase ());
         });
 }
+
+/* ************************************************************************** */
+
+namespace
+{
+
+/**
+ * Binds a TEXT parameter to a std::string value.  The value is bound using
+ * SQLITE_STATIC, so the underlying string must remain valid until execution
+ * of the prepared statement is done.
+ */
+void
+BindString (sqlite3_stmt* stmt, const int ind, const std::string& value)
+{
+  const int rc = sqlite3_bind_text (stmt, ind, &value[0], value.size (),
+                                    SQLITE_STATIC);
+  if (rc != SQLITE_OK)
+    LOG (FATAL) << "Failed to bind string value to parameter: " << rc;
+}
+
+} // anonymous namespace
+
+SQLiteGame::AutoId::AutoId (SQLiteGame& game, const std::string& key)
+{
+  auto* stmt = game.PrepareStatement (R"(
+    SELECT `nextid` FROM `xayagame_autoids` WHERE `key` = ?1
+  )");
+  BindString (stmt, 1, key);
+
+  const int rc = sqlite3_step (stmt);
+  if (rc == SQLITE_DONE)
+    {
+      LOG (INFO) << "No next value for AutoId " << key;
+      nextValue = 1;
+    }
+  else if (rc == SQLITE_ROW)
+    {
+      nextValue = sqlite3_column_int (stmt, 0);
+      dbValue = nextValue;
+      LOG (INFO) << "Fetched next value " << nextValue << " for AutoId " << key;
+      SQLiteStorage::StepWithNoResult (stmt);
+    }
+  else
+    LOG (FATAL) << "Error initialising AutoId " << key;
+
+  CHECK_GT (nextValue, 0);
+}
+
+SQLiteGame::AutoId::~AutoId ()
+{
+  CHECK_EQ (dbValue, nextValue) << "AutoId has not been synced";
+}
+
+void
+SQLiteGame::AutoId::Sync (SQLiteGame& game, const std::string& key)
+{
+  if (nextValue == dbValue)
+    {
+      LOG (INFO) << "No need to sync AutoId " << key;
+      return;
+    }
+
+  auto* stmt = game.PrepareStatement (R"(
+    INSERT OR REPLACE INTO `xayagame_autoids`
+      (`key`, `nextid`) VALUES (?1, ?2)
+  )");
+  BindString (stmt, 1, key);
+  CHECK_EQ (sqlite3_bind_int (stmt, 2, nextValue), SQLITE_OK);
+
+  SQLiteStorage::StepWithNoResult (stmt);
+
+  LOG (INFO) << "Synced AutoId " << key << " to database";
+  dbValue = nextValue;
+}
+
+/* ************************************************************************** */
 
 } // namespace xaya
