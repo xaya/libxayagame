@@ -158,7 +158,16 @@ class XayaGameTest (object):
     self.rpc.game = None
     self.gamenode.stop ()
 
-  def sendMove (self, name, move):
+  def registerNames (self, names):
+    """
+    Utility method to register names without any data yet.  This can be used
+    by tests to set up some initial player accounts for use in the test.
+    """
+
+    for nm in names:
+      self.rpc.xaya.name_register ("p/" + nm, "{}")
+
+  def sendMove (self, name, move, options={}):
     """
     Sends a given move for the name.  This calls name_register or name_update,
     depending on whether the name exists already.  It also builds up the
@@ -168,10 +177,10 @@ class XayaGameTest (object):
     val = json.dumps ({"g": {self.gameId: move}})
 
     try:
-      return self.rpc.xaya.name_update ("p/" + name, val)
+      return self.rpc.xaya.name_update ("p/" + name, val, options)
     except:
       self.log.info ("name_update for p/%s failed, trying name_register" % name)
-      return self.rpc.xaya.name_register ("p/" + name, val)
+      return self.rpc.xaya.name_register ("p/" + name, val, options)
 
   def getGameState (self):
     """
