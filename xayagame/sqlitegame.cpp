@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -492,7 +492,7 @@ SQLiteGame::AutoId::AutoId (SQLiteGame& game, const std::string& key)
   else
     LOG (FATAL) << "Error initialising AutoId " << key;
 
-  CHECK_GT (nextValue, 0);
+  CHECK_NE (nextValue, EMPTY_ID);
 }
 
 SQLiteGame::AutoId::~AutoId ()

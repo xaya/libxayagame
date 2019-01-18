@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,6 +13,7 @@
 
 #include <json/json.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -142,6 +143,12 @@ protected:
 
 public:
 
+  /** Type for automatically generated IDs.  */
+  using IdT = uint64_t;
+
+  /** Value for a "missing" ID.  */
+  static constexpr IdT EMPTY_ID = 0;
+
   explicit SQLiteGame (const std::string& f);
   virtual ~SQLiteGame ();
 
@@ -189,13 +196,13 @@ class SQLiteGame::AutoId
 private:
 
   /** The next ID value to give out.  */
-  unsigned nextValue;
+  IdT nextValue;
 
   /**
    * The last value that has been read from or synced to the database.
-   * (Or 0 if no sync has been made yet.)
+   * (Or EMPTY_ID if no sync has been made yet.)
    */
-  unsigned dbValue = 0;
+  IdT dbValue = EMPTY_ID;
 
   /**
    * Constructs the AutoId, initialised from the database.
@@ -225,7 +232,7 @@ public:
   /**
    * Retrieves the next value.
    */
-  unsigned
+  IdT
   GetNext ()
   {
     return nextValue++;
@@ -237,7 +244,7 @@ public:
    * instance through initial static data.
    */
   void
-  ReserveUpTo (const unsigned end)
+  ReserveUpTo (const IdT end)
   {
     nextValue = std::max (nextValue, end + 1);
   }
