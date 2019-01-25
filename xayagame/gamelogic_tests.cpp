@@ -14,6 +14,7 @@
 
 #include <glog/logging.h>
 
+#include <sstream>
 #include <stack>
 
 namespace xaya
@@ -93,6 +94,82 @@ protected:
   }
 
 };
+
+/* ************************************************************************** */
+
+/**
+ * Example "game" for testing the handling of random numbers in the
+ * context of GameLogic callbacks.  The game rules just define that the
+ * new game state is given as the string representation of a random
+ * number taken from the context.
+ *
+ * For undoing, we simply store the old game state as undo data
+ * (like the CachingGame).  But we also verify that the random numbers
+ * we would get from the Context match the game state, i.e. that they
+ * match what the forward function had.
+ */
+class RandomGame : public GameLogic
+{
+
+private:
+
+  /**
+   * Returns a random "game state" from the Context's RNG.
+   */
+  GameStateData
+  RandomState ()
+  {
+    std::ostringstream res;
+    res << GetContext ().GetRandom ().Next<uint64_t> ();
+    return res.str ();
+  }
+
+protected:
+
+  GameStateData
+  GetInitialStateInternal (unsigned& height, std::string& hashHex) override
+  {
+    return RandomState ();
+  }
+
+  GameStateData
+  ProcessForwardInternal (const GameStateData& oldState,
+                          const Json::Value& blockData,
+                          UndoData& undoData) override
+  {
+    undoData = oldState;
+    return RandomState ();
+  }
+
+  GameStateData
+  ProcessBackwardsInternal (const GameStateData& newState,
+                            const Json::Value& blockData,
+                            const UndoData& undoData) override
+  {
+    CHECK_EQ (newState, RandomState ());
+    return undoData;
+  }
+
+};
+
+using ContextRandomTests = GameLogicFixture<RandomGame>;
+
+TEST_F (ContextRandomTests, Works)
+{
+  constexpr unsigned n = 3;
+
+  for (unsigned i = 0; i < n; ++i)
+    {
+      const GameStateData prev = state;
+      AttachBlock (NoMove ());
+      EXPECT_NE (prev, state);
+    }
+
+  for (unsigned i = 0; i < n; ++i)
+    DetachBlock ();
+
+  EXPECT_TRUE (blockStack.empty ());
+}
 
 /* ************************************************************************** */
 

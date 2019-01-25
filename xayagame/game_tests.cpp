@@ -239,7 +239,9 @@ protected:
   GameStateData
   GetInitialStateInternal (unsigned& height, std::string& hashHex) override
   {
-    CHECK (GetChain () == Chain::MAIN);
+    CHECK (GetContext ().GetChain () == Chain::MAIN);
+    CHECK_EQ (GetContext ().GetGameId (), GAME_ID);
+
     height = GAME_GENESIS_HEIGHT;
     hashHex = GAME_GENESIS_HASH;
     return EncodeMap (Map ());
@@ -250,7 +252,8 @@ protected:
                           const Json::Value& blockData,
                           UndoData& undoData) override
   {
-    CHECK (GetChain () == Chain::MAIN);
+    CHECK (GetContext ().GetChain () == Chain::MAIN);
+    CHECK_EQ (GetContext ().GetGameId (), GAME_ID);
 
     Map state = DecodeMap (oldState);
     Map undo;
@@ -283,7 +286,8 @@ protected:
                             const Json::Value& blockData,
                             const UndoData& undoData) override
   {
-    CHECK (GetChain () == Chain::MAIN);
+    CHECK (GetContext ().GetChain () == Chain::MAIN);
+    CHECK_EQ (GetContext ().GetGameId (), GAME_ID);
 
     Map state = DecodeMap (newState);
     const Map undo = DecodeMap (undoData);

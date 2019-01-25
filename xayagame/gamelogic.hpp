@@ -5,7 +5,9 @@
 #ifndef XAYAGAME_GAMELOGIC_HPP
 #define XAYAGAME_GAMELOGIC_HPP
 
+#include "random.hpp"
 #include "storage.hpp"
+#include "uint256.hpp"
 
 #include <json/json.h>
 
@@ -13,6 +15,8 @@
 
 namespace xaya
 {
+
+class GameLogic;
 
 /**
  * The possible chains on which a game can be in the Xaya network.
@@ -31,6 +35,61 @@ enum class Chain
  * on the chain.
  */
 std::string ChainToString (Chain c);
+
+/**
+ * Context for a call to the callbacks of the GameLogic class.  This is
+ * provided by GameLogic itself so that the implementing subclasses can
+ * access certain additional information.
+ */
+class Context
+{
+
+private:
+
+  /**
+   * Reference to the GameLogic instance.  This is used to access some static
+   * data there, like the chain or game ID.
+   */
+  const GameLogic& logic;
+
+  /** Random-number generator for the current block.  */
+  Random rnd;
+
+  /**
+   * Constructs a context.  This is done by the GameLogic class.
+   */
+  Context (const GameLogic& l, const uint256& rndSeed);
+
+  friend class GameLogic;
+
+public:
+
+  Context () = delete;
+  Context (const Context&) = delete;
+  void operator= (const Context&) = delete;
+
+  /**
+   * Returns the chain that the game is running on.
+   */
+  Chain GetChain () const;
+
+  /**
+   * Returns the game ID of the running game instance.
+   */
+  const std::string& GetGameId () const;
+
+  /**
+   * Returns a reference to a random-number generator that is seeded
+   * specifically for the current context (initial-state computation
+   * or a particular block that is being attached / detached).
+   */
+  Random&
+  GetRandom ()
+  {
+    return rnd;
+  }
+
+};
 
 /**
  * The interface for actual games.  Implementing classes define the rules
@@ -56,6 +115,8 @@ class GameLogic
 
 private:
 
+  class ContextSetter;
+
   /**
    * The chain that the game is running on.  This may influence the rules
    * and is provided via GetChain.
@@ -68,12 +129,29 @@ private:
    */
   std::string gameId;
 
+  /** Current Context instance if any.  */
+  Context* ctx = nullptr;
+
+  friend class Context;
+
 protected:
 
   /**
    * Returns the chain the game is running on.
    */
   Chain GetChain () const;
+
+  /**
+   * Returns the current Context instance.  This function must only be
+   * called while one of the Internal callbacks is running in a subclass.
+   */
+  Context& GetContext ();
+
+  /**
+   * Returns a read-only version of the Context.  This can be used in case
+   * some callback functions are marked as const.
+   */
+  const Context& GetContext () const;
 
   /**
    * Returns the initial state (as well as the associated block height
