@@ -59,6 +59,11 @@ protected:
   /** The stack of undo data for the simulated blockchain.  */
   std::stack<UndoData> undoStack;
 
+  CachingGameTests ()
+  {
+    game.SetGameId ("replacing game");
+  }
+
   /**
    * Processes the state forward using game and the simulated blockchain.
    */
@@ -90,6 +95,10 @@ protected:
   static Json::Value
   Move (const std::string& value)
   {
+    Json::Value block(Json::objectValue);
+    block["rngseed"]
+        = "0000000000000000000000000000000000000000000000000000000000000001";
+
     Json::Value move(Json::objectValue);
     move["move"] = value;
 
@@ -97,6 +106,7 @@ protected:
     moves.append (move);
 
     Json::Value data(Json::objectValue);
+    data["block"] = block;
     data["moves"] = moves;
 
     return data;
@@ -108,7 +118,12 @@ protected:
   static Json::Value
   NoMove ()
   {
+    Json::Value block(Json::objectValue);
+    block["rngseed"]
+        = "0000000000000000000000000000000000000000000000000000000000000001";
+
     Json::Value data(Json::objectValue);
+    data["block"] = block;
     data["moves"] = Json::Value (Json::arrayValue);
     return data;
   }
