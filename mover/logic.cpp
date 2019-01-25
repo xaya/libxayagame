@@ -16,7 +16,8 @@ namespace mover
 GameStateData
 MoverLogic::GetInitialStateInternal (unsigned& height, std::string& hashHex)
 {
-  switch (GetChain ())
+  const Chain chain = GetContext ().GetChain ();
+  switch (chain)
     {
     case Chain::MAIN:
       height = 125000;
@@ -37,7 +38,7 @@ MoverLogic::GetInitialStateInternal (unsigned& height, std::string& hashHex)
       break;
 
     default:
-      LOG (FATAL) << "Unexpected chain: " << ChainToString (GetChain ());
+      LOG (FATAL) << "Unexpected chain: " << ChainToString (chain);
     }
 
   /* In all cases, the initial game state is just empty.  */

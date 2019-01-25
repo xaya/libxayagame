@@ -182,7 +182,8 @@ protected:
   GetInitialStateInternal (unsigned& height, std::string& hashHex) override
   {
     CHECK (callbacks.GetInitialState != nullptr);
-    return callbacks.GetInitialState (GetChain (), height, hashHex);
+    return callbacks.GetInitialState (GetContext ().GetChain (),
+                                      height, hashHex);
   }
 
   GameStateData
@@ -191,8 +192,8 @@ protected:
                           UndoData& undoData) override
   {
     CHECK (callbacks.ProcessForward != nullptr);
-    return callbacks.ProcessForward (GetChain (), oldState,
-                                     blockData, undoData);
+    return callbacks.ProcessForward (GetContext ().GetChain (),
+                                     oldState, blockData, undoData);
   }
 
   GameStateData
@@ -201,8 +202,8 @@ protected:
                             const UndoData& undoData) override
   {
     CHECK (callbacks.ProcessBackwards != nullptr);
-    return callbacks.ProcessBackwards (GetChain (), oldState,
-                                       blockData, undoData);
+    return callbacks.ProcessBackwards (GetContext ().GetChain (),
+                                       oldState, blockData, undoData);
   }
 
 public:

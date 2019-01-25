@@ -69,7 +69,10 @@ public:
   void operator= (const Context&) = delete;
 
   /**
-   * Returns the chain that the game is running on.
+   * Returns the chain that the game is running on.  Where possible, this
+   * should be accessed through Context.  But in some situations there
+   * is no context (e.g. SQLiteGame::GetInitialStateBlock), but the chain
+   * might still be important.
    */
   Chain GetChain () const;
 
@@ -119,7 +122,7 @@ private:
 
   /**
    * The chain that the game is running on.  This may influence the rules
-   * and is provided via GetChain.
+   * and is provided via the Context.
    */
   Chain chain = Chain::UNKNOWN;
 
