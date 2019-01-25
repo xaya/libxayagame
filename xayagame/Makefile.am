@@ -15,9 +15,11 @@ BUILT_SOURCES = $(RPC_STUBS)
 CLEANFILES = $(RPC_STUBS)
 
 libxayagame_la_CXXFLAGS = \
+  $(OPENSSL_CFLAGS) \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
   $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
 libxayagame_la_LIBADD = \
+  $(OPENSSL_LIBS) \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS) \
   -lstdc++fs
@@ -26,6 +28,7 @@ libxayagame_la_SOURCES = \
   game.cpp \
   gamelogic.cpp \
   gamerpcserver.cpp \
+  hash.cpp \
   heightcache.cpp \
   lmdbstorage.cpp \
   mainloop.cpp \
@@ -41,6 +44,7 @@ xayagame_HEADERS = \
   game.hpp \
   gamelogic.hpp \
   gamerpcserver.hpp \
+  hash.hpp \
   heightcache.hpp \
   lmdbstorage.hpp \
   mainloop.hpp \
@@ -69,6 +73,7 @@ tests_LDADD = $(builddir)/libxayagame.la \
 tests_SOURCES = testutils.cpp \
   game_tests.cpp \
   gamelogic_tests.cpp \
+  hash_tests.cpp \
   heightcache_tests.cpp \
   lmdbstorage_tests.cpp \
   mainloop_tests.cpp \
