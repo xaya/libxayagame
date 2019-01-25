@@ -1,11 +1,13 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef XAYAGAME_GAMELOGIC_HPP
 #define XAYAGAME_GAMELOGIC_HPP
 
+#include "random.hpp"
 #include "storage.hpp"
+#include "uint256.hpp"
 
 #include <json/json.h>
 
@@ -13,6 +15,8 @@
 
 namespace xaya
 {
+
+class GameLogic;
 
 /**
  * The possible chains on which a game can be in the Xaya network.
@@ -31,6 +35,64 @@ enum class Chain
  * on the chain.
  */
 std::string ChainToString (Chain c);
+
+/**
+ * Context for a call to the callbacks of the GameLogic class.  This is
+ * provided by GameLogic itself so that the implementing subclasses can
+ * access certain additional information.
+ */
+class Context
+{
+
+private:
+
+  /**
+   * Reference to the GameLogic instance.  This is used to access some static
+   * data there, like the chain or game ID.
+   */
+  const GameLogic& logic;
+
+  /** Random-number generator for the current block.  */
+  Random rnd;
+
+  /**
+   * Constructs a context.  This is done by the GameLogic class.
+   */
+  Context (const GameLogic& l, const uint256& rndSeed);
+
+  friend class GameLogic;
+
+public:
+
+  Context () = delete;
+  Context (const Context&) = delete;
+  void operator= (const Context&) = delete;
+
+  /**
+   * Returns the chain that the game is running on.  Where possible, this
+   * should be accessed through Context.  But in some situations there
+   * is no context (e.g. SQLiteGame::GetInitialStateBlock), but the chain
+   * might still be important.
+   */
+  Chain GetChain () const;
+
+  /**
+   * Returns the game ID of the running game instance.
+   */
+  const std::string& GetGameId () const;
+
+  /**
+   * Returns a reference to a random-number generator that is seeded
+   * specifically for the current context (initial-state computation
+   * or a particular block that is being attached / detached).
+   */
+  Random&
+  GetRandom ()
+  {
+    return rnd;
+  }
+
+};
 
 /**
  * The interface for actual games.  Implementing classes define the rules
@@ -56,11 +118,24 @@ class GameLogic
 
 private:
 
+  class ContextSetter;
+
   /**
    * The chain that the game is running on.  This may influence the rules
-   * and is provided via GetChain.
+   * and is provided via the Context.
    */
   Chain chain = Chain::UNKNOWN;
+
+  /**
+   * The game id of the connected game.  This is used to seed the random
+   * number generator.
+   */
+  std::string gameId;
+
+  /** Current Context instance if any.  */
+  Context* ctx = nullptr;
+
+  friend class Context;
 
 protected:
 
@@ -68,6 +143,50 @@ protected:
    * Returns the chain the game is running on.
    */
   Chain GetChain () const;
+
+  /**
+   * Returns the current Context instance.  This function must only be
+   * called while one of the Internal callbacks is running in a subclass.
+   */
+  Context& GetContext ();
+
+  /**
+   * Returns a read-only version of the Context.  This can be used in case
+   * some callback functions are marked as const.
+   */
+  const Context& GetContext () const;
+
+  /**
+   * Returns the initial state (as well as the associated block height
+   * and block hash in big-endian hex) for the game.
+   */
+  virtual GameStateData GetInitialStateInternal (unsigned& height,
+                                                 std::string& hashHex) = 0;
+
+  /**
+   * Processes the game logic forward in time:  From an old state and moves
+   * (actually, the JSON data sent for block attaches; it includes the moves
+   * but also other things like the rngseed), the new state has to be computed.
+   *
+   * The passed in oldState is either an initial state as returned by
+   * GetInitialState (if neither ProcessForward nor ProcessBackwards have been
+   * called yet), or the last state returned from ProcessForward
+   * or ProcessBackwards.
+   */
+  virtual GameStateData ProcessForwardInternal (const GameStateData& oldState,
+                                                const Json::Value& blockData,
+                                                UndoData& undoData) = 0;
+
+  /**
+   * Processes the game logic backwards in time:  Compute the previous
+   * game state from the "new" one, the moves and the undo data.
+   *
+   * The passed in newState is the state that was returned by the last
+   * call to ProcessForward or ProcessBackwards.
+   */
+  virtual GameStateData ProcessBackwardsInternal (const GameStateData& newState,
+                                                  const Json::Value& blockData,
+                                                  const UndoData& undoData) = 0;
 
 public:
 
@@ -84,36 +203,38 @@ public:
   void SetChain (Chain c);
 
   /**
-   * Returns the initial state (as well as the associated block height
-   * and block hash in big-endian hex) for the game.
+   * Sets the game id.  This is called by the Game instance after connecting
+   * the game rules to it.
+   *
+   * If it was already set, then it must not be changed to some other value
+   * afterwards anymore.
    */
-  virtual GameStateData GetInitialState (unsigned& height,
-                                         std::string& hashHex) = 0;
+  void SetGameId (const std::string& id);
 
   /**
-   * Processes the game logic forward in time:  From an old state and moves
-   * (actually, the JSON data sent for block attaches; it includes the moves
-   * but also other things like the rngseed), the new state has to be computed.
-   *
-   * The passed in oldState is either an initial state as returned by
-   * GetInitialState (if neither ProcessForward nor ProcessBackwards have been
-   * called yet), or the last state returned from ProcessForward
-   * or ProcessBackwards.
+   * Returns the initial state for the game.  This is the function that is
+   * called externally.  It sets up a Context instance and then calls
+   * through to GetInitialStateInternal.
    */
-  virtual GameStateData ProcessForward (const GameStateData& oldState,
-                                        const Json::Value& blockData,
-                                        UndoData& undoData) = 0;
+  GameStateData GetInitialState (unsigned& height, std::string& hashHex);
 
   /**
-   * Processes the game logic backwards in time:  Compute the previous
-   * game state from the "new" one, the moves and the undo data.
-   *
-   * The passed in newState is the state that was returned by the last
-   * call to ProcessForward or ProcessBackwards.
+   * Processes the game state forward in time.  This method should be
+   * called externally for this.  It sets up a Context instance and then
+   * delegates the actual work to ProcessForwardInternal.
    */
-  virtual GameStateData ProcessBackwards (const GameStateData& newState,
-                                          const Json::Value& blockData,
-                                          const UndoData& undoData) = 0;
+  GameStateData ProcessForward (const GameStateData& oldState,
+                                const Json::Value& blockData,
+                                UndoData& undoData);
+
+  /**
+   * Processes the game state backwards in time (for reorgs).  This function
+   * should be called externally.  It handles the Context setup and then
+   * does the actual work through ProcessBackwardsInternal.
+   */
+  GameStateData ProcessBackwards (const GameStateData& newState,
+                                  const Json::Value& blockData,
+                                  const UndoData& undoData);
 
   /**
    * Converts an encoded game state to JSON format, which can be returned as
@@ -148,14 +269,12 @@ protected:
   virtual GameStateData UpdateState (const GameStateData& oldState,
                                      const Json::Value& blockData) = 0;
 
-public:
-
-  GameStateData ProcessForward (const GameStateData& oldState,
-                                const Json::Value& blockData,
-                                UndoData& undoData) override;
-  GameStateData ProcessBackwards (const GameStateData& newState,
-                                  const Json::Value& blockData,
-                                  const UndoData& undoData) override;
+  GameStateData ProcessForwardInternal (const GameStateData& oldState,
+                                        const Json::Value& blockData,
+                                        UndoData& undoData) override;
+  GameStateData ProcessBackwardsInternal (const GameStateData& newState,
+                                          const Json::Value& blockData,
+                                          const UndoData& undoData) override;
 
 };
 

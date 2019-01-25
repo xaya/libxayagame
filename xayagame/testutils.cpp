@@ -46,6 +46,7 @@ GameTestFixture::CallBlockAttach (Game& g, const std::string& reqToken,
   block["hash"] = blockHash.ToHex ();
   block["parent"] = parentHash.ToHex ();
   block["height"] = height;
+  block["rngseed"] = blockHash.ToHex ();
 
   Json::Value data(Json::objectValue);
   if (!reqToken.empty ())
@@ -68,6 +69,7 @@ GameTestFixture::CallBlockDetach (Game& g, const std::string& reqToken,
   block["hash"] = blockHash.ToHex ();
   block["parent"] = parentHash.ToHex ();
   block["height"] = height;
+  block["rngseed"] = blockHash.ToHex ();
 
   Json::Value data(Json::objectValue);
   if (!reqToken.empty ())

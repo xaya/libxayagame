@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -183,6 +183,7 @@ TEST (InitialStateTests, IsEmpty)
   for (const auto chain : {Chain::MAIN, Chain::TEST, Chain::REGTEST})
     {
       MoverLogic rules;
+      rules.SetGameId ("mv");
       rules.SetChain (chain);
 
       unsigned height;
@@ -245,6 +246,7 @@ protected:
 
   StateProcessingTests ()
   {
+    rules.SetGameId ("mv");
     rules.SetChain (Chain::MAIN);
 
     unsigned height;
@@ -295,7 +297,13 @@ protected:
         elem["move"] = moves[nm];
         moveArray.append (elem);
       }
+
+    Json::Value blk(Json::objectValue);
+    blk["rngseed"]
+        = "0000000000000000000000000000000000000000000000000000000000000001";
+
     d.blockData = Json::Value (Json::objectValue);
+    d.blockData["block"] = blk;
     d.blockData["moves"] = moveArray;
 
     proto::GameState expectedStatePb;

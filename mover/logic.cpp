@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,9 +14,10 @@ namespace mover
 {
 
 GameStateData
-MoverLogic::GetInitialState (unsigned& height, std::string& hashHex)
+MoverLogic::GetInitialStateInternal (unsigned& height, std::string& hashHex)
 {
-  switch (GetChain ())
+  const Chain chain = GetContext ().GetChain ();
+  switch (chain)
     {
     case Chain::MAIN:
       height = 125000;
@@ -37,7 +38,7 @@ MoverLogic::GetInitialState (unsigned& height, std::string& hashHex)
       break;
 
     default:
-      LOG (FATAL) << "Unexpected chain: " << ChainToString (GetChain ());
+      LOG (FATAL) << "Unexpected chain: " << ChainToString (chain);
     }
 
   /* In all cases, the initial game state is just empty.  */
@@ -197,8 +198,9 @@ MoverLogic::ParseMove (const Json::Value& obj,
 }
 
 GameStateData
-MoverLogic::ProcessForward (const GameStateData& oldState,
-                            const Json::Value& blockData, UndoData& undoData)
+MoverLogic::ProcessForwardInternal (const GameStateData& oldState,
+                                    const Json::Value& blockData,
+                                    UndoData& undoData)
 {
   proto::GameState state;
   CHECK (state.ParseFromString (oldState));
@@ -278,9 +280,9 @@ MoverLogic::ProcessForward (const GameStateData& oldState,
 }
 
 GameStateData
-MoverLogic::ProcessBackwards (const GameStateData& newState,
-                              const Json::Value& blockData,
-                              const UndoData& undoData)
+MoverLogic::ProcessBackwardsInternal (const GameStateData& newState,
+                                      const Json::Value& blockData,
+                                      const UndoData& undoData)
 {
   proto::GameState state;
   CHECK (state.ParseFromString (newState));

@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -176,36 +176,41 @@ private:
   /** The callback pointers.  */
   const GameLogicCallbacks& callbacks;
 
+protected:
+
+  GameStateData
+  GetInitialStateInternal (unsigned& height, std::string& hashHex) override
+  {
+    CHECK (callbacks.GetInitialState != nullptr);
+    return callbacks.GetInitialState (GetContext ().GetChain (),
+                                      height, hashHex);
+  }
+
+  GameStateData
+  ProcessForwardInternal (const GameStateData& oldState,
+                          const Json::Value& blockData,
+                          UndoData& undoData) override
+  {
+    CHECK (callbacks.ProcessForward != nullptr);
+    return callbacks.ProcessForward (GetContext ().GetChain (),
+                                     oldState, blockData, undoData);
+  }
+
+  GameStateData
+  ProcessBackwardsInternal (const GameStateData& oldState,
+                            const Json::Value& blockData,
+                            const UndoData& undoData) override
+  {
+    CHECK (callbacks.ProcessBackwards != nullptr);
+    return callbacks.ProcessBackwards (GetContext ().GetChain (),
+                                       oldState, blockData, undoData);
+  }
+
 public:
 
   explicit CallbackGameLogic (const GameLogicCallbacks& cb)
     : callbacks(cb)
   {}
-
-  GameStateData
-  GetInitialState (unsigned& height, std::string& hashHex)
-  {
-    CHECK (callbacks.GetInitialState != nullptr);
-    return callbacks.GetInitialState (GetChain (), height, hashHex);
-  }
-
-  GameStateData
-  ProcessForward (const GameStateData& oldState, const Json::Value& blockData,
-                  UndoData& undoData) override
-  {
-    CHECK (callbacks.ProcessForward != nullptr);
-    return callbacks.ProcessForward (GetChain (), oldState,
-                                     blockData, undoData);
-  }
-
-  GameStateData
-  ProcessBackwards (const GameStateData& oldState, const Json::Value& blockData,
-                    const UndoData& undoData) override
-  {
-    CHECK (callbacks.ProcessBackwards != nullptr);
-    return callbacks.ProcessBackwards (GetChain (), oldState,
-                                       blockData, undoData);
-  }
 
   Json::Value
   GameStateToJson (const GameStateData& state) override

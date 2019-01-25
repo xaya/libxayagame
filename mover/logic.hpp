@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -34,18 +34,20 @@ private:
 
   friend class ParseMoveTests;
 
+protected:
+
+  xaya::GameStateData GetInitialStateInternal (unsigned& height,
+                                               std::string& hashHex) override;
+
+  xaya::GameStateData ProcessForwardInternal (
+      const xaya::GameStateData& oldState, const Json::Value& blockData,
+      xaya::UndoData& undo) override;
+
+  xaya::GameStateData ProcessBackwardsInternal (
+      const xaya::GameStateData& newState, const Json::Value& blockData,
+      const xaya::UndoData& undo) override;
+
 public:
-
-  xaya::GameStateData GetInitialState (unsigned& height,
-                                       std::string& hashHex) override;
-
-  xaya::GameStateData ProcessForward (const xaya::GameStateData& oldState,
-                                      const Json::Value& blockData,
-                                      xaya::UndoData& undo) override;
-
-  xaya::GameStateData ProcessBackwards (const xaya::GameStateData& newState,
-                                        const Json::Value& blockData,
-                                        const xaya::UndoData& undo) override;
 
   Json::Value GameStateToJson (const xaya::GameStateData& state) override;
 

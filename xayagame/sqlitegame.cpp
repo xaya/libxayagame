@@ -249,7 +249,7 @@ SQLiteGame::GetStorage ()
 }
 
 GameStateData
-SQLiteGame::GetInitialState (unsigned& height, std::string& hashHex)
+SQLiteGame::GetInitialStateInternal (unsigned& height, std::string& hashHex)
 {
   GetInitialStateBlock (height, hashHex);
   return INITIAL_STATE;
@@ -319,9 +319,9 @@ public:
 } // anonymous namespace
 
 GameStateData
-SQLiteGame::ProcessForward (const GameStateData& oldState,
-                            const Json::Value& blockData,
-                            UndoData& undo)
+SQLiteGame::ProcessForwardInternal (const GameStateData& oldState,
+                                    const Json::Value& blockData,
+                                    UndoData& undo)
 {
   database->EnsureCurrentState (oldState);
 
@@ -402,9 +402,9 @@ public:
 } // anonymous namespace
 
 GameStateData
-SQLiteGame::ProcessBackwards (const GameStateData& newState,
-                              const Json::Value& blockData,
-                              const UndoData& undo)
+SQLiteGame::ProcessBackwardsInternal (const GameStateData& newState,
+                                      const Json::Value& blockData,
+                                      const UndoData& undo)
 {
   database->EnsureCurrentState (newState);
 

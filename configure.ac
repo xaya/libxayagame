@@ -35,6 +35,7 @@ AX_PKG_CHECK_MODULES([LMDB], [lmdb], [])
 
 # Private dependencies of the library itself.
 AX_PKG_CHECK_MODULES([GLOG], [], [libglog])
+AX_PKG_CHECK_MODULES([OPENSSL], [], [openssl])
 AX_PKG_CHECK_MODULES([ZMQ], [], [libzmq])
 
 # Private dependencies that are not needed for libxayagame, but only for
