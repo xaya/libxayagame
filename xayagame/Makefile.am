@@ -33,6 +33,7 @@ libxayagame_la_SOURCES = \
   lmdbstorage.cpp \
   mainloop.cpp \
   pruningqueue.cpp \
+  random.cpp \
   sqlitegame.cpp \
   sqlitestorage.cpp \
   storage.cpp \
@@ -49,6 +50,7 @@ xayagame_HEADERS = \
   lmdbstorage.hpp \
   mainloop.hpp \
   pruningqueue.hpp \
+  random.hpp \
   sqlitegame.hpp \
   sqlitestorage.hpp \
   storage.hpp \
@@ -78,6 +80,7 @@ tests_SOURCES = testutils.cpp \
   lmdbstorage_tests.cpp \
   mainloop_tests.cpp \
   pruningqueue_tests.cpp \
+  random_tests.cpp \
   sqlitegame_tests.cpp \
   sqlitestorage_tests.cpp \
   storage_tests.cpp \
