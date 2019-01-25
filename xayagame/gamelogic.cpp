@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,8 @@
 
 namespace xaya
 {
+
+/* ************************************************************************** */
 
 std::string
 ChainToString (const Chain c)
@@ -27,6 +29,8 @@ ChainToString (const Chain c)
   LOG (FATAL) << "Invalid chain enum value: " << static_cast<int> (c);
 }
 
+/* ************************************************************************** */
+
 Chain
 GameLogic::GetChain () const
 {
@@ -42,16 +46,40 @@ GameLogic::SetChain (const Chain c)
   chain = c;
 }
 
+GameStateData
+GameLogic::GetInitialState (unsigned& height, std::string& hashHex)
+{
+  return GetInitialStateInternal (height, hashHex);
+}
+
+GameStateData
+GameLogic::ProcessForward (const GameStateData& oldState,
+                           const Json::Value& blockData,
+                           UndoData& undoData)
+{
+  return ProcessForwardInternal (oldState, blockData, undoData);
+}
+
+GameStateData
+GameLogic::ProcessBackwards (const GameStateData& newState,
+                             const Json::Value& blockData,
+                             const UndoData& undoData)
+{
+  return ProcessBackwardsInternal (newState, blockData, undoData);
+}
+
 Json::Value
 GameLogic::GameStateToJson (const GameStateData& state)
 {
   return state;
 }
 
+/* ************************************************************************** */
+
 GameStateData
-CachingGame::ProcessForward (const GameStateData& oldState,
-                             const Json::Value& blockData,
-                             UndoData& undoData)
+CachingGame::ProcessForwardInternal (const GameStateData& oldState,
+                                     const Json::Value& blockData,
+                                     UndoData& undoData)
 {
   const GameStateData newState = UpdateState (oldState, blockData);
   undoData = UndoData (oldState);
@@ -59,11 +87,13 @@ CachingGame::ProcessForward (const GameStateData& oldState,
 }
 
 GameStateData
-CachingGame::ProcessBackwards (const GameStateData& newState,
-                               const Json::Value& blockData,
-                               const UndoData& undoData)
+CachingGame::ProcessBackwardsInternal (const GameStateData& newState,
+                                       const Json::Value& blockData,
+                                       const UndoData& undoData)
 {
   return GameStateData (undoData);
 }
+
+/* ************************************************************************** */
 
 } // namespace xaya

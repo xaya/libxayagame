@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -37,10 +37,8 @@ protected:
     return blockData["moves"][0]["move"].asString ();
   }
 
-public:
-
   GameStateData
-  GetInitialState (unsigned& height, std::string& hashHex) override
+  GetInitialStateInternal (unsigned& height, std::string& hashHex) override
   {
     LOG (FATAL) << "This should not be called by the test";
   }

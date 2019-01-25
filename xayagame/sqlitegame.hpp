@@ -141,6 +141,17 @@ protected:
       const Game& game, const std::string& jsonField,
       const std::function<Json::Value (sqlite3*)>& cb);
 
+  GameStateData GetInitialStateInternal (unsigned& height,
+                                         std::string& hashHex) override;
+
+  GameStateData ProcessForwardInternal (const GameStateData& oldState,
+                                        const Json::Value& blockData,
+                                        UndoData& undo) override;
+
+  GameStateData ProcessBackwardsInternal (const GameStateData& newState,
+                                          const Json::Value& blockData,
+                                          const UndoData& undo) override;
+
 public:
 
   /** Type for automatically generated IDs.  */
@@ -161,17 +172,6 @@ public:
    * as main storage in Game.
    */
   StorageInterface* GetStorage ();
-
-  GameStateData GetInitialState (unsigned& height,
-                                 std::string& hashHex) override;
-
-  GameStateData ProcessForward (const GameStateData& oldState,
-                                const Json::Value& blockData,
-                                UndoData& undo) override;
-
-  GameStateData ProcessBackwards (const GameStateData& newState,
-                                  const Json::Value& blockData,
-                                  const UndoData& undo) override;
 
   Json::Value GameStateToJson (const GameStateData& state) override;
 

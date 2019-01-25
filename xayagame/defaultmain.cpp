@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -176,22 +176,19 @@ private:
   /** The callback pointers.  */
   const GameLogicCallbacks& callbacks;
 
-public:
-
-  explicit CallbackGameLogic (const GameLogicCallbacks& cb)
-    : callbacks(cb)
-  {}
+protected:
 
   GameStateData
-  GetInitialState (unsigned& height, std::string& hashHex)
+  GetInitialStateInternal (unsigned& height, std::string& hashHex) override
   {
     CHECK (callbacks.GetInitialState != nullptr);
     return callbacks.GetInitialState (GetChain (), height, hashHex);
   }
 
   GameStateData
-  ProcessForward (const GameStateData& oldState, const Json::Value& blockData,
-                  UndoData& undoData) override
+  ProcessForwardInternal (const GameStateData& oldState,
+                          const Json::Value& blockData,
+                          UndoData& undoData) override
   {
     CHECK (callbacks.ProcessForward != nullptr);
     return callbacks.ProcessForward (GetChain (), oldState,
@@ -199,13 +196,20 @@ public:
   }
 
   GameStateData
-  ProcessBackwards (const GameStateData& oldState, const Json::Value& blockData,
-                    const UndoData& undoData) override
+  ProcessBackwardsInternal (const GameStateData& oldState,
+                            const Json::Value& blockData,
+                            const UndoData& undoData) override
   {
     CHECK (callbacks.ProcessBackwards != nullptr);
     return callbacks.ProcessBackwards (GetChain (), oldState,
                                        blockData, undoData);
   }
+
+public:
+
+  explicit CallbackGameLogic (const GameLogicCallbacks& cb)
+    : callbacks(cb)
+  {}
 
   Json::Value
   GameStateToJson (const GameStateData& state) override

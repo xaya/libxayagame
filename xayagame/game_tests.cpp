@@ -234,10 +234,10 @@ private:
     return res.str ();
   }
 
-public:
+protected:
 
   GameStateData
-  GetInitialState (unsigned& height, std::string& hashHex) override
+  GetInitialStateInternal (unsigned& height, std::string& hashHex) override
   {
     CHECK (GetChain () == Chain::MAIN);
     height = GAME_GENESIS_HEIGHT;
@@ -246,8 +246,9 @@ public:
   }
 
   GameStateData
-  ProcessForward (const GameStateData& oldState, const Json::Value& blockData,
-                  UndoData& undoData) override
+  ProcessForwardInternal (const GameStateData& oldState,
+                          const Json::Value& blockData,
+                          UndoData& undoData) override
   {
     CHECK (GetChain () == Chain::MAIN);
 
@@ -278,8 +279,9 @@ public:
   }
 
   GameStateData
-  ProcessBackwards (const GameStateData& newState, const Json::Value& blockData,
-                    const UndoData& undoData) override
+  ProcessBackwardsInternal (const GameStateData& newState,
+                            const Json::Value& blockData,
+                            const UndoData& undoData) override
   {
     CHECK (GetChain () == Chain::MAIN);
 
@@ -296,6 +298,8 @@ public:
 
     return EncodeMap (state);
   }
+
+public:
 
   Json::Value
   GameStateToJson (const GameStateData& state) override

@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -69,6 +69,38 @@ protected:
    */
   Chain GetChain () const;
 
+  /**
+   * Returns the initial state (as well as the associated block height
+   * and block hash in big-endian hex) for the game.
+   */
+  virtual GameStateData GetInitialStateInternal (unsigned& height,
+                                                 std::string& hashHex) = 0;
+
+  /**
+   * Processes the game logic forward in time:  From an old state and moves
+   * (actually, the JSON data sent for block attaches; it includes the moves
+   * but also other things like the rngseed), the new state has to be computed.
+   *
+   * The passed in oldState is either an initial state as returned by
+   * GetInitialState (if neither ProcessForward nor ProcessBackwards have been
+   * called yet), or the last state returned from ProcessForward
+   * or ProcessBackwards.
+   */
+  virtual GameStateData ProcessForwardInternal (const GameStateData& oldState,
+                                                const Json::Value& blockData,
+                                                UndoData& undoData) = 0;
+
+  /**
+   * Processes the game logic backwards in time:  Compute the previous
+   * game state from the "new" one, the moves and the undo data.
+   *
+   * The passed in newState is the state that was returned by the last
+   * call to ProcessForward or ProcessBackwards.
+   */
+  virtual GameStateData ProcessBackwardsInternal (const GameStateData& newState,
+                                                  const Json::Value& blockData,
+                                                  const UndoData& undoData) = 0;
+
 public:
 
   GameLogic () = default;
@@ -84,36 +116,29 @@ public:
   void SetChain (Chain c);
 
   /**
-   * Returns the initial state (as well as the associated block height
-   * and block hash in big-endian hex) for the game.
+   * Returns the initial state for the game.  This is the function that is
+   * called externally.  It sets up a Context instance and then calls
+   * through to GetInitialStateInternal.
    */
-  virtual GameStateData GetInitialState (unsigned& height,
-                                         std::string& hashHex) = 0;
+  GameStateData GetInitialState (unsigned& height, std::string& hashHex);
 
   /**
-   * Processes the game logic forward in time:  From an old state and moves
-   * (actually, the JSON data sent for block attaches; it includes the moves
-   * but also other things like the rngseed), the new state has to be computed.
-   *
-   * The passed in oldState is either an initial state as returned by
-   * GetInitialState (if neither ProcessForward nor ProcessBackwards have been
-   * called yet), or the last state returned from ProcessForward
-   * or ProcessBackwards.
+   * Processes the game state forward in time.  This method should be
+   * called externally for this.  It sets up a Context instance and then
+   * delegates the actual work to ProcessForwardInternal.
    */
-  virtual GameStateData ProcessForward (const GameStateData& oldState,
-                                        const Json::Value& blockData,
-                                        UndoData& undoData) = 0;
+  GameStateData ProcessForward (const GameStateData& oldState,
+                                const Json::Value& blockData,
+                                UndoData& undoData);
 
   /**
-   * Processes the game logic backwards in time:  Compute the previous
-   * game state from the "new" one, the moves and the undo data.
-   *
-   * The passed in newState is the state that was returned by the last
-   * call to ProcessForward or ProcessBackwards.
+   * Processes the game state backwards in time (for reorgs).  This function
+   * should be called externally.  It handles the Context setup and then
+   * does the actual work through ProcessBackwardsInternal.
    */
-  virtual GameStateData ProcessBackwards (const GameStateData& newState,
-                                          const Json::Value& blockData,
-                                          const UndoData& undoData) = 0;
+  GameStateData ProcessBackwards (const GameStateData& newState,
+                                  const Json::Value& blockData,
+                                  const UndoData& undoData);
 
   /**
    * Converts an encoded game state to JSON format, which can be returned as
@@ -148,14 +173,12 @@ protected:
   virtual GameStateData UpdateState (const GameStateData& oldState,
                                      const Json::Value& blockData) = 0;
 
-public:
-
-  GameStateData ProcessForward (const GameStateData& oldState,
-                                const Json::Value& blockData,
-                                UndoData& undoData) override;
-  GameStateData ProcessBackwards (const GameStateData& newState,
-                                  const Json::Value& blockData,
-                                  const UndoData& undoData) override;
+  GameStateData ProcessForwardInternal (const GameStateData& oldState,
+                                        const Json::Value& blockData,
+                                        UndoData& undoData) override;
+  GameStateData ProcessBackwardsInternal (const GameStateData& newState,
+                                          const Json::Value& blockData,
+                                          const UndoData& undoData) override;
 
 };
 
