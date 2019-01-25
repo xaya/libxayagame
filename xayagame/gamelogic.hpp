@@ -62,6 +62,12 @@ private:
    */
   Chain chain = Chain::UNKNOWN;
 
+  /**
+   * The game id of the connected game.  This is used to seed the random
+   * number generator.
+   */
+  std::string gameId;
+
 protected:
 
   /**
@@ -114,6 +120,15 @@ public:
    * during the lifetime of the object.
    */
   void SetChain (Chain c);
+
+  /**
+   * Sets the game id.  This is called by the Game instance after connecting
+   * the game rules to it.
+   *
+   * If it was already set, then it must not be changed to some other value
+   * afterwards anymore.
+   */
+  void SetGameId (const std::string& id);
 
   /**
    * Returns the initial state for the game.  This is the function that is

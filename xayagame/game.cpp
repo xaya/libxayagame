@@ -400,6 +400,7 @@ Game::SetGameLogic (GameLogic* gl)
   std::lock_guard<std::mutex> lock(mut);
   CHECK (!mainLoop.IsRunning ());
   rules = gl;
+  rules->SetGameId (gameId);
   if (chain != Chain::UNKNOWN)
     rules->SetChain (chain);
 }
