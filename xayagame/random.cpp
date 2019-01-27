@@ -9,6 +9,7 @@
 #include <glog/logging.h>
 
 #include <cstdint>
+#include <limits>
 
 namespace xaya
 {
@@ -84,6 +85,29 @@ template <>
   Random::Next<uint64_t> ()
 {
   return CombineHalfInts<uint64_t, uint32_t, 32> (*this);
+}
+
+uint32_t
+Random::NextInt (const uint32_t n)
+{
+  CHECK_GT (n, 0);
+
+  /* If we just take a random uint64 x and return "x % n", then smaller numbers
+     are (very slightly) more probable than larger ones.  But if we make sure
+     that x is from a range [0, m) where m is a multiple of n, then all
+     numbers are equally likely to occur from the mod.  We can achieve this
+     by rerolling x if it is larger than m.  This is negligible probability of
+     occuring, so it is not hard performance wise either.  */
+
+  const uint64_t factor = std::numeric_limits<uint64_t>::max () / n;
+  const uint64_t m = factor * n;
+
+  while (true)
+    {
+      const uint64_t x = Next<uint64_t> ();
+      if (x < m)
+        return x % n;
+    }
 }
 
 } // namespace xaya

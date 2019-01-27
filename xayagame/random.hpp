@@ -51,6 +51,12 @@ public:
   template <typename T>
     T Next ();
 
+  /**
+   * Returns a random integer i with 0 <= i < n based on this instance's
+   * random number stream.
+   */
+  uint32_t NextInt (uint32_t n);
+
 };
 
 } // namespace xaya

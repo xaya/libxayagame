@@ -8,6 +8,8 @@
 
 #include <glog/logging.h>
 
+#include <limits>
+
 namespace xaya
 {
 namespace
@@ -62,6 +64,36 @@ TEST_F (RandomTests, Integers)
   ASSERT_EQ (rnd.Next<uint16_t> (), 0x7ca2);
   ASSERT_EQ (rnd.Next<uint32_t> (), 0x2c166534);
   ASSERT_EQ (rnd.Next<uint64_t> (), 0x9f6c2cf40c7f7923);
+}
+
+TEST_F (RandomTests, NextInt)
+{
+  constexpr unsigned n = 10;
+  constexpr unsigned rolls = 10000;
+  constexpr unsigned threshold = rolls / n * 80 / 100;
+
+  std::vector<unsigned> cnt(n);
+  for (unsigned i = 0; i < rolls; ++i)
+    ++cnt[rnd.NextInt (n)];
+
+  for (unsigned i = 0; i < n; ++i)
+    {
+      LOG (INFO) << "Count for " << i << ": " << cnt[i];
+      EXPECT_GE (cnt[i], threshold);
+    }
+}
+
+TEST_F (RandomTests, NextIntLargeN)
+{
+  constexpr uint32_t n = std::numeric_limits<uint32_t>::max ();
+  constexpr unsigned rolls = 1000;
+  constexpr uint32_t threshold = 4000000000;
+
+  for (unsigned i = 0; i < rolls; ++i)
+    if (rnd.NextInt (n) >= threshold)
+      return;
+
+  FAIL () << "Threshold has never been exceeded";
 }
 
 } // anonymous namespace
