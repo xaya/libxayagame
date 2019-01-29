@@ -6,7 +6,9 @@
 
 #include <glog/logging.h>
 
+#include <chrono>
 #include <sstream>
+#include <thread>
 
 namespace xaya
 {
@@ -549,6 +551,11 @@ Game::Stop ()
   /* Make sure to wake up all listeners waiting for a state update (as there
      won't be one anymore).  */
   NotifyStateChange ();
+
+  /* Sleep a bit before really "stopping" the game.  This gives the RPC server
+     time to reply to waitforchange calls (after the notification above)
+     before it is stopped.  */
+  std::this_thread::sleep_for (std::chrono::milliseconds (10));
 }
 
 void

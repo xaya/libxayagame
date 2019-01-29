@@ -33,6 +33,7 @@ class ForChangeWaiter (threading.Thread):
     self.node = node
     self.result = None
     self.start ()
+    sleepSome ()
 
   def run (self):
     rpc = self.node.createRpc ()
