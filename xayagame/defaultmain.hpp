@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -25,8 +25,6 @@ enum class RpcServerType
   NONE = 0,
   /** Start a JSON-RPC server listening through HTTP.  */
   HTTP = 1,
-  /** Start a JSON-RPC server listening through a plain TCP socket.  */
-  TCP = 2,
 };
 
 /**
