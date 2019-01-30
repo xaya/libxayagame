@@ -10,7 +10,6 @@
 #include "sqlitestorage.hpp"
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/tcpsocketserver.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <glog/logging.h>
@@ -92,14 +91,6 @@ CreateRpcServerConnector (const GameDaemonConfiguration& config)
       LOG (INFO)
           << "Starting JSON-RPC HTTP server at port " << config.GameRpcPort;
       return std::make_unique<jsonrpc::HttpServer> (config.GameRpcPort);
-
-    case RpcServerType::TCP:
-      CHECK (config.GameRpcPort != 0)
-          << "GameRpcPort must be specified for TCP server type";
-      LOG (INFO)
-          << "Starting JSON-RPC TCP server at port " << config.GameRpcPort;
-      return std::make_unique<jsonrpc::TcpSocketServer> ("127.0.0.1",
-                                                         config.GameRpcPort);
     }
 
   LOG (FATAL)
