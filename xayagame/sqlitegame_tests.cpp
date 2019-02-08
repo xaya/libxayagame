@@ -104,13 +104,10 @@ protected:
     hashHex = GenesisHash ().ToHex ();
   }
 
-  explicit TestGame (const std::string& f)
-    : SQLiteGame (f)
-  {}
+  TestGame () = default;
 
 public:
 
-  TestGame () = delete;
   TestGame (const TestGame&) = delete;
   void operator= (const TestGame&) = delete;
 
@@ -233,9 +230,7 @@ public:
    */
   using MoveSet = std::vector<std::pair<std::string, std::string>>;
 
-  explicit ChatGame (const std::string& f)
-    : TestGame (f)
-  {}
+  ChatGame () = default;
 
   /**
    * Expects that the current game state (corresponding to the given
@@ -315,8 +310,10 @@ protected:
 
   SQLiteGameTests ()
     : GameTestWithBlockchain(GAME_ID),
-      game(GAME_ID), rules(":memory:")
+      game(GAME_ID)
   {
+    rules.Initialise (":memory:");
+
     SetStartingBlock (GenesisHash ());
 
     game.SetStorage (rules.GetStorage ());
@@ -540,7 +537,9 @@ protected:
   void
   CreateChatGame ()
   {
-    rules = std::make_unique<ChatGame> (filename);
+    rules = std::make_unique<ChatGame> ();
+    rules->Initialise (filename);
+
     game.SetStorage (rules->GetStorage ());
     game.SetGameLogic (rules.get ());
   }
@@ -715,9 +714,7 @@ public:
    */
   using MoveSet = std::vector<std::string>;
 
-  explicit InsertGame (const std::string& f)
-    : TestGame (f)
-  {}
+  InsertGame () = default;
 
   /**
    * Expects that the current game state (corresponding to the given

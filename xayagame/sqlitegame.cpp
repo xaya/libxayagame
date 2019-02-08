@@ -220,13 +220,16 @@ SQLiteGame::Storage::EnsureCurrentState (const GameStateData& state)
 
 /* ************************************************************************** */
 
-SQLiteGame::SQLiteGame (const std::string& f)
-  : database(std::make_unique<Storage> (*this, f))
-{}
-
-/* The destructor cannot be =default'ed in the header, since Storage is
-   an incomplete type at that stage.  */
+/* These cannot be =default'ed in the header, since Storage is an incomplete
+   type at that stage.  */
+SQLiteGame::SQLiteGame () = default;
 SQLiteGame::~SQLiteGame () = default;
+
+void
+SQLiteGame::Initialise (const std::string& dbFile)
+{
+  database = std::make_unique<Storage> (*this, dbFile);
+}
 
 void
 SQLiteGame::SetupSchema (sqlite3* db)
@@ -239,12 +242,14 @@ SQLiteGame::SetupSchema (sqlite3* db)
 sqlite3_stmt*
 SQLiteGame::PrepareStatement (const std::string& sql) const
 {
+  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
   return database->PrepareStatement (sql);
 }
 
 StorageInterface*
 SQLiteGame::GetStorage ()
 {
+  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
   return database.get ();
 }
 
@@ -323,6 +328,7 @@ SQLiteGame::ProcessForwardInternal (const GameStateData& oldState,
                                     const Json::Value& blockData,
                                     UndoData& undo)
 {
+  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
   database->EnsureCurrentState (oldState);
 
   SQLiteSession session(database->GetDatabase ());
@@ -406,6 +412,7 @@ SQLiteGame::ProcessBackwardsInternal (const GameStateData& newState,
                                       const Json::Value& blockData,
                                       const UndoData& undo)
 {
+  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
   database->EnsureCurrentState (newState);
 
   /* Note that the undo data holds the *forward* changeset, not the inverted
@@ -432,6 +439,7 @@ SQLiteGame::Ids (const std::string& key)
 Json::Value
 SQLiteGame::GameStateToJson (const GameStateData& state)
 {
+  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
   database->EnsureCurrentState (state);
   return GetStateAsJson (database->GetDatabase ());
 }
@@ -440,6 +448,7 @@ Json::Value
 SQLiteGame::GetCustomStateData (const Game& game, const std::string& jsonField,
                                 const std::function<Json::Value (sqlite3*)>& cb)
 {
+  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
   return game.GetCustomStateData (jsonField,
       [this, &cb] (const GameStateData& state)
         {

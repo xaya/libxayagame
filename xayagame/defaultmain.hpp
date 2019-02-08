@@ -5,11 +5,16 @@
 #ifndef XAYAGAME_DEFAULTMAIN_HPP
 #define XAYAGAME_DEFAULTMAIN_HPP
 
+#include "game.hpp"
 #include "gamelogic.hpp"
+#include "sqlitegame.hpp"
 #include "storage.hpp"
+
+#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <json/json.h>
 
+#include <memory>
 #include <string>
 
 namespace xaya
@@ -25,6 +30,96 @@ enum class RpcServerType
   NONE = 0,
   /** Start a JSON-RPC server listening through HTTP.  */
   HTTP = 1,
+};
+
+/**
+ * Interace for a class that runs the game's RPC server.  We need this mainly
+ * since the server classes from jsonrpccpp do not inherit from a single
+ * super class which we could use instead.
+ */
+class RpcServerInterface
+{
+
+protected:
+
+  RpcServerInterface () = default;
+
+public:
+
+  virtual ~RpcServerInterface () = default;
+
+  RpcServerInterface (const RpcServerInterface&) = delete;
+  void operator=  (const RpcServerInterface&) = delete;
+
+  /**
+   * Starts listening on the server.
+   */
+  virtual void StartListening () = 0;
+
+  /**
+   * Stops listening in the server.
+   */
+  virtual void StopListening () = 0;
+
+};
+
+/**
+ * Simple implementation of RpcServerInterface, that simply wraps a templated
+ * actual server class.
+ */
+template <typename T>
+  class WrappedRpcServer : public RpcServerInterface
+{
+
+private:
+
+  T server;
+
+public:
+
+  template <typename... Args>
+    WrappedRpcServer (Args&... args)
+    : server(args...)
+  {}
+
+  void
+  StartListening () override
+  {
+    server.StartListening ();
+  }
+
+  void
+  StopListening () override
+  {
+    server.StopListening ();
+  }
+
+};
+
+/**
+ * Factory interface for constructing instances of classes that are not
+ * required to be provided (like the GameLogic), but can optionally be
+ * customised by games.  An example of such a class is the RPC server.
+ */
+class CustomisedInstanceFactory
+{
+
+public:
+
+  CustomisedInstanceFactory () = default;
+  virtual ~CustomisedInstanceFactory () = default;
+
+  CustomisedInstanceFactory (const CustomisedInstanceFactory&) = delete;
+  void operator= (const CustomisedInstanceFactory&) = delete;
+
+  /**
+   * Returns an instance of the RPC server that should be used for the game.
+   * By default, this method builds a standard GameRpcServer.
+   */
+  virtual std::unique_ptr<RpcServerInterface> BuildRpcServer (
+      Game& game,
+      jsonrpc::AbstractServerConnector& conn);
+
 };
 
 /**
@@ -76,6 +171,15 @@ struct GameDaemonConfiguration
    */
   std::string DataDirectory;
 
+  /**
+   * Factory class for customed instances of certain optional classes
+   * like the RPC server.  If not set, default classes are used instead.
+   *
+   * The pointer here is just a pointer and not owned by the struct.  It must
+   * be managed outside of the DefaultMain call.
+   */
+  CustomisedInstanceFactory* InstanceFactory = nullptr;
+
 };
 
 /**
@@ -92,6 +196,18 @@ struct GameDaemonConfiguration
 int DefaultMain (const GameDaemonConfiguration& config,
                  const std::string& gameId,
                  GameLogic& rules);
+
+/**
+ * Runs a default main function for SQLite-based Xaya game daemons.  The
+ * details of the started game daemon can be configured through the config
+ * struct's values.
+ *
+ * Note that this function always ignores config.StorageType and instead
+ * uses "sqlite".
+ */
+int SQLiteMain (const GameDaemonConfiguration& config,
+                const std::string& gameId,
+                SQLiteGame& rules);
 
 /**
  * Struct that holds function pointers for implementations of the

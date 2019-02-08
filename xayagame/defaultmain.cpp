@@ -4,13 +4,11 @@
 
 #include "defaultmain.hpp"
 
-#include "game.hpp"
 #include "gamerpcserver.hpp"
 #include "lmdbstorage.hpp"
 #include "sqlitestorage.hpp"
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <glog/logging.h>
 
@@ -18,10 +16,18 @@
 
 #include <cstdlib>
 #include <exception>
-#include <memory>
 
 namespace xaya
 {
+
+std::unique_ptr<RpcServerInterface>
+CustomisedInstanceFactory::BuildRpcServer (
+    Game& game, jsonrpc::AbstractServerConnector& conn)
+{
+  std::unique_ptr<RpcServerInterface> res;
+  res.reset (new WrappedRpcServer<GameRpcServer> (game, conn));
+  return res;
+}
 
 namespace
 {
@@ -106,6 +112,14 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
 {
   try
     {
+      CustomisedInstanceFactory* instanceFact = config.InstanceFactory;
+      std::unique_ptr<CustomisedInstanceFactory> defaultInstanceFact;
+      if (instanceFact == nullptr)
+        {
+          defaultInstanceFact = std::make_unique<CustomisedInstanceFactory> ();
+          instanceFact = defaultInstanceFact.get ();
+        }
+
       CHECK (!config.XayaRpcUrl.empty ()) << "XayaRpcUrl must be configured";
       const std::string jsonRpcUrl(config.XayaRpcUrl);
       jsonrpc::HttpClient httpConnector(jsonRpcUrl);
@@ -124,13 +138,92 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
         game->EnablePruning (config.EnablePruning);
 
       auto serverConnector = CreateRpcServerConnector (config);
-      std::unique_ptr<GameRpcServer> rpcServer;
+      std::unique_ptr<RpcServerInterface> rpcServer;
       if (serverConnector == nullptr)
           LOG (WARNING)
               << "No connector has been set up for the game RPC server,"
                  " no RPC interface will be available";
       else
-          rpcServer = std::make_unique<GameRpcServer> (*game, *serverConnector);
+          rpcServer = instanceFact->BuildRpcServer (*game, *serverConnector);
+
+      if (rpcServer != nullptr)
+        rpcServer->StartListening ();
+      game->Run ();
+      if (rpcServer != nullptr)
+        rpcServer->StopListening ();
+
+      /* We need to make sure that the Game instance is destructed before the
+         storage is.  That is necessary, since destructing the Game instance
+         may still cause some batched transactions to be flushed, and this
+         needs the storage intact.  */
+      game.reset ();
+    }
+  catch (const std::exception& exc)
+    {
+      LOG (FATAL) << "Exception caught: " << exc.what ();
+    }
+  catch (...)
+    {
+      LOG (FATAL) << "Unknown exception caught";
+    }
+
+  return EXIT_SUCCESS;
+}
+
+int
+SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
+            SQLiteGame& rules)
+{
+  try
+    {
+      CustomisedInstanceFactory* instanceFact = config.InstanceFactory;
+      std::unique_ptr<CustomisedInstanceFactory> defaultInstanceFact;
+      if (instanceFact == nullptr)
+        {
+          defaultInstanceFact = std::make_unique<CustomisedInstanceFactory> ();
+          instanceFact = defaultInstanceFact.get ();
+        }
+
+      CHECK (!config.XayaRpcUrl.empty ()) << "XayaRpcUrl must be configured";
+      const std::string jsonRpcUrl(config.XayaRpcUrl);
+      jsonrpc::HttpClient httpConnector(jsonRpcUrl);
+
+      auto game = std::make_unique<Game> (gameId);
+      game->ConnectRpcClient (httpConnector);
+      CHECK (game->DetectZmqEndpoint ());
+
+      CHECK (!config.DataDirectory.empty ())
+          << "DataDirectory must be set if non-memory storage is used";
+      const fs::path gameDir
+          = fs::path (config.DataDirectory)
+              / fs::path (gameId)
+              / fs::path (ChainToString (game->GetChain ()));
+
+      if (fs::is_directory (gameDir))
+        LOG (INFO) << "Using existing data directory: " << gameDir;
+      else
+        {
+          LOG (INFO) << "Creating data directory: " << gameDir;
+          CHECK (fs::create_directories (gameDir));
+        }
+      const fs::path dbFile = gameDir / fs::path ("storage.sqlite");
+
+      rules.Initialise (dbFile);
+      game->SetStorage (rules.GetStorage ());
+
+      game->SetGameLogic (&rules);
+
+      if (config.EnablePruning >= 0)
+        game->EnablePruning (config.EnablePruning);
+
+      auto serverConnector = CreateRpcServerConnector (config);
+      std::unique_ptr<RpcServerInterface> rpcServer;
+      if (serverConnector == nullptr)
+          LOG (WARNING)
+              << "No connector has been set up for the game RPC server,"
+                 " no RPC interface will be available";
+      else
+          rpcServer = instanceFact->BuildRpcServer (*game, *serverConnector);
 
       if (rpcServer != nullptr)
         rpcServer->StartListening ();
