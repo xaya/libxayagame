@@ -7,6 +7,7 @@
 
 #include "game.hpp"
 #include "gamelogic.hpp"
+#include "sqlitegame.hpp"
 #include "storage.hpp"
 
 #include <jsonrpccpp/server/connectors/httpserver.h>
@@ -115,7 +116,7 @@ public:
    * Returns an instance of the RPC server that should be used for the game.
    * By default, this method builds a standard GameRpcServer.
    */
-  std::unique_ptr<RpcServerInterface> BuildRpcServer (
+  virtual std::unique_ptr<RpcServerInterface> BuildRpcServer (
       Game& game,
       jsonrpc::AbstractServerConnector& conn);
 
@@ -195,6 +196,18 @@ struct GameDaemonConfiguration
 int DefaultMain (const GameDaemonConfiguration& config,
                  const std::string& gameId,
                  GameLogic& rules);
+
+/**
+ * Runs a default main function for SQLite-based Xaya game daemons.  The
+ * details of the started game daemon can be configured through the config
+ * struct's values.
+ *
+ * Note that this function always ignores config.StorageType and instead
+ * uses "sqlite".
+ */
+int SQLiteMain (const GameDaemonConfiguration& config,
+                const std::string& gameId,
+                SQLiteGame& rules);
 
 /**
  * Struct that holds function pointers for implementations of the
