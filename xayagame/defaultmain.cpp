@@ -4,13 +4,11 @@
 
 #include "defaultmain.hpp"
 
-#include "game.hpp"
 #include "gamerpcserver.hpp"
 #include "lmdbstorage.hpp"
 #include "sqlitestorage.hpp"
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <glog/logging.h>
 
@@ -18,10 +16,18 @@
 
 #include <cstdlib>
 #include <exception>
-#include <memory>
 
 namespace xaya
 {
+
+std::unique_ptr<RpcServerInterface>
+CustomisedInstanceFactory::BuildRpcServer (
+    Game& game, jsonrpc::AbstractServerConnector& conn)
+{
+  std::unique_ptr<RpcServerInterface> res;
+  res.reset (new WrappedRpcServer<GameRpcServer> (game, conn));
+  return res;
+}
 
 namespace
 {
@@ -106,6 +112,14 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
 {
   try
     {
+      CustomisedInstanceFactory* instanceFact = config.InstanceFactory;
+      std::unique_ptr<CustomisedInstanceFactory> defaultInstanceFact;
+      if (instanceFact == nullptr)
+        {
+          defaultInstanceFact = std::make_unique<CustomisedInstanceFactory> ();
+          instanceFact = defaultInstanceFact.get ();
+        }
+
       CHECK (!config.XayaRpcUrl.empty ()) << "XayaRpcUrl must be configured";
       const std::string jsonRpcUrl(config.XayaRpcUrl);
       jsonrpc::HttpClient httpConnector(jsonRpcUrl);
@@ -124,13 +138,13 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
         game->EnablePruning (config.EnablePruning);
 
       auto serverConnector = CreateRpcServerConnector (config);
-      std::unique_ptr<GameRpcServer> rpcServer;
+      std::unique_ptr<RpcServerInterface> rpcServer;
       if (serverConnector == nullptr)
           LOG (WARNING)
               << "No connector has been set up for the game RPC server,"
                  " no RPC interface will be available";
       else
-          rpcServer = std::make_unique<GameRpcServer> (*game, *serverConnector);
+          rpcServer = instanceFact->BuildRpcServer (*game, *serverConnector);
 
       if (rpcServer != nullptr)
         rpcServer->StartListening ();
