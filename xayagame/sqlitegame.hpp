@@ -160,12 +160,21 @@ public:
   /** Value for a "missing" ID.  */
   static constexpr IdT EMPTY_ID = 0;
 
-  explicit SQLiteGame (const std::string& f);
+  /**
+   * Constructs an instance which is not yet connected to an actual database.
+   * It has to be Initialise()'ed before it can be used.
+   */
+  SQLiteGame ();
+
   virtual ~SQLiteGame ();
 
-  SQLiteGame () = delete;
   SQLiteGame (const SQLiteGame&) = delete;
   void operator= (const SQLiteGame&) = delete;
+
+  /**
+   * Initialises the game by opening the given database file.
+   */
+  void Initialise (const std::string& dbFile);
 
   /**
    * Returns the storage implementation used internally, which should be set
