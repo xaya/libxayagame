@@ -345,6 +345,20 @@ Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
     rules->SetChain (chain);
 }
 
+unsigned
+Game::GetXayaVersion () const
+{
+  std::lock_guard<std::mutex> lock(mut);
+  CHECK (rpcClient != nullptr);
+
+  const auto info = rpcClient->getnetworkinfo ();
+  CHECK (info.isObject ());
+  const auto& version = info["version"];
+  CHECK (version.isUInt ());
+
+  return version.asUInt ();
+}
+
 Chain
 Game::GetChain () const
 {

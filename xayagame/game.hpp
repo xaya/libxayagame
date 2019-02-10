@@ -243,6 +243,16 @@ public:
   void ConnectRpcClient (jsonrpc::IClientConnector& conn);
 
   /**
+   * Returns the version of the connected Xaya Core daemon in the form
+   * AABBCCDD, where AA is the major version, BB the minor version, CC the
+   * revision and DD the build.  For instance, 1020300 would be Xaya Core
+   * 1.2.3.
+   *
+   * This method CHECK fails if the RPC connection has not yet been set up.
+   */
+  unsigned GetXayaVersion () const;
+
+  /**
    * Returns the chain (network) type as enum of the
    * connected Xaya daemon.  This can be used to set up the storage database
    * correctly, for instance.  Must not be called before ConnectRpcClient.

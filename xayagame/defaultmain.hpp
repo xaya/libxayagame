@@ -139,6 +139,20 @@ struct GameDaemonConfiguration
   std::string XayaRpcUrl;
 
   /**
+   * The minimum required Xaya Core version.  By default, this is Xaya Core 1.1,
+   * where the ZMQ interface for games was introduced.
+   */
+  unsigned MinXayaVersion = 1010000;
+
+  /**
+   * The maximum possible Xaya Core version.  If zero (the default), then
+   * no maximum version is imposed.  This can be set for instance if
+   * incompatible changes to the ZMQ interface are made in the future, and
+   * the old game daemon needs to be updated to work with newer Xaya Core.
+   */
+  unsigned MaxXayaVersion = 0;
+
+  /**
    * The type of JSON-RPC server that should be started for the game
    * (if any).
    */

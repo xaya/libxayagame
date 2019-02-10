@@ -35,17 +35,14 @@ namespace
 namespace fs = std::experimental::filesystem;
 
 /**
- * Sets up a StorageInterface instance according to the configuration.
+ * Returns the directory in which data for this game should be stored.
+ * The directory is created as needed.
  */
-std::unique_ptr<StorageInterface>
-CreateStorage (const GameDaemonConfiguration& config,
-               const std::string& gameId, const Chain chain)
+fs::path
+GetGameDirectory (const GameDaemonConfiguration& config,
+                  const std::string& gameId, const Chain chain)
 {
-  if (config.StorageType == "memory")
-    return std::make_unique<MemoryStorage> ();
-
-  CHECK (!config.DataDirectory.empty ())
-      << "DataDirectory must be set if non-memory storage is used";
+  CHECK (!config.DataDirectory.empty ()) << "DataDirectory has not been set";
   const fs::path gameDir
       = fs::path (config.DataDirectory)
           / fs::path (gameId)
@@ -58,6 +55,21 @@ CreateStorage (const GameDaemonConfiguration& config,
       LOG (INFO) << "Creating data directory: " << gameDir;
       CHECK (fs::create_directories (gameDir));
     }
+
+  return gameDir;
+}
+
+/**
+ * Sets up a StorageInterface instance according to the configuration.
+ */
+std::unique_ptr<StorageInterface>
+CreateStorage (const GameDaemonConfiguration& config,
+               const std::string& gameId, const Chain chain)
+{
+  if (config.StorageType == "memory")
+    return std::make_unique<MemoryStorage> ();
+
+  const fs::path gameDir = GetGameDirectory (config, gameId, chain);
 
   if (config.StorageType == "lmdb")
     {
@@ -104,6 +116,19 @@ CreateRpcServerConnector (const GameDaemonConfiguration& config)
       << static_cast<int> (config.GameRpcServer);
 }
 
+/**
+ * Checks the Xaya Core version against the minimum and maximum versions
+ * defined in the configuration.
+ */
+void
+VerifyXayaVersion (const GameDaemonConfiguration& config, const unsigned v)
+{
+  LOG (INFO) << "Connected to Xaya Core version " << v;
+  CHECK_GE (v, config.MinXayaVersion) << "Xaya Core is too old";
+  if (config.MaxXayaVersion > 0)
+    CHECK_LE (v, config.MaxXayaVersion) << "Xaya Core is too new";
+}
+
 } // anonymous namespace
 
 int
@@ -126,6 +151,7 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
 
       auto game = std::make_unique<Game> (gameId);
       game->ConnectRpcClient (httpConnector);
+      VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());
 
       std::unique_ptr<StorageInterface> storage
@@ -190,22 +216,11 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
 
       auto game = std::make_unique<Game> (gameId);
       game->ConnectRpcClient (httpConnector);
+      VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());
 
-      CHECK (!config.DataDirectory.empty ())
-          << "DataDirectory must be set if non-memory storage is used";
-      const fs::path gameDir
-          = fs::path (config.DataDirectory)
-              / fs::path (gameId)
-              / fs::path (ChainToString (game->GetChain ()));
-
-      if (fs::is_directory (gameDir))
-        LOG (INFO) << "Using existing data directory: " << gameDir;
-      else
-        {
-          LOG (INFO) << "Creating data directory: " << gameDir;
-          CHECK (fs::create_directories (gameDir));
-        }
+      const fs::path gameDir = GetGameDirectory (config, gameId,
+                                                 game->GetChain ());
       const fs::path dbFile = gameDir / fs::path ("storage.sqlite");
 
       rules.Initialise (dbFile);
