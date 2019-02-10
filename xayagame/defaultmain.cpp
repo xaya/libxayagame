@@ -116,6 +116,19 @@ CreateRpcServerConnector (const GameDaemonConfiguration& config)
       << static_cast<int> (config.GameRpcServer);
 }
 
+/**
+ * Checks the Xaya Core version against the minimum and maximum versions
+ * defined in the configuration.
+ */
+void
+VerifyXayaVersion (const GameDaemonConfiguration& config, const unsigned v)
+{
+  LOG (INFO) << "Connected to Xaya Core version " << v;
+  CHECK_GE (v, config.MinXayaVersion) << "Xaya Core is too old";
+  if (config.MaxXayaVersion > 0)
+    CHECK_LE (v, config.MaxXayaVersion) << "Xaya Core is too new";
+}
+
 } // anonymous namespace
 
 int
@@ -138,6 +151,7 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
 
       auto game = std::make_unique<Game> (gameId);
       game->ConnectRpcClient (httpConnector);
+      VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());
 
       std::unique_ptr<StorageInterface> storage
@@ -202,6 +216,7 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
 
       auto game = std::make_unique<Game> (gameId);
       game->ConnectRpcClient (httpConnector);
+      VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());
 
       const fs::path gameDir = GetGameDirectory (config, gameId,
