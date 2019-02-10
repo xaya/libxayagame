@@ -99,6 +99,7 @@ public:
        should explicitly be specified in the individual tests.  */
     EXPECT_CALL (*this, getzmqnotifications ()).Times (0);
     EXPECT_CALL (*this, trackedgames (_, _)).Times (0);
+    EXPECT_CALL (*this, getnetworkinfo ()).Times (0);
     EXPECT_CALL (*this, getblockhash (_)).Times (0);
     EXPECT_CALL (*this, getblockheader (_)).Times (0);
     EXPECT_CALL (*this, game_sendupdates (_, _)).Times (0);
@@ -107,6 +108,7 @@ public:
   MOCK_METHOD0 (getzmqnotifications, Json::Value ());
   MOCK_METHOD2 (trackedgames, void (const std::string& command,
                                     const std::string& gameid));
+  MOCK_METHOD0 (getnetworkinfo, Json::Value ());
   MOCK_METHOD1 (getblockhash, std::string (int height));
   MOCK_METHOD1 (getblockheader, Json::Value (const std::string& hash));
   MOCK_METHOD2 (game_sendupdates, Json::Value (const std::string& fromblock,
@@ -374,6 +376,22 @@ protected:
   }
 
 };
+
+/* ************************************************************************** */
+
+using XayaVersionTests = GameTests;
+
+TEST_F (XayaVersionTests, Works)
+{
+  Json::Value networkInfo(Json::objectValue);
+  networkInfo["version"] = 1020300;
+  EXPECT_CALL (mockXayaServer, getnetworkinfo ())
+      .WillOnce (Return (networkInfo));
+
+  Game g(GAME_ID);
+  g.ConnectRpcClient (httpClient);
+  EXPECT_EQ (g.GetXayaVersion (), 1020300);
+}
 
 /* ************************************************************************** */
 

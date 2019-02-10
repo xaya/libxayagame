@@ -13,6 +13,11 @@
       }
   },
   {
+    "name": "getnetworkinfo",
+    "params": {},
+    "returns": {}
+  },
+  {
     "name": "getblockchaininfo",
     "params": {},
     "returns": {}
