@@ -223,7 +223,7 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
                                                  game->GetChain ());
       const fs::path dbFile = gameDir / fs::path ("storage.sqlite");
 
-      rules.Initialise (dbFile);
+      rules.Initialise (dbFile.string ());
       game->SetStorage (rules.GetStorage ());
 
       game->SetGameLogic (&rules);
