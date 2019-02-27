@@ -82,6 +82,18 @@ public:
     : server(args...)
   {}
 
+  T&
+  Get ()
+  {
+    return server;
+  }
+
+  const T&
+  Get () const
+  {
+    return server;
+  }
+
   void
   StartListening () override
   {
