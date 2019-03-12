@@ -47,7 +47,17 @@ class XayaGameTest (object):
                          help="base directory for test runs")
     parser.add_argument ("--nocleanup", default=False, action="store_true",
                          help="do not clean up logs after success")
+    self.addArguments (parser)
     self.args = parser.parse_args ()
+
+  def addArguments (self, parser):
+    """
+    This function is called to add additional arguments (test specific)
+    for the argument parser.  By default, none are added, but subclasses
+    can override it as needed.
+    """
+
+    pass
 
   def main (self):
     """
