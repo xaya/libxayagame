@@ -177,6 +177,13 @@ struct GameDaemonConfiguration
   int GameRpcPort = 0;
 
   /**
+   * The address to which the RPC server should bind.  By default, it binds
+   * to 127.0.0.1, so that it is only accessible locally.  If this is explicitly
+   * set to the empty string "", then the server will listen on all interfaces.
+   */
+  std::string GameRpcHost = "127.0.0.1";
+
+  /**
    * If non-negative (including zero), pruning of old undo data is enabled.
    * The specified value determines how many of the latest blocks are
    * kept to perform reorgs.

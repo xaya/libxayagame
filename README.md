@@ -26,8 +26,10 @@ your system, respectively.
 for the configuration and/or build to be successful:
 
 - [`libjsoncpp`](https://github.com/open-source-parsers/jsoncpp):
-  Available for Debian-based operating systems in the `libjsoncpp-dev`
-  package.
+  The Debian package `libjsoncpp-dev` is not fresh enough, so it needs
+  to be built from source.  In particular, it must be a version that
+  includes the commit
+  [`f013753b122d43e364f6d6039a38e5c54e65306e`](https://github.com/cinemast/libjson-rpc-cpp/pull/259).
 - [`jsonrpccpp`](https://github.com/cinemast/libjson-rpc-cpp/):
   For Debian, the packages `libjsonrpccpp-dev` and `libjsonrpccpp-tools`
   can be installed.
