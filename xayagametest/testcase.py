@@ -177,6 +177,18 @@ class XayaGameTest (object):
     for nm in names:
       self.rpc.xaya.name_register ("p/" + nm, "{}")
 
+  def registerOrUpdateName (self, name, value, options={}):
+    """
+    Tries to update or register the name with the given value, depending
+    on whether or not it already exists.
+    """
+
+    try:
+      return self.rpc.xaya.name_update (name, value, options)
+    except:
+      self.log.info ("name_update for %s failed, trying name_register" % name)
+      return self.rpc.xaya.name_register (name, value, options)
+
   def sendMove (self, name, move, options={}):
     """
     Sends a given move for the name.  This calls name_register or name_update,
@@ -184,13 +196,18 @@ class XayaGameTest (object):
     full name value from self.gameId and move.
     """
 
-    val = json.dumps ({"g": {self.gameId: move}})
+    value = json.dumps ({"g": {self.gameId: move}})
+    self.registerOrUpdateName ("p/" + name, value, options)
 
-    try:
-      return self.rpc.xaya.name_update ("p/" + name, val, options)
-    except:
-      self.log.info ("name_update for p/%s failed, trying name_register" % name)
-      return self.rpc.xaya.name_register ("p/" + name, val, options)
+  def adminCommand (self, cmd, options={}):
+    """
+    Sends an admin command with the given value.  This calls name_register or
+    name_update, depending on whether or not the g/ name for the game being
+    tested already exists or not.
+    """
+
+    value = json.dumps ({"cmd": cmd})
+    self.registerOrUpdateName ("g/" + self.gameId, value, options)
 
   def getGameState (self):
     """
