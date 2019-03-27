@@ -209,24 +209,37 @@ class XayaGameTest (object):
     value = json.dumps ({"cmd": cmd})
     self.registerOrUpdateName ("g/" + self.gameId, value, options)
 
+  def getCustomState (self, field, method, **kwargs):
+    """
+    Calls an RPC method on the game daemon that returns game state.  Makes
+    sure to wait until the game state is synced.
+    """
+
+    fcn = getattr (self.rpc.game, method)
+
+    bestblk = self.rpc.xaya.getbestblockhash ()
+    bestheight = self.rpc.xaya.getblockcount ()
+
+    while True:
+      state = fcn (**kwargs)
+      self.assertEqual (state["gameid"], self.gameId)
+
+      if state["state"] == "up-to-date" and state["blockhash"] == bestblk:
+        self.assertEqual (state["height"], bestheight)
+        return state[field]
+
+      self.log.warning (("Game state (%s, %s) does not match"
+                            +" the best block (%s), waiting")
+          % (state["state"], state["blockhash"], bestblk))
+      time.sleep (0.1)
+
   def getGameState (self):
     """
     Returns the current game state.  Makes sure to wait for the game daemon
     to sync up with Xaya's best block first.
     """
 
-    bestblk = self.rpc.xaya.getbestblockhash ()
-    bestheight = self.rpc.xaya.getblockcount ()
-    while True:
-      state = self.rpc.game.getcurrentstate ()
-      assert state["gameid"] == self.gameId
-      if state["state"] == "up-to-date" and state["blockhash"] == bestblk:
-        assert state["height"] == bestheight
-        return state["gamestate"]
-      self.log.warning (("Game state (%s, %s) does not match"
-                            +" the best block (%s), waiting")
-          % (state["state"], state["blockhash"], bestblk))
-      time.sleep (0.1)
+    return self.getCustomState ("gamestate", "getcurrentstate")
 
   def expectGameState (self, expected):
     """
@@ -234,11 +247,18 @@ class XayaGameTest (object):
     """
 
     actual = self.getGameState ()
-    if actual != expected:
-      self.mainLogger.error ("Mismatch in actual vs expected game state:\n"
-                                + "%s\n  vs\n%s"
-          % (json.dumps (actual, indent=2), json.dumps (expected, indent=2)))
-      raise AssertionError ("Actual game state does not match expectation")
+    self.assertEqual (actual, expected)
+
+  def assertEqual (self, a, b):
+    """
+    Asserts that two values are equal, logging them if not.
+    """
+
+    if a == b:
+      return
+
+    self.log.error ("The value of:\n%s\n\nis not equal to:\n%s" % (a, b))
+    raise AssertionError ("%s != %s" % (a, b))
 
   def generate (self, n):
     """
