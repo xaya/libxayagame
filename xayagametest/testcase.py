@@ -14,9 +14,12 @@ import json
 import logging
 import os.path
 import random
+import re
 import shutil
 import sys
 import time
+
+from jsonrpclib import ProtocolError
 
 
 XAYAD_BINARY_DEFAULT = "/usr/local/bin/xayad"
@@ -33,6 +36,9 @@ class XayaGameTest (object):
   can control the Xaya Core daemon through rpc.xaya and the game daemon through
   rpc.game.
   """
+
+  ##############################################################################
+  # Main functionality, handling the setup of daemons and all that.
 
   def __init__ (self, gameId, gameBinaryDefault):
     self.gameId = gameId
@@ -168,6 +174,9 @@ class XayaGameTest (object):
     self.rpc.game = None
     self.gamenode.stop ()
 
+  ##############################################################################
+  # Utility methods for testing.
+
   def registerNames (self, names):
     """
     Utility method to register names without any data yet.  This can be used
@@ -267,3 +276,21 @@ class XayaGameTest (object):
 
     addr = self.rpc.xaya.getnewaddress ()
     self.rpc.xaya.generatetoaddress (n, addr)
+
+  def expectError (self, code, msgRegExp, method, *args, **kwargs):
+    """
+    Calls the method object with the given arguments, and expects that
+    an RPC error is raised matching the code and message.
+    """
+
+    try:
+      method (*args, **kwargs)
+      self.log.error ("Expected RPC error with code=%d and message %s"
+                        % (code, msgRegExp))
+      raise AssertionError ("expected RPC error was not raised")
+    except ProtocolError as exc:
+      self.log.info ("Caught expected RPC error: %s" % exc)
+      (c, m) = exc.args[0]
+      self.assertEqual (c, code)
+      msgPattern = re.compile (msgRegExp)
+      assert msgPattern.match (m)
