@@ -44,6 +44,7 @@ class PruningTest (MoverTest):
     self.setPruning (1)
 
     txid = self.move ("a", "j", 1)
+    fullTx = self.rpc.xaya.gettransaction (txid)["hex"]
     self.generate (1)
     self.expectGameState ({"players": {
       "a": {"x": 1, "y": 0},
@@ -52,8 +53,9 @@ class PruningTest (MoverTest):
     blk = self.rpc.xaya.getbestblockhash ()
 
     self.rpc.xaya.invalidateblock (blk)
-    # The previous move of "a" should have been put back into the mempool.
-    assert self.rpc.xaya.getrawmempool () == [txid]
+    # Ensure that the move of a is in the mempool again.
+    self.rpc.xaya.sendrawtransaction (fullTx)
+    self.assertEqual (self.rpc.xaya.getrawmempool (), [txid])
     self.move ("b", "n", 1)
     self.generate (1)
     self.expectGameState ({"players": {

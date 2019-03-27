@@ -197,7 +197,7 @@ class XayaGameTest (object):
     """
 
     value = json.dumps ({"g": {self.gameId: move}})
-    self.registerOrUpdateName ("p/" + name, value, options)
+    return self.registerOrUpdateName ("p/" + name, value, options)
 
   def adminCommand (self, cmd, options={}):
     """
@@ -207,7 +207,7 @@ class XayaGameTest (object):
     """
 
     value = json.dumps ({"cmd": cmd})
-    self.registerOrUpdateName ("g/" + self.gameId, value, options)
+    return self.registerOrUpdateName ("g/" + self.gameId, value, options)
 
   def getCustomState (self, field, method, **kwargs):
     """
