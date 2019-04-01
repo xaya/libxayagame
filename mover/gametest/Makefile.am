@@ -7,7 +7,7 @@ TEST_LIBRARY = \
 
 REGTESTS = \
   basic.py \
-  bind_address.py \
+  bind_locally.py \
   catching_up.py \
   persistence-lmdb.py \
   persistence-sqlite.py \

@@ -29,7 +29,7 @@ for the configuration and/or build to be successful:
   The Debian package `libjsoncpp-dev` is not fresh enough, so it needs
   to be built from source.  In particular, it must be a version that
   includes the commit
-  [`f013753b122d43e364f6d6039a38e5c54e65306e`](https://github.com/cinemast/libjson-rpc-cpp/pull/259).
+  [`4f24acaf4c6737cd07d40a02edad0a56147e0713`](https://github.com/cinemast/libjson-rpc-cpp/commit/4f24acaf4c6737cd07d40a02edad0a56147e0713).
 - [`jsonrpccpp`](https://github.com/cinemast/libjson-rpc-cpp/):
   For Debian, the packages `libjsonrpccpp-dev` and `libjsonrpccpp-tools`
   can be installed.

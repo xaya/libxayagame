@@ -177,11 +177,11 @@ struct GameDaemonConfiguration
   int GameRpcPort = 0;
 
   /**
-   * The address to which the RPC server should bind.  By default, it binds
-   * to 127.0.0.1, so that it is only accessible locally.  If this is explicitly
-   * set to the empty string "", then the server will listen on all interfaces.
+   * Whether or not the game daemon's JSON-RPC server shoud listen only locally
+   * (if set to true / left to the default) or on all interfaces (if set to
+   * false explicitly).
    */
-  std::string GameRpcHost = "127.0.0.1";
+  bool GameRpcListenLocally = true;
 
   /**
    * If non-negative (including zero), pruning of old undo data is enabled.

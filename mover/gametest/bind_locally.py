@@ -33,7 +33,7 @@ class BindAddressTest (MoverTest):
 
     # Restart and listen on all interfaces.
     self.stopGameDaemon ()
-    self.startGameDaemon (extraArgs=["--game_rpc_host="])
+    self.startGameDaemon (extraArgs=["--game_rpc_listen_locally=false"])
 
     # Now both connections should work.
     assert rpc.getcurrentstate ()["chain"] == "regtest"

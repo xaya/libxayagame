@@ -20,9 +20,8 @@ DEFINE_string (xaya_rpc_url, "",
 DEFINE_int32 (game_rpc_port, 0,
               "the port at which the game daemon's JSON-RPC server will be"
               " start (if non-zero)");
-DEFINE_string (game_rpc_host, "127.0.0.1",
-               "the address where the game daemon's JSON-RPC server should"
-               " bind; set to \"\" for listening on all interfaces");
+DEFINE_bool (game_rpc_listen_locally, true,
+             "whether the game daemon's JSON-RPC server should listen locally");
 
 DEFINE_int32 (enable_pruning, -1,
               "if non-negative (including zero), enable pruning of old undo"
@@ -64,7 +63,7 @@ main (int argc, char** argv)
     {
       config.GameRpcServer = xaya::RpcServerType::HTTP;
       config.GameRpcPort = FLAGS_game_rpc_port;
-      config.GameRpcHost = FLAGS_game_rpc_host;
+      config.GameRpcListenLocally = FLAGS_game_rpc_listen_locally;
     }
   config.EnablePruning = FLAGS_enable_pruning;
   config.StorageType = FLAGS_storage_type;

@@ -110,7 +110,8 @@ CreateRpcServerConnector (const GameDaemonConfiguration& config)
         LOG (INFO)
             << "Starting JSON-RPC HTTP server at port " << config.GameRpcPort;
         auto srv = std::make_unique<jsonrpc::HttpServer> (config.GameRpcPort);
-        srv->SetBindAddress (config.GameRpcHost);
+        if (config.GameRpcListenLocally)
+          srv->BindLocalhost ();
         return srv;
       }
     }
