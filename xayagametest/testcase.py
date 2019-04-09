@@ -218,7 +218,7 @@ class XayaGameTest (object):
     value = json.dumps ({"cmd": cmd})
     return self.registerOrUpdateName ("g/" + self.gameId, value, options)
 
-  def getCustomState (self, field, method, **kwargs):
+  def getCustomState (self, field, method, *args, **kwargs):
     """
     Calls an RPC method on the game daemon that returns game state.  Makes
     sure to wait until the game state is synced.
@@ -230,7 +230,7 @@ class XayaGameTest (object):
     bestheight = self.rpc.xaya.getblockcount ()
 
     while True:
-      state = fcn (**kwargs)
+      state = fcn (*args, **kwargs)
       self.assertEqual (state["gameid"], self.gameId)
 
       if state["state"] == "up-to-date" and state["blockhash"] == bestblk:
