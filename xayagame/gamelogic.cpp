@@ -96,27 +96,22 @@ public:
 
 };
 
+void
+GameLogic::InitialiseGameContext (const Chain c, const std::string& id)
+{
+  CHECK (c != Chain::UNKNOWN);
+  CHECK (!id.empty ());
+
+  CHECK (chain == Chain::UNKNOWN) << "GameLogic is already initialised";
+  chain = c;
+  gameId = id;
+}
+
 Chain
 GameLogic::GetChain () const
 {
   CHECK (chain != Chain::UNKNOWN);
   return chain;
-}
-
-void
-GameLogic::SetChain (const Chain c)
-{
-  CHECK (chain == Chain::UNKNOWN || chain == c);
-  CHECK (c != Chain::UNKNOWN);
-  chain = c;
-}
-
-void
-GameLogic::SetGameId (const std::string& id)
-{
-  CHECK (gameId.empty () || gameId == id);
-  CHECK (!id.empty ());
-  gameId = id;
 }
 
 Context&

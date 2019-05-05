@@ -405,20 +405,11 @@ TEST_F (ChainDetectionTests, ChainDetected)
   EXPECT_TRUE (g.GetChain () == Chain::MAIN);
 }
 
-TEST_F (ChainDetectionTests, ReconnectionPossible)
-{
-  Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (httpClient);
-  g.ConnectRpcClient (httpClient);
-  EXPECT_TRUE (g.GetChain () == Chain::MAIN);
-}
-
-TEST_F (ChainDetectionTests, ReconnectionToWrongChain)
+TEST_F (ChainDetectionTests, Reconnection)
 {
   /* For the death test, we need to make sure that we only run the server
      in the forked environment.  If we set up the mock expectations before
-     forking, they will be set in both processes, but only fulfillled
+     forking, they will be set in both processes, but only fulfilled
      in one of them.  */
   mockXayaServer.StopListening ();
 
@@ -428,10 +419,9 @@ TEST_F (ChainDetectionTests, ReconnectionToWrongChain)
       mockXayaServer.StartListening ();
       mockXayaServer.SetBestBlock (0, BlockHash (0));
       g.ConnectRpcClient (httpClient);
-      mockXayaServer.SetChain (Chain::TEST);
       g.ConnectRpcClient (httpClient);
     },
-    "Previous RPC connection had chain");
+    "RPC client is already connected");
 }
 
 /* ************************************************************************** */
@@ -705,9 +695,10 @@ TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
      simulate startup without a cached height (but persisted current game
      state).  */
   Game freshGame(GAME_ID);
+  TestGame freshRules;
   freshGame.ConnectRpcClient (httpClient);
   freshGame.SetStorage (&storage);
-  freshGame.SetGameLogic (&rules);
+  freshGame.SetGameLogic (&freshRules);
   ReinitialiseState (freshGame);
 
   const Json::Value state = freshGame.GetCurrentJsonState ();

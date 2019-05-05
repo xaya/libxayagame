@@ -316,33 +316,27 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
 void
 Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
 {
-  auto newClient = std::make_unique<XayaRpcClient> (conn, rpcClientVersion);
-
   std::lock_guard<std::mutex> lock(mut);
-  rpcClient = std::move (newClient);
+  CHECK (rpcClient == nullptr) << "RPC client is already connected";
+  CHECK (chain == Chain::UNKNOWN);
+
+  rpcClient = std::make_unique<XayaRpcClient> (conn, rpcClientVersion);
 
   const Json::Value info = rpcClient->getblockchaininfo ();
-  const std::string newChainStr = info["chain"].asString ();
-  Chain newChain;
-  if (newChainStr == "main")
-    newChain = Chain::MAIN;
-  else if (newChainStr == "test")
-    newChain = Chain::TEST;
-  else if (newChainStr == "regtest")
-    newChain = Chain::REGTEST;
+  const std::string chainStr = info["chain"].asString ();
+  if (chainStr == "main")
+    chain = Chain::MAIN;
+  else if (chainStr == "test")
+    chain = Chain::TEST;
+  else if (chainStr == "regtest")
+    chain = Chain::REGTEST;
   else
     LOG (FATAL)
-        << "Unexpected chain type returned by Xaya Core: " << newChainStr;
+        << "Unexpected chain type returned by Xaya Core: " << chainStr;
 
-  CHECK (chain == Chain::UNKNOWN || chain == newChain)
-      << "Previous RPC connection had chain "
-      << ChainToString (chain) << ", now we have "
-      << ChainToString (newChain);
-  chain = newChain;
   LOG (INFO) << "Connected to RPC daemon with chain " << ChainToString (chain);
-
   if (rules != nullptr)
-    rules->SetChain (chain);
+    rules->InitialiseGameContext (chain, gameId);
 }
 
 unsigned
@@ -416,9 +410,8 @@ Game::SetGameLogic (GameLogic* gl)
   std::lock_guard<std::mutex> lock(mut);
   CHECK (!mainLoop.IsRunning ());
   rules = gl;
-  rules->SetGameId (gameId);
   if (chain != Chain::UNKNOWN)
-    rules->SetChain (chain);
+    rules->InitialiseGameContext (chain, gameId);
 }
 
 void

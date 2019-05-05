@@ -45,7 +45,7 @@ protected:
 
   GameLogicFixture ()
   {
-    game.SetGameId (GAME_ID);
+    game.InitialiseGameContext (Chain::MAIN, GAME_ID);
 
     unsigned dummyHeight;
     std::string dummyHashHex;

@@ -238,7 +238,8 @@ public:
   void operator= (const Game&) = delete;
 
   /**
-   * Sets up the RPC client based on the given connector.
+   * Sets up the RPC client based on the given connector.  This must only
+   * be called once.
    */
   void ConnectRpcClient (jsonrpc::IClientConnector& conn);
 

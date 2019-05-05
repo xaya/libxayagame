@@ -194,22 +194,13 @@ public:
   virtual ~GameLogic () = default;
 
   /**
-   * Sets the chain value.  This is typically called by the Game instance,
-   * but may be used also for unit testing.
+   * Initialises the instance with some data that is obtained by a Game
+   * instance after the RPC connection to Xaya Core is up.
    *
-   * If the chain was already set, it must not be changed to a different value
-   * during the lifetime of the object.
+   * This must only be called once.  It is typically done by the Game
+   * instance, but may also be used for testing.
    */
-  void SetChain (Chain c);
-
-  /**
-   * Sets the game id.  This is called by the Game instance after connecting
-   * the game rules to it.
-   *
-   * If it was already set, then it must not be changed to some other value
-   * afterwards anymore.
-   */
-  void SetGameId (const std::string& id);
+  void InitialiseGameContext (Chain c, const std::string& id);
 
   /**
    * Returns the initial state for the game.  This is the function that is

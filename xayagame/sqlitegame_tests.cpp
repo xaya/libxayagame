@@ -313,6 +313,7 @@ protected:
       game(GAME_ID)
   {
     rules.Initialise (":memory:");
+    rules.InitialiseGameContext (Chain::MAIN, GAME_ID);
 
     SetStartingBlock (GenesisHash ());
 
@@ -539,6 +540,7 @@ protected:
   {
     rules = std::make_unique<ChatGame> ();
     rules->Initialise (filename);
+    rules->InitialiseGameContext (Chain::MAIN, GAME_ID);
 
     game.SetStorage (rules->GetStorage ());
     game.SetGameLogic (rules.get ());
