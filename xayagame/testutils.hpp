@@ -80,6 +80,9 @@ public:
   MOCK_METHOD1 (getblockheader, Json::Value (const std::string& hash));
   MOCK_METHOD2 (game_sendupdates, Json::Value (const std::string& fromblock,
                                                const std::string& gameid));
+  MOCK_METHOD3 (verifymessage, Json::Value (const std::string& address,
+                                            const std::string& message,
+                                            const std::string& signature));
 
 };
 

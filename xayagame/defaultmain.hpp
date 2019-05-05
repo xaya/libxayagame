@@ -151,10 +151,11 @@ struct GameDaemonConfiguration
   std::string XayaRpcUrl;
 
   /**
-   * The minimum required Xaya Core version.  By default, this is Xaya Core 1.1,
-   * where the ZMQ interface for games was introduced.
+   * The minimum required Xaya Core version.  By default, this is
+   * Xaya Core 1.1.2, since when the extended verifymessage command is available
+   * (which is used by GameLogic).
    */
-  unsigned MinXayaVersion = 1010000;
+  unsigned MinXayaVersion = 1010200;
 
   /**
    * The maximum possible Xaya Core version.  If zero (the default), then

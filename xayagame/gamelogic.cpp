@@ -135,6 +135,13 @@ GameLogic::GetContext () const
   return *ctx;
 }
 
+XayaRpcClient&
+GameLogic::GetXayaRpc ()
+{
+  CHECK (rpcClient != nullptr);
+  return *rpcClient;
+}
+
 GameStateData
 GameLogic::GetInitialState (unsigned& height, std::string& hashHex)
 {

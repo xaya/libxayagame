@@ -165,6 +165,12 @@ protected:
   const Context& GetContext () const;
 
   /**
+   * Returns the configured RPC connection to Xaya Core.  Must only be called
+   * after InitialiseGameContext was invoked with a non-null RPC client.
+   */
+  XayaRpcClient& GetXayaRpc ();
+
+  /**
    * Returns the initial state (as well as the associated block height
    * and block hash in big-endian hex) for the game.
    */
@@ -206,7 +212,7 @@ public:
    * instance after the RPC connection to Xaya Core is up.
    *
    * The RPC client instance may be null, but then certain features
-   * (e.g. VerifyMessage) will be disabled.
+   * (depending on GetXayaRpc) will be disabled.
    *
    * This must only be called once.  It is typically done by the Game
    * instance, but may also be used for testing.
