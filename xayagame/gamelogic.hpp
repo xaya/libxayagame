@@ -5,11 +5,12 @@
 #ifndef XAYAGAME_GAMELOGIC_HPP
 #define XAYAGAME_GAMELOGIC_HPP
 
-#include "random.hpp"
 #include "storage.hpp"
-#include "uint256.hpp"
 
 #include "rpc-stubs/xayarpcclient.h"
+
+#include <xayautil/random.hpp>
+#include <xayautil/uint256.hpp>
 
 #include <json/json.h>
 

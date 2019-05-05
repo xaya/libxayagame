@@ -15,10 +15,12 @@ BUILT_SOURCES = $(RPC_STUBS)
 CLEANFILES = $(RPC_STUBS)
 
 libxayagame_la_CXXFLAGS = \
+  -I$(top_srcdir) \
   $(OPENSSL_CFLAGS) \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
   $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
 libxayagame_la_LIBADD = \
+  $(top_builddir)/xayautil/libxayautil.la \
   $(OPENSSL_LIBS) \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS) \
@@ -28,36 +30,30 @@ libxayagame_la_SOURCES = \
   game.cpp \
   gamelogic.cpp \
   gamerpcserver.cpp \
-  hash.cpp \
   heightcache.cpp \
   lmdbstorage.cpp \
   mainloop.cpp \
   pruningqueue.cpp \
-  random.cpp \
   signatures.cpp \
   sqlitegame.cpp \
   sqlitestorage.cpp \
   storage.cpp \
   transactionmanager.cpp \
-  uint256.cpp \
   zmqsubscriber.cpp
 xayagame_HEADERS = \
   defaultmain.hpp \
   game.hpp \
   gamelogic.hpp \
   gamerpcserver.hpp \
-  hash.hpp \
   heightcache.hpp \
   lmdbstorage.hpp \
   mainloop.hpp \
   pruningqueue.hpp \
-  random.hpp \
   signatures.hpp \
   sqlitegame.hpp \
   sqlitestorage.hpp \
   storage.hpp \
   transactionmanager.hpp \
-  uint256.hpp \
   zmqsubscriber.hpp
 rpcstub_HEADERS = \
   rpc-stubs/gamerpcclient.h \
@@ -69,26 +65,26 @@ check_PROGRAMS = tests
 TESTS = tests
 
 tests_CXXFLAGS = \
+  -I$(top_srcdir) \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
   $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
-tests_LDADD = $(builddir)/libxayagame.la \
+tests_LDADD = \
+  $(builddir)/libxayagame.la \
+  $(top_builddir)/xayautil/libxayautil.la \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS)
 tests_SOURCES = testutils.cpp \
   game_tests.cpp \
   gamelogic_tests.cpp \
-  hash_tests.cpp \
   heightcache_tests.cpp \
   lmdbstorage_tests.cpp \
   mainloop_tests.cpp \
   pruningqueue_tests.cpp \
-  random_tests.cpp \
   signatures_tests.cpp \
   sqlitegame_tests.cpp \
   sqlitestorage_tests.cpp \
   storage_tests.cpp \
   transactionmanager_tests.cpp \
-  uint256_tests.cpp \
   zmqsubscriber_tests.cpp
 check_HEADERS = testutils.hpp storage_tests.hpp
 

@@ -1,9 +1,9 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef XAYAGAME_UINT256_HPP
-#define XAYAGAME_UINT256_HPP
+#ifndef XAYAUTIL_UINT256_HPP
+#define XAYAUTIL_UINT256_HPP
 
 #include <array>
 #include <string>
@@ -100,4 +100,4 @@ public:
 
 } // namespace xaya
 
-#endif // XAYAGAME_UINT256_HPP
+#endif // XAYAUTIL_UINT256_HPP

@@ -9,7 +9,7 @@ Version: @PACKAGE_VERSION@
 Description: A library for development of game backends on the Xaya platform.
 URL: https://github.com/xaya/libxayagame
 
-Requires: @AX_PACKAGE_REQUIRES@
+Requires: @AX_PACKAGE_REQUIRES@ libxayautil
 Requires.private: @AX_PACKAGE_REQUIRES_PRIVATE@
 
 Cflags: -I${includedir}

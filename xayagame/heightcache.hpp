@@ -9,7 +9,8 @@
    used directly by external code!  */
 
 #include "storage.hpp"
-#include "uint256.hpp"
+
+#include <xayautil/uint256.hpp>
 
 #include <functional>
 

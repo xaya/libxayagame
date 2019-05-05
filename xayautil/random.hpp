@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef XAYAGAME_RANDOM_HPP
-#define XAYAGAME_RANDOM_HPP
+#ifndef XAYAUTIL_RANDOM_HPP
+#define XAYAUTIL_RANDOM_HPP
 
 #include "uint256.hpp"
 
@@ -61,4 +61,4 @@ public:
 
 } // namespace xaya
 
-#endif // XAYAGAME_RANDOM_HPP
+#endif // XAYAUTIL_RANDOM_HPP

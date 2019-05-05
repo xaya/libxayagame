@@ -22,3 +22,5 @@ Makefile.in
 *.la
 *.trs
 *.pyc
+*.pc
+tests

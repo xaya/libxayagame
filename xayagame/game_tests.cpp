@@ -5,11 +5,12 @@
 #include "game.hpp"
 
 #include "gamelogic.hpp"
-#include "uint256.hpp"
 
 #include "testutils.hpp"
 
 #include "rpc-stubs/xayarpcserverstub.h"
+
+#include <xayautil/uint256.hpp>
 
 #include <json/json.h>
 #include <jsonrpccpp/client/connectors/httpclient.h>

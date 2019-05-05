@@ -9,9 +9,10 @@
 
 #include "game.hpp"
 #include "storage.hpp"
-#include "uint256.hpp"
 
 #include "rpc-stubs/xayarpcserverstub.h"
+
+#include <xayautil/uint256.hpp>
 
 #include <json/json.h>
 #include <jsonrpccpp/server.h>

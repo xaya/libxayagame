@@ -48,10 +48,12 @@ AC_CONFIG_FILES([
   Makefile \
   xayagame/Makefile \
   xayagametest/Makefile \
+  xayautil/Makefile \
   mover/Makefile \
   mover/gametest/Makefile \
   \
-  xayagame/libxayagame.pc
+  xayagame/libxayagame.pc \
+  xayautil/libxayautil.pc
 ])
 AC_OUTPUT
 

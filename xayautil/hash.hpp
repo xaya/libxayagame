@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef XAYAGAME_HASH_HPP
-#define XAYAGAME_HASH_HPP
+#ifndef XAYAUTIL_HASH_HPP
+#define XAYAUTIL_HASH_HPP
 
 #include "uint256.hpp"
 
@@ -55,4 +55,4 @@ public:
 
 } // namespace xaya
 
-#endif // XAYAGAME_HASH_HPP
+#endif // XAYAUTIL_HASH_HPP

@@ -4,7 +4,7 @@
 
 #include "gamelogic.hpp"
 
-#include "hash.hpp"
+#include <xayautil/hash.hpp>
 
 #include <glog/logging.h>
 

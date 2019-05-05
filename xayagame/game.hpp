@@ -11,10 +11,11 @@
 #include "pruningqueue.hpp"
 #include "storage.hpp"
 #include "transactionmanager.hpp"
-#include "uint256.hpp"
 #include "zmqsubscriber.hpp"
 
 #include "rpc-stubs/xayarpcclient.h"
+
+#include <xayautil/uint256.hpp>
 
 #include <json/json.h>
 #include <jsonrpccpp/client.h>

@@ -5,10 +5,11 @@
 #include "heightcache.hpp"
 
 #include "storage.hpp"
-#include "uint256.hpp"
 
 #include "storage_tests.hpp"
 #include "testutils.hpp"
+
+#include <xayautil/uint256.hpp>
 
 #include <gtest/gtest.h>
 

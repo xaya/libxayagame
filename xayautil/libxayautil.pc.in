@@ -1,0 +1,15 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libxayautil
+Version: @PACKAGE_VERSION@
+
+Description: A library of basic utilities for games on the Xaya platform.
+URL: https://github.com/xaya/libxayagame
+
+Requires.private: libglog openssl
+
+Cflags: -I${includedir}
+Libs: -L${libdir} -lxayautil
