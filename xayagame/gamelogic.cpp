@@ -97,7 +97,8 @@ public:
 };
 
 void
-GameLogic::InitialiseGameContext (const Chain c, const std::string& id)
+GameLogic::InitialiseGameContext (const Chain c, const std::string& id,
+                                  XayaRpcClient* rpc)
 {
   CHECK (c != Chain::UNKNOWN);
   CHECK (!id.empty ());
@@ -105,6 +106,12 @@ GameLogic::InitialiseGameContext (const Chain c, const std::string& id)
   CHECK (chain == Chain::UNKNOWN) << "GameLogic is already initialised";
   chain = c;
   gameId = id;
+  rpcClient = rpc;
+
+  if (rpcClient == nullptr)
+    LOG (WARNING)
+        << "GameLogic has been initialised without an RPC connection;"
+           " some features will be missing";
 }
 
 Chain

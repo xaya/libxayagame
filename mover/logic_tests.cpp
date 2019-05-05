@@ -183,7 +183,7 @@ TEST (InitialStateTests, IsEmpty)
   for (const auto chain : {Chain::MAIN, Chain::TEST, Chain::REGTEST})
     {
       MoverLogic rules;
-      rules.InitialiseGameContext (chain, "mv");
+      rules.InitialiseGameContext (chain, "mv", nullptr);
 
       unsigned height;
       std::string hashHex;
@@ -245,7 +245,7 @@ protected:
 
   StateProcessingTests ()
   {
-    rules.InitialiseGameContext (Chain::MAIN, "mv");
+    rules.InitialiseGameContext (Chain::MAIN, "mv", nullptr);
 
     unsigned height;
     std::string hashHex;

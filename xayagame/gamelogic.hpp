@@ -9,6 +9,8 @@
 #include "storage.hpp"
 #include "uint256.hpp"
 
+#include "rpc-stubs/xayarpcclient.h"
+
 #include <json/json.h>
 
 #include <string>
@@ -132,6 +134,12 @@ private:
    */
   std::string gameId;
 
+  /**
+   * Xaya Core RPC connection, if it has been initialised already from the
+   * Game instance.
+   */
+  XayaRpcClient* rpcClient = nullptr;
+
   /** Current Context instance if any.  */
   Context* ctx = nullptr;
 
@@ -197,10 +205,14 @@ public:
    * Initialises the instance with some data that is obtained by a Game
    * instance after the RPC connection to Xaya Core is up.
    *
+   * The RPC client instance may be null, but then certain features
+   * (e.g. VerifyMessage) will be disabled.
+   *
    * This must only be called once.  It is typically done by the Game
    * instance, but may also be used for testing.
    */
-  void InitialiseGameContext (Chain c, const std::string& id);
+  void InitialiseGameContext (Chain c, const std::string& id,
+                              XayaRpcClient* rpc);
 
   /**
    * Returns the initial state for the game.  This is the function that is

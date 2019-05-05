@@ -336,7 +336,7 @@ Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
 
   LOG (INFO) << "Connected to RPC daemon with chain " << ChainToString (chain);
   if (rules != nullptr)
-    rules->InitialiseGameContext (chain, gameId);
+    rules->InitialiseGameContext (chain, gameId, rpcClient.get ());
 }
 
 unsigned
@@ -411,7 +411,7 @@ Game::SetGameLogic (GameLogic* gl)
   CHECK (!mainLoop.IsRunning ());
   rules = gl;
   if (chain != Chain::UNKNOWN)
-    rules->InitialiseGameContext (chain, gameId);
+    rules->InitialiseGameContext (chain, gameId, rpcClient.get ());
 }
 
 void
