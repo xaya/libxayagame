@@ -12,9 +12,7 @@
 #include "rpc-stubs/xayarpcserverstub.h"
 
 #include <json/json.h>
-#include <jsonrpccpp/client.h>
 #include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <gmock/gmock.h>
@@ -37,31 +35,12 @@ using testing::AnyNumber;
 using testing::InSequence;
 using testing::Return;
 
-constexpr int HTTP_PORT = 32100;
-
 constexpr const char GAME_ID[] = "test-game";
 
 constexpr const char NO_REQ_TOKEN[] = "";
 
 constexpr bool SEQ_MISMATCH = true;
 constexpr bool NO_SEQ_MISMATCH = false;
-
-std::string
-GetHttpUrl ()
-{
-  std::ostringstream res;
-  res << "http://localhost:" << HTTP_PORT;
-  return res.str ();
-}
-
-const Json::Value
-ParseJson (const std::string& str)
-{
-  Json::Value val;
-  std::istringstream in(str);
-  in >> val;
-  return val;
-}
 
 /* ************************************************************************** */
 
@@ -70,7 +49,7 @@ ParseJson (const std::string& str)
  * Some methods are mocked using GMock, while others (in particular,
  * getblockchaininfo) have an explicit fake implemlentation.
  */
-class MockXayaRpcServer : public XayaRpcServerStub
+class MockXayaRpcServerWithState : public MockXayaRpcServer
 {
 
 private:
@@ -90,29 +69,7 @@ private:
 
 public:
 
-  MockXayaRpcServer () = delete;
-
-  explicit MockXayaRpcServer (jsonrpc::AbstractServerConnector& conn)
-    : XayaRpcServerStub(conn)
-  {
-    /* By default, expect no calls to be made.  The calls that we expect
-       should explicitly be specified in the individual tests.  */
-    EXPECT_CALL (*this, getzmqnotifications ()).Times (0);
-    EXPECT_CALL (*this, trackedgames (_, _)).Times (0);
-    EXPECT_CALL (*this, getnetworkinfo ()).Times (0);
-    EXPECT_CALL (*this, getblockhash (_)).Times (0);
-    EXPECT_CALL (*this, getblockheader (_)).Times (0);
-    EXPECT_CALL (*this, game_sendupdates (_, _)).Times (0);
-  }
-
-  MOCK_METHOD0 (getzmqnotifications, Json::Value ());
-  MOCK_METHOD2 (trackedgames, void (const std::string& command,
-                                    const std::string& gameid));
-  MOCK_METHOD0 (getnetworkinfo, Json::Value ());
-  MOCK_METHOD1 (getblockhash, std::string (int height));
-  MOCK_METHOD1 (getblockheader, Json::Value (const std::string& hash));
-  MOCK_METHOD2 (game_sendupdates, Json::Value (const std::string& fromblock,
-                                               const std::string& gameid));
+  using MockXayaRpcServer::MockXayaRpcServer;
 
   /**
    * Sets the chain value that should be returned for getblockchaininfo.
@@ -335,7 +292,7 @@ protected:
   /** HTTP server connector for the mock server.  */
   jsonrpc::HttpServer httpServer;
   /** Mock for the Xaya daemon RPC server.  */
-  MockXayaRpcServer mockXayaServer;
+  MockXayaRpcServerWithState mockXayaServer;
   /** HTTP connection to the mock server for the client.  */
   jsonrpc::HttpClient httpClient;
 
@@ -346,8 +303,8 @@ protected:
 
   GameTests ()
     : GameTestWithBlockchain(GAME_ID),
-      httpServer(HTTP_PORT), mockXayaServer(httpServer),
-      httpClient(GetHttpUrl ())
+      httpServer(MockXayaRpcServer::HTTP_PORT), mockXayaServer(httpServer),
+      httpClient(MockXayaRpcServer::HTTP_URL)
   {
     mockXayaServer.StartListening ();
 

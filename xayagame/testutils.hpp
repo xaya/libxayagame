@@ -11,7 +11,10 @@
 #include "storage.hpp"
 #include "uint256.hpp"
 
+#include "rpc-stubs/xayarpcserverstub.h"
+
 #include <json/json.h>
+#include <jsonrpccpp/server.h>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -35,6 +38,50 @@ uint256 BlockHash (unsigned num);
  * some test situations we need.
  */
 void SleepSome ();
+
+/**
+ * Parses a given string as JSON and returns the JSON object.
+ */
+Json::Value ParseJson (const std::string& str);
+
+/**
+ * Mock server for Xaya Core's JSON-RPC interface.
+ */
+class MockXayaRpcServer : public XayaRpcServerStub
+{
+
+public:
+
+  /** The listening port for the mock server in tests.  */
+  static constexpr int HTTP_PORT = 32100;
+
+  /** The listening address of the mock server.  */
+  static constexpr const char* HTTP_URL = "http://localhost:32100";
+
+  /**
+   * Constructs the server at the given connector.  It does not start
+   * listening yet.
+   *
+   * This also sets the mock expectations to no calls at all, so that
+   * tests can explicitly specify the calls they want.
+   */
+  explicit MockXayaRpcServer (jsonrpc::AbstractServerConnector& conn);
+
+  MockXayaRpcServer () = delete;
+  MockXayaRpcServer (const MockXayaRpcServer&) = delete;
+  void operator= (const MockXayaRpcServer&) = delete;
+
+  MOCK_METHOD0 (getzmqnotifications, Json::Value ());
+  MOCK_METHOD2 (trackedgames, void (const std::string& command,
+                                    const std::string& gameid));
+  MOCK_METHOD0 (getnetworkinfo, Json::Value ());
+  MOCK_METHOD0 (getblockchaininfo, Json::Value ());
+  MOCK_METHOD1 (getblockhash, std::string (int height));
+  MOCK_METHOD1 (getblockheader, Json::Value (const std::string& hash));
+  MOCK_METHOD2 (game_sendupdates, Json::Value (const std::string& fromblock,
+                                               const std::string& gameid));
+
+};
 
 /**
  * Memory storage instance that has mocks for verifying the transaction
