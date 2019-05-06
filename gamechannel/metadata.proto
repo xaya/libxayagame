@@ -1,0 +1,28 @@
+// Copyright (C) 2019 The Xaya developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+syntax = "proto2";
+
+package xaya;
+
+/** A participant in a game channel.  */
+message ChannelParticipant
+{
+
+  /** The Xaya p/ name of the participant (their main handle).  */
+  optional string name = 1;
+
+  /** The signing address configured for this channel.  */
+  optional string address = 2;
+
+}
+
+/** Metadata for a game channel.  */
+message ChannelMetadata
+{
+
+  /** The participants of the channel.  The order matters.  */
+  repeated ChannelParticipant participants = 1;
+
+}
