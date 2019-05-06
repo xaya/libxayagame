@@ -141,6 +141,14 @@ protected:
       const Game& game, const std::string& jsonField,
       const std::function<Json::Value (sqlite3*)>& cb);
 
+  /**
+   * Returns a direct handle to the underlying SQLite database.
+   *
+   * THIS SHOULD ONLY BE USED FOR UNIT TESTS AND NOT IN PRODUCTION CODE!
+   * For real code, only use the handle passed into the callbacks.
+   */
+  sqlite3* GetDatabaseForTesting ();
+
   GameStateData GetInitialStateInternal (unsigned& height,
                                          std::string& hashHex) override;
 

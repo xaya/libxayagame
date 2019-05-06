@@ -439,7 +439,7 @@ SQLiteGame::Ids (const std::string& key)
 Json::Value
 SQLiteGame::GameStateToJson (const GameStateData& state)
 {
-  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
+  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
   database->EnsureCurrentState (state);
   return GetStateAsJson (database->GetDatabase ());
 }
@@ -448,13 +448,20 @@ Json::Value
 SQLiteGame::GetCustomStateData (const Game& game, const std::string& jsonField,
                                 const std::function<Json::Value (sqlite3*)>& cb)
 {
-  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
+  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
   return game.GetCustomStateData (jsonField,
       [this, &cb] (const GameStateData& state)
         {
           database->EnsureCurrentState (state);
           return cb (database->GetDatabase ());
         });
+}
+
+sqlite3*
+SQLiteGame::GetDatabaseForTesting ()
+{
+  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
+  return database->GetDatabase ();
 }
 
 /* ************************************************************************** */
