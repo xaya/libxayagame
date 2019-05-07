@@ -18,11 +18,15 @@ Makefile
 Makefile.in
 .deps
 .libs
+
 *.lo
 *.la
 *.trs
 *.pyc
 *.pc
+
+*.pb.h
+*.pb.cc
 
 .dirstamp
 tests

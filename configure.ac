@@ -46,11 +46,12 @@ PKG_CHECK_MODULES([PROTOBUF], [protobuf])
 
 AC_CONFIG_FILES([
   Makefile \
+  gamechannel/Makefile \
+  mover/Makefile \
+  mover/gametest/Makefile \
   xayagame/Makefile \
   xayagametest/Makefile \
   xayautil/Makefile \
-  mover/Makefile \
-  mover/gametest/Makefile \
   \
   xayagame/libxayagame.pc \
   xayautil/libxayautil.pc
