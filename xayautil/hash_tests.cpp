@@ -47,5 +47,13 @@ TEST_F (SHA256Tests, NonEmpty)
       "bdd7344649494d3f16b5c3bbc9989efe64bba2ce0651d6980aab2f12cef4fb0d");
 }
 
+TEST_F (SHA256Tests, UtilityHash)
+{
+  EXPECT_EQ (SHA256::Hash ("").ToHex (),
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  EXPECT_EQ (SHA256::Hash ("foobar").ToHex (),
+      "c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2");
+}
+
 } // anonymous namespace
 } // namespace xaya

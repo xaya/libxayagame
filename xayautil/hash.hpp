@@ -51,6 +51,11 @@ public:
    */
   uint256 Finalise ();
 
+  /**
+   * Utility method to hash just a string directory.
+   */
+  static uint256 Hash (const std::string& data);
+
 };
 
 } // namespace xaya

@@ -95,4 +95,12 @@ SHA256::Finalise ()
   return res;
 }
 
+uint256
+SHA256::Hash (const std::string& data)
+{
+  SHA256 hasher;
+  hasher << data;
+  return hasher.Finalise ();
+}
+
 } // namespace xaya
