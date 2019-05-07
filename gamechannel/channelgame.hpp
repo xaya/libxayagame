@@ -28,6 +28,9 @@ protected:
    */
   void SetupGameChannelsSchema (sqlite3* db);
 
+  friend class ChannelData;
+  friend class ChannelsTable;
+
 public:
 
   using SQLiteGame::SQLiteGame;

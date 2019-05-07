@@ -22,10 +22,12 @@ libgamechannel_la_LIBADD = \
   $(GLOG_LIBS) $(SQLITE3_LIBS) $(PROTOBUF_LIBS)
 libgamechannel_la_SOURCES = \
   channelgame.cpp \
+  database.cpp \
   schema.cpp \
   $(PROTOSOURCES)
 gamechannel_HEADERS = \
   channelgame.hpp \
+  database.hpp \
   schema.hpp \
   $(PROTOHEADERS)
 
@@ -35,14 +37,15 @@ TESTS = tests
 tests_CXXFLAGS = \
   -I$(top_srcdir) \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
-  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS)
+  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS) $(PROTOBUF_CFLAGS)
 tests_LDADD = \
   $(builddir)/libgamechannel.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS)
+  $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(PROTOBUF_LIBS)
 tests_SOURCES = \
+  database_tests.cpp \
   schema_tests.cpp \
   \
   testgame.cpp
