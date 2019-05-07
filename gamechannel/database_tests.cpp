@@ -84,6 +84,28 @@ TEST_F (ChannelDbTests, Updating)
   EXPECT_FALSE (h->HasDispute ());
 }
 
+TEST_F (ChannelDbTests, StringsWithNul)
+{
+  const std::string str1("a\0b", 3);
+  const std::string str2("x\0y", 3);
+  ASSERT_EQ (str1.size (), 3);
+  ASSERT_EQ (str1[1], 0);
+  ASSERT_EQ (str2.size (), 3);
+  ASSERT_EQ (str2[1], 0);
+
+  auto h = tbl.CreateNew (SHA256::Hash ("id"));
+  h->MutableMetadata ().add_participants ()->set_name (str1);
+  h->SetState (str2);
+  h.reset ();
+
+  h = tbl.GetById (SHA256::Hash ("id"));
+  ASSERT_NE (h, nullptr);
+  EXPECT_EQ (h->GetId (), SHA256::Hash ("id"));
+  EXPECT_EQ (h->GetMetadata ().participants_size (), 1);
+  EXPECT_EQ (h->GetMetadata ().participants (0).name (), str1);
+  EXPECT_EQ (h->GetState (), str2);
+}
+
 TEST_F (ChannelDbTests, GetByUnknownId)
 {
   EXPECT_EQ (tbl.GetById (SHA256::Hash ("foo")), nullptr);
