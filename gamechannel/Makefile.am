@@ -1,7 +1,7 @@
 lib_LTLIBRARIES = libgamechannel.la
 gamechanneldir = $(includedir)/gamechannel
 
-PROTOS = metadata.proto
+PROTOS = metadata.proto signatures.proto
 PROTOHEADERS = $(PROTOS:.proto=.pb.h)
 PROTOSOURCES = $(PROTOS:.proto=.pb.cc)
 
