@@ -1,7 +1,7 @@
 lib_LTLIBRARIES = libgamechannel.la
 gamechanneldir = $(includedir)/gamechannel
 
-PROTOS = metadata.proto signatures.proto
+PROTOS = metadata.proto signatures.proto stateproof.proto
 PROTOHEADERS = $(PROTOS:.proto=.pb.h)
 PROTOSOURCES = $(PROTOS:.proto=.pb.cc)
 
@@ -26,6 +26,7 @@ libgamechannel_la_SOURCES = \
   database.cpp \
   schema.cpp \
   signatures.cpp \
+  stateproof.cpp \
   $(PROTOSOURCES)
 gamechannel_HEADERS = \
   boardrules.hpp \
@@ -33,6 +34,7 @@ gamechannel_HEADERS = \
   database.hpp \
   schema.hpp \
   signatures.hpp \
+  stateproof.hpp \
   $(PROTOHEADERS)
 
 check_PROGRAMS = tests
@@ -53,6 +55,7 @@ tests_SOURCES = \
   database_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \
+  stateproof_tests.cpp \
   testgame_tests.cpp \
   \
   testgame.cpp

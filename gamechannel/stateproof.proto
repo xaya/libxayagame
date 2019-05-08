@@ -1,0 +1,56 @@
+// Copyright (C) 2019 The Xaya developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+syntax = "proto2";
+
+import "signatures.proto";
+
+package xaya;
+
+/**
+ * A state transition:  This is a move made by the current player together
+ * with the resulting state signed by that player.  If we have a known current
+ * state, then this is the information we need to verify that this is the
+ * current player's move.  Furthermore, by having a state signed by that
+ * player afterwards, we get a basis to build upon and proving that that
+ * player agreed at this point.
+ */
+message StateTransition
+{
+
+  /** The player's move encoded in a game-specific format.  */
+  optional bytes move = 1;
+
+  /** The resulting state and the player's signature.  */
+  optional SignedData new_state = 2;
+
+}
+
+/**
+ * A full proof of some state of the game channel and that every participant
+ * agrees to it.  This starts off some base state and then applies state
+ * transitions ending at the target state.  As long as the base or any later
+ * state was known to be good (i.e. already put on-chain) or every participant
+ * signed a state during the steps, this is ensured.  It is also fine
+ * if someone signed only a state even if they were not the one who did a move,
+ * although that is unlikely to occur in practice.
+ *
+ * Note that there are possible efficiency-improvements to the format
+ * and rules of such a state proof.  For instance, it would be enough if for
+ * each player, the *last* state resulting from a move of them is signed.
+ * If, for example, some player makes three moves after each other for some
+ * reason, then only the last state actually needs a signature and the
+ * signatures for "intermediate" states can be left out.  For now, this is
+ * not implemented, though.
+ */
+message StateProof
+{
+
+  /** The initial state and potentially signatures on it.  */
+  optional SignedData initial_state = 1;
+
+  /** A series of ordered state transitions on top of the initial state.  */
+  repeated StateTransition transitions = 2;
+
+}

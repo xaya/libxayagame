@@ -61,10 +61,6 @@ public:
 class TestGame : public ChannelGame
 {
 
-private:
-
-  AdditionRules rules;
-
 protected:
 
   void SetupSchema (sqlite3* db) override;
@@ -77,6 +73,10 @@ protected:
   const BoardRules& GetBoardRules () const override;
 
   friend class TestGameFixture;
+
+public:
+
+  AdditionRules rules;
 
 };
 
