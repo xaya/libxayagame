@@ -5,6 +5,7 @@
 #ifndef GAMECHANNEL_TESTGAME_HPP
 #define GAMECHANNEL_TESTGAME_HPP
 
+#include "boardrules.hpp"
 #include "channelgame.hpp"
 
 #include <gtest/gtest.h>
@@ -21,11 +22,41 @@ namespace xaya
 class TestGameFixture;
 
 /**
+ * Board rules for a trivial example game used in unit tests.  The game goes
+ * like this:
+ *
+ * The current state is a number, encoded simply in a string.  The current
+ * turn is for player (number % 2).  When the number is 100 or above, then
+ * the game is finished.  A move is simply another, strictly positive number
+ * encoded as a string, which gets added to the current "state number".
+ */
+class AdditionRules : public BoardRules
+{
+
+public:
+
+  bool CompareStates (const ChannelMetadata& meta,
+                      const BoardState& a, const BoardState& b) const override;
+
+  int WhoseTurn (const ChannelMetadata& meta,
+                 const BoardState& a) const override;
+
+  bool ApplyMove (const ChannelMetadata& meta,
+                  const BoardState& oldState, const BoardMove& mv,
+                  BoardState& newState) const override;
+
+};
+
+/**
  * Subclass of ChannelGame that implements a trivial game only as much as
  * necessary for unit tests of the game-channel framework.
  */
 class TestGame : public ChannelGame
 {
+
+private:
+
+  AdditionRules rules;
 
 protected:
 
@@ -35,6 +66,8 @@ protected:
   void InitialiseState (sqlite3* db) override;
   void UpdateState (sqlite3* db, const Json::Value& blockData) override;
   Json::Value GetStateAsJson (sqlite3* db) override;
+
+  const BoardRules& GetBoardRules () const override;
 
   friend class TestGameFixture;
 

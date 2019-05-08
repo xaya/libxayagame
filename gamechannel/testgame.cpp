@@ -6,8 +6,64 @@
 
 #include <glog/logging.h>
 
+#include <sstream>
+
 namespace xaya
 {
+
+namespace
+{
+
+int
+ParseNum (const std::string& s)
+{
+  std::istringstream in(s);
+  int res;
+  in >> res;
+
+  return res;
+}
+
+} // anonymous namespace
+
+bool
+AdditionRules::CompareStates (const ChannelMetadata& meta,
+                              const BoardState& a, const BoardState& b) const
+{
+  return ParseNum (a) == ParseNum (b);
+}
+
+int
+AdditionRules::WhoseTurn (const ChannelMetadata& meta,
+                          const BoardState& state) const
+{
+  const int num = ParseNum (state);
+  if (num >= 100)
+    return BoardRules::NO_TURN;
+
+  return num % 2;
+}
+
+bool
+AdditionRules::ApplyMove (const ChannelMetadata& meta,
+                          const BoardState& oldState, const BoardMove& mv,
+                          BoardState& newState) const
+{
+  const int num = ParseNum (oldState);
+  /* The framework code should never actually attempt to apply a move in
+     a NO_TURN situation.  Verify that.  */
+  CHECK_LT (num, 100) << "Move applied to 'no turn' state";
+
+  const int add = ParseNum (mv);
+  if (add <= 0)
+    return false;
+
+  std::ostringstream out;
+  out << (num + add);
+  newState = out.str ();
+
+  return true;
+}
 
 void
 TestGame::SetupSchema (sqlite3* db)
@@ -37,6 +93,12 @@ Json::Value
 TestGame::GetStateAsJson (sqlite3* db)
 {
   LOG (FATAL) << "TestGame::GetStateAsJson is not implemented";
+}
+
+const BoardRules&
+TestGame::GetBoardRules () const
+{
+  return rules;
 }
 
 TestGameFixture::TestGameFixture ()

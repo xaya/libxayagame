@@ -21,12 +21,14 @@ libgamechannel_la_LIBADD = \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(SQLITE3_LIBS) $(PROTOBUF_LIBS)
 libgamechannel_la_SOURCES = \
+  boardrules.cpp \
   channelgame.cpp \
   database.cpp \
   schema.cpp \
   signatures.cpp \
   $(PROTOSOURCES)
 gamechannel_HEADERS = \
+  boardrules.hpp \
   channelgame.hpp \
   database.hpp \
   schema.hpp \
@@ -51,6 +53,7 @@ tests_SOURCES = \
   database_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \
+  testgame_tests.cpp \
   \
   testgame.cpp
 check_HEADERS = \
