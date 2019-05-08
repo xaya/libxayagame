@@ -61,19 +61,34 @@ rpcstub_HEADERS = \
   rpc-stubs/xayarpcclient.h \
   rpc-stubs/xayarpcserverstub.h
 
+check_LTLIBRARIES = libtestutils.la
 check_PROGRAMS = tests
 TESTS = tests
+
+libtestutils_la_CXXFLAGS = \
+  -I$(top_srcdir) \
+  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
+  $(GLOG_CFLAGS) $(GTEST_CFLAGS)
+libtestutils_la_LIBADD = \
+  $(builddir)/libxayagame.la \
+  $(top_builddir)/xayautil/libxayautil.la \
+  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
+  $(GLOG_LIBS) $(GTEST_LIBS)
+libtestutils_la_SOURCES = \
+  testutils.cpp
+TESTUTILHEADERS = testutils.hpp
 
 tests_CXXFLAGS = \
   -I$(top_srcdir) \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
   $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
 tests_LDADD = \
+  $(builddir)/libtestutils.la \
   $(builddir)/libxayagame.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS)
-tests_SOURCES = testutils.cpp \
+tests_SOURCES = \
   game_tests.cpp \
   gamelogic_tests.cpp \
   heightcache_tests.cpp \
@@ -86,7 +101,9 @@ tests_SOURCES = testutils.cpp \
   storage_tests.cpp \
   transactionmanager_tests.cpp \
   zmqsubscriber_tests.cpp
-check_HEADERS = testutils.hpp storage_tests.hpp
+TESTHEADERS = storage_tests.hpp
+
+check_HEADERS = $(TESTUTILHEADERS) $(TESTHEADERS)
 
 rpc-stubs/gamerpcclient.h: $(srcdir)/rpc-stubs/game.json
 	jsonrpcstub "$<" --cpp-client=GameRpcClient --cpp-client-file="$@"
