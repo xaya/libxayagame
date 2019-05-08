@@ -1,0 +1,26 @@
+// Copyright (C) 2019 The Xaya developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+syntax = "proto2";
+
+package xaya;
+
+/** A piece of data with signatures of channel participants.  */
+message SignedData
+{
+
+  /**
+   * The data itself.  This can encode different entities, like board states,
+   * moves or changes made to a channel in agreement.
+   */
+  optional bytes data = 1;
+
+  /**
+   * The signatures made on the data by channel participants.  Each signature
+   * is the "signmessage" output of Xaya Core, but base64-decoded to binary.
+   * The message is the SHA256-hash of "data", encoded into lower-case hex.
+   */
+  repeated bytes signatures = 2;
+
+}
