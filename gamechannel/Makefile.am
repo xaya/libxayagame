@@ -1,7 +1,7 @@
 lib_LTLIBRARIES = libgamechannel.la
 gamechanneldir = $(includedir)/gamechannel
 
-PROTOS = metadata.proto signatures.proto
+PROTOS = metadata.proto signatures.proto stateproof.proto
 PROTOHEADERS = $(PROTOS:.proto=.pb.h)
 PROTOSOURCES = $(PROTOS:.proto=.pb.cc)
 
@@ -21,16 +21,20 @@ libgamechannel_la_LIBADD = \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(SQLITE3_LIBS) $(PROTOBUF_LIBS)
 libgamechannel_la_SOURCES = \
+  boardrules.cpp \
   channelgame.cpp \
   database.cpp \
   schema.cpp \
   signatures.cpp \
+  stateproof.cpp \
   $(PROTOSOURCES)
 gamechannel_HEADERS = \
+  boardrules.hpp \
   channelgame.hpp \
   database.hpp \
   schema.hpp \
   signatures.hpp \
+  stateproof.hpp \
   $(PROTOHEADERS)
 
 check_PROGRAMS = tests
@@ -51,6 +55,8 @@ tests_SOURCES = \
   database_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \
+  stateproof_tests.cpp \
+  testgame_tests.cpp \
   \
   testgame.cpp
 check_HEADERS = \

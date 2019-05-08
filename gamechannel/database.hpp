@@ -5,6 +5,7 @@
 #ifndef GAMECHANNEL_DATABASE_HPP
 #define GAMECHANNEL_DATABASE_HPP
 
+#include "boardrules.hpp"
 #include "channelgame.hpp"
 
 #include "metadata.pb.h"
@@ -14,13 +15,9 @@
 #include <sqlite3.h>
 
 #include <memory>
-#include <string>
 
 namespace xaya
 {
-
-/** We use std::string as container for encoded state data.  */
-using BoardState = std::string;
 
 /**
  * Wrapper class around the state of one channel in the database.  This

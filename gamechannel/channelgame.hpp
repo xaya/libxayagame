@@ -5,6 +5,8 @@
 #ifndef GAMECHANNEL_CHANNELGAME_HPP
 #define GAMECHANNEL_CHANNELGAME_HPP
 
+#include "boardrules.hpp"
+
 #include <xayagame/sqlitegame.hpp>
 
 namespace xaya
@@ -27,6 +29,12 @@ protected:
    * called from the overridden SetupSchema method.
    */
   void SetupGameChannelsSchema (sqlite3* db);
+
+  /**
+   * This method needs to be overridden to provide an instance of BoardRules
+   * to the game channels framework.
+   */
+  virtual const BoardRules& GetBoardRules () const = 0;
 
   friend class ChannelData;
   friend class ChannelsTable;
