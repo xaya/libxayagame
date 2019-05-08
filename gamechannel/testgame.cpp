@@ -4,6 +4,11 @@
 
 #include "testgame.hpp"
 
+#include <xayautil/base64.hpp>
+#include <xayautil/hash.hpp>
+
+#include <gmock/gmock.h>
+
 #include <glog/logging.h>
 
 #include <sstream>
@@ -13,6 +18,9 @@ namespace xaya
 
 namespace
 {
+
+using testing::_;
+using testing::Return;
 
 int
 ParseNum (const std::string& s)
@@ -102,17 +110,53 @@ TestGame::GetBoardRules () const
 }
 
 TestGameFixture::TestGameFixture ()
+  : httpServer(MockXayaRpcServer::HTTP_PORT),
+    httpClient(MockXayaRpcServer::HTTP_URL),
+    mockXayaServer(httpServer),
+    rpcClient(httpClient)
 {
   game.Initialise (":memory:");
   game.GetStorage ()->Initialise ();
-
   /* The initialisation above already sets up the database schema.  */
+
+  mockXayaServer.StartListening ();
+}
+
+TestGameFixture::~TestGameFixture ()
+{
+  mockXayaServer.StopListening ();
 }
 
 sqlite3*
 TestGameFixture::GetDb ()
 {
   return game.GetDatabaseForTesting ();
+}
+
+void
+TestGameFixture::ValidSignature (const std::string& sgn,
+                                 const std::string& addr)
+{
+  Json::Value res(Json::objectValue);
+  res["valid"] = true;
+  res["address"] = addr;
+
+  EXPECT_CALL (mockXayaServer, verifymessage ("", _, EncodeBase64 (sgn)))
+      .WillRepeatedly (Return (res));
+}
+
+void
+TestGameFixture::ExpectSignature (const std::string& msg,
+                                  const std::string& sgn,
+                                  const std::string& addr)
+{
+  Json::Value res(Json::objectValue);
+  res["valid"] = true;
+  res["address"] = addr;
+
+  const std::string hashed = SHA256::Hash (msg).ToHex ();
+  EXPECT_CALL (mockXayaServer, verifymessage ("", hashed, EncodeBase64 (sgn)))
+      .WillOnce (Return (res));
 }
 
 } // namespace xaya

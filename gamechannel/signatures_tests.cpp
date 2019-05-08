@@ -4,14 +4,10 @@
 
 #include "signatures.hpp"
 
-#include "xayagame/testutils.hpp"
+#include "testgame.hpp"
 
-#include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
-
-#include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -23,34 +19,7 @@ namespace
 
 using testing::Return;
 
-class SignaturesTests : public testing::Test
-{
-
-private:
-
-  jsonrpc::HttpServer httpServer;
-  jsonrpc::HttpClient httpClient;
-
-protected:
-
-  MockXayaRpcServer mockXayaServer;
-  XayaRpcClient rpcClient;
-
-  SignaturesTests ()
-    : httpServer(MockXayaRpcServer::HTTP_PORT),
-      httpClient(MockXayaRpcServer::HTTP_URL),
-      mockXayaServer(httpServer),
-      rpcClient(httpClient)
-  {
-    mockXayaServer.StartListening ();
-  }
-
-  ~SignaturesTests ()
-  {
-    mockXayaServer.StopListening ();
-  }
-
-};
+using SignaturesTests = TestGameFixture;
 
 TEST_F (SignaturesTests, VerifyParticipantSignatures)
 {
