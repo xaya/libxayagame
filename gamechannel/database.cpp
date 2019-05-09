@@ -4,6 +4,8 @@
 
 #include "database.hpp"
 
+#include "channelgame.hpp"
+
 #include <glog/logging.h>
 
 #include <set>

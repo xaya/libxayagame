@@ -6,6 +6,9 @@
 #define GAMECHANNEL_CHANNELGAME_HPP
 
 #include "boardrules.hpp"
+#include "database.hpp"
+
+#include "proto/stateproof.pb.h"
 
 #include <xayagame/sqlitegame.hpp>
 
@@ -29,6 +32,28 @@ protected:
    * called from the overridden SetupSchema method.
    */
   void SetupGameChannelsSchema (sqlite3* db);
+
+  /**
+   * Processes a request (e.g. sent in a move) to open a dispute at the
+   * current block height for the given game channel and based on the
+   * given state proof.  If the request is valid (mainly meaning that the
+   * state proof is valid and for a "later" state than the current on-chain
+   * state), then the dispute is opened on the ChannelData instance and
+   * true is returned.  If it is not valid, then no changes are made and
+   * false is returned.
+   */
+  bool ProcessDispute (ChannelData& ch, unsigned height,
+                       const StateProof& proof);
+
+  /**
+   * Processes a request (e.g. sent in a move) for resolving a dispute
+   * in the given channel.  If the provided state proof is valid and at least
+   * one turn further than the current on-chain state, then the new state is
+   * put on-chain and any open disputes are resolved (and true is returned).
+   * Note that this function succeeds also if there is not an open dispute;
+   * in that case, the on-chain state will simply be updated.
+   */
+  bool ProcessResolution (ChannelData& ch, const StateProof& proof);
 
   /**
    * This method needs to be overridden to provide an instance of BoardRules

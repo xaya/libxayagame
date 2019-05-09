@@ -63,7 +63,17 @@ public:
    * NO_TURN to indicate that it is noone's turn at the moment.
    */
   virtual int WhoseTurn (const ChannelMetadata& meta,
-                         const BoardState& a) const = 0;
+                         const BoardState& state) const = 0;
+
+  /**
+   * Returns the "turn count" for the given game state.  This is a number
+   * that should increase with turns made in the game, so that it is possible
+   * to determine whether a given state is "after" another.  It can also be
+   * seen as the "block height" in the "private chain" formed during a game
+   * on a channel.
+   */
+  virtual unsigned TurnCount (const ChannelMetadata& meta,
+                              const BoardState& state) const = 0;
 
   /**
    * Applies a move (assumed to be made by the player whose turn it is)

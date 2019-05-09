@@ -32,10 +32,12 @@ class TestGameFixture;
  * Board rules for a trivial example game used in unit tests.  The game goes
  * like this:
  *
- * The current state is a number, encoded simply in a string.  The current
+ * The current state is a pair of numbers, encoded simply in a string.  Those
+ * numbers are a "current number" and the turn count.  The current
  * turn is for player (number % 2).  When the number is 100 or above, then
  * the game is finished.  A move is simply another, strictly positive number
  * encoded as a string, which gets added to the current "state number".
+ * The turn count is simply incremented on each turn made.
  */
 class AdditionRules : public BoardRules
 {
@@ -46,7 +48,10 @@ public:
                       const BoardState& a, const BoardState& b) const override;
 
   int WhoseTurn (const ChannelMetadata& meta,
-                 const BoardState& a) const override;
+                 const BoardState& state) const override;
+
+  unsigned TurnCount (const ChannelMetadata& meta,
+                      const BoardState& state) const override;
 
   bool ApplyMove (const ChannelMetadata& meta,
                   const BoardState& oldState, const BoardMove& mv,
@@ -77,6 +82,9 @@ protected:
 public:
 
   AdditionRules rules;
+
+  using ChannelGame::ProcessDispute;
+  using ChannelGame::ProcessResolution;
 
 };
 
