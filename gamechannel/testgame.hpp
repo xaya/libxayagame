@@ -84,6 +84,7 @@ public:
   AdditionRules rules;
 
   using ChannelGame::ProcessDispute;
+  using ChannelGame::ProcessResolution;
 
 };
 

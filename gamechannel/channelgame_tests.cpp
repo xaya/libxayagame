@@ -158,5 +158,66 @@ TEST_F (DisputeTests, UpdateAtSameHeight)
 
 /* ************************************************************************** */
 
+using ResolutionTests = ChannelGameTests;
+
+TEST_F (ResolutionTests, InvalidStateProof)
+{
+  auto ch = GetChannel ("test");
+  ch->SetDisputeHeight (100);
+  ch->SetState ("0 1");
+
+  ASSERT_FALSE (game.ProcessResolution (*ch, ParseStateProof (R"(
+    initial_state:
+      {
+        data: "42 5"
+      }
+  )")));
+
+  EXPECT_EQ (ch->GetState (), "0 1");
+  ASSERT_TRUE (ch->HasDispute ());
+  EXPECT_EQ (ch->GetDisputeHeight (), 100);
+}
+
+TEST_F (ResolutionTests, NoLaterTurn)
+{
+  auto ch = GetChannel ("test");
+  ch->SetDisputeHeight (100);
+  ch->SetState ("10 5");
+
+  ASSERT_FALSE (game.ProcessResolution (*ch, ParseStateProof (R"(
+    initial_state:
+      {
+        data: "20 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )")));
+
+  EXPECT_EQ (ch->GetState (), "10 5");
+  ASSERT_TRUE (ch->HasDispute ());
+  EXPECT_EQ (ch->GetDisputeHeight (), 100);
+}
+
+TEST_F (ResolutionTests, Valid)
+{
+  auto ch = GetChannel ("test");
+  ch->SetDisputeHeight (100);
+  ch->SetState ("10 5");
+
+  ASSERT_TRUE (game.ProcessResolution (*ch, ParseStateProof (R"(
+    initial_state:
+      {
+        data: "20 6"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )")));
+
+  EXPECT_EQ (ch->GetState (), "20 6");
+  EXPECT_FALSE (ch->HasDispute ());
+}
+
+/* ************************************************************************** */
+
 } // anonymous namespace
 } // namespace xaya

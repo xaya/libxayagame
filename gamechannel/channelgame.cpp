@@ -18,19 +18,25 @@ ChannelGame::SetupGameChannelsSchema (sqlite3* db)
   InternalSetupGameChannelsSchema (db);
 }
 
+namespace
+{
+
+/**
+ * Verifies if the given state proof is valid and for a state later
+ * than (in turn count) the current on-chain state.  This is logic
+ * in common between ProcessDispute and ProcessResolution.
+ */
 bool
-ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
-                             const StateProof& proof)
+CheckStateProofIsLater (XayaRpcClient& rpc, const BoardRules& rules,
+                        const ChannelData& ch, const StateProof& proof,
+                        BoardState& provenState)
 {
   const auto& meta = ch.GetMetadata ();
   const auto& onChainState = ch.GetState ();
-  const auto& rules = GetBoardRules ();
 
-  BoardState provenState;
-  if (!VerifyStateProof (GetXayaRpc (), rules, meta, onChainState, proof,
-                         provenState))
+  if (!VerifyStateProof (rpc, rules, meta, onChainState, proof, provenState))
     {
-      LOG (WARNING) << "Dispute has invalid state proof";
+      LOG (WARNING) << "Dispute/resolution has invalid state proof";
       return false;
     }
 
@@ -39,11 +45,25 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
   if (onChainCnt >= provenCnt)
     {
       LOG (WARNING)
-          << "Dispute has turn count " << provenCnt
+          << "Dispute/resolution has turn count " << provenCnt
           << ", which is not beyond the on-chain count " << onChainCnt;
       return false;
     }
   CHECK_GT (provenCnt, onChainCnt);
+
+  return true;
+}
+
+} // anonymous namespace
+
+bool
+ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
+                             const StateProof& proof)
+{
+  BoardState provenState;
+  if (!CheckStateProofIsLater (GetXayaRpc (), GetBoardRules (), ch, proof,
+                               provenState))
+    return false;
 
   /* If there is already a dispute in the on-chain game state, then it can only
      have been placed there by an earlier block (or perhaps the same block
@@ -55,6 +75,22 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
 
   ch.SetState (provenState);
   ch.SetDisputeHeight (height);
+
+  return true;
+}
+
+bool
+ChannelGame::ProcessResolution (ChannelData& ch, const StateProof& proof)
+{
+  BoardState provenState;
+  if (!CheckStateProofIsLater (GetXayaRpc (), GetBoardRules (), ch, proof,
+                               provenState))
+    return false;
+
+  VLOG (1) << "Resolution is valid, updating state...";
+
+  ch.SetState (provenState);
+  ch.ClearDispute ();
 
   return true;
 }

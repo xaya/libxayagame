@@ -46,6 +46,16 @@ protected:
                        const StateProof& proof);
 
   /**
+   * Processes a request (e.g. sent in a move) for resolving a dispute
+   * in the given channel.  If the provided state proof is valid and at least
+   * one turn further than the current on-chain state, then the new state is
+   * put on-chain and any open disputes are resolved (and true is returned).
+   * Note that this function succeeds also if there is not an open dispute;
+   * in that case, the on-chain state will simply be updated.
+   */
+  bool ProcessResolution (ChannelData& ch, const StateProof& proof);
+
+  /**
    * This method needs to be overridden to provide an instance of BoardRules
    * to the game channels framework.
    */
