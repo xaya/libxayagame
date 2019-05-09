@@ -73,12 +73,11 @@ VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
 
 bool
 VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
-                  const ChannelData& channel, const StateProof& proof,
+                  const ChannelMetadata& meta,
+                  const BoardState& onChainState,
+                  const StateProof& proof,
                   BoardState& endState)
 {
-  const auto& meta = channel.GetMetadata ();
-  const auto& onChainState = channel.GetState ();
-
   std::set<int> signatures
       = VerifyParticipantSignatures (rpc, meta, proof.initial_state ());
   endState = proof.initial_state ().data ();

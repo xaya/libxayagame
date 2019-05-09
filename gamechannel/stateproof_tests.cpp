@@ -131,23 +131,9 @@ TEST_F (StateTransitionTests, Valid)
 class StateProofTests : public GeneralStateProofTests
 {
 
-private:
-
-  ChannelsTable tbl;
-  const uint256 id;
-
 protected:
 
   BoardState endState;
-
-  StateProofTests ()
-    : tbl(game), id(SHA256::Hash ("id"))
-  {
-    /* Set up a ChannelData instance in the database.  This allows us to
-       always use the same one later for VerifyProof, so that we do not need
-       to generate distinct IDs or otherwise hack around.  */
-    tbl.CreateNew (id);
-  }
 
   /**
    * Calls VerifyStateProof based on the given on-chain state and the
@@ -159,11 +145,8 @@ protected:
     StateProof proto;
     CHECK (TextFormat::ParseFromString (proof, &proto));
 
-    auto ch = tbl.GetById (id);
-    ch->MutableMetadata () = meta;
-    ch->SetState (chainState);
-
-    return VerifyStateProof (rpcClient, game.rules, *ch, proto, endState);
+    return VerifyStateProof (rpcClient, game.rules, meta, chainState, proto,
+                             endState);
   }
 
 };

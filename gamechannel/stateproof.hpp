@@ -6,7 +6,6 @@
 #define GAMECHANNEL_STATEPROOF_HPP
 
 #include "boardrules.hpp"
-#include "database.hpp"
 
 #include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
@@ -34,7 +33,9 @@ bool VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
  * in endState.
  */
 bool VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
-                       const ChannelData& channel, const StateProof& proof,
+                       const ChannelMetadata& meta,
+                       const BoardState& onChainState,
+                       const StateProof& proof,
                        BoardState& endState);
 
 } // namespace xaya
