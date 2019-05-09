@@ -5,7 +5,7 @@
 #ifndef GAMECHANNEL_BOARDRULES_HPP
 #define GAMECHANNEL_BOARDRULES_HPP
 
-#include "metadata.pb.h"
+#include "proto/metadata.pb.h"
 
 #include <string>
 

@@ -8,7 +8,7 @@
 #include "boardrules.hpp"
 #include "channelgame.hpp"
 
-#include "metadata.pb.h"
+#include "proto/metadata.pb.h"
 
 #include <xayautil/uint256.hpp>
 

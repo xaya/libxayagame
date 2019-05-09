@@ -5,8 +5,8 @@
 #ifndef GAMECHANNEL_SIGNATURES_HPP
 #define GAMECHANNEL_SIGNATURES_HPP
 
-#include "metadata.pb.h"
-#include "signatures.pb.h"
+#include "proto/metadata.pb.h"
+#include "proto/signatures.pb.h"
 
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 

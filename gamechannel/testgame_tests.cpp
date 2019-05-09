@@ -4,7 +4,7 @@
 
 #include "testgame.hpp"
 
-#include "metadata.pb.h"
+#include "proto/metadata.pb.h"
 
 #include <gtest/gtest.h>
 

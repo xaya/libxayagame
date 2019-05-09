@@ -8,8 +8,8 @@
 #include "boardrules.hpp"
 #include "database.hpp"
 
-#include "metadata.pb.h"
-#include "stateproof.pb.h"
+#include "proto/metadata.pb.h"
+#include "proto/stateproof.pb.h"
 
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 
