@@ -56,6 +56,7 @@ tests_LDADD = \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(PROTOBUF_LIBS)
 tests_SOURCES = \
+  channelgame_tests.cpp \
   database_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \

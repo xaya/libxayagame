@@ -6,8 +6,6 @@
 
 #include "testgame.hpp"
 
-#include <xayautil/hash.hpp>
-
 #include <google/protobuf/text_format.h>
 
 #include <gtest/gtest.h>

@@ -6,7 +6,6 @@
 #define GAMECHANNEL_DATABASE_HPP
 
 #include "boardrules.hpp"
-#include "channelgame.hpp"
 
 #include "proto/metadata.pb.h"
 
@@ -18,6 +17,8 @@
 
 namespace xaya
 {
+
+class ChannelGame;
 
 /**
  * Wrapper class around the state of one channel in the database.  This
