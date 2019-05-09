@@ -12,6 +12,7 @@
 #include <glog/logging.h>
 
 #include <sstream>
+#include <utility>
 
 namespace xaya
 {
@@ -22,14 +23,19 @@ namespace
 using testing::_;
 using testing::Return;
 
-int
-ParseNum (const std::string& s)
+std::pair<int, int>
+ParsePair (const std::string& s)
 {
   std::istringstream in(s);
-  int res;
-  in >> res;
+  int a, b;
+  in >> a >> b;
 
-  return res;
+  /* Make sure that we actually had two numbers to read.  Else we would get
+     one or both as "silent zeros", but that means there's a bug somewhere
+     in the test data.  */
+  CHECK (in) << "Invalid game state: " << s;
+
+  return {a, b};
 }
 
 } // anonymous namespace
@@ -38,18 +44,25 @@ bool
 AdditionRules::CompareStates (const ChannelMetadata& meta,
                               const BoardState& a, const BoardState& b) const
 {
-  return ParseNum (a) == ParseNum (b);
+  return ParsePair (a) == ParsePair (b);
 }
 
 int
 AdditionRules::WhoseTurn (const ChannelMetadata& meta,
                           const BoardState& state) const
 {
-  const int num = ParseNum (state);
+  const int num = ParsePair (state).first;
   if (num >= 100)
     return BoardRules::NO_TURN;
 
   return num % 2;
+}
+
+unsigned
+AdditionRules::TurnCount (const ChannelMetadata& meta,
+                          const BoardState& state) const
+{
+  return ParsePair (state).second;
 }
 
 bool
@@ -57,17 +70,19 @@ AdditionRules::ApplyMove (const ChannelMetadata& meta,
                           const BoardState& oldState, const BoardMove& mv,
                           BoardState& newState) const
 {
-  const int num = ParseNum (oldState);
+  const auto state = ParsePair (oldState);
   /* The framework code should never actually attempt to apply a move in
      a NO_TURN situation.  Verify that.  */
-  CHECK_LT (num, 100) << "Move applied to 'no turn' state";
+  CHECK_LT (state.first, 100) << "Move applied to 'no turn' state";
 
-  const int add = ParseNum (mv);
+  std::istringstream mvIn(mv);
+  int add;
+  mvIn >> add;
   if (add <= 0)
     return false;
 
   std::ostringstream out;
-  out << (num + add);
+  out << (state.first + add) << " " << (state.second + 1);
   newState = out.str ();
 
   return true;

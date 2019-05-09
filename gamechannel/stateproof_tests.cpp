@@ -64,11 +64,11 @@ protected:
 
 TEST_F (StateTransitionTests, NoTurnState)
 {
-  EXPECT_FALSE (VerifyTransition ("100", R"(
+  EXPECT_FALSE (VerifyTransition ("100 1", R"(
     move: "1",
     new_state:
       {
-        data: "101"
+        data: "101 2"
         signatures: "sgn0"
       }
   )"));
@@ -76,11 +76,11 @@ TEST_F (StateTransitionTests, NoTurnState)
 
 TEST_F (StateTransitionTests, InvalidMove)
 {
-  EXPECT_FALSE (VerifyTransition ("10", R"(
+  EXPECT_FALSE (VerifyTransition ("10 1", R"(
     move: "0",
     new_state:
       {
-        data: "10"
+        data: "10 2"
         signatures: "sgn0"
       }
   )"));
@@ -88,11 +88,11 @@ TEST_F (StateTransitionTests, InvalidMove)
 
 TEST_F (StateTransitionTests, NewStateMismatch)
 {
-  EXPECT_FALSE (VerifyTransition ("10", R"(
+  EXPECT_FALSE (VerifyTransition ("10 1", R"(
     move: "1",
     new_state:
       {
-        data: "12"
+        data: "11 5"
         signatures: "sgn0"
       }
   )"));
@@ -100,11 +100,11 @@ TEST_F (StateTransitionTests, NewStateMismatch)
 
 TEST_F (StateTransitionTests, InvalidSignature)
 {
-  EXPECT_FALSE (VerifyTransition ("10", R"(
+  EXPECT_FALSE (VerifyTransition ("10 1", R"(
     move: "1",
     new_state:
       {
-        data: "11"
+        data: "11 2"
         signatures: "sgn1"
         signatures: "sgn42"
       }
@@ -113,13 +113,13 @@ TEST_F (StateTransitionTests, InvalidSignature)
 
 TEST_F (StateTransitionTests, Valid)
 {
-  ExpectSignature (" 11 ", "signed by zero", "addr0");
+  ExpectSignature (" 11 2 ", "signed by zero", "addr0");
 
-  EXPECT_TRUE (VerifyTransition ("10", R"(
+  EXPECT_TRUE (VerifyTransition ("10 1", R"(
     move: "1",
     new_state:
       {
-        data: " 11 "
+        data: " 11 2 "
         signatures: "signed by zero"
         signatures: "sgn42"
       }
@@ -153,38 +153,38 @@ protected:
 
 TEST_F (StateProofTests, OnlyInitialOnChain)
 {
-  ASSERT_TRUE (VerifyProof (" 42 ", R"(
+  ASSERT_TRUE (VerifyProof (" 42 5 ", R"(
     initial_state:
       {
-        data: "42"
+        data: "42 5"
         signatures: "sgn42"
       }
   )"));
-  EXPECT_EQ (endState, "42");
+  EXPECT_EQ (endState, "42 5");
 }
 
 TEST_F (StateProofTests, OnlyInitialSigned)
 {
-  ExpectSignature ("42", "signature 0", "addr0");
-  ExpectSignature ("42", "signature 1", "addr1");
+  ExpectSignature ("42 5", "signature 0", "addr0");
+  ExpectSignature ("42 5", "signature 1", "addr1");
 
-  ASSERT_TRUE (VerifyProof ("0", R"(
+  ASSERT_TRUE (VerifyProof ("0 1", R"(
     initial_state:
       {
-        data: "42"
+        data: "42 5"
         signatures: "signature 0"
         signatures: "signature 1"
       }
   )"));
-  EXPECT_EQ (endState, "42");
+  EXPECT_EQ (endState, "42 5");
 }
 
 TEST_F (StateProofTests, OnlyInitialNotSigned)
 {
-  EXPECT_FALSE (VerifyProof ("0", R"(
+  EXPECT_FALSE (VerifyProof ("0 1", R"(
     initial_state:
       {
-        data: "42"
+        data: "42 5"
         signatures: "sgn0"
         signatures: "sgn42"
       }
@@ -193,32 +193,32 @@ TEST_F (StateProofTests, OnlyInitialNotSigned)
 
 TEST_F (StateProofTests, InvalidTransition)
 {
-  EXPECT_FALSE (VerifyProof ("42", R"(
+  EXPECT_FALSE (VerifyProof ("42 1", R"(
     initial_state:
       {
-        data: "42"
+        data: "42 1"
       }
     transitions:
       {
         move: "0"
         new_state:
           {
-            data: "42"
+            data: "42 2"
           }
       }
   )"));
 
-  EXPECT_FALSE (VerifyProof ("42", R"(
+  EXPECT_FALSE (VerifyProof ("42 1", R"(
     initial_state:
       {
-        data: "42"
+        data: "42 1"
       }
     transitions:
       {
         move: "1"
         new_state:
           {
-            data: "43"
+            data: "43 2"
             signatures: "sgn1"
           }
       }
@@ -227,17 +227,17 @@ TEST_F (StateProofTests, InvalidTransition)
 
 TEST_F (StateProofTests, MissingSignature)
 {
-  EXPECT_FALSE (VerifyProof ("0", R"(
+  EXPECT_FALSE (VerifyProof ("0 1", R"(
     initial_state:
       {
-        data: "42"
+        data: "42 5"
       }
     transitions:
       {
         move: "2"
         new_state:
           {
-            data: "44"
+            data: "44 6"
             signatures: "sgn0"
           }
       }
@@ -246,7 +246,7 @@ TEST_F (StateProofTests, MissingSignature)
         move: "2"
         new_state:
           {
-            data: "46"
+            data: "46 7"
             signatures: "sgn0"
           }
       }
@@ -255,17 +255,17 @@ TEST_F (StateProofTests, MissingSignature)
 
 TEST_F (StateProofTests, IntermediateStateOnChain)
 {
-  ASSERT_TRUE (VerifyProof (" 44 ", R"(
+  ASSERT_TRUE (VerifyProof (" 44 11 ", R"(
     initial_state:
       {
-        data: "42"
+        data: "42 10"
       }
     transitions:
       {
         move: "2"
         new_state:
           {
-            data: "44"
+            data: "44 11"
             signatures: "sgn0"
           }
       }
@@ -274,20 +274,20 @@ TEST_F (StateProofTests, IntermediateStateOnChain)
         move: "2"
         new_state:
           {
-            data: "46"
+            data: "46 12"
             signatures: "sgn0"
           }
       }
   )"));
-  EXPECT_EQ (endState, "46");
+  EXPECT_EQ (endState, "46 12");
 }
 
 TEST_F (StateProofTests, SignedInitialState)
 {
-  ASSERT_TRUE (VerifyProof ("0", R"(
+  ASSERT_TRUE (VerifyProof ("0 1", R"(
     initial_state:
       {
-        data: "42"
+        data: "42 5"
         signatures: "sgn1"
       }
     transitions:
@@ -295,33 +295,33 @@ TEST_F (StateProofTests, SignedInitialState)
         move: "1"
         new_state:
           {
-            data: "43"
+            data: "43 6"
             signatures: "sgn0"
           }
       }
   )"));
-  EXPECT_EQ (endState, "43");
+  EXPECT_EQ (endState, "43 6");
 }
 
 TEST_F (StateProofTests, MultiSignedLaterState)
 {
-  ASSERT_TRUE (VerifyProof ("0", R"(
+  ASSERT_TRUE (VerifyProof ("0 1", R"(
     initial_state:
       {
-        data: "42"
+        data: "42 5"
       }
     transitions:
       {
         move: "1"
         new_state:
           {
-            data: "43"
+            data: "43 6"
             signatures: "sgn0"
             signatures: "sgn1"
           }
       }
   )"));
-  EXPECT_EQ (endState, "43");
+  EXPECT_EQ (endState, "43 6");
 }
 
 /* ************************************************************************** */
