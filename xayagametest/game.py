@@ -89,7 +89,7 @@ class Node ():
     return jsonrpclib.Server ("http://localhost:%d" % self.port)
 
 
-  def logMatches (self, expr):
+  def logMatches (self, expr, times=None):
     """
     Checks if a line of the current INFO log for the game daemon matches
     the given regexp (as string).
@@ -104,8 +104,16 @@ class Node ():
     logfile = os.path.join (self.datadir,
                             os.path.basename (self.binary) + ".INFO")
 
+    count = 0
     for line in open (logfile, 'r'):
       if obj.search (line):
-        return True
+        count += 1
 
-    return False
+    if times is not None:
+      if count != times:
+        self.log.error ("Expected %d matches in log, got %d: %s"
+                          % (times, count, expr))
+        return False
+      return True
+
+    return count > 0
