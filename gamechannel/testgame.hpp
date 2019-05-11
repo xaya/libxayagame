@@ -44,16 +44,16 @@ class AdditionRules : public BoardRules
 
 public:
 
-  bool CompareStates (const ChannelMetadata& meta,
+  bool CompareStates (const proto::ChannelMetadata& meta,
                       const BoardState& a, const BoardState& b) const override;
 
-  int WhoseTurn (const ChannelMetadata& meta,
+  int WhoseTurn (const proto::ChannelMetadata& meta,
                  const BoardState& state) const override;
 
-  unsigned TurnCount (const ChannelMetadata& meta,
+  unsigned TurnCount (const proto::ChannelMetadata& meta,
                       const BoardState& state) const override;
 
-  bool ApplyMove (const ChannelMetadata& meta,
+  bool ApplyMove (const proto::ChannelMetadata& meta,
                   const BoardState& oldState, const BoardMove& mv,
                   BoardState& newState) const override;
 

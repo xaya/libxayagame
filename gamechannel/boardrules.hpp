@@ -53,7 +53,7 @@ public:
    * Returns true if they are equivalent (i.e. possibly different encodings
    * of the same state).
    */
-  virtual bool CompareStates (const ChannelMetadata& meta,
+  virtual bool CompareStates (const proto::ChannelMetadata& meta,
                               const BoardState& a,
                               const BoardState& b) const = 0;
 
@@ -62,7 +62,7 @@ public:
    * is the player index into the channel's participants array.  This may return
    * NO_TURN to indicate that it is noone's turn at the moment.
    */
-  virtual int WhoseTurn (const ChannelMetadata& meta,
+  virtual int WhoseTurn (const proto::ChannelMetadata& meta,
                          const BoardState& state) const = 0;
 
   /**
@@ -72,7 +72,7 @@ public:
    * seen as the "block height" in the "private chain" formed during a game
    * on a channel.
    */
-  virtual unsigned TurnCount (const ChannelMetadata& meta,
+  virtual unsigned TurnCount (const proto::ChannelMetadata& meta,
                               const BoardState& state) const = 0;
 
   /**
@@ -80,7 +80,7 @@ public:
    * onto the given state, yielding a new board state.  Returns false
    * if the move is invalid instead.
    */
-  virtual bool ApplyMove (const ChannelMetadata& meta,
+  virtual bool ApplyMove (const proto::ChannelMetadata& meta,
                           const BoardState& oldState, const BoardMove& mv,
                           BoardState& newState) const = 0;
 

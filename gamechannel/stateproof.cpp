@@ -23,9 +23,9 @@ namespace
  */
 bool
 ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
-                            const ChannelMetadata& meta,
+                            const proto::ChannelMetadata& meta,
                             const BoardState& oldState,
-                            const StateTransition& transition,
+                            const proto::StateTransition& transition,
                             std::set<int>& signatures)
 {
   const int turn = rules.WhoseTurn (meta, oldState);
@@ -63,8 +63,9 @@ ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
 
 bool
 VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
-                       const ChannelMetadata& meta, const BoardState& oldState,
-                       const StateTransition& transition)
+                       const proto::ChannelMetadata& meta,
+                       const BoardState& oldState,
+                       const proto::StateTransition& transition)
 {
   std::set<int> signatures;
   return ExtraVerifyStateTransition (rpc, rules, meta, oldState, transition,
@@ -73,9 +74,9 @@ VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
 
 bool
 VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
-                  const ChannelMetadata& meta,
+                  const proto::ChannelMetadata& meta,
                   const BoardState& onChainState,
-                  const StateProof& proof,
+                  const proto::StateProof& proof,
                   BoardState& endState)
 {
   std::set<int> signatures

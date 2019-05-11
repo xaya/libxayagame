@@ -22,8 +22,8 @@ namespace xaya
  * signature was found on the data.
  */
 std::set<int> VerifyParticipantSignatures (XayaRpcClient& rpc,
-                                           const ChannelMetadata& meta,
-                                           const SignedData& data);
+                                           const proto::ChannelMetadata& meta,
+                                           const proto::SignedData& data);
 
 } // namespace xaya
 

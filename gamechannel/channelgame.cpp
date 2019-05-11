@@ -28,7 +28,7 @@ namespace
  */
 bool
 CheckStateProofIsLater (XayaRpcClient& rpc, const BoardRules& rules,
-                        const ChannelData& ch, const StateProof& proof,
+                        const ChannelData& ch, const proto::StateProof& proof,
                         BoardState& provenState)
 {
   const auto& meta = ch.GetMetadata ();
@@ -58,7 +58,7 @@ CheckStateProofIsLater (XayaRpcClient& rpc, const BoardRules& rules,
 
 bool
 ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
-                             const StateProof& proof)
+                             const proto::StateProof& proof)
 {
   BoardState provenState;
   if (!CheckStateProofIsLater (GetXayaRpc (), GetBoardRules (), ch, proof,
@@ -80,7 +80,7 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
 }
 
 bool
-ChannelGame::ProcessResolution (ChannelData& ch, const StateProof& proof)
+ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
 {
   BoardState provenState;
   if (!CheckStateProofIsLater (GetXayaRpc (), GetBoardRules (), ch, proof,

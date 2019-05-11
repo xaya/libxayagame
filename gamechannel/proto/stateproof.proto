@@ -6,7 +6,7 @@ syntax = "proto2";
 
 import "signatures.proto";
 
-package xaya;
+package xaya.proto;
 
 /**
  * A state transition:  This is a move made by the current player together

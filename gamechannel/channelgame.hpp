@@ -43,7 +43,7 @@ protected:
    * false is returned.
    */
   bool ProcessDispute (ChannelData& ch, unsigned height,
-                       const StateProof& proof);
+                       const proto::StateProof& proof);
 
   /**
    * Processes a request (e.g. sent in a move) for resolving a dispute
@@ -53,7 +53,7 @@ protected:
    * Note that this function succeeds also if there is not an open dispute;
    * in that case, the on-chain state will simply be updated.
    */
-  bool ProcessResolution (ChannelData& ch, const StateProof& proof);
+  bool ProcessResolution (ChannelData& ch, const proto::StateProof& proof);
 
   /**
    * This method needs to be overridden to provide an instance of BoardRules

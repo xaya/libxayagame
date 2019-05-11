@@ -23,9 +23,9 @@ namespace xaya
  * and the player who was supposed to make that move signed the new state.
  */
 bool VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
-                            const ChannelMetadata& meta,
+                            const proto::ChannelMetadata& meta,
                             const BoardState& oldState,
-                            const StateTransition& transition);
+                            const proto::StateTransition& transition);
 
 /**
  * Verifies a state proof for the given channel.  If the proof is complete
@@ -33,9 +33,9 @@ bool VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
  * in endState.
  */
 bool VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
-                       const ChannelMetadata& meta,
+                       const proto::ChannelMetadata& meta,
                        const BoardState& onChainState,
-                       const StateProof& proof,
+                       const proto::StateProof& proof,
                        BoardState& endState);
 
 } // namespace xaya

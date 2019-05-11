@@ -23,11 +23,11 @@ using SignaturesTests = TestGameFixture;
 
 TEST_F (SignaturesTests, VerifyParticipantSignatures)
 {
-  ChannelMetadata meta;
+  proto::ChannelMetadata meta;
   meta.add_participants ()->set_address ("address 1");
   meta.add_participants ()->set_address ("address 2");
 
-  SignedData data;
+  proto::SignedData data;
   data.set_data ("foobar");
   const std::string msg = SHA256::Hash ("foobar").ToHex ();
   data.add_signatures ("signature 1");

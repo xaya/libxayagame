@@ -41,14 +41,14 @@ ParsePair (const std::string& s)
 } // anonymous namespace
 
 bool
-AdditionRules::CompareStates (const ChannelMetadata& meta,
+AdditionRules::CompareStates (const proto::ChannelMetadata& meta,
                               const BoardState& a, const BoardState& b) const
 {
   return ParsePair (a) == ParsePair (b);
 }
 
 int
-AdditionRules::WhoseTurn (const ChannelMetadata& meta,
+AdditionRules::WhoseTurn (const proto::ChannelMetadata& meta,
                           const BoardState& state) const
 {
   const int num = ParsePair (state).first;
@@ -59,14 +59,14 @@ AdditionRules::WhoseTurn (const ChannelMetadata& meta,
 }
 
 unsigned
-AdditionRules::TurnCount (const ChannelMetadata& meta,
+AdditionRules::TurnCount (const proto::ChannelMetadata& meta,
                           const BoardState& state) const
 {
   return ParsePair (state).second;
 }
 
 bool
-AdditionRules::ApplyMove (const ChannelMetadata& meta,
+AdditionRules::ApplyMove (const proto::ChannelMetadata& meta,
                           const BoardState& oldState, const BoardMove& mv,
                           BoardState& newState) const
 {

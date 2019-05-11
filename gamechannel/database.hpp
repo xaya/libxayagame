@@ -38,7 +38,7 @@ private:
   uint256 id;
 
   /** The channel's metadata.  */
-  ChannelMetadata metadata;
+  proto::ChannelMetadata metadata;
 
   /** The channel's current state.  */
   BoardState state;
@@ -82,13 +82,13 @@ public:
     return id;
   }
 
-  const ChannelMetadata&
+  const proto::ChannelMetadata&
   GetMetadata () const
   {
     return metadata;
   }
 
-  ChannelMetadata&
+  proto::ChannelMetadata&
   MutableMetadata ()
   {
     dirty = true;

@@ -24,7 +24,7 @@ class GeneralStateProofTests : public TestGameFixture
 
 protected:
 
-  ChannelMetadata meta;
+  proto::ChannelMetadata meta;
 
   GeneralStateProofTests ()
   {
@@ -52,7 +52,7 @@ protected:
   bool
   VerifyTransition (const BoardState& oldState, const std::string& transition)
   {
-    StateTransition proto;
+    proto::StateTransition proto;
     CHECK (TextFormat::ParseFromString (transition, &proto));
 
     return VerifyStateTransition (rpcClient, game.rules, meta, oldState, proto);
@@ -140,7 +140,7 @@ protected:
   bool
   VerifyProof (const BoardState& chainState, const std::string& proof)
   {
-    StateProof proto;
+    proto::StateProof proto;
     CHECK (TextFormat::ParseFromString (proof, &proto));
 
     return VerifyStateProof (rpcClient, game.rules, meta, chainState, proto,

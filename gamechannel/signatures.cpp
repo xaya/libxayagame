@@ -15,8 +15,8 @@ namespace xaya
 
 std::set<int>
 VerifyParticipantSignatures (XayaRpcClient& rpc,
-                             const ChannelMetadata& meta,
-                             const SignedData& data)
+                             const proto::ChannelMetadata& meta,
+                             const proto::SignedData& data)
 {
   const std::string msg = SHA256::Hash (data.data ()).ToHex ();
 

@@ -24,10 +24,10 @@ using google::protobuf::TextFormat;
 /**
  * Parses a text-format string into a StateProof proto.
  */
-StateProof
+proto::StateProof
 ParseStateProof (const std::string& str)
 {
-  StateProof res;
+  proto::StateProof res;
   CHECK (TextFormat::ParseFromString (str, &res));
 
   return res;
@@ -38,7 +38,7 @@ class ChannelGameTests : public TestGameFixture
 
 private:
 
-  ChannelMetadata meta;
+  proto::ChannelMetadata meta;
 
   ChannelsTable tbl;
 

@@ -18,7 +18,7 @@ class AdditionRulesTests : public testing::Test
 
 protected:
 
-  ChannelMetadata meta;
+  proto::ChannelMetadata meta;
   AdditionRules rules;
 
 };
