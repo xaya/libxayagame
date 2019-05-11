@@ -67,3 +67,66 @@ the opponent also has to publish their configuration
 and salt, and they are checked against hashes as well as the reported outcomes
 of shots during the game.  If a player lied, he loses the game.  Otherwise,
 the ending player wins if and only if all opponent ships have been sunk.
+
+## Detailed Specification
+
+Let us now define the game rules (moves for the on-chain state, i.e.
+management of channels, and the board rules for games in a channel)
+in more detail.
+
+### Board State and Rules
+
+The *board state* is the state of a particular game of battleships in
+a channel.  The exact sequence of moves in such a game is as follows:
+
+1. Alice opens a channel by sending an on-chain move.
+1. Bob joins the channel by sending also an on-chain move.
+1. Alice sends two hashes as move in the channel, one of her chosen
+   ship configuration and one of her chosen random seed.
+1. Bob sends the hash of his ship configuration and at the same time
+   his random seed in clear text.
+1. Alice reveals her random seed.
+1. The concatenation of both random seeds is hashed and the result
+   used to derive a random bit.  That determines who (Alice or Bob)
+   starts the main game and is the next player.  For this example, let us
+   say Alice is chosen.
+1. Alice guesses a coordinate on the board for her "shot".
+  - Besides verifying that the coordinate is valid (i.e. in range, well-formed),
+    it is also verified that the coordinate has not been guessed before.
+    If it has, then the move is invalid.
+1. Bob responds with "hit" or "miss".
+  - If it is "hit", then it stays Alice's turn.
+  - If it is a "miss", then Bob is the next player.
+1. Any time, both Alice and Bob can decide to end the game instead of
+   either guessing the next coordinate or responding to a guess.  Let's say
+   that Bob ends the game.
+1. In that situation, Bob reveals his ship configuration and salt.
+  - The move is valid as long as this preimage matches his committed hash.
+  - If any of Bob's previous answers to Alice's guesses was wrong according to
+    the configuration, then the state is marked as "Alice won".
+  - Similarly, if Bob's configuration is invalid for the game (because
+    he placed too few ships, they touch or anything like that),
+    then Alice also wins.
+1. If Bob did not lie anywhere and all of Alice's ships have been hit
+    (according to Alice's answers), then the state is marked as "Bob won".
+1. Otherwise, Alice reveals her configuration in the next move.
+  - As before, the move is valid if and only if the preimage matches Alice's
+    committed hash.
+  - If any of Alice's answers was wrong or her initial position invalid,
+    then the state is marked as "Bob won".
+1. If also Alice did not lie at any time, then Alice wins (since Bob did not
+   sink all her ships).
+1. The player who *lost* creates a message containing the channel ID and
+   that her opponent won, and signs it with her address.  This is the last
+   move in the channel game.
+1. The winning player can then close the channel and get the results marked
+   on-chain by sending a move containing that signed message.
+
+In a situation where both players have already sunk all ships, the rules
+detailed above imply that the player who reveals the initial position first
+wins the game (rather than e.g. the player who sunk all ships first).
+However, when e.g. Alice hits the last of Bob's ships, it is her turn again
+and she knows that Bob either lied or she sunk all ships.  Thus in that
+situation, she can immediately end the game and is guaranteed to win
+(unless she lied about her ships).  Hence the player who sinks all
+enemy ships first can ensure they win the game.

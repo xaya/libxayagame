@@ -1,0 +1,117 @@
+// Copyright (C) 2019 The Xaya developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+syntax = "proto2";
+
+import "gamechannel/proto/signatures.proto";
+
+package ships.proto;
+
+/**
+ * The "known information" about the ship configuration of one player:
+ * Where coordinates have been guessed and where (those) have been hits.
+ * Both are boolean arrays encoded directly into a uint64.
+ */
+message KnownShips
+{
+
+  /** The coordinates that have been guessed "against" this player.  */
+  optional fixed64 guessed = 1;
+
+  /** Those of the guessed coordinates that were hits.  */
+  optional fixed64 hits = 2;
+
+}
+
+/**
+ * The full board state of a game channel of Xayaships.  The generic board state
+ * for libgamechannel (std::string) is the serialised form of this message.
+ *
+ * This state applies only to channels that already have both participants.
+ * While waiting for the second player to join, the core game logic never
+ * invokes any board functions at all, as no disputes / resolutions are possible
+ * in that case.
+ */
+message BoardState
+{
+
+  /**
+   * Which player (index into participants array) is the current one.  Missing
+   * in a "no turn" situation, i.e. when the game is finished.
+   *
+   * Note that this information is sometimes redundant (e.g. when the initial
+   * commitment from player 0 is there but not yet the commitment from player 1,
+   * then it is clear that it's player 1's turn).  The field is still always
+   * set (and must match the implicit value where applicable) to simplify
+   * the "whose turn" method.
+   */
+  optional uint32 turn = 1;
+
+  /**
+   * The two position commitments from both players (or only one if the second
+   * is now to be made).  These are bytes encoding 256-bit hashes.
+   *
+   * When the game is ended and the positions are revealed, the corresponding
+   * hash is cleared to save space.  The fields remain set, though, just the
+   * bytes are set to an empty string.
+   */
+  repeated bytes position_hashes = 2;
+
+  /**
+   * The hash commitment of the "random seed" of player 0 when determining who
+   * starts the game.  This field is cleared again when the preimage has
+   * been revealed.  Like position_hashes, this encodes a 256-bit hash.
+   */
+  optional bytes seed_hash_0 = 3;
+
+  /**
+   * The preimage of the "random seed" of player 1.  This can be arbitrary
+   * data up to 32 bytes in length.  This field is cleared when the starting
+   * player has been determined.
+   */
+  optional bytes seed_1 = 4;
+
+  /**
+   * The information known so far about the ship configurations of both
+   * players.  These fields are initialised (with all zeros for both players)
+   * when the starting player has been determined.
+   *
+   * This data could be removed as soon as the position is revealed (and checked
+   * against previous answers), but we keep the field set since that data can
+   * be used by frontends to show the guesses against the final position
+   * of the other player.
+   */
+  repeated KnownShips known_ships = 5;
+
+  /**
+   * If a shot has been made and not yet answered, then this field is set
+   * holding the target location.  The shot is always by the player whose
+   * turn it is not, and the player whose turn it is should answer in the
+   * next move.
+   */
+  optional uint32 current_shot = 6;
+
+  /**
+   * The revealed full ship configurations as 64-bit vectors.  When the first
+   * player reveals, this is initialised to two zero elements (and then the
+   * revealed position set).  So the array might have zero or two elements
+   * at any point in time.
+   *
+   * Note that in theory it is not necessary to keep this information in the
+   * game state, as it is enough to just verify the commitment when the move
+   * is made.  But having it in the game state is useful for frontends.
+   */
+  repeated fixed64 positions = 7;
+
+  /** If it is already determined who won, the player's index.  */
+  optional uint32 winner = 8;
+
+  /**
+   * An encoded WinnerStatement message signed by the loser.  This is set as
+   * the last move in the game by the loser after the result has been
+   * determined.  It allows the winner to claim the result on chain.
+   */
+  optional xaya.proto.SignedData winner_statement = 9;
+
+}
