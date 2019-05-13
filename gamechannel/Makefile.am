@@ -70,5 +70,5 @@ check_HEADERS = \
 schema.cpp: schema_head.cpp schema.sql schema_tail.cpp
 	cat $^ >$@
 
-proto/%.pb.h proto/%.pb.cc: $(srcdir)/proto/%.proto
-	protoc -I$(srcdir)/proto --cpp_out=proto "$<"
+proto/%.pb.h proto/%.pb.cc: $(top_srcdir)/gamechannel/proto/%.proto
+	protoc -I$(top_srcdir) --cpp_out=$(top_builddir) "$<"

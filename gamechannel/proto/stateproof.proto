@@ -4,7 +4,7 @@
 
 syntax = "proto2";
 
-import "signatures.proto";
+import "gamechannel/proto/signatures.proto";
 
 package xaya.proto;
 
