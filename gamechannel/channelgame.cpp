@@ -78,6 +78,14 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
   if (!CheckStateProofIsLater (GetXayaRpc (), rules, ch, proof, provenState))
     return false;
 
+  const auto provenParsed = rules.ParseState (meta, provenState);
+  CHECK (provenParsed != nullptr);
+  if (provenParsed->WhoseTurn () == ParsedBoardState::NO_TURN)
+    {
+      LOG (WARNING) << "Cannot file dispute for 'no turn' situation";
+      return false;
+    }
+
   VLOG (1) << "Dispute is valid, updating state...";
 
   ch.SetState (provenState);
