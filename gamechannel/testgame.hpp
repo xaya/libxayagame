@@ -21,6 +21,7 @@
 
 #include <json/json.h>
 
+#include <memory>
 #include <string>
 
 namespace xaya
@@ -44,18 +45,8 @@ class AdditionRules : public BoardRules
 
 public:
 
-  bool CompareStates (const proto::ChannelMetadata& meta,
-                      const BoardState& a, const BoardState& b) const override;
-
-  int WhoseTurn (const proto::ChannelMetadata& meta,
-                 const BoardState& state) const override;
-
-  unsigned TurnCount (const proto::ChannelMetadata& meta,
-                      const BoardState& state) const override;
-
-  bool ApplyMove (const proto::ChannelMetadata& meta,
-                  const BoardState& oldState, const BoardMove& mv,
-                  BoardState& newState) const override;
+  std::unique_ptr<ParsedBoardState> ParseState (
+      const proto::ChannelMetadata& meta, const BoardState& s) const override;
 
 };
 

@@ -72,6 +72,18 @@ TEST_F (StateTransitionTests, NoTurnState)
   )"));
 }
 
+TEST_F (StateTransitionTests, InvalidOldState)
+{
+  EXPECT_FALSE (VerifyTransition ("invalid", R"(
+    move: "0",
+    new_state:
+      {
+        data: "0 2"
+        signatures: "sgn0"
+      }
+  )"));
+}
+
 TEST_F (StateTransitionTests, InvalidClaimedNewState)
 {
   EXPECT_FALSE (VerifyTransition ("10 1", R"(

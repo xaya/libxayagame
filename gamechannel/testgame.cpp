@@ -22,9 +22,6 @@ namespace
 using testing::_;
 using testing::Return;
 
-/**
- * The game state parsed into two integers.
- */
 struct ParsedState
 {
   int number;
@@ -46,62 +43,82 @@ ParsePair (const std::string& s, ParsedState& res)
   return true;
 }
 
+class AdditionState : public ParsedBoardState
+{
+
+private:
+
+  const ParsedState data;
+
+public:
+
+  explicit AdditionState (const ParsedState& d)
+    : data(d)
+  {}
+
+  AdditionState () = delete;
+  AdditionState (const AdditionState&) = delete;
+  void operator= (const AdditionState&) = delete;
+
+  bool
+  Equals (const BoardState& other) const override
+  {
+    ParsedState p;
+    if (!ParsePair (other, p))
+      return false;
+
+    return p.number == data.number && p.count == data.count;
+  }
+
+  int
+  WhoseTurn () const override
+  {
+    if (data.number >= 100)
+      return ParsedBoardState::NO_TURN;
+
+    return data.number % 2;
+  }
+
+  unsigned
+  TurnCount () const override
+  {
+    return data.count;
+  }
+
+  bool
+  ApplyMove (XayaRpcClient& rpc, const BoardMove& mv,
+             BoardState& newState) const override
+  {
+    /* The game-channel engine should never invoke ApplyMove on a 'no turn'
+       situation.  Make sure to verify that.  */
+    CHECK (WhoseTurn () != ParsedBoardState::NO_TURN);
+
+    std::istringstream mvIn(mv);
+    int add;
+    mvIn >> add;
+    if (add <= 0)
+      return false;
+
+    std::ostringstream out;
+    out << (data.number + add) << " " << (data.count + 1);
+    newState = out.str ();
+
+    return true;
+  }
+
+};
+
 } // anonymous namespace
 
-bool
-AdditionRules::CompareStates (const proto::ChannelMetadata& meta,
-                              const BoardState& a, const BoardState& b) const
-{
-  ParsedState pa, pb;
-  if (!ParsePair (a, pa) || !ParsePair (b, pb))
-    return false;
-
-  return pa.number == pb.number && pa.count == pb.count;
-}
-
-int
-AdditionRules::WhoseTurn (const proto::ChannelMetadata& meta,
-                          const BoardState& state) const
+std::unique_ptr<ParsedBoardState>
+AdditionRules::ParseState (const proto::ChannelMetadata& meta,
+                           const BoardState& state) const
 {
   ParsedState p;
-  CHECK (ParsePair (state, p)) << "WhoseTurn for invalid game state";
+  if (!ParsePair (state, p))
+    return nullptr;
 
-  if (p.number >= 100)
-    return BoardRules::NO_TURN;
-
-  return p.number % 2;
-}
-
-unsigned
-AdditionRules::TurnCount (const proto::ChannelMetadata& meta,
-                          const BoardState& state) const
-{
-  ParsedState p;
-  CHECK (ParsePair (state, p)) << "TurnCount for invalid game state";
-
-  return p.count;
-}
-
-bool
-AdditionRules::ApplyMove (const proto::ChannelMetadata& meta,
-                          const BoardState& oldState, const BoardMove& mv,
-                          BoardState& newState) const
-{
-  ParsedState p;
-  if (!ParsePair (oldState, p))
-    return false;
-
-  std::istringstream mvIn(mv);
-  int add;
-  mvIn >> add;
-  if (add <= 0)
-    return false;
-
-  std::ostringstream out;
-  out << (p.number + add) << " " << (p.count + 1);
-  newState = out.str ();
-
-  return true;
+  return std::make_unique<AdditionState> (p);
 }
 
 void
