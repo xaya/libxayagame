@@ -32,6 +32,13 @@ TEST_F (AdditionRulesTests, CompareStates)
   EXPECT_FALSE (rules.CompareStates (meta, "5 1", "5 2"));
 }
 
+TEST_F (AdditionRulesTests, CompareStatesInvalid)
+{
+  EXPECT_FALSE (rules.CompareStates (meta, "5 1", "invalid"));
+  EXPECT_FALSE (rules.CompareStates (meta, "invalid", "5 1"));
+  EXPECT_FALSE (rules.CompareStates (meta, "invalid", "invalid"));
+}
+
 TEST_F (AdditionRulesTests, WhoseTurn)
 {
   EXPECT_EQ (rules.WhoseTurn (meta, "13 1"), 1);
@@ -41,10 +48,20 @@ TEST_F (AdditionRulesTests, WhoseTurn)
   EXPECT_EQ (rules.WhoseTurn (meta, "105 10"), BoardRules::NO_TURN);
 }
 
+TEST_F (AdditionRulesTests, WhoseTurnInvalid)
+{
+  EXPECT_DEATH (rules.WhoseTurn (meta, "invalid"), "invalid game state");
+}
+
 TEST_F (AdditionRulesTests, TurnCount)
 {
   EXPECT_EQ (rules.TurnCount (meta, "10 12"), 12);
   EXPECT_EQ (rules.TurnCount (meta, "105 1"), 1);
+}
+
+TEST_F (AdditionRulesTests, TurnCountInvalid)
+{
+  EXPECT_DEATH (rules.TurnCount (meta, "invalid"), "invalid game state");
 }
 
 TEST_F (AdditionRulesTests, ApplyMove)
@@ -54,11 +71,14 @@ TEST_F (AdditionRulesTests, ApplyMove)
   EXPECT_EQ (newState, "55 6");
   ASSERT_TRUE (rules.ApplyMove (meta, "99 10", "2", newState));
   EXPECT_EQ (newState, "101 11");
+}
 
+TEST_F (AdditionRulesTests, ApplyMoveInvalid)
+{
+  BoardState newState;
   EXPECT_FALSE (rules.ApplyMove (meta, "42 1", "0", newState));
   EXPECT_FALSE (rules.ApplyMove (meta, "42 1", "-1", newState));
-
-  EXPECT_DEATH (rules.ApplyMove (meta, "100 1", "1", newState), "no turn");
+  EXPECT_FALSE (rules.ApplyMove (meta, "invalid", "1", newState));
 }
 
 } // anonymous namespace

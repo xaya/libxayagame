@@ -28,13 +28,6 @@ ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
                             const proto::StateTransition& transition,
                             std::set<int>& signatures)
 {
-  const int turn = rules.WhoseTurn (meta, oldState);
-  if (turn == BoardRules::NO_TURN)
-    {
-      LOG (WARNING) << "State transition applied to 'no turn' state";
-      return false;
-    }
-
   BoardState newState;
   if (!rules.ApplyMove (meta, oldState, transition.move (), newState))
     {
@@ -45,6 +38,13 @@ ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
   if (!rules.CompareStates (meta, transition.new_state ().data (), newState))
     {
       LOG (WARNING) << "Wrong new state claimed in state transition";
+      return false;
+    }
+
+  const int turn = rules.WhoseTurn (meta, oldState);
+  if (turn == BoardRules::NO_TURN)
+    {
+      LOG (WARNING) << "State transition applied to 'no turn' state";
       return false;
     }
 
@@ -95,6 +95,16 @@ VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
       endState = t.new_state ().data ();
       if (!foundOnChain)
         foundOnChain = rules.CompareStates (meta, onChainState, endState);
+    }
+
+  /* Make sure that the end state (which may be just the claimed initial
+     state) is valid.  Otherwise we might end up with invalid data put
+     onto the global game state.  (For instance, if the state proof consists
+     just of an invalid initial state that is signed by all players.)  */
+  if (!rules.CompareStates (meta, endState, endState))
+    {
+      LOG (WARNING) << "Proven endstate is invalid";
+      return false;
     }
 
   if (foundOnChain)

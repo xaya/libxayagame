@@ -52,6 +52,9 @@ public:
    * Compares two given board states in the context of the given metadata.
    * Returns true if they are equivalent (i.e. possibly different encodings
    * of the same state).
+   *
+   * If one or both of the passed states is invalid (e.g. malformed data),
+   * then the function should return false.
    */
   virtual bool CompareStates (const proto::ChannelMetadata& meta,
                               const BoardState& a,
@@ -61,6 +64,10 @@ public:
    * Returns which player's turn it is in the given state.  The return value
    * is the player index into the channel's participants array.  This may return
    * NO_TURN to indicate that it is noone's turn at the moment.
+   *
+   * It is guaranteed that this function is never called on an invalid state.
+   * In other words, it is only called on results of successful calls
+   * to ApplyMove.
    */
   virtual int WhoseTurn (const proto::ChannelMetadata& meta,
                          const BoardState& state) const = 0;
@@ -71,6 +78,10 @@ public:
    * to determine whether a given state is "after" another.  It can also be
    * seen as the "block height" in the "private chain" formed during a game
    * on a channel.
+   *
+   * It is guaranteed that this function is never called on an invalid state.
+   * In other words, it is only called on results of successful calls
+   * to ApplyMove.
    */
   virtual unsigned TurnCount (const proto::ChannelMetadata& meta,
                               const BoardState& state) const = 0;
@@ -78,7 +89,12 @@ public:
   /**
    * Applies a move (assumed to be made by the player whose turn it is)
    * onto the given state, yielding a new board state.  Returns false
-   * if the move is invalid instead.
+   * if the move is invalid instead (either because the data itself does
+   * not represent a move at all, or because the move is invalid in the
+   * context of the given old state).
+   *
+   * If the old state is invalid (e.g. malformed data), then this function
+   * should also return false.
    */
   virtual bool ApplyMove (const proto::ChannelMetadata& meta,
                           const BoardState& oldState, const BoardMove& mv,

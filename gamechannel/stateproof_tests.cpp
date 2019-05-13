@@ -72,6 +72,18 @@ TEST_F (StateTransitionTests, NoTurnState)
   )"));
 }
 
+TEST_F (StateTransitionTests, InvalidClaimedNewState)
+{
+  EXPECT_FALSE (VerifyTransition ("10 1", R"(
+    move: "0",
+    new_state:
+      {
+        data: "invalid"
+        signatures: "sgn0"
+      }
+  )"));
+}
+
 TEST_F (StateTransitionTests, InvalidMove)
 {
   EXPECT_FALSE (VerifyTransition ("10 1", R"(
@@ -148,6 +160,52 @@ protected:
   }
 
 };
+
+TEST_F (StateProofTests, InvalidStates)
+{
+  EXPECT_FALSE (VerifyProof (" 42 5 ", R"(
+    initial_state:
+      {
+        data: "invalid"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )"));
+
+  EXPECT_FALSE (VerifyProof (" 42 5 ", R"(
+    initial_state:
+      {
+        data: "invalid"
+        signatures: "sgn1"
+      }
+    transitions:
+      {
+        move: "2"
+        new_state:
+          {
+            data: "44 6"
+            signatures: "sgn0"
+          }
+      }
+  )"));
+
+  EXPECT_FALSE (VerifyProof (" 42 5 ", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn1"
+      }
+    transitions:
+      {
+        move: "2"
+        new_state:
+          {
+            data: "invalid"
+            signatures: "sgn0"
+          }
+      }
+  )"));
+}
 
 TEST_F (StateProofTests, OnlyInitialOnChain)
 {
