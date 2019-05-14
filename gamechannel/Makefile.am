@@ -4,6 +4,7 @@ protodir = $(gamechanneldir)/proto
 
 PROTOS = \
   proto/metadata.proto \
+  proto/protoboardtest.proto \
   proto/signatures.proto \
   proto/stateproof.proto
 PROTOHEADERS = $(PROTOS:.proto=.pb.h)
@@ -36,6 +37,7 @@ gamechannel_HEADERS = \
   boardrules.hpp \
   channelgame.hpp \
   database.hpp \
+  protoboard.hpp protoboard.tpp \
   schema.hpp \
   signatures.hpp \
   stateproof.hpp
@@ -58,6 +60,7 @@ tests_LDADD = \
 tests_SOURCES = \
   channelgame_tests.cpp \
   database_tests.cpp \
+  protoboard_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \
   stateproof_tests.cpp \

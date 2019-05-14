@@ -1,0 +1,35 @@
+// Copyright (C) 2019 The Xaya developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+syntax = "proto2";
+
+package xaya.proto;
+
+/** An example BoardState proto for use in unit tests.  */
+message TestBoardState
+{
+
+  /** The current value of a "global message", set by moves.  */
+  optional string msg = 1;
+
+  /** If this is set to true, then we mark the proto as invalid.  */
+  optional bool invalid = 2;
+
+  /**
+   * If this field is set on two messages, then equality comparison is done
+   * by comparing this field only.  This allows us to test both the default
+   * proto-comparison equality and a custom equality function.
+   */
+  optional string only_compare_this = 3;
+
+}
+
+/** An example BoardMove proto for use in unit tests.  */
+message TestBoardMove
+{
+
+  /** When applying this move, set current message to this value.  */
+  optional string msg = 1;
+
+}
