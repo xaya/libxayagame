@@ -4,8 +4,9 @@
 
 #include "testgame.hpp"
 
+#include "signatures.hpp"
+
 #include <xayautil/base64.hpp>
-#include <xayautil/hash.hpp>
 
 #include <gmock/gmock.h>
 
@@ -195,7 +196,9 @@ TestGameFixture::ValidSignature (const std::string& sgn,
 }
 
 void
-TestGameFixture::ExpectSignature (const std::string& msg,
+TestGameFixture::ExpectSignature (const uint256& channelId,
+                                  const std::string& topic,
+                                  const std::string& msg,
                                   const std::string& sgn,
                                   const std::string& addr)
 {
@@ -203,7 +206,7 @@ TestGameFixture::ExpectSignature (const std::string& msg,
   res["valid"] = true;
   res["address"] = addr;
 
-  const std::string hashed = SHA256::Hash (msg).ToHex ();
+  const std::string hashed = GetChannelSignatureMessage (channelId, topic, msg);
   EXPECT_CALL (mockXayaServer, verifymessage ("", hashed, EncodeBase64 (sgn)))
       .WillOnce (Return (res));
 }

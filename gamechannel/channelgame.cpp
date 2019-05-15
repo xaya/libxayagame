@@ -34,7 +34,8 @@ CheckStateProofIsLater (XayaRpcClient& rpc, const BoardRules& rules,
   const auto& meta = ch.GetMetadata ();
   const auto& onChainState = ch.GetState ();
 
-  if (!VerifyStateProof (rpc, rules, meta, onChainState, proof, provenState))
+  if (!VerifyStateProof (rpc, rules, ch.GetId (), meta, onChainState, proof,
+                         provenState))
     {
       LOG (WARNING) << "Dispute/resolution has invalid state proof";
       return false;

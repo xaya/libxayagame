@@ -6,6 +6,8 @@
 
 #include "testgame.hpp"
 
+#include <xayautil/hash.hpp>
+
 #include <google/protobuf/text_format.h>
 
 #include <gtest/gtest.h>
@@ -25,6 +27,7 @@ class GeneralStateProofTests : public TestGameFixture
 protected:
 
   proto::ChannelMetadata meta;
+  const uint256 channelId = SHA256::Hash ("channel id");
 
   GeneralStateProofTests ()
   {
@@ -55,7 +58,8 @@ protected:
     proto::StateTransition proto;
     CHECK (TextFormat::ParseFromString (transition, &proto));
 
-    return VerifyStateTransition (rpcClient, game.rules, meta, oldState, proto);
+    return VerifyStateTransition (rpcClient, game.rules, channelId, meta,
+                                  oldState, proto);
   }
 
 };
@@ -135,7 +139,7 @@ TEST_F (StateTransitionTests, InvalidSignature)
 
 TEST_F (StateTransitionTests, Valid)
 {
-  ExpectSignature (" 11 2 ", "signed by zero", "addr0");
+  ExpectSignature (channelId, "state", " 11 2 ", "signed by zero", "addr0");
 
   EXPECT_TRUE (VerifyTransition ("10 1", R"(
     move: "1",
@@ -167,8 +171,8 @@ protected:
     proto::StateProof proto;
     CHECK (TextFormat::ParseFromString (proof, &proto));
 
-    return VerifyStateProof (rpcClient, game.rules, meta, chainState, proto,
-                             endState);
+    return VerifyStateProof (rpcClient, game.rules, channelId, meta, chainState,
+                             proto, endState);
   }
 
 };
@@ -233,8 +237,8 @@ TEST_F (StateProofTests, OnlyInitialOnChain)
 
 TEST_F (StateProofTests, OnlyInitialSigned)
 {
-  ExpectSignature ("42 5", "signature 0", "addr0");
-  ExpectSignature ("42 5", "signature 1", "addr1");
+  ExpectSignature (channelId, "state", "42 5", "signature 0", "addr0");
+  ExpectSignature (channelId, "state", "42 5", "signature 1", "addr1");
 
   ASSERT_TRUE (VerifyProof ("0 1", R"(
     initial_state:

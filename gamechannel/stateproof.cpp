@@ -23,6 +23,7 @@ namespace
  */
 bool
 ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
+                            const uint256& channelId,
                             const proto::ChannelMetadata& meta,
                             const ParsedBoardState& oldState,
                             const proto::StateTransition& transition,
@@ -55,7 +56,8 @@ ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
       return false;
     }
 
-  signatures = VerifyParticipantSignatures (rpc, meta, transition.new_state ());
+  signatures = VerifyParticipantSignatures (rpc, channelId, meta, "state",
+                                            transition.new_state ());
   if (signatures.count (turn) == 0)
     {
       LOG (WARNING)
@@ -70,6 +72,7 @@ ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
 
 bool
 VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
+                       const uint256& channelId,
                        const proto::ChannelMetadata& meta,
                        const BoardState& oldState,
                        const proto::StateTransition& transition)
@@ -83,19 +86,21 @@ VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
 
   std::unique_ptr<ParsedBoardState> parsedNew;
   std::set<int> signatures;
-  return ExtraVerifyStateTransition (rpc, rules, meta, *parsedOld, transition,
-                                     signatures, parsedNew);
+  return ExtraVerifyStateTransition (rpc, rules, channelId, meta, *parsedOld,
+                                     transition, signatures, parsedNew);
 }
 
 bool
 VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
+                  const uint256& channelId,
                   const proto::ChannelMetadata& meta,
                   const BoardState& onChainState,
                   const proto::StateProof& proof,
                   BoardState& endState)
 {
   std::set<int> signatures
-      = VerifyParticipantSignatures (rpc, meta, proof.initial_state ());
+      = VerifyParticipantSignatures (rpc, channelId, meta, "state",
+                                     proof.initial_state ());
 
   auto parsed = rules.ParseState (meta, proof.initial_state ().data ());
   if (parsed == nullptr)
@@ -111,7 +116,7 @@ VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
     {
       std::unique_ptr<ParsedBoardState> parsedNew;
       std::set<int> newSignatures;
-      if (!ExtraVerifyStateTransition (rpc, rules, meta, *parsed, t,
+      if (!ExtraVerifyStateTransition (rpc, rules, channelId, meta, *parsed, t,
                                        newSignatures, parsedNew))
         return false;
 

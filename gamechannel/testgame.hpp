@@ -8,9 +8,9 @@
 #include "boardrules.hpp"
 #include "channelgame.hpp"
 
-#include "xayagame/testutils.hpp"
-
+#include <xayagame/testutils.hpp>
 #include <xayagame/rpc-stubs/xayarpcclient.h>
+#include <xayautil/uint256.hpp>
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
@@ -127,7 +127,8 @@ protected:
    * and signature (both as binary, they will be hashed / base64-encoded).
    * Returns a valid response for the given address.
    */
-  void ExpectSignature (const std::string& msg, const std::string& sgn,
+  void ExpectSignature (const uint256& channelId, const std::string& topic,
+                        const std::string& msg, const std::string& sgn,
                         const std::string& addr);
 
 };

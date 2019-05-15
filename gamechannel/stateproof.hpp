@@ -11,6 +11,7 @@
 #include "proto/stateproof.pb.h"
 
 #include <xayagame/rpc-stubs/xayarpcclient.h>
+#include <xayautil/uint256.hpp>
 
 namespace xaya
 {
@@ -23,6 +24,7 @@ namespace xaya
  * and the player who was supposed to make that move signed the new state.
  */
 bool VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
+                            const uint256& channelId,
                             const proto::ChannelMetadata& meta,
                             const BoardState& oldState,
                             const proto::StateTransition& transition);
@@ -33,6 +35,7 @@ bool VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
  * in endState.
  */
 bool VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
+                       const uint256& channelId,
                        const proto::ChannelMetadata& meta,
                        const BoardState& onChainState,
                        const proto::StateProof& proof,

@@ -19,7 +19,35 @@ namespace
 
 using testing::Return;
 
-using SignaturesTests = TestGameFixture;
+class SignaturesTests : public TestGameFixture
+{
+
+protected:
+
+  const uint256 channelId = SHA256::Hash ("channel id");
+
+};
+
+TEST_F (SignaturesTests, GetChannelSignatureMessage)
+{
+  SHA256 hasher;
+  hasher << channelId;
+  hasher << std::string ("topic\0", 6);
+  hasher << "foobar";
+
+  EXPECT_EQ (GetChannelSignatureMessage (channelId, "topic", "foobar"),
+             hasher.Finalise ().ToHex ());
+}
+
+TEST_F (SignaturesTests, InvalidTopic)
+{
+  const std::string invalidTopic("a\0b", 3);
+  ASSERT_EQ (invalidTopic.size (), 3);
+  ASSERT_EQ (invalidTopic[1], '\0');
+
+  EXPECT_DEATH (GetChannelSignatureMessage (channelId, invalidTopic, "foobar"),
+                "Topic string contains nul character");
+}
 
 TEST_F (SignaturesTests, VerifyParticipantSignatures)
 {
@@ -29,10 +57,12 @@ TEST_F (SignaturesTests, VerifyParticipantSignatures)
 
   proto::SignedData data;
   data.set_data ("foobar");
-  const std::string msg = SHA256::Hash ("foobar").ToHex ();
   data.add_signatures ("signature 1");
   data.add_signatures ("signature 2");
   data.add_signatures ("signature 3");
+
+  const std::string msg = GetChannelSignatureMessage (channelId, "topic",
+                                                      data.data ());
 
   EXPECT_CALL (mockXayaServer,
                verifymessage ("", msg, EncodeBase64 ("signature 1")))
@@ -52,7 +82,8 @@ TEST_F (SignaturesTests, VerifyParticipantSignatures)
         "valid": false
       })")));
 
-  EXPECT_EQ (VerifyParticipantSignatures (rpcClient, meta, data),
+  EXPECT_EQ (VerifyParticipantSignatures (rpcClient, channelId, meta,
+                                          "topic", data),
              std::set<int> ({1}));
 }
 
