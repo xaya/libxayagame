@@ -74,7 +74,27 @@ public:
    */
   std::string Blob () const;
 
+  /**
+   * Returns the number of cells covered by ships in a valid configuration.
+   */
+  static int TotalShipCells ();
+
 };
+
+/**
+ * Verifies if the given grid of ship positions matches previous answers made
+ * by a player to shots (based on a grid of where shots were made and which of
+ * those were replied to as "hit").  The "hits" must be a subset of the
+ * "targeted" positions.
+ */
+bool VerifyPositionForAnswers (const Grid& position, const Grid& targeted,
+                               const Grid& hits);
+
+/**
+ * Verifies whether a given position of ships is valid with respect to the
+ * number of ships and the placement rules.
+ */
+bool VerifyPositionOfShips (const Grid& position);
 
 } // namespace ships
 

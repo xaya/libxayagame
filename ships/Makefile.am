@@ -43,7 +43,11 @@ tests_LDADD = \
   $(GLOG_LIBS) $(GTEST_LIBS) $(PROTOBUF_LIBS)
 tests_SOURCES = \
   coord_tests.cpp \
-  grid_tests.cpp
+  grid_tests.cpp \
+  \
+  testutils.cpp
+check_HEADERS = \
+  testutils.hpp
 
 proto/%.pb.h proto/%.pb.cc: $(srcdir)/proto/%.proto
 	protoc -I$(top_srcdir) -I$(srcdir)/proto --cpp_out=proto "$<"

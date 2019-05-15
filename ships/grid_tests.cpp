@@ -4,12 +4,18 @@
 
 #include "grid.hpp"
 
+#include "testutils.hpp"
+
 #include <gtest/gtest.h>
+
+#include <glog/logging.h>
 
 namespace ships
 {
 namespace
 {
+
+/* ************************************************************************** */
 
 using GridTests = testing::Test;
 
@@ -72,6 +78,192 @@ TEST_F (GridTests, Blob)
   EXPECT_EQ (blob[1], static_cast<char> (1));
   EXPECT_EQ (blob[7], static_cast<char> (0x80));
 }
+
+TEST_F (GridTests, TotalShipCells)
+{
+  EXPECT_EQ (Grid::TotalShipCells (), 8 + 6 + 4);
+}
+
+/* ************************************************************************** */
+
+class VerifyPositionForAnswersTests : public testing::Test
+{
+
+protected:
+
+  Grid position;
+  Grid targeted;
+  Grid hits;
+
+  bool
+  Verify () const
+  {
+    return VerifyPositionForAnswers (position, targeted, hits);
+  }
+
+};
+
+TEST_F (VerifyPositionForAnswersTests, Works)
+{
+  EXPECT_TRUE (Verify ());
+
+  position.Set (Coord (1));
+  position.Set (Coord (5));
+  position.Set (Coord (10));
+  EXPECT_TRUE (Verify ());
+
+  targeted.Set (Coord (1));
+  targeted.Set (Coord (2));
+  targeted.Set (Coord (5));
+  EXPECT_FALSE (Verify ());
+
+  hits.Set (Coord (1));
+  hits.Set (Coord (5));
+  EXPECT_TRUE (Verify ());
+
+  hits.Set (Coord (2));
+  EXPECT_FALSE (Verify ());
+}
+
+TEST_F (VerifyPositionForAnswersTests, InvalidHits)
+{
+  hits.Set (Coord (10));
+  targeted.Set (Coord (10));
+  Verify ();
+
+  hits.Set (Coord (20));
+  EXPECT_DEATH (Verify (), "Hit positions are not a subset");
+}
+
+/* ************************************************************************** */
+
+class VerifyPositionOfShipsTests : public testing::Test
+{
+
+protected:
+
+  /**
+   * Verifies a position using VerifyPositionOfShips, parsing the configuration
+   * first from a string.  In the string, "." is for empty places and "x"
+   * for ships.
+   */
+  static bool
+  Verify (const std::string& str)
+  {
+    return VerifyPositionOfShips (GridFromString (str));
+  }
+
+};
+
+TEST_F (VerifyPositionOfShipsTests, Valid)
+{
+  EXPECT_TRUE (Verify (
+    "xx...x.x"
+    ".....x.x"
+    "xxxx...."
+    "........"
+    "........"
+    "x.x....."
+    "x.x....."
+    "x.x...xx"
+  ));
+}
+
+TEST_F (VerifyPositionOfShipsTests, InvalidPlacement)
+{
+  EXPECT_FALSE (Verify (
+    "xx.....x"
+    "..x....x"
+    "..x....."
+    "........"
+    "....xxxx"
+    "x.x....."
+    "x.x....."
+    "x.x...xx"
+  ));
+
+  EXPECT_FALSE (Verify (
+    ".xx....x"
+    "x......x"
+    "x......."
+    "........"
+    "....xxxx"
+    "x.x....."
+    "x.x....."
+    "x.x...xx"
+  ));
+
+  EXPECT_FALSE (Verify (
+    "..xx...x"
+    "x......x"
+    "x......."
+    "........"
+    "....xxxx"
+    "x.x..x.."
+    "x.x..x.."
+    "x.x....."
+  ));
+
+  EXPECT_FALSE (Verify (
+    ".......x"
+    "xx.....x"
+    "x......."
+    "........"
+    "....xxxx"
+    "x.x....."
+    "x.x..x.."
+    "x.x..x.."
+  ));
+}
+
+TEST_F (VerifyPositionOfShipsTests, ShipTypes)
+{
+  EXPECT_FALSE (Verify (
+    "xx.....x"
+    "...x...x"
+    "...x...."
+    "x......."
+    "....xxxx"
+    "x.x....."
+    "x.x....."
+    "x.x...xx"
+  ));
+
+  EXPECT_FALSE (Verify (
+    "xx.x...x"
+    "...x...x"
+    "........"
+    "xxxxx..x"
+    ".......x"
+    "x.x....x"
+    "x.x....x"
+    "x.x.xx.."
+  ));
+
+  EXPECT_FALSE (Verify (
+    ".....x.x"
+    ".....x.x"
+    "xxxx...."
+    "........"
+    "........"
+    "x.x....."
+    "x.x....."
+    "x.x...xx"
+  ));
+
+  EXPECT_FALSE (Verify (
+    "xx...x.x"
+    ".....x.x"
+    "xxxx...."
+    ".......x"
+    ".......x"
+    "x.x....x"
+    "x.x....."
+    "x.x...xx"
+  ));
+}
+
+/* ************************************************************************** */
 
 } // anonymous namespace
 } // namespace ships
