@@ -40,8 +40,13 @@ CheckStateProofIsLater (XayaRpcClient& rpc, const BoardRules& rules,
       return false;
     }
 
-  const unsigned onChainCnt = rules.TurnCount (meta, onChainState);
-  const unsigned provenCnt = rules.TurnCount (meta, provenState);
+  const auto onChainParsed = rules.ParseState (meta, onChainState);
+  CHECK (onChainParsed != nullptr);
+  const auto provenParsed = rules.ParseState (meta, provenState);
+  CHECK (provenParsed != nullptr);
+
+  const unsigned onChainCnt = onChainParsed->TurnCount ();
+  const unsigned provenCnt = provenParsed->TurnCount ();
   if (onChainCnt >= provenCnt)
     {
       LOG (WARNING)
@@ -60,16 +65,26 @@ bool
 ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
                              const proto::StateProof& proof)
 {
-  BoardState provenState;
-  if (!CheckStateProofIsLater (GetXayaRpc (), GetBoardRules (), ch, proof,
-                               provenState))
-    return false;
-
   /* If there is already a dispute in the on-chain game state, then it can only
      have been placed there by an earlier block (or perhaps the same block
      in edge cases).  */
   if (ch.HasDispute ())
     CHECK_GE (height, ch.GetDisputeHeight ());
+
+  const auto& meta = ch.GetMetadata ();
+  const auto& rules = GetBoardRules ();
+
+  BoardState provenState;
+  if (!CheckStateProofIsLater (GetXayaRpc (), rules, ch, proof, provenState))
+    return false;
+
+  const auto provenParsed = rules.ParseState (meta, provenState);
+  CHECK (provenParsed != nullptr);
+  if (provenParsed->WhoseTurn () == ParsedBoardState::NO_TURN)
+    {
+      LOG (WARNING) << "Cannot file dispute for 'no turn' situation";
+      return false;
+    }
 
   VLOG (1) << "Dispute is valid, updating state...";
 

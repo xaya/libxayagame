@@ -7,6 +7,6 @@
 namespace xaya
 {
 
-constexpr int BoardRules::NO_TURN;
+constexpr int ParsedBoardState::NO_TURN;
 
 } // namespace xaya

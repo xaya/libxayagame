@@ -7,6 +7,9 @@
 
 #include "proto/metadata.pb.h"
 
+#include <xayagame/rpc-stubs/xayarpcclient.h>
+
+#include <memory>
 #include <string>
 
 namespace xaya
@@ -22,20 +25,21 @@ using BoardState = std::string;
 using BoardMove = std::string;
 
 /**
- * Abstract base class for the game-specific processor of board states and
- * moves on a channel.  This is the main class defining the rules of the
- * on-chain game.
+ * Interface for a game-specific "parsed" representation of a board state.
+ * Instances of subclasses are obtained by parsing an (encoded) BoardState
+ * through the game's BoardRules instance, and then those instances can be
+ * used to further work with a game state.
  *
- * The implemented methods of this class should be pure and thread-safe.
- * They may be called in parallel and from various different threads from
- * the game-channel framework.
+ * A typical usage pattern here is that the BoardState could be a serialised
+ * protocol buffer, while the ParsedBoardState is a wrapper class around
+ * the actual protocol buffer.
  */
-class BoardRules
+class ParsedBoardState
 {
 
 protected:
 
-  BoardRules () = default;
+  ParsedBoardState () = default;
 
 public:
 
@@ -46,43 +50,76 @@ public:
    */
   static constexpr int NO_TURN = -1;
 
-  virtual ~BoardRules () = default;
+  virtual ~ParsedBoardState () = default;
 
   /**
-   * Compares two given board states in the context of the given metadata.
-   * Returns true if they are equivalent (i.e. possibly different encodings
-   * of the same state).
+   * Compares the current state to the given other board state.  Returns true
+   * if they are equivalent (i.e. possibly different encodings of the same
+   * state).
+   *
+   * The passed in BoardState may be invalid (even malformed encoded data),
+   * in which case this function should return false.
    */
-  virtual bool CompareStates (const proto::ChannelMetadata& meta,
-                              const BoardState& a,
-                              const BoardState& b) const = 0;
+  virtual bool Equals (const BoardState& other) const = 0;
 
   /**
-   * Returns which player's turn it is in the given state.  The return value
-   * is the player index into the channel's participants array.  This may return
-   * NO_TURN to indicate that it is noone's turn at the moment.
+   * Returns which player's turn it is in the current state.  The return value
+   * is the player index into the associated channel's participants array.
+   * This may return NO_TURN to indicate that it is noone's turn at the moment.
    */
-  virtual int WhoseTurn (const proto::ChannelMetadata& meta,
-                         const BoardState& state) const = 0;
+  virtual int WhoseTurn () const = 0;
 
   /**
-   * Returns the "turn count" for the given game state.  This is a number
+   * Returns the "turn count" for the current game state.  This is a number
    * that should increase with turns made in the game, so that it is possible
    * to determine whether a given state is "after" another.  It can also be
    * seen as the "block height" in the "private chain" formed during a game
    * on a channel.
    */
-  virtual unsigned TurnCount (const proto::ChannelMetadata& meta,
-                              const BoardState& state) const = 0;
+  virtual unsigned TurnCount () const = 0;
 
   /**
    * Applies a move (assumed to be made by the player whose turn it is)
-   * onto the given state, yielding a new board state.  Returns false
-   * if the move is invalid instead.
+   * onto the current state, yielding a new board state.  Returns false
+   * if the move is invalid instead (either because the data itself does
+   * not represent a move at all, or because the move is invalid in the
+   * context of the given old state).
    */
-  virtual bool ApplyMove (const proto::ChannelMetadata& meta,
-                          const BoardState& oldState, const BoardMove& mv,
+  virtual bool ApplyMove (XayaRpcClient& rpc, const BoardMove& mv,
                           BoardState& newState) const = 0;
+
+};
+
+/**
+ * Abstract base class for the game-specific processor of board states and
+ * moves on a channel.  This is the main class defining the rules of the
+ * on-chain game, by means of constructing proper subclasses of
+ * ParsedBoardState (which then do the real processing).
+ */
+class BoardRules
+{
+
+protected:
+
+  BoardRules () = default;
+
+public:
+
+  virtual ~BoardRules () = default;
+
+  /**
+   * Parses an encoded BoardState into a ParsedBoardState instance, which
+   * implements the abstract methods suitably for the game at hand.
+   *
+   * If the state is invalid (e.g. malformed data), this function should return
+   * nullptr instead.
+   *
+   * The passed-in ChannelMetadata can be used to put the board state into
+   * context.  It is guaranteed that the reference stays valid at least as
+   * long as the returned ParsedBoardState instance will be alive.
+   */
+  virtual std::unique_ptr<ParsedBoardState> ParseState (
+      const proto::ChannelMetadata& meta, const BoardState& s) const = 0;
 
 };
 

@@ -24,25 +24,32 @@ namespace
 bool
 ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
                             const proto::ChannelMetadata& meta,
-                            const BoardState& oldState,
+                            const ParsedBoardState& oldState,
                             const proto::StateTransition& transition,
-                            std::set<int>& signatures)
+                            std::set<int>& signatures,
+                            std::unique_ptr<ParsedBoardState>& parsedNew)
 {
-  const int turn = rules.WhoseTurn (meta, oldState);
-  if (turn == BoardRules::NO_TURN)
+
+  const int turn = oldState.WhoseTurn ();
+  if (turn == ParsedBoardState::NO_TURN)
     {
       LOG (WARNING) << "State transition applied to 'no turn' state";
       return false;
     }
 
   BoardState newState;
-  if (!rules.ApplyMove (meta, oldState, transition.move (), newState))
+  if (!oldState.ApplyMove (rpc, transition.move (), newState))
     {
       LOG (WARNING) << "Failed to apply move of state transition";
       return false;
     }
 
-  if (!rules.CompareStates (meta, transition.new_state ().data (), newState))
+  parsedNew = rules.ParseState (meta, newState);
+  /* newState is not user-provided but the output of a successful ApplyMove,
+     so it should be guaranteed to be valid.  */
+  CHECK (parsedNew != nullptr);
+
+  if (!parsedNew->Equals (transition.new_state ().data ()))
     {
       LOG (WARNING) << "Wrong new state claimed in state transition";
       return false;
@@ -67,9 +74,17 @@ VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
                        const BoardState& oldState,
                        const proto::StateTransition& transition)
 {
+  const auto parsedOld = rules.ParseState (meta, oldState);
+  if (parsedOld == nullptr)
+    {
+      LOG (WARNING) << "Invalid old state in state transition";
+      return false;
+    }
+
+  std::unique_ptr<ParsedBoardState> parsedNew;
   std::set<int> signatures;
-  return ExtraVerifyStateTransition (rpc, rules, meta, oldState, transition,
-                                     signatures);
+  return ExtraVerifyStateTransition (rpc, rules, meta, *parsedOld, transition,
+                                     signatures, parsedNew);
 }
 
 bool
@@ -81,20 +96,30 @@ VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
 {
   std::set<int> signatures
       = VerifyParticipantSignatures (rpc, meta, proof.initial_state ());
+
+  auto parsed = rules.ParseState (meta, proof.initial_state ().data ());
+  if (parsed == nullptr)
+    {
+      LOG (WARNING) << "Invalid initial state for state proof";
+      return false;
+    }
+
   endState = proof.initial_state ().data ();
-  bool foundOnChain = rules.CompareStates (meta, onChainState, endState);
+  bool foundOnChain = parsed->Equals (onChainState);
 
   for (const auto& t : proof.transitions ())
     {
+      std::unique_ptr<ParsedBoardState> parsedNew;
       std::set<int> newSignatures;
-      if (!ExtraVerifyStateTransition (rpc, rules, meta, endState, t,
-                                       newSignatures))
+      if (!ExtraVerifyStateTransition (rpc, rules, meta, *parsed, t,
+                                       newSignatures, parsedNew))
         return false;
 
       signatures.insert (newSignatures.begin (), newSignatures.end ());
+      parsed = std::move (parsedNew);
       endState = t.new_state ().data ();
       if (!foundOnChain)
-        foundOnChain = rules.CompareStates (meta, onChainState, endState);
+        foundOnChain = parsed->Equals (onChainState);
     }
 
   if (foundOnChain)

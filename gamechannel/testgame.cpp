@@ -12,7 +12,6 @@
 #include <glog/logging.h>
 
 #include <sstream>
-#include <utility>
 
 namespace xaya
 {
@@ -23,69 +22,103 @@ namespace
 using testing::_;
 using testing::Return;
 
-std::pair<int, int>
-ParsePair (const std::string& s)
+struct ParsedState
+{
+  int number;
+  int count;
+};
+
+bool
+ParsePair (const std::string& s, ParsedState& res)
 {
   std::istringstream in(s);
-  int a, b;
-  in >> a >> b;
+  in >> res.number >> res.count;
 
-  /* Make sure that we actually had two numbers to read.  Else we would get
-     one or both as "silent zeros", but that means there's a bug somewhere
-     in the test data.  */
-  CHECK (in) << "Invalid game state: " << s;
+  if (!in)
+    {
+      LOG (WARNING) << "Invalid game state: " << s;
+      return false;
+    }
 
-  return {a, b};
+  return true;
 }
+
+class AdditionState : public ParsedBoardState
+{
+
+private:
+
+  const ParsedState data;
+
+public:
+
+  explicit AdditionState (const ParsedState& d)
+    : data(d)
+  {}
+
+  AdditionState () = delete;
+  AdditionState (const AdditionState&) = delete;
+  void operator= (const AdditionState&) = delete;
+
+  bool
+  Equals (const BoardState& other) const override
+  {
+    ParsedState p;
+    if (!ParsePair (other, p))
+      return false;
+
+    return p.number == data.number && p.count == data.count;
+  }
+
+  int
+  WhoseTurn () const override
+  {
+    if (data.number >= 100)
+      return ParsedBoardState::NO_TURN;
+
+    return data.number % 2;
+  }
+
+  unsigned
+  TurnCount () const override
+  {
+    return data.count;
+  }
+
+  bool
+  ApplyMove (XayaRpcClient& rpc, const BoardMove& mv,
+             BoardState& newState) const override
+  {
+    /* The game-channel engine should never invoke ApplyMove on a 'no turn'
+       situation.  Make sure to verify that.  */
+    CHECK (WhoseTurn () != ParsedBoardState::NO_TURN);
+
+    std::istringstream mvIn(mv);
+    int add;
+    mvIn >> add;
+    if (add <= 0)
+      return false;
+
+    std::ostringstream out;
+    out << (data.number + add) << " " << (data.count + 1);
+    newState = out.str ();
+
+    return true;
+  }
+
+};
 
 } // anonymous namespace
 
-bool
-AdditionRules::CompareStates (const proto::ChannelMetadata& meta,
-                              const BoardState& a, const BoardState& b) const
+std::unique_ptr<ParsedBoardState>
+AdditionRules::ParseState (const proto::ChannelMetadata& meta,
+                           const BoardState& state) const
 {
-  return ParsePair (a) == ParsePair (b);
-}
+  ParsedState p;
+  if (!ParsePair (state, p))
+    return nullptr;
 
-int
-AdditionRules::WhoseTurn (const proto::ChannelMetadata& meta,
-                          const BoardState& state) const
-{
-  const int num = ParsePair (state).first;
-  if (num >= 100)
-    return BoardRules::NO_TURN;
-
-  return num % 2;
-}
-
-unsigned
-AdditionRules::TurnCount (const proto::ChannelMetadata& meta,
-                          const BoardState& state) const
-{
-  return ParsePair (state).second;
-}
-
-bool
-AdditionRules::ApplyMove (const proto::ChannelMetadata& meta,
-                          const BoardState& oldState, const BoardMove& mv,
-                          BoardState& newState) const
-{
-  const auto state = ParsePair (oldState);
-  /* The framework code should never actually attempt to apply a move in
-     a NO_TURN situation.  Verify that.  */
-  CHECK_LT (state.first, 100) << "Move applied to 'no turn' state";
-
-  std::istringstream mvIn(mv);
-  int add;
-  mvIn >> add;
-  if (add <= 0)
-    return false;
-
-  std::ostringstream out;
-  out << (state.first + add) << " " << (state.second + 1);
-  newState = out.str ();
-
-  return true;
+  return std::make_unique<AdditionState> (p);
 }
 
 void
