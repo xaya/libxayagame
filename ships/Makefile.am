@@ -21,10 +21,12 @@ libships_la_LIBADD = \
   $(top_builddir)/gamechannel/libgamechannel.la \
   $(JSONCPP_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
 libships_la_SOURCES = \
+  board.cpp \
   coord.cpp \
   grid.cpp \
   $(PROTOSOURCES)
 noinst_HEADERS = \
+  board.hpp \
   coord.hpp \
   grid.hpp \
   $(PROTOHEADERS)
@@ -42,6 +44,7 @@ tests_LDADD = \
   $(top_builddir)/gamechannel/libgamechannel.la \
   $(GLOG_LIBS) $(GTEST_LIBS) $(PROTOBUF_LIBS)
 tests_SOURCES = \
+  board_tests.cpp \
   coord_tests.cpp \
   grid_tests.cpp \
   \
