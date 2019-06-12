@@ -36,13 +36,14 @@ TESTS = tests
 
 tests_CXXFLAGS = \
   -I$(top_srcdir) \
-  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(PROTOBUF_CFLAGS)
+  $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(PROTOBUF_CFLAGS)
 tests_LDADD = \
   $(builddir)/libships.la \
   $(top_builddir)/xayautil/libxayautil.la \
+  $(top_builddir)/xayagame/libtestutils.la \
   $(top_builddir)/xayagame/libxayagame.la \
   $(top_builddir)/gamechannel/libgamechannel.la \
-  $(GLOG_LIBS) $(GTEST_LIBS) $(PROTOBUF_LIBS)
+  $(JSONCPP_LIBS) $(GLOG_LIBS) $(GTEST_LIBS) $(PROTOBUF_LIBS)
 tests_SOURCES = \
   board_tests.cpp \
   coord_tests.cpp \

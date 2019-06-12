@@ -79,6 +79,13 @@ private:
    */
   Phase GetPhase () const;
 
+  /**
+   * Applies a position commitment move (if valid).
+   */
+  static bool ApplyPositionCommitment (const proto::PositionCommitmentMove& mv,
+                                       const Phase phase,
+                                       proto::BoardState& newState);
+
   friend class BoardTests;
 
 protected:

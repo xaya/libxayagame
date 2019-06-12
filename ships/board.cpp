@@ -4,6 +4,8 @@
 
 #include "board.hpp"
 
+#include <xayautil/uint256.hpp>
+
 #include <glog/logging.h>
 
 namespace ships
@@ -139,10 +141,90 @@ ShipsBoardState::TurnCount () const
 }
 
 bool
+ShipsBoardState::ApplyPositionCommitment (
+    const proto::PositionCommitmentMove& mv, const Phase phase,
+    proto::BoardState& newState)
+{
+  if (mv.position_hash ().size () != xaya::uint256::NUM_BYTES)
+    {
+      LOG (WARNING) << "position_hash has wrong size";
+      return false;
+    }
+
+  switch (phase)
+    {
+    case Phase::FIRST_COMMITMENT:
+      if (mv.seed_hash ().size () != xaya::uint256::NUM_BYTES)
+        {
+          LOG (WARNING) << "seed_hash has wrong size";
+          return false;
+        }
+      if (mv.has_seed ())
+        {
+          LOG (WARNING) << "First commitment has preimage seed";
+          return false;
+        }
+
+      newState.set_turn (1);
+      newState.add_position_hashes (mv.position_hash ());
+      CHECK_EQ (newState.position_hashes_size (), 1);
+      newState.set_seed_hash_0 (mv.seed_hash ());
+      return true;
+
+    case Phase::SECOND_COMMITMENT:
+      if (mv.has_seed_hash ())
+        {
+          LOG (WARNING) << "Second commitment has seed hash";
+          return false;
+        }
+      if (mv.seed ().size () > xaya::uint256::NUM_BYTES)
+        {
+          LOG (WARNING) << "seed is too large: " << mv.seed ().size ();
+          return false;
+        }
+
+      newState.set_turn (0);
+      newState.add_position_hashes (mv.position_hash ());
+      CHECK_EQ (newState.position_hashes_size (), 2);
+      newState.set_seed_1 (mv.seed ());
+      return true;
+
+    default:
+      LOG (WARNING)
+          << "Invalid phase for position commitment: "
+          << static_cast<int> (phase);
+      return false;
+    }
+}
+
+bool
 ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
                                  proto::BoardState& newState) const
 {
-  LOG (FATAL) << "Not implemented";
+  /* Moves do typically incremental changes, so we start by copying the
+     current state and then modify it (rather than constructing the new
+     state from scratch).  */
+  const auto& pb = GetState ();
+  newState = pb;
+
+  const int turn = WhoseTurn ();
+  CHECK_NE (turn, xaya::ParsedBoardState::NO_TURN);
+
+  const auto phase = GetPhase ();
+  switch (mv.move_case ())
+    {
+    case proto::BoardMove::kPositionCommitment:
+      return ApplyPositionCommitment (mv.position_commitment (), phase,
+                                      newState);
+
+    default:
+    case proto::BoardMove::MOVE_NOT_SET:
+      LOG (WARNING) << "Move does not specify any one-of case";
+      return false;
+    }
+
+  LOG (FATAL) << "Unexpected move case: " << mv.move_case ();
+  return false;
 }
 
 } // namespace ships
