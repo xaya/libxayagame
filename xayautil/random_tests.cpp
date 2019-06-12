@@ -59,6 +59,18 @@ TEST_F (RandomTests, Bytes)
     ASSERT_EQ (rnd.Next<uint8_t> (), b);
 }
 
+TEST_F (RandomTests, Bits)
+{
+  ASSERT_EQ (rnd.Next<bool> (), false);
+  ASSERT_EQ (rnd.Next<bool> (), false);
+  ASSERT_EQ (rnd.Next<bool> (), false);
+  ASSERT_EQ (rnd.Next<bool> (), false);
+  ASSERT_EQ (rnd.Next<bool> (), true);
+  ASSERT_EQ (rnd.Next<bool> (), false);
+  ASSERT_EQ (rnd.Next<bool> (), true);
+  ASSERT_EQ (rnd.Next<bool> (), false);
+}
+
 TEST_F (RandomTests, Integers)
 {
   ASSERT_EQ (rnd.Next<uint16_t> (), 0x7ca2);

@@ -45,6 +45,13 @@ template <>
   return data[nextIndex++];
 }
 
+template <>
+  bool
+  Random::Next<bool> ()
+{
+  return Next<unsigned char> () & 1;
+}
+
 namespace
 {
 
