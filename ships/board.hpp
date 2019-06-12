@@ -86,6 +86,12 @@ private:
                                        const Phase phase,
                                        proto::BoardState& newState);
 
+  /**
+   * Applies a seed-reveal move (if valid).
+   */
+  static bool ApplySeedReveal (const proto::SeedRevealMove& mv,
+                               const Phase phase, proto::BoardState& newState);
+
   friend class BoardTests;
 
 protected:

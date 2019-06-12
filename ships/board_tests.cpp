@@ -53,6 +53,17 @@ TextMove (const std::string& str)
   return res;
 }
 
+/**
+ * Hashes a string to 32 bytes and returns those as string again.
+ */
+std::string
+HashToString (const std::string& preimage)
+{
+  const xaya::uint256 value = xaya::SHA256::Hash (preimage);
+  const char* data = reinterpret_cast<const char*> (value.GetBlob ());
+  return std::string (data, xaya::uint256::NUM_BYTES);
+}
+
 /* Allow printing as text proto for logging.  */
 
 template <typename S>
@@ -630,6 +641,126 @@ TEST_F (PositionCommitmentTests, InvalidSecondCommitment)
         seed_hash: "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
       }
   )"));
+}
+
+/* ************************************************************************** */
+
+using SeedRevealTests = ApplyMoveTests;
+
+TEST_F (SeedRevealTests, InvalidPhase)
+{
+  proto::BoardMove mv;
+  mv.mutable_seed_reveal ()->set_seed ("foobar");
+
+  auto state = TextState (R"(
+    turn: 0
+  )");
+  state.set_seed_hash_0 (HashToString (mv.seed_reveal ().seed ()));
+
+  ExpectInvalid (state, mv);
+}
+
+TEST_F (SeedRevealTests, SeedTooLarge)
+{
+  proto::BoardMove mv;
+  mv.mutable_seed_reveal ()->set_seed ("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxz");
+
+  auto state = TextState (R"(
+    turn: 0
+    position_hashes: "first hash"
+    position_hashes: "second hash"
+  )");
+  state.set_seed_hash_0 (HashToString (mv.seed_reveal ().seed ()));
+
+  ExpectInvalid (state, mv);
+}
+
+TEST_F (SeedRevealTests, NotMatchingCommitment)
+{
+  ExpectInvalid (TextState (R"(
+    turn: 0
+    position_hashes: "first hash"
+    position_hashes: "second hash"
+    seed_hash_0: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  )"), TextMove (R"(
+    seed_reveal:
+      {
+        seed: "foobar"
+      }
+  )"));
+}
+
+TEST_F (SeedRevealTests, Valid)
+{
+  for (const std::string seed : {"", "foobar",
+                                 "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"})
+    {
+      proto::BoardMove mv;
+      mv.mutable_seed_reveal ()->set_seed (seed);
+
+      auto state = TextState (R"(
+        turn: 0
+        position_hashes: "first hash"
+        position_hashes: "second hash"
+        seed_1: "other seed"
+      )");
+      state.set_seed_hash_0 (HashToString (mv.seed_reveal ().seed ()));
+
+      auto expected = TextState (R"(
+        position_hashes: "first hash"
+        position_hashes: "second hash"
+        known_ships:
+          {
+            guessed: 0
+            hits: 0
+          }
+        known_ships:
+          {
+            guessed: 0
+            hits: 0
+          }
+      )");
+
+      xaya::Random rnd;
+      rnd.Seed (xaya::SHA256::Hash (seed + "other seed"));
+      expected.set_turn (rnd.Next<bool> () ? 1 : 0);
+
+      ExpectNewState (state, mv, expected);
+    }
+}
+
+TEST_F (SeedRevealTests, MissingSeed1)
+{
+  proto::BoardMove mv;
+  mv.mutable_seed_reveal ()->set_seed ("foo");
+
+  auto state = TextState (R"(
+    turn: 0
+    position_hashes: "first hash"
+    position_hashes: "second hash"
+  )");
+  state.set_seed_hash_0 (HashToString (mv.seed_reveal ().seed ()));
+
+  auto expected = TextState (R"(
+    position_hashes: "first hash"
+    position_hashes: "second hash"
+    known_ships:
+      {
+        guessed: 0
+        hits: 0
+      }
+    known_ships:
+      {
+        guessed: 0
+        hits: 0
+      }
+  )");
+
+  xaya::Random rnd;
+  rnd.Seed (xaya::SHA256::Hash ("foo"));
+  expected.set_turn (rnd.Next<bool> () ? 1 : 0);
+
+  ExpectNewState (state, mv, expected);
 }
 
 /* ************************************************************************** */

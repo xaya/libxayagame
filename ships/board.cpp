@@ -4,12 +4,41 @@
 
 #include "board.hpp"
 
+#include <xayautil/hash.hpp>
+#include <xayautil/random.hpp>
 #include <xayautil/uint256.hpp>
 
 #include <glog/logging.h>
 
 namespace ships
 {
+
+namespace
+{
+
+/**
+ * Checks whether a hash value encoded in a string of bytes (as stored in
+ * the protocol buffers) matches the given uint256.  This gracefully handles
+ * a situation where the stored bytes have a wrong length, in which case the
+ * hash simply mismatches.
+ */
+bool
+CheckHashValue (const xaya::uint256& actual, const std::string& expected)
+{
+  if (expected.size () != xaya::uint256::NUM_BYTES)
+    {
+      LOG (WARNING) << "Committed hash has wrong size: " << expected.size ();
+      return false;
+    }
+
+  const auto* bytes = reinterpret_cast<const unsigned char*> (expected.data ());
+  xaya::uint256 expectedValue;
+  expectedValue.FromBlob (bytes);
+
+  return actual == expectedValue;
+}
+
+} // anonymous namespace
 
 bool
 ShipsBoardState::IsValid () const
@@ -198,6 +227,51 @@ ShipsBoardState::ApplyPositionCommitment (
 }
 
 bool
+ShipsBoardState::ApplySeedReveal (const proto::SeedRevealMove& mv,
+                                  const Phase phase,
+                                  proto::BoardState& newState)
+{
+  if (phase != Phase::FIRST_REVEAL_SEED)
+    {
+      LOG (WARNING)
+          << "Invalid phase for seed reveal: " << static_cast<int> (phase);
+      return false;
+    }
+
+  if (mv.seed ().size () > xaya::uint256::NUM_BYTES)
+    {
+      LOG (WARNING) << "seed is too large: " << mv.seed ().size ();
+      return false;
+    }
+  if (!CheckHashValue (xaya::SHA256::Hash (mv.seed ()),
+                       newState.seed_hash_0 ()))
+    {
+      LOG (WARNING) << "seed does not match committed hash";
+      return false;
+    }
+
+  /* The starting player is determined by computing a single random bit,
+     seeded from the hash of both seed strings together.  */
+  xaya::SHA256 hasher;
+  hasher << mv.seed () << newState.seed_1 ();
+  xaya::Random rnd;
+  rnd.Seed (hasher.Finalise ());
+  newState.set_turn (rnd.Next<bool> () ? 1 : 0);
+
+  newState.clear_seed_hash_0 ();
+  newState.clear_seed_1 ();
+
+  for (int i = 0; i < 2; ++i)
+    {
+      auto* known = newState.add_known_ships ();
+      known->set_guessed (0);
+      known->set_hits (0);
+    }
+
+  return true;
+}
+
+bool
 ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
                                  proto::BoardState& newState) const
 {
@@ -216,6 +290,9 @@ ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
     case proto::BoardMove::kPositionCommitment:
       return ApplyPositionCommitment (mv.position_commitment (), phase,
                                       newState);
+
+    case proto::BoardMove::kSeedReveal:
+      return ApplySeedReveal (mv.seed_reveal (), phase, newState);
 
     default:
     case proto::BoardMove::MOVE_NOT_SET:
