@@ -83,14 +83,20 @@ private:
    * Applies a position commitment move (if valid).
    */
   static bool ApplyPositionCommitment (const proto::PositionCommitmentMove& mv,
-                                       const Phase phase,
+                                       Phase phase,
                                        proto::BoardState& newState);
 
   /**
    * Applies a seed-reveal move (if valid).
    */
-  static bool ApplySeedReveal (const proto::SeedRevealMove& mv,
-                               const Phase phase, proto::BoardState& newState);
+  static bool ApplySeedReveal (const proto::SeedRevealMove& mv, Phase phase,
+                               proto::BoardState& newState);
+
+  /**
+   * Applies a shot move (if valid).
+   */
+  static bool ApplyShot (const proto::ShotMove& mv, Phase phase,
+                         proto::BoardState& newState);
 
   friend class BoardTests;
 

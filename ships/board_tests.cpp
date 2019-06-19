@@ -765,5 +765,75 @@ TEST_F (SeedRevealTests, MissingSeed1)
 
 /* ************************************************************************** */
 
+class ShotTests : public ApplyMoveTests
+{
+
+protected:
+
+  /** Predefined state in the "shoot" phase.  */
+  proto::BoardState state;
+
+  ShotTests ()
+  {
+    state = TextState (R"(
+      turn: 0
+      position_hashes: "foo"
+      position_hashes: "bar"
+      known_ships: {}
+      known_ships: {}
+    )");
+  }
+
+};
+
+TEST_F (ShotTests, InvalidPhase)
+{
+  ExpectInvalid (TextState ("turn: 0"), TextMove (R"(
+    shot:
+      {
+        location: 42
+      }
+  )"));
+}
+
+TEST_F (ShotTests, NoOrInvalidLocation)
+{
+  ExpectInvalid (state, TextMove ("shot: {}"));
+  ExpectInvalid (state, TextMove ("shot: { location: 64 }"));
+}
+
+TEST_F (ShotTests, LocationAlreadyGuessed)
+{
+  state.mutable_known_ships (1)->set_guessed (2);
+  ExpectInvalid (state, TextMove ("shot: { location: 1 }"));
+}
+
+TEST_F (ShotTests, ValidShot)
+{
+  state.mutable_known_ships (0)->set_guessed (1);
+  state.mutable_known_ships (1)->set_guessed (2);
+
+  ExpectNewState (state, TextMove ("shot: { location: 0 }"), TextState (R"(
+    turn: 1
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: { guessed: 1 }
+    known_ships: { guessed: 3 }
+    current_shot: 0
+  )"));
+
+  state.set_turn (1);
+  ExpectNewState (state, TextMove ("shot: { location: 1 }"), TextState (R"(
+    turn: 0
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: { guessed: 3 }
+    known_ships: { guessed: 2 }
+    current_shot: 1
+  )"));
+}
+
+/* ************************************************************************** */
+
 } // anonymous namespace
 } // namespace ships

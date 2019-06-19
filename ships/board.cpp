@@ -4,6 +4,9 @@
 
 #include "board.hpp"
 
+#include "coord.hpp"
+#include "grid.hpp"
+
 #include <xayautil/hash.hpp>
 #include <xayautil/random.hpp>
 #include <xayautil/uint256.hpp>
@@ -272,6 +275,47 @@ ShipsBoardState::ApplySeedReveal (const proto::SeedRevealMove& mv,
 }
 
 bool
+ShipsBoardState::ApplyShot (const proto::ShotMove& mv, const Phase phase,
+                            proto::BoardState& newState)
+{
+  if (phase != Phase::SHOOT)
+    {
+      LOG (WARNING) << "Invalid phase for shot: " << static_cast<int> (phase);
+      return false;
+    }
+
+  if (!mv.has_location ())
+    {
+      LOG (WARNING) << "Shot move has no location";
+      return false;
+    }
+  const Coord target(mv.location ());
+  if (!target.IsOnBoard ())
+    {
+      LOG (WARNING) << "Shot target is not on the board";
+      return false;
+    }
+
+  const int otherPlayer = 1 - newState.turn ();
+  CHECK_GE (otherPlayer, 0);
+  CHECK_LE (otherPlayer, 1);
+
+  Grid guessed(newState.known_ships (otherPlayer).guessed ());
+  if (guessed.Get (target))
+    {
+      LOG (WARNING) << "Shot target has already been guessed";
+      return false;
+    }
+  guessed.Set (target);
+
+  newState.set_turn (otherPlayer);
+  newState.set_current_shot (target.GetIndex ());
+  newState.mutable_known_ships (otherPlayer)->set_guessed (guessed.GetBits ());
+
+  return true;
+}
+
+bool
 ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
                                  proto::BoardState& newState) const
 {
@@ -293,6 +337,9 @@ ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
 
     case proto::BoardMove::kSeedReveal:
       return ApplySeedReveal (mv.seed_reveal (), phase, newState);
+
+    case proto::BoardMove::kShot:
+      return ApplyShot (mv.shot (), phase, newState);
 
     default:
     case proto::BoardMove::MOVE_NOT_SET:
