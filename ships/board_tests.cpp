@@ -835,5 +835,115 @@ TEST_F (ShotTests, ValidShot)
 
 /* ************************************************************************** */
 
+class ReplyTests : public ApplyMoveTests
+{
+
+protected:
+
+  /**
+   * Predefined state in the "shoot" phase.  By setting a current_shot value,
+   * it will be turned into "answer" phase.
+   */
+  proto::BoardState state;
+
+  ReplyTests ()
+  {
+    state = TextState (R"(
+      turn: 0
+      position_hashes: "foo"
+      position_hashes: "bar"
+      known_ships: {}
+      known_ships: {}
+    )");
+  }
+
+};
+
+TEST_F (ReplyTests, InvalidPhase)
+{
+  ExpectInvalid (state, TextMove (R"(
+    reply:
+      {
+        reply: HIT
+      }
+  )"));
+}
+
+TEST_F (ReplyTests, NoOrInvalidReply)
+{
+  state.set_current_shot (42);
+  ExpectInvalid (state, TextMove ("reply: {}"));
+  ExpectInvalid (state, TextMove ("reply: { reply: INVALID }"));
+}
+
+TEST_F (ReplyTests, InvalidCurrentShot)
+{
+  state.set_current_shot (64);
+  ExpectInvalid (state, TextMove ("reply: { reply: MISS }"));
+}
+
+TEST_F (ReplyTests, Miss)
+{
+  const auto miss = TextMove ("reply: { reply: MISS }");
+
+  state.mutable_known_ships (0)->set_hits (5);
+  state.mutable_known_ships (1)->set_hits (8);
+  state.set_current_shot (10);
+
+  ExpectNewState (state, miss, TextState (R"(
+    turn: 0
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: { hits: 5 }
+    known_ships: { hits: 8 }
+  )"));
+
+  state.set_turn (1);
+  ExpectNewState (state, miss, TextState (R"(
+    turn: 1
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: { hits: 5 }
+    known_ships: { hits: 8 }
+  )"));
+}
+
+TEST_F (ReplyTests, Hit)
+{
+  const auto hit = TextMove ("reply: { reply: HIT }");
+
+  state.mutable_known_ships (0)->set_hits (1);
+  state.mutable_known_ships (1)->set_hits (2);
+
+  state.set_turn (0);
+  state.set_current_shot (1);
+  ExpectNewState (state, hit, TextState (R"(
+    turn: 1
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: { hits: 3 }
+    known_ships: { hits: 2 }
+  )"));
+
+  state.set_turn (1);
+  state.set_current_shot (0);
+  ExpectNewState (state, hit, TextState (R"(
+    turn: 0
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: { hits: 1 }
+    known_ships: { hits: 3 }
+  )"));
+
+  /* Here, the state is invalid as it already contains a hit for the given
+     shot target.  This should result in an invalid move (and importantly
+     no crash or CHECK failure).  */
+  state.set_turn (0);
+  state.set_current_shot (0);
+  ExpectInvalid (state, hit);
+}
+
+/* ************************************************************************** */
+
 } // anonymous namespace
 } // namespace ships

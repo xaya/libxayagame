@@ -316,6 +316,69 @@ ShipsBoardState::ApplyShot (const proto::ShotMove& mv, const Phase phase,
 }
 
 bool
+ShipsBoardState::ApplyReply (const proto::ReplyMove& mv, const Phase phase,
+                             proto::BoardState& newState)
+{
+  if (phase != Phase::ANSWER)
+    {
+      LOG (WARNING) << "Invalid phase for reply: " << static_cast<int> (phase);
+      return false;
+    }
+
+  if (!mv.has_reply ())
+    {
+      LOG (WARNING) << "Reply move has no actual reply";
+      return false;
+    }
+
+  CHECK (newState.has_current_shot ());
+  const Coord target(newState.current_shot ());
+  if (!target.IsOnBoard ())
+    {
+      /* This check is not part of the state validation, so we have to make sure
+         that an invalid state (e.g. committed to chain by signatures of both
+         players) is handled gracefully.  */
+      LOG (WARNING) << "Invalid current shot target";
+      return false;
+    }
+  newState.clear_current_shot ();
+
+  switch (mv.reply ())
+    {
+    case proto::ReplyMove::HIT:
+      {
+        /* If this is a hit, then we have to mark it in known_ships and also
+           the turn changes (as the next player is who made the shot, not who is
+           currently replying).  */
+
+        Grid hits(newState.known_ships (newState.turn ()).hits ());
+        if (hits.Get (target))
+          {
+            LOG (WARNING) << "Previous shot targeted already known position";
+            return false;
+          }
+        hits.Set (target);
+
+        newState
+            .mutable_known_ships (newState.turn ())
+            ->set_hits (hits.GetBits ());
+        newState.set_turn (1 - newState.turn ());
+
+        return true;
+      }
+
+    case proto::ReplyMove::MISS:
+      /* If the shot was a miss, then it remains the current player's turn
+         (as that's who replied) and no other update to the state is needed.  */
+      return true;
+
+    default:
+      LOG (WARNING) << "Invalid reply in move: " << mv.reply ();
+      return false;
+    }
+}
+
+bool
 ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
                                  proto::BoardState& newState) const
 {
@@ -340,6 +403,9 @@ ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
 
     case proto::BoardMove::kShot:
       return ApplyShot (mv.shot (), phase, newState);
+
+    case proto::BoardMove::kReply:
+      return ApplyReply (mv.reply (), phase, newState);
 
     default:
     case proto::BoardMove::MOVE_NOT_SET:

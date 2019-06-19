@@ -98,6 +98,12 @@ private:
   static bool ApplyShot (const proto::ShotMove& mv, Phase phase,
                          proto::BoardState& newState);
 
+  /**
+   * Applies a reply move (answering a shot), if valid.
+   */
+  static bool ApplyReply (const proto::ReplyMove& mv, Phase phase,
+                          proto::BoardState& newState);
+
   friend class BoardTests;
 
 protected:
