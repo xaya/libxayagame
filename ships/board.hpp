@@ -79,30 +79,20 @@ private:
    */
   Phase GetPhase () const;
 
-  /**
-   * Applies a position commitment move (if valid).
-   */
+  /* Helper routines that apply a given move to the state, modifying it
+     in-place.  If the move is invalid, they return false.  */
   static bool ApplyPositionCommitment (const proto::PositionCommitmentMove& mv,
                                        Phase phase,
                                        proto::BoardState& newState);
-
-  /**
-   * Applies a seed-reveal move (if valid).
-   */
   static bool ApplySeedReveal (const proto::SeedRevealMove& mv, Phase phase,
                                proto::BoardState& newState);
-
-  /**
-   * Applies a shot move (if valid).
-   */
   static bool ApplyShot (const proto::ShotMove& mv, Phase phase,
                          proto::BoardState& newState);
-
-  /**
-   * Applies a reply move (answering a shot), if valid.
-   */
   static bool ApplyReply (const proto::ReplyMove& mv, Phase phase,
                           proto::BoardState& newState);
+  static bool ApplyPositionReveal (const proto::PositionRevealMove& mv,
+                                   Phase phase,
+                                   proto::BoardState& newState);
 
   friend class BoardTests;
 

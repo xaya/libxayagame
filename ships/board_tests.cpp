@@ -4,7 +4,9 @@
 
 #include "board.hpp"
 
+#include "grid.hpp"
 #include "proto/boardstate.pb.h"
+#include "testutils.hpp"
 
 #include <gamechannel/proto/metadata.pb.h>
 #include <xayagame/testutils.hpp>
@@ -941,6 +943,275 @@ TEST_F (ReplyTests, Hit)
   state.set_turn (0);
   state.set_current_shot (0);
   ExpectInvalid (state, hit);
+}
+
+/* ************************************************************************** */
+
+class PositionRevealTests : public ApplyMoveTests
+{
+
+protected:
+
+  /**
+   * A BoardState instance that is used for testing.  It is initialised to
+   * some basic value in the constructor, namely with two empty known_ships
+   * fields set.  The position_hashes should be set using CommitPosition,
+   * and other fields as well as needed.
+   */
+  proto::BoardState state;
+
+  /** A valid position of ships.  */
+  uint64_t validPosition;
+
+  PositionRevealTests ()
+  {
+    state = TextState (R"(
+      known_ships: {}
+      known_ships: {}
+    )");
+
+    const Grid validGrid = GridFromString (
+      "xxxx..xx"
+      "........"
+      "......xx"
+      "........"
+      "......xx"
+      "x.x....."
+      "x.x...xx"
+      "x.x....."
+    );
+    CHECK (VerifyPositionOfShips (validGrid));
+    validPosition = validGrid.GetBits ();
+  }
+
+  /**
+   * Adds a position_hashes field to state, based on the given position int
+   * and salt.
+   */
+  void
+  CommitPosition (uint64_t position, const std::string& salt)
+  {
+    std::ostringstream data;
+    for (int i = 0; i < 8; ++i)
+      {
+        data << static_cast<char> (position & 0xFF);
+        position >>= 8;
+      }
+    data << salt;
+
+    state.add_position_hashes (HashToString (data.str ()));
+  }
+
+  /**
+   * Utility method that returns a BoardMove proto, revealing the
+   * "validPosition" with the given salt.
+   */
+  proto::BoardMove
+  ValidPositionMove (const std::string& salt)
+  {
+    proto::BoardMove mv;
+
+    auto* reveal = mv.mutable_position_reveal ();
+    reveal->set_position (validPosition);
+    reveal->set_salt (salt);
+
+    return mv;
+  }
+
+};
+
+TEST_F (PositionRevealTests, InvalidPhase)
+{
+  ExpectInvalid (TextState ("turn: 0"), TextMove (R"(
+    position_reveal:
+      {
+        position: 42
+      }
+  )"));
+}
+
+TEST_F (PositionRevealTests, InvalidMoveProto)
+{
+  state.set_turn (0);
+  CommitPosition (10, "");
+  CommitPosition (15, "");
+
+  ExpectInvalid (state, TextMove (R"(
+    position_reveal:
+      {
+        salt: "foo"
+      }
+  )"));
+  ExpectInvalid (state, TextMove (R"(
+    position_reveal:
+      {
+        position: 42
+        salt: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxz"
+      }
+  )"));
+}
+
+TEST_F (PositionRevealTests, CommitmentMismatch)
+{
+  state.set_turn (0);
+  CommitPosition (10, "foo");
+  CommitPosition (42, "bar");
+
+  ExpectInvalid (state, TextMove (R"(
+    position_reveal:
+      {
+        position: 42
+        salt: "bar"
+      }
+  )"));
+}
+
+TEST_F (PositionRevealTests, MissingSaltOk)
+{
+  state.set_turn (0);
+  CommitPosition (10, "");
+  CommitPosition (20, "");
+
+  ExpectNewState (state, TextMove (R"(
+    position_reveal:
+      {
+        position: 10
+      }
+  )"), TextState (R"(
+    turn: 0
+    winner: 1
+    position_hashes: ""
+    position_hashes: ""
+    known_ships: {}
+    known_ships: {}
+    positions: 10
+    positions: 0
+  )"));
+}
+
+TEST_F (PositionRevealTests, HitsNotSubsetOfGuesses)
+{
+  state.set_turn (0);
+  CommitPosition (validPosition, "");
+  CommitPosition (validPosition, "");
+
+  state.mutable_known_ships (0)->set_hits (1);
+
+  ExpectInvalid (state, ValidPositionMove (""));
+}
+
+TEST_F (PositionRevealTests, InvalidShipConfiguration)
+{
+  state.set_turn (0);
+  state.set_current_shot (42);
+  CommitPosition (10, "foo");
+  CommitPosition (20, "bar");
+
+  ExpectNewState (state, TextMove (R"(
+    position_reveal:
+      {
+        position: 10
+        salt: "foo"
+      }
+  )"), TextState (R"(
+    turn: 0
+    winner: 1
+    current_shot: 42
+    position_hashes: ""
+    position_hashes: ""
+    known_ships: {}
+    known_ships: {}
+    positions: 10
+    positions: 0
+  )"));
+}
+
+TEST_F (PositionRevealTests, ShotReplyMismatches)
+{
+  state.set_turn (1);
+  state.add_position_hashes ("");
+  CommitPosition (validPosition, "bar");
+  state.add_positions (42);
+  state.add_positions (0);
+  state.mutable_known_ships (1)->set_guessed (validPosition);
+
+  auto expected = TextState (R"(
+    turn: 1
+    winner: 0
+    position_hashes: ""
+    position_hashes: ""
+    positions: 42
+  )");
+  *expected.mutable_known_ships () = state.known_ships ();
+  expected.add_positions (validPosition);
+
+  ExpectNewState (state, ValidPositionMove ("bar"), expected);
+}
+
+TEST_F (PositionRevealTests, AllShipsHit)
+{
+  state.set_turn (0);
+  CommitPosition (validPosition, "foo");
+  CommitPosition (42, "bar");
+
+  /* This is not a valid ship configuration, but it contains enough hits
+     to count as "all ships sunk".  */
+  state.mutable_known_ships (1)->set_guessed (0xFFFFFFFF);
+  state.mutable_known_ships (1)->set_hits (0xFFFFFF00);
+
+  auto expected = TextState  (R"(
+    turn: 1
+    winner: 0
+    position_hashes: ""
+    position_hashes: ""
+  )");
+  *expected.mutable_known_ships () = state.known_ships ();
+  expected.add_positions (validPosition);
+  expected.add_positions (0);
+
+  ExpectNewState (state, ValidPositionMove ("foo"), expected);
+}
+
+TEST_F (PositionRevealTests, NotAllShipsHitAfterFirst)
+{
+  state.set_turn (1);
+  state.add_position_hashes ("first hash");
+  CommitPosition (validPosition, "bar");
+
+  auto expected = TextState  (R"(
+    turn: 0
+    position_hashes: "first hash"
+    position_hashes: ""
+    known_ships: {}
+    known_ships: {}
+    positions: 0
+  )");
+  expected.add_positions (validPosition);
+
+  ExpectNewState (state, ValidPositionMove ("bar"), expected);
+}
+
+TEST_F (PositionRevealTests, NotAllShipsHitSecondWins)
+{
+  state.set_turn (0);
+  CommitPosition (validPosition, "foo");
+  state.add_position_hashes ("");
+  state.add_positions (0);
+  state.add_positions (1);
+
+  auto expected = TextState (R"(
+    turn: 1
+    winner: 0
+    position_hashes: ""
+    position_hashes: ""
+    known_ships: {}
+    known_ships: {}
+    positions: 0
+    positions: 1
+  )");
+  expected.set_positions (0, validPosition);
+
+  ExpectNewState (state, ValidPositionMove ("foo"), expected);
 }
 
 /* ************************************************************************** */

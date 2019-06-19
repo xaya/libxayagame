@@ -379,6 +379,138 @@ ShipsBoardState::ApplyReply (const proto::ReplyMove& mv, const Phase phase,
 }
 
 bool
+ShipsBoardState::ApplyPositionReveal (const proto::PositionRevealMove& mv,
+                                      const Phase phase,
+                                      proto::BoardState& newState)
+{
+  switch (phase)
+    {
+    case Phase::SHOOT:
+    case Phase::ANSWER:
+      /* In these two phases, the player can reveal their position rather
+         than shoot/reply.  */
+      break;
+
+    case Phase::SECOND_REVEAL_POSITION:
+      /* In this phase, a position revelation is actually the only valid
+         move that can be made.  */
+      break;
+
+    default:
+      LOG (WARNING)
+          << "Invalid phase for position reveal: " << static_cast<int> (phase);
+      return false;
+    }
+
+  if (!mv.has_position ())
+    {
+      LOG (WARNING) << "Position reveal has no position data";
+      return false;
+    }
+  if (mv.salt ().size () > xaya::uint256::NUM_BYTES)
+    {
+      LOG (WARNING)
+          << "Position reveal has invalid salt size: " << mv.salt ().size ();
+      return false;
+    }
+
+  const Grid g(mv.position ());
+
+  /* If the position does not match the committed hash, then the move is
+     outright invalid.  */
+  xaya::SHA256 hasher;
+  hasher << g.Blob () << mv.salt ();
+  if (!CheckHashValue (hasher.Finalise (),
+                       newState.position_hashes (newState.turn ())))
+    {
+      LOG (WARNING) << "Revealed position does not match committed hash";
+      return false;
+    }
+
+  /* Record the revealed position and clear the committing hash.  */
+  if (newState.positions_size () == 0)
+    {
+      newState.add_positions (0);
+      newState.add_positions (0);
+    }
+  CHECK_EQ (newState.positions_size (), 2);
+  CHECK_EQ (newState.positions (newState.turn ()), 0);
+  newState.set_positions (newState.turn (), mv.position ());
+  newState.mutable_position_hashes (newState.turn ())->clear ();
+
+  /* If the position is invalid or does not match given answers, then the
+     player whose turn it is lost.  */
+  const int otherPlayer = 1 - newState.turn ();
+  CHECK_GE (otherPlayer, 0);
+  CHECK_LE (otherPlayer, 1);
+  if (!VerifyPositionOfShips (g))
+    {
+      LOG (INFO) << "Player had invalid position of ships";
+      newState.set_winner (otherPlayer);
+    }
+  else
+    {
+      /* If hits is not a subset of the guessed positions, then the state
+         is invalid.  This could happen through committing it to the chain
+         with signatures of both players.  Make sure to gracefully handle that
+         situation.  */
+      const auto& known = newState.known_ships (newState.turn ());
+      if ((known.hits () & ~known.guessed ()) != 0)
+        {
+          LOG (WARNING) << "Hits are not a subset of guessed positions";
+          return false;
+        }
+
+      const Grid targeted(known.guessed ());
+      const Grid hits(known.hits ());
+      if (!VerifyPositionForAnswers (g, targeted, hits))
+        {
+          LOG (INFO) << "Player position does not match answers";
+          newState.set_winner (otherPlayer);
+        }
+    }
+
+  /* If all was fine and this is the first player to reveal, then they win
+     if all opponent ships have been hit.  */
+  if (!newState.has_winner () && phase != Phase::SECOND_REVEAL_POSITION)
+    {
+      const Grid hits(newState.known_ships (otherPlayer).hits ());
+      const int ones = hits.CountOnes ();
+      VLOG (1) << "Ships hit by the revealing player: " << ones;
+      if (ones >= Grid::TotalShipCells ())
+        {
+          VLOG (1) << "All opponent ships have been hit";
+          newState.set_winner (newState.turn ());
+        }
+    }
+
+  /* If the second player answers and all is still fine, then the first player
+     did not sink all ships and thus loses.  */
+  if (!newState.has_winner () && phase == Phase::SECOND_REVEAL_POSITION)
+    {
+      VLOG (1) << "Not all ships have been sunk";
+      newState.set_winner (newState.turn ());
+    }
+
+  /* If we have a winner, set turn to the loser since they have to send
+     a winner statement next.  Also make sure to clear all position hashes,
+     if not yet done completely above.  */
+  if (newState.has_winner ())
+    {
+      newState.set_turn (1 - newState.winner ());
+      for (auto& ph : *newState.mutable_position_hashes ())
+        ph.clear ();
+      return true;
+    }
+
+  /* Finally, if we still do not have a winner, then it means that this was
+     just the first position reveal.  The other player is next to reveal.  */
+  CHECK (phase != Phase::SECOND_REVEAL_POSITION);
+  newState.set_turn (otherPlayer);
+  return true;
+}
+
+bool
 ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
                                  proto::BoardState& newState) const
 {
@@ -406,6 +538,9 @@ ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
 
     case proto::BoardMove::kReply:
       return ApplyReply (mv.reply (), phase, newState);
+
+    case proto::BoardMove::kPositionReveal:
+      return ApplyPositionReveal (mv.position_reveal (), phase, newState);
 
     default:
     case proto::BoardMove::MOVE_NOT_SET:
