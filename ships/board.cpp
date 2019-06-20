@@ -171,7 +171,63 @@ ShipsBoardState::WhoseTurn () const
 unsigned
 ShipsBoardState::TurnCount () const
 {
-  LOG (FATAL) << "Not implemented";
+  const auto& pb = GetState ();
+  unsigned shots = 0;
+  for (const auto& known : pb.known_ships ())
+    {
+      const Grid guesses(known.guessed ());
+      shots += guesses.CountOnes ();
+    }
+
+  const auto phase = GetPhase ();
+  switch (phase)
+    {
+    case Phase::FIRST_COMMITMENT:
+      return 0;
+
+    case Phase::SECOND_COMMITMENT:
+      return 1;
+
+    case Phase::FIRST_REVEAL_SEED:
+      return 2;
+
+    case Phase::SHOOT:
+      return 3 + 2 * shots;
+
+    case Phase::ANSWER:
+      /* In the answer phase, the count of shots is already incremented, but
+         we have not yet made the "second move" of the last "shot cycle".  */
+      return 3 + 2 * shots - 1;
+
+    case Phase::SECOND_REVEAL_POSITION:
+    case Phase::WINNER_DETERMINED:
+    case Phase::FINISHED:
+      /* Flow is not fully determined in these phases.  For example, when
+         the first player reveals their position, the game may go to either
+         SECOND_REVEAL_POSITION or WINNER_DETERMINED.  Thus those phases are
+         handled together.  */
+      {
+        unsigned cnt = 3 + 2 * shots;
+        if (pb.has_current_shot ())
+          cnt -= 1;
+
+        /* We can look at the number of known positions to determine how many
+           reveal moves there were really made.  */
+        for (const int p : pb.positions ())
+          if (p != 0)
+            cnt += 1;
+
+        /* If there is even a winner statement, then one move move has been
+           made (and the game is finished).  */
+        if (pb.has_winner_statement ())
+          cnt += 1;
+
+        return cnt;
+      }
+
+    default:
+      LOG (FATAL) << "Invalid phase: " << static_cast<int> (phase);
+    }
 }
 
 bool

@@ -194,6 +194,11 @@ TEST_F (InitialBoardStateTests, WhoseTurn)
   EXPECT_EQ (ParseState (InitialBoardState ())->WhoseTurn (), 0);
 }
 
+TEST_F (InitialBoardStateTests, TurnCount)
+{
+  EXPECT_EQ (ParseState (InitialBoardState ())->TurnCount (), 0);
+}
+
 /* ************************************************************************** */
 
 class IsValidTests : public BoardTests
@@ -453,7 +458,7 @@ TEST_F (WhoseTurnTests, TurnNotSet)
 
 /* ************************************************************************** */
 
-class ApplyMoveTests : public BoardTests
+class ApplyMoveAndTurnCountTests : public BoardTests
 {
 
 private:
@@ -480,7 +485,7 @@ private:
 
 protected:
 
-  ApplyMoveTests ()
+  ApplyMoveAndTurnCountTests ()
     : httpServer(xaya::MockXayaRpcServer::HTTP_PORT),
       httpClient(xaya::MockXayaRpcServer::HTTP_URL),
       mockXayaServer(httpServer),
@@ -489,7 +494,7 @@ protected:
     mockXayaServer.StartListening ();
   }
 
-  ~ApplyMoveTests ()
+  ~ApplyMoveAndTurnCountTests ()
   {
     mockXayaServer.StopListening ();
   }
@@ -506,7 +511,8 @@ protected:
 
   /**
    * Applies a move onto the given state and expects that the new state matches
-   * the given proto.
+   * the given proto.  This also verifies that the turn count increases by
+   * exactly one for the applied move.
    */
   void
   ExpectNewState (const proto::BoardState& oldState, const proto::BoardMove& mv,
@@ -518,6 +524,9 @@ protected:
     EXPECT_TRUE (MessageDifferencer::Equals (actual, expected))
         << "Actual new game state: " << actual
         << "\n  does not equal expected new state: " << expected;
+
+    EXPECT_EQ (ParseState (oldState)->TurnCount () + 1,
+               ParseState (expected)->TurnCount ());
   }
 
   /**
@@ -542,14 +551,14 @@ protected:
 
 };
 
-TEST_F (ApplyMoveTests, NoCaseSelected)
+TEST_F (ApplyMoveAndTurnCountTests, NoCaseSelected)
 {
   ExpectInvalid (TextState ("turn: 0"), TextMove (""));
 }
 
 /* ************************************************************************** */
 
-using PositionCommitmentTests = ApplyMoveTests;
+using PositionCommitmentTests = ApplyMoveAndTurnCountTests;
 
 TEST_F (PositionCommitmentTests, InvalidPositionHash)
 {
@@ -696,7 +705,7 @@ TEST_F (PositionCommitmentTests, InvalidSecondCommitment)
 
 /* ************************************************************************** */
 
-using SeedRevealTests = ApplyMoveTests;
+using SeedRevealTests = ApplyMoveAndTurnCountTests;
 
 TEST_F (SeedRevealTests, InvalidPhase)
 {
@@ -816,7 +825,7 @@ TEST_F (SeedRevealTests, MissingSeed1)
 
 /* ************************************************************************** */
 
-class ShotTests : public ApplyMoveTests
+class ShotTests : public ApplyMoveAndTurnCountTests
 {
 
 protected:
@@ -886,7 +895,7 @@ TEST_F (ShotTests, ValidShot)
 
 /* ************************************************************************** */
 
-class ReplyTests : public ApplyMoveTests
+class ReplyTests : public ApplyMoveAndTurnCountTests
 {
 
 protected:
@@ -996,7 +1005,7 @@ TEST_F (ReplyTests, Hit)
 
 /* ************************************************************************** */
 
-class PositionRevealTests : public ApplyMoveTests
+class PositionRevealTests : public ApplyMoveAndTurnCountTests
 {
 
 protected:
@@ -1265,7 +1274,7 @@ TEST_F (PositionRevealTests, NotAllShipsHitSecondWins)
 
 /* ************************************************************************** */
 
-class WinnerStatementTests : public ApplyMoveTests
+class WinnerStatementTests : public ApplyMoveAndTurnCountTests
 {
 
 protected:

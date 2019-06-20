@@ -89,6 +89,9 @@ message BoardState
    * holding the target location.  The shot is always by the player whose
    * turn it is not, and the player whose turn it is should answer in the
    * next move.
+   *
+   * If a player reveals their position instead of answering the shot, this
+   * field remains set.  That allows us to accurately count turns.
    */
   optional uint32 current_shot = 6;
 
