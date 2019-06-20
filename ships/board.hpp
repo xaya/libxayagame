@@ -93,6 +93,12 @@ private:
   static bool ApplyPositionReveal (const proto::PositionRevealMove& mv,
                                    Phase phase,
                                    proto::BoardState& newState);
+  static bool ApplyWinnerStatement (const proto::WinnerStatementMove& mv,
+                                    XayaRpcClient& rpc,
+                                    const xaya::uint256& channelId,
+                                    const xaya::proto::ChannelMetadata& meta,
+                                    Phase phase,
+                                    proto::BoardState& newState);
 
   friend class BoardTests;
 

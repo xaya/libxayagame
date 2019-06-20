@@ -6,7 +6,9 @@
 
 #include "coord.hpp"
 #include "grid.hpp"
+#include "proto/winnerstatement.pb.h"
 
+#include <gamechannel/signatures.hpp>
 #include <xayautil/hash.hpp>
 #include <xayautil/random.hpp>
 #include <xayautil/uint256.hpp>
@@ -511,6 +513,55 @@ ShipsBoardState::ApplyPositionReveal (const proto::PositionRevealMove& mv,
 }
 
 bool
+ShipsBoardState::ApplyWinnerStatement (const proto::WinnerStatementMove& mv,
+                                       XayaRpcClient& rpc,
+                                       const xaya::uint256& channelId,
+                                       const xaya::proto::ChannelMetadata& meta,
+                                       const Phase phase,
+                                       proto::BoardState& newState)
+{
+  if (phase != Phase::WINNER_DETERMINED)
+    {
+      LOG (WARNING)
+          << "Invalid phase for winner statement: " << static_cast<int> (phase);
+      return false;
+    }
+  CHECK (newState.has_winner ());
+
+  if (!mv.has_statement ())
+    {
+      LOG (WARNING) << "Winner statement move has no statement";
+      return false;
+    }
+
+  proto::WinnerStatement stmt;
+  if (!stmt.ParseFromString (mv.statement ().data ()))
+    {
+      LOG (WARNING) << "Failed to parse WinnerStatement proto";
+      return false;
+    }
+  if (!stmt.has_winner () || stmt.winner () != newState.winner ())
+    {
+      LOG (WARNING) << "WinnerStatement does not list correct winner";
+      return false;
+    }
+
+  const auto sgn = xaya::VerifyParticipantSignatures (rpc, channelId, meta,
+                                                      "winnerstatement",
+                                                      mv.statement ());
+  const int loser = 1 - newState.winner ();
+  if (sgn.count (loser) == 0)
+    {
+      LOG (WARNING) << "Winner statement is not signed by loser";
+      return false;
+    }
+
+  newState.clear_turn ();
+  *newState.mutable_winner_statement () = mv.statement ();
+  return true;
+}
+
+bool
 ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
                                  proto::BoardState& newState) const
 {
@@ -541,6 +592,11 @@ ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
 
     case proto::BoardMove::kPositionReveal:
       return ApplyPositionReveal (mv.position_reveal (), phase, newState);
+
+    case proto::BoardMove::kWinnerStatement:
+      return ApplyWinnerStatement (mv.winner_statement (),
+                                   rpc, GetChannelId (), GetMetadata (),
+                                   phase, newState);
 
     default:
     case proto::BoardMove::MOVE_NOT_SET:

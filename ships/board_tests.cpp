@@ -6,26 +6,33 @@
 
 #include "grid.hpp"
 #include "proto/boardstate.pb.h"
+#include "proto/winnerstatement.pb.h"
 #include "testutils.hpp"
 
 #include <gamechannel/proto/metadata.pb.h>
+#include <gamechannel/signatures.hpp>
 #include <xayagame/testutils.hpp>
 #include <xayagame/rpc-stubs/xayarpcclient.h>
+#include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
 #include <xayautil/uint256.hpp>
 
+#include <json/json.h>
 #include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <memory>
 
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
+using testing::_;
+using testing::Return;
 
 namespace ships
 {
@@ -489,6 +496,26 @@ protected:
     EXPECT_TRUE (MessageDifferencer::Equals (actual, expected))
         << "Actual new game state: " << actual
         << "\n  does not equal expected new state: " << expected;
+  }
+
+  /**
+   * Expects a signature validation call on the mock RPC server for a winner
+   * statement on our channel ID, and returns that it is valid with the given
+   * signing address.
+   */
+  void
+  ExpectSignature (const std::string& data, const std::string& sgn,
+                   const std::string& addr)
+  {
+    Json::Value res(Json::objectValue);
+    res["valid"] = true;
+    res["address"] = addr;
+
+    const std::string hashed
+        = xaya::GetChannelSignatureMessage (channelId, "winnerstatement", data);
+    EXPECT_CALL (mockXayaServer, verifymessage ("", hashed,
+                                                xaya::EncodeBase64 (sgn)))
+        .WillOnce (Return (res));
   }
 
 };
@@ -1212,6 +1239,122 @@ TEST_F (PositionRevealTests, NotAllShipsHitSecondWins)
   expected.set_positions (0, validPosition);
 
   ExpectNewState (state, ValidPositionMove ("foo"), expected);
+}
+
+/* ************************************************************************** */
+
+class WinnerStatementTests : public ApplyMoveTests
+{
+
+protected:
+
+  /**
+   * Returns a winner-statement move proto where the statement itself
+   * is given as text proto.
+   */
+  proto::BoardMove
+  WinnerStatementMove (const std::string& stmtStr,
+                       const std::vector<std::string>& signatures = {})
+  {
+    proto::BoardMove res;
+    auto* signedData = res.mutable_winner_statement ()->mutable_statement ();
+
+    proto::WinnerStatement stmt;
+    CHECK (TextFormat::ParseFromString (stmtStr, &stmt));
+    CHECK (stmt.SerializeToString (signedData->mutable_data ()));
+
+    for (const auto& sgn : signatures)
+      signedData->add_signatures (sgn);
+
+    return res;
+  }
+
+};
+
+TEST_F (WinnerStatementTests, InvalidPhase)
+{
+  ExpectInvalid (TextState ("turn: 0"), WinnerStatementMove ("winner: 1"));
+}
+
+TEST_F (WinnerStatementTests, MissingStatementOrData)
+{
+  ExpectInvalid (TextState (R"(
+    turn: 0
+    winner: 1
+  )"), TextMove ("winner_statement: {}"));
+
+  ExpectInvalid (TextState (R"(
+    turn: 0
+    winner: 1
+  )"), TextMove (R"(
+    winner_statement:
+      {
+        statement: {}
+      }
+  )"));
+}
+
+TEST_F (WinnerStatementTests, MalformedData)
+{
+  ExpectInvalid (TextState (R"(
+    turn: 0
+    winner: 1
+  )"), TextMove (R"(
+    winner_statement:
+      {
+        statement:
+          {
+            data: "foobar"
+          }
+      }
+  )"));
+}
+
+TEST_F (WinnerStatementTests, InvalidWinner)
+{
+  ExpectInvalid (TextState (R"(
+    turn: 0
+    winner: 1
+  )"), WinnerStatementMove (""));
+
+  ExpectInvalid (TextState (R"(
+    turn: 0
+    winner: 1
+  )"), WinnerStatementMove ("winner: 0"));
+
+  ExpectInvalid (TextState (R"(
+    turn: 1
+    winner: 0
+  )"), WinnerStatementMove ("winner: 1"));
+}
+
+TEST_F (WinnerStatementTests, InvalidSignature)
+{
+  const auto mv = WinnerStatementMove ("winner: 0", {"sgn 1"});
+  ExpectSignature (mv.winner_statement ().statement ().data (),
+                   "sgn 1",  "addr 1");
+
+  ExpectInvalid (TextState (R"(
+    turn: 1
+    winner: 0
+  )"), mv);
+}
+
+TEST_F (WinnerStatementTests, Valid)
+{
+  const auto mv = WinnerStatementMove ("winner: 1", {"sgn 1"});
+  ExpectSignature (mv.winner_statement ().statement ().data (),
+                   "sgn 1",  "addr 1");
+
+  auto expected = TextState (R"(
+    winner: 1
+  )");
+  *expected.mutable_winner_statement () = mv.winner_statement ().statement ();
+
+  ExpectNewState (TextState (R"(
+    turn: 0
+    winner: 1
+  )"), mv, expected);
 }
 
 /* ************************************************************************** */
