@@ -608,4 +608,12 @@ ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
   return false;
 }
 
+proto::BoardState
+InitialBoardState ()
+{
+  proto::BoardState res;
+  res.set_turn (0);
+  return res;
+}
+
 } // namespace ships

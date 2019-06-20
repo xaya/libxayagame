@@ -174,6 +174,28 @@ namespace
 
 /* ************************************************************************** */
 
+using InitialBoardStateTests = BoardTests;
+
+TEST_F (InitialBoardStateTests, CorrectInitialState)
+{
+  const auto actual = InitialBoardState ();
+  const auto expected = TextState ("turn: 0");
+  EXPECT_TRUE (MessageDifferencer::Equals (actual, expected));
+}
+
+TEST_F (InitialBoardStateTests, Phase)
+{
+  EXPECT_EQ (GetPhase (*ParseState (InitialBoardState ())),
+             Phase::FIRST_COMMITMENT);
+}
+
+TEST_F (InitialBoardStateTests, WhoseTurn)
+{
+  EXPECT_EQ (ParseState (InitialBoardState ())->WhoseTurn (), 0);
+}
+
+/* ************************************************************************** */
+
 class IsValidTests : public BoardTests
 {
 

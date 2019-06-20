@@ -120,6 +120,12 @@ public:
 /** The BoardRules instance we use for the ships game.  */
 using ShipsBoardRules = xaya::ProtoBoardRules<ShipsBoardState>;
 
+/**
+ * Returns the initial board state of a game (i.e. just after the second
+ * participant has joined).
+ */
+proto::BoardState InitialBoardState ();
+
 } // namespace ships
 
 #endif // XAYASHIPS_BOARD_HPP
