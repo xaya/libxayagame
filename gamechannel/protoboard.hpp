@@ -29,6 +29,12 @@ template <typename State, typename Move>
 private:
 
   /**
+   * A reference to the channel ID.  This is stored in the constructor and
+   * can be accessed by subclasses.
+   */
+  const uint256& channelId;
+
+  /**
    * A reference to the channel's metadata.  This is stored in the constructor
    * (from the BoardRules instance) and can be accessed by subclasses as
    * they need it for the game logic.
@@ -72,11 +78,21 @@ public:
    * the provided state proto.  This is mostly intended to be called from
    * ProtoBoardRules.
    */
-  explicit ProtoBoardState (const proto::ChannelMetadata& m, State&& s);
+  explicit ProtoBoardState (const uint256& channelId,
+                            const proto::ChannelMetadata& m, State&& s);
 
   ProtoBoardState () = delete;
   ProtoBoardState (const ProtoBoardState<State, Move>&) = delete;
   void operator= (const ProtoBoardState<State, Move>&) = delete;
+
+  /**
+   * Returns the channel ID.
+   */
+  const uint256&
+  GetChannelId () const
+  {
+    return channelId;
+  }
 
   /**
    * Returns the metadata associated with this channel state.
@@ -126,7 +142,8 @@ public:
   void operator= (const ProtoBoardRules<StateClass>&) = delete;
 
   std::unique_ptr<ParsedBoardState> ParseState (
-      const proto::ChannelMetadata& meta, const BoardState& s) const override;
+      const uint256& channelId, const proto::ChannelMetadata& meta,
+      const BoardState& s) const override;
 
 };
 

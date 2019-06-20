@@ -13,8 +13,8 @@ namespace xaya
 
 template <typename State, typename Move>
   ProtoBoardState<State, Move>::ProtoBoardState (
-      const proto::ChannelMetadata& m, State&& s)
-  : meta(m)
+      const uint256& id, const proto::ChannelMetadata& m, State&& s)
+  : channelId(id), meta(m)
 {
   state.Swap (&s);
 }
@@ -71,7 +71,8 @@ template <typename State, typename Move>
 template <typename StateClass>
   std::unique_ptr<ParsedBoardState>
   ProtoBoardRules<StateClass>::ParseState (
-      const proto::ChannelMetadata& meta, const BoardState& s) const
+      const uint256& channelId, const proto::ChannelMetadata& meta,
+      const BoardState& s) const
 {
   typename StateClass::StateProto p;
   if (!p.ParseFromString (s))
@@ -80,7 +81,7 @@ template <typename StateClass>
       return nullptr;
     }
 
-  auto res = std::make_unique<StateClass> (meta, std::move (p));
+  auto res = std::make_unique<StateClass> (channelId, meta, std::move (p));
   if (!res->IsValid ())
     {
       LOG (WARNING) << "Parsed BoardState is invalid";

@@ -45,7 +45,7 @@ ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
       return false;
     }
 
-  parsedNew = rules.ParseState (meta, newState);
+  parsedNew = rules.ParseState (channelId, meta, newState);
   /* newState is not user-provided but the output of a successful ApplyMove,
      so it should be guaranteed to be valid.  */
   CHECK (parsedNew != nullptr);
@@ -77,7 +77,7 @@ VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
                        const BoardState& oldState,
                        const proto::StateTransition& transition)
 {
-  const auto parsedOld = rules.ParseState (meta, oldState);
+  const auto parsedOld = rules.ParseState (channelId, meta, oldState);
   if (parsedOld == nullptr)
     {
       LOG (WARNING) << "Invalid old state in state transition";
@@ -102,7 +102,8 @@ VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
       = VerifyParticipantSignatures (rpc, channelId, meta, "state",
                                      proof.initial_state ());
 
-  auto parsed = rules.ParseState (meta, proof.initial_state ().data ());
+  auto parsed = rules.ParseState (channelId, meta,
+                                  proof.initial_state ().data ());
   if (parsed == nullptr)
     {
       LOG (WARNING) << "Invalid initial state for state proof";

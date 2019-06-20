@@ -6,6 +6,8 @@
 
 #include "proto/metadata.pb.h"
 
+#include <xayautil/hash.hpp>
+
 #include <gtest/gtest.h>
 
 #include <glog/logging.h>
@@ -20,12 +22,13 @@ class AdditionRulesTests : public TestGameFixture
 
 protected:
 
+  const uint256 channelId = SHA256::Hash ("foo");
   proto::ChannelMetadata meta;
 
   bool
   CompareStates (const BoardState& a, const BoardState& b)
   {
-    const auto pa = game.rules.ParseState (meta, a);
+    const auto pa = game.rules.ParseState (channelId, meta, a);
     CHECK (pa != nullptr);
 
     return pa->Equals (b);
@@ -34,7 +37,7 @@ protected:
   int
   WhoseTurn (const BoardState& s)
   {
-    const auto p = game.rules.ParseState (meta, s);
+    const auto p = game.rules.ParseState (channelId, meta, s);
     CHECK (p != nullptr);
 
     return p->WhoseTurn ();
@@ -43,7 +46,7 @@ protected:
   unsigned
   TurnCount (const BoardState& s)
   {
-    const auto p = game.rules.ParseState (meta, s);
+    const auto p = game.rules.ParseState (channelId, meta, s);
     CHECK (p != nullptr);
 
     return p->TurnCount ();
@@ -52,7 +55,7 @@ protected:
   bool
   ApplyMove (const BoardState& old, const BoardMove& mv, BoardState& newState)
   {
-    const auto po = game.rules.ParseState (meta, old);
+    const auto po = game.rules.ParseState (channelId, meta, old);
     CHECK (po != nullptr);
 
     return po->ApplyMove (rpcClient, mv, newState);
@@ -62,7 +65,7 @@ protected:
 
 TEST_F (AdditionRulesTests, ParseInvalid)
 {
-  EXPECT_EQ (game.rules.ParseState (meta, "invalid"), nullptr);
+  EXPECT_EQ (game.rules.ParseState (channelId, meta, "invalid"), nullptr);
 }
 
 TEST_F (AdditionRulesTests, CompareStates)

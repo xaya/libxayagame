@@ -8,6 +8,8 @@
 #include "proto/metadata.pb.h"
 #include "proto/protoboardtest.pb.h"
 
+#include <xayautil/hash.hpp>
+
 #include <google/protobuf/text_format.h>
 
 #include <gtest/gtest.h>
@@ -120,6 +122,9 @@ protected:
    */
   XayaRpcClient& rpc;
 
+  /** Fake channel ID used in tests.  */
+  const uint256 channelId = SHA256::Hash ("foo");
+
   /**
    * Metadata instance.  We actually verify that its address is correct
    * (i.e. it gets passed everywhere by reference) rather than the content.
@@ -139,7 +144,7 @@ protected:
   std::unique_ptr<TestState>
   ParseState (const BoardState& s)
   {
-    auto parsed = rules.ParseState (meta, s);
+    auto parsed = rules.ParseState (channelId, meta, s);
     if (parsed == nullptr)
       return nullptr;
 
@@ -160,6 +165,7 @@ TEST_F (ProtoBoardTests, ParseState)
   auto s = ParseState (TextState ("msg: \"foo\""));
   ASSERT_NE (s, nullptr);
   EXPECT_EQ (s->GetState ().msg (), "foo");
+  EXPECT_EQ (s->GetChannelId (), channelId);
   EXPECT_EQ (&s->GetMetadata (), &meta);
 }
 

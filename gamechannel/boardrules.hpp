@@ -8,6 +8,7 @@
 #include "proto/metadata.pb.h"
 
 #include <xayagame/rpc-stubs/xayarpcclient.h>
+#include <xayautil/uint256.hpp>
 
 #include <memory>
 #include <string>
@@ -114,12 +115,13 @@ public:
    * If the state is invalid (e.g. malformed data), this function should return
    * nullptr instead.
    *
-   * The passed-in ChannelMetadata can be used to put the board state into
+   * The passed-in ID and metadata can be used to put the board state into
    * context.  It is guaranteed that the reference stays valid at least as
    * long as the returned ParsedBoardState instance will be alive.
    */
   virtual std::unique_ptr<ParsedBoardState> ParseState (
-      const proto::ChannelMetadata& meta, const BoardState& s) const = 0;
+      const uint256& channelId, const proto::ChannelMetadata& meta,
+      const BoardState& s) const = 0;
 
 };
 

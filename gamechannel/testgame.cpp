@@ -112,7 +112,8 @@ public:
 } // anonymous namespace
 
 std::unique_ptr<ParsedBoardState>
-AdditionRules::ParseState (const proto::ChannelMetadata& meta,
+AdditionRules::ParseState (const uint256& channelId,
+                           const proto::ChannelMetadata& meta,
                            const BoardState& state) const
 {
   ParsedState p;

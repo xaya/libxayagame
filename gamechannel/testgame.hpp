@@ -46,7 +46,8 @@ class AdditionRules : public BoardRules
 public:
 
   std::unique_ptr<ParsedBoardState> ParseState (
-      const proto::ChannelMetadata& meta, const BoardState& s) const override;
+      const uint256& channelId, const proto::ChannelMetadata& meta,
+      const BoardState& s) const override;
 
 };
 
