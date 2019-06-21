@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,13 +13,14 @@
 
 #include <google/protobuf/stubs/common.h>
 
+#include <cstdlib>
 #include <iostream>
 
 DEFINE_string (xaya_rpc_url, "",
                "URL at which Xaya Core's JSON-RPC interface is available");
 DEFINE_int32 (game_rpc_port, 0,
               "the port at which the game daemon's JSON-RPC server will be"
-              " start (if non-zero)");
+              " started (if non-zero)");
 DEFINE_bool (game_rpc_listen_locally, true,
              "whether the game daemon's JSON-RPC server should listen locally");
 
