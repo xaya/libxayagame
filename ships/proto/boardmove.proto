@@ -1,0 +1,127 @@
+// Copyright (C) 2019 The Xaya developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+syntax = "proto2";
+
+import "gamechannel/proto/signatures.proto";
+
+package ships.proto;
+
+/**
+ * A move that creates the position commitment for either of the players.
+ * Depending on whether this is the first or second player's move, either
+ * the seed hash or the seed (as preimage) will be set.
+ */
+message PositionCommitmentMove
+{
+
+  /** The uint256 salted hash of the position.  */
+  optional bytes position_hash = 1;
+
+  /** If this is player 0's move, then the hash of the random seed data.  */
+  optional bytes seed_hash = 2;
+
+  /**
+   * For player 1's move, the "preimage" of the random seed data.  This can
+   * be any string of bytes up to 32 in length (256 bit).
+   */
+  optional bytes seed = 3;
+
+}
+
+/**
+ * The move of player 0 revealing the random seed preimage.
+ */
+message SeedRevealMove
+{
+
+  /**
+   * The preimage data for the previous seed hash.  This can be any string of
+   * bytes up to 32 in length (256 bit), and it must match the previously
+   * committed SHA-256 hash.
+   */
+  optional bytes seed = 4;
+
+}
+
+/**
+ * A move that guesses a location for a shot.
+ */
+message ShotMove
+{
+
+  /** The targeted location as index into the bit vectors (0..63).  */
+  optional uint32 location = 1;
+
+}
+
+/**
+ * A move that replies to a shot
+ */
+message ReplyMove
+{
+
+  /** Possible reply values.  */
+  enum ReplyType
+  {
+    INVALID = 0;
+    HIT = 1;
+    MISS = 2;
+  }
+
+  /** The reply for the previously targeted location.  */
+  optional ReplyType reply = 1;
+
+}
+
+/**
+ * A move revealing the original ship configuration and salt.
+ */
+message PositionRevealMove
+{
+
+  /** The full position of ships, encoded as bit vector.  */
+  optional uint64 position = 1;
+
+  /**
+   * The salt data, which can be an arbitrary string up to 32 bytes (256 bit)
+   * in length.  The commitment hash is computed by concatenating the 8 bytes
+   * of the position in little endian and the salt bytes.
+   */
+  optional bytes salt = 2;
+
+}
+
+/**
+ * The last move in the game, where the loser provides a signed WinnerStatement.
+ */
+message WinnerStatementMove
+{
+
+  /**
+   * An encoded WinnerStatement message matching the game's result and signed
+   * by the losing player (who is also the player sending this move).
+   */
+  optional xaya.proto.SignedData statement = 1;
+
+}
+
+/**
+ * One move in the channel game.  The std::string-encoded BoardMove bytes
+ * correspond to a serialised message of this type.
+ */
+message BoardMove
+{
+
+  oneof move
+  {
+    PositionCommitmentMove position_commitment = 1;
+    SeedRevealMove seed_reveal = 2;
+    ShotMove shot = 3;
+    ReplyMove reply = 4;
+    PositionRevealMove position_reveal = 5;
+    WinnerStatementMove winner_statement = 6;
+  }
+
+}

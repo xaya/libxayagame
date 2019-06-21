@@ -9,6 +9,11 @@ rules of their game.
 can move around an infinite plane.  It is fully functional, although mainly
 meant as example and/or basis for more complex games.
 
+This repository also contains a framework for [**game
+channels**](http://www.ledgerjournal.org/ojs/index.php/ledger/article/view/15)
+as well as [Xayaships](ships/README.md), which is an example game for
+channels.
+
 ## Building
 
 To build `libxayagame` and the example mover game, use the standard routine

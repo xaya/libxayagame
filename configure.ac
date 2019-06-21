@@ -49,6 +49,7 @@ AC_CONFIG_FILES([
   gamechannel/Makefile \
   mover/Makefile \
   mover/gametest/Makefile \
+  ships/Makefile \
   xayagame/Makefile \
   xayagametest/Makefile \
   xayautil/Makefile \
