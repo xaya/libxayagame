@@ -130,3 +130,13 @@ and she knows that Bob either lied or she sunk all ships.  Thus in that
 situation, she can immediately end the game and is guaranteed to win
 (unless she lied about her ships).  Hence the player who sinks all
 enemy ships first can ensure they win the game.
+
+### Game State and Moves
+
+Xayaships uses the game ID `xs` for its on-chain GSP.  The global game state
+consists of two types of data:
+
+1. The statistics of won and lost games per Xaya name are stored in a simple
+   SQLite database table.
+1. Data about currently open game channels is stored through the game-channels
+   framework (which has also its own table in the SQLite database).

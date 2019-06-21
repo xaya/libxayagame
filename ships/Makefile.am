@@ -8,10 +8,11 @@ PROTOS = \
 PROTOHEADERS = $(PROTOS:.proto=.pb.h)
 PROTOSOURCES = $(PROTOS:.proto=.pb.cc)
 
-EXTRA_DIST = $(PROTOS)
+EXTRA_DIST = $(PROTOS) \
+  schema.sql schema_head.cpp schema_tail.cpp
 
 BUILT_SOURCES = $(PROTOHEADERS)
-CLEANFILES = $(PROTOHEADERS) $(PROTOSOURCES)
+CLEANFILES = $(PROTOHEADERS) $(PROTOSOURCES) schema.cpp
 
 libships_la_CXXFLAGS = \
   -I$(top_srcdir) \
@@ -26,12 +27,14 @@ libships_la_SOURCES = \
   coord.cpp \
   grid.cpp \
   logic.cpp \
+  schema.cpp \
   $(PROTOSOURCES)
 noinst_HEADERS = \
   board.hpp \
   coord.hpp \
   grid.hpp \
   logic.hpp \
+  schema.hpp \
   $(PROTOHEADERS)
 
 shipsd_CXXFLAGS = \
@@ -62,10 +65,14 @@ tests_SOURCES = \
   board_tests.cpp \
   coord_tests.cpp \
   grid_tests.cpp \
+  schema_tests.cpp \
   \
   testutils.cpp
 check_HEADERS = \
   testutils.hpp
+
+schema.cpp: schema_head.cpp schema.sql schema_tail.cpp
+	cat $^ >$@
 
 proto/%.pb.h proto/%.pb.cc: $(srcdir)/proto/%.proto
 	protoc -I$(top_srcdir) -I$(srcdir)/proto --cpp_out=proto "$<"

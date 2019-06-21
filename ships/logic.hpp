@@ -31,6 +31,9 @@ private:
 
   ShipsBoardRules boardRules;
 
+  friend class InMemoryLogicFixture;
+  friend class SchemaTests;
+
 protected:
 
   const xaya::BoardRules& GetBoardRules () const override;

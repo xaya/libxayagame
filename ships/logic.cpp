@@ -4,6 +4,8 @@
 
 #include "logic.hpp"
 
+#include "schema.hpp"
+
 #include <glog/logging.h>
 
 namespace ships
@@ -18,7 +20,8 @@ ShipsLogic::GetBoardRules () const
 void
 ShipsLogic::SetupSchema (sqlite3* db)
 {
-  LOG (WARNING) << "Setting up the schema is not yet implemented";
+  SetupGameChannelsSchema (db);
+  SetupShipsSchema (db);
 }
 
 void
