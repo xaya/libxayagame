@@ -9,6 +9,7 @@
 
 #include <gamechannel/boardrules.hpp>
 #include <gamechannel/channelgame.hpp>
+#include <xayautil/uint256.hpp>
 
 #include <json/json.h>
 
@@ -31,7 +32,15 @@ private:
 
   ShipsBoardRules boardRules;
 
+  /**
+   * Tries to process a "create channel" move, if the JSON object describes
+   * a valid one.
+   */
+  void HandleCreateChannel (const Json::Value& obj, const std::string& name,
+                            const xaya::uint256& txid);
+
   friend class InMemoryLogicFixture;
+  friend class StateUpdateTests;
   friend class SchemaTests;
 
 protected:

@@ -11,6 +11,7 @@
 #include <xayagame/testutils.hpp>
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 
+#include <json/json.h>
 #include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
@@ -29,6 +30,11 @@ namespace ships
  * of the characters "." for zeros and "x" for ones.
  */
 Grid GridFromString (const std::string& str);
+
+/**
+ * Parses a string into JSON.
+ */
+Json::Value ParseJson (const std::string& str);
 
 /**
  * Test fixture that creates a ShipsLogic instance with an in-memory database

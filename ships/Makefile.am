@@ -65,6 +65,7 @@ tests_SOURCES = \
   board_tests.cpp \
   coord_tests.cpp \
   grid_tests.cpp \
+  logic_tests.cpp \
   schema_tests.cpp \
   \
   testutils.cpp

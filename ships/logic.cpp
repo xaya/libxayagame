@@ -6,6 +6,8 @@
 
 #include "schema.hpp"
 
+#include <gamechannel/database.hpp>
+
 #include <glog/logging.h>
 
 namespace ships
@@ -63,7 +65,78 @@ ShipsLogic::InitialiseState (sqlite3* db)
 void
 ShipsLogic::UpdateState (sqlite3* db, const Json::Value& blockData)
 {
-  LOG (WARNING) << "Updating the state for blocks is not yet implemented";
+  const auto& moves = blockData["moves"];
+  CHECK (moves.isArray ());
+  LOG (INFO) << "Processing " << moves.size () << " moves...";
+  for (const auto& mv : moves)
+    {
+      CHECK (mv.isObject ()) << "Not an object: " << mv;
+
+      const auto& nameVal = mv["name"];
+      CHECK (nameVal.isString ());
+      const std::string name = nameVal.asString ();
+
+      const auto& txidVal = mv["txid"];
+      CHECK (txidVal.isString ());
+      xaya::uint256 txid;
+      CHECK (txid.FromHex (txidVal.asString ()));
+
+      const auto& data = mv["move"];
+      if (!data.isObject ())
+        {
+          LOG (WARNING) << "Move by " << name << " is not an object: " << data;
+          continue;
+        }
+
+      /* Some of the possible moves can interact with each other (e.g. joining
+         a channel and filing a dispute immediately).  These interactions
+         are not generally useful, and just complicate things (as we have to
+         ensure that the order remains fixed and they keep working).  Thus
+         let us simply forbid more than one action per move.  */
+      if (data.size () > 1)
+        {
+          LOG (WARNING)
+              << "Move by " << name << " has more than one action: " << data;
+          continue;
+        }
+
+      HandleCreateChannel (data["c"], name, txid);
+    }
+
+  /* TODO: Go through expired disputes and declare winners for them.  */
+}
+
+void
+ShipsLogic::HandleCreateChannel (const Json::Value& obj,
+                                 const std::string& name,
+                                 const xaya::uint256& txid)
+{
+  if (!obj.isObject ())
+    return;
+
+  const auto& addrVal = obj["addr"];
+  if (obj.size () != 1 || !addrVal.isString ())
+    {
+      LOG (WARNING) << "Invalid create channel move: " << obj;
+      return;
+    }
+  const std::string addr = addrVal.asString ();
+
+  LOG (INFO)
+      << "Creating channel with ID " << txid.ToHex ()
+      << " for user " << name << " with address " << addr;
+
+  xaya::ChannelsTable tbl(*this);
+
+  /* Verify that this is indeed a new instance and not an existing one.  That
+     should never happen, assuming that txid's do not collide.  */
+  auto h = tbl.GetById (txid);
+  CHECK (h == nullptr) << "Already have channel with ID " << txid.ToHex ();
+
+  h = tbl.CreateNew (txid);
+  auto* p = h->MutableMetadata ().add_participants ();
+  p->set_name (name);
+  p->set_address (addr);
 }
 
 Json::Value

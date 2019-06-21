@@ -140,3 +140,22 @@ consists of two types of data:
    SQLite database table.
 1. Data about currently open game channels is stored through the game-channels
    framework (which has also its own table in the SQLite database).
+
+Each **move** of the game must be a *JSON object*, containing *at most one*
+of the following actions:
+
+#### Creating a Channel
+
+To create a new channel as the first participant, the following JSON value
+can be used as move:
+
+    {"c": {"addr": ADDRESS}}
+
+Here, `ADDRESS` must be a string, and it will be set as signing address
+for the player in the channel.  (It need not be a valid Xaya address, but
+if it isn't, then obviously no messages can be signed on the channel
+successfully.)
+
+This will create a new channel, whose ID will be the transaction ID of
+the move that created it.  There will be only one person in it initially,
+waiting for a second player to join.

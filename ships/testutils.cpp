@@ -8,6 +8,8 @@
 
 #include <glog/logging.h>
 
+#include <sstream>
+
 namespace ships
 {
 
@@ -30,6 +32,18 @@ GridFromString (const std::string& str)
       }
 
   return g;
+}
+
+Json::Value
+ParseJson (const std::string& str)
+{
+  std::istringstream in(str);
+
+  Json::Value res;
+  in >> res;
+  CHECK (in);
+
+  return res;
 }
 
 InMemoryLogicFixture::InMemoryLogicFixture ()
