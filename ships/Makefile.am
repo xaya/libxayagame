@@ -1,4 +1,5 @@
 noinst_LTLIBRARIES = libships.la
+bin_PROGRAMS = shipsd
 
 PROTOS = \
   proto/boardmove.proto \
@@ -14,22 +15,35 @@ CLEANFILES = $(PROTOHEADERS) $(PROTOSOURCES)
 
 libships_la_CXXFLAGS = \
   -I$(top_srcdir) \
-  $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
+  $(JSONCPP_CFLAGS) $(SQLITE3_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
 libships_la_LIBADD = \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
   $(top_builddir)/gamechannel/libgamechannel.la \
-  $(JSONCPP_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
+  $(JSONCPP_LIBS) $(SQLITE3_CFLAGS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
 libships_la_SOURCES = \
   board.cpp \
   coord.cpp \
   grid.cpp \
+  logic.cpp \
   $(PROTOSOURCES)
 noinst_HEADERS = \
   board.hpp \
   coord.hpp \
   grid.hpp \
+  logic.hpp \
   $(PROTOHEADERS)
+
+shipsd_CXXFLAGS = \
+  -I$(top_srcdir) \
+  $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(GFLAGS_CFLAGS) $(PROTOBUF_CFLAGS)
+shipsd_LDADD = \
+  $(builddir)/libships.la \
+  $(top_builddir)/xayautil/libxayautil.la \
+  $(top_builddir)/xayagame/libxayagame.la \
+  $(top_builddir)/gamechannel/libgamechannel.la \
+  $(JSONCPP_LIBS) $(GLOG_LIBS) $(GFLAGS_LIBS) $(PROTOBUF_LIBS)
+shipsd_SOURCES = main.cpp
 
 check_PROGRAMS = tests
 TESTS = tests
