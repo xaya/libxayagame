@@ -39,6 +39,11 @@ private:
   void HandleCreateChannel (const Json::Value& obj, const std::string& name,
                             const xaya::uint256& txid);
 
+  /**
+   * Tries to process a "join channel" move.
+   */
+  void HandleJoinChannel (const Json::Value& obj, const std::string& name);
+
   friend class InMemoryLogicFixture;
   friend class StateUpdateTests;
   friend class SchemaTests;

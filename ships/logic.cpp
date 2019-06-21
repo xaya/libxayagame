@@ -101,6 +101,7 @@ ShipsLogic::UpdateState (sqlite3* db, const Json::Value& blockData)
         }
 
       HandleCreateChannel (data["c"], name, txid);
+      HandleJoinChannel (data["j"], name);
     }
 
   /* TODO: Go through expired disputes and declare winners for them.  */
@@ -137,6 +138,95 @@ ShipsLogic::HandleCreateChannel (const Json::Value& obj,
   auto* p = h->MutableMetadata ().add_participants ();
   p->set_name (name);
   p->set_address (addr);
+  CHECK_EQ (h->GetMetadata ().participants_size (), 1);
+}
+
+namespace
+{
+
+/**
+ * Helper method that tries to extract a channel ID in a move JSON object
+ * and retrieve that channel.
+ */
+xaya::ChannelsTable::Handle
+RetrieveChannelFromMove (const Json::Value& obj, xaya::ChannelsTable& tbl)
+{
+  CHECK (obj.isObject ());
+  const auto& idVal = obj["id"];
+  if (!idVal.isString ())
+    {
+      LOG (WARNING) << "No channel ID given: " << obj;
+      return nullptr;
+    }
+  const std::string id = idVal.asString ();
+
+  xaya::uint256 channelId;
+  if (!channelId.FromHex (id))
+    {
+      LOG (WARNING) << "Invalid uint256 channel ID: " << id;
+      return nullptr;
+    }
+
+  auto h = tbl.GetById (channelId);
+  if (h == nullptr)
+    {
+      LOG (WARNING) << "Action for non-existant channel: " << id;
+      return  nullptr;
+    }
+
+  return h;
+}
+
+} // anonymous namespace
+
+void
+ShipsLogic::HandleJoinChannel (const Json::Value& obj, const std::string& name)
+{
+  if (!obj.isObject ())
+    return;
+
+  const auto& addrVal = obj["addr"];
+  if (obj.size () != 2 || !addrVal.isString ())
+    {
+      LOG (WARNING) << "Invalid join channel move: " << obj;
+      return;
+    }
+  const std::string addr = addrVal.asString ();
+
+  xaya::ChannelsTable tbl(*this);
+  auto h = RetrieveChannelFromMove (obj, tbl);
+  if (h == nullptr)
+    return;
+
+  const auto& meta = h->GetMetadata ();
+  if (meta.participants_size () != 1)
+    {
+      LOG (WARNING)
+          << "Cannot join channel " << h->GetId ().ToHex ()
+          << " with " << meta.participants_size () << " participants";
+      return;
+    }
+
+  if (meta.participants (0).name () == name)
+    {
+      LOG (WARNING)
+          << name << " cannot join channel " << h->GetId ().ToHex ()
+          << " a second time";
+      return;
+    }
+
+  LOG (INFO)
+      << "Adding " << name << " to channel " << h->GetId ().ToHex ()
+      << " with address " << addr;
+
+  auto* p = h->MutableMetadata ().add_participants ();
+  p->set_name (name);
+  p->set_address (addr);
+  CHECK_EQ (h->GetMetadata ().participants_size (), 2);
+
+  xaya::BoardState state;
+  CHECK (InitialBoardState ().SerializeToString (&state));
+  h->SetState (state);
 }
 
 Json::Value

@@ -159,3 +159,19 @@ successfully.)
 This will create a new channel, whose ID will be the transaction ID of
 the move that created it.  There will be only one person in it initially,
 waiting for a second player to join.
+
+#### Joining a Channel
+
+If a channel has only one participant, any (other) player may join it.
+To do so, they should send a move of this form:
+
+    {"j": {"id": CHANNEL-ID, "addr": ADDRESS}}
+
+As with creating a channel, `ADDRESS` is the signing address the player
+wishes to use within the channel.  `CHANNEL-ID` is the ID of the channel they
+want to join, given as hex string.
+Joining a channel is not possible if the channel already has two participants
+or if the other participant is the same Xaya account (`p/` name).
+
+After a second player joins a channel successfully, the on-channel game
+begins properly.

@@ -4,6 +4,7 @@
 
 #include "logic.hpp"
 
+#include "proto/boardstate.pb.h"
 #include "testutils.hpp"
 
 #include <gamechannel/database.hpp>
@@ -19,11 +20,9 @@ namespace ships
 class StateUpdateTests : public InMemoryLogicFixture
 {
 
-private:
+protected:
 
   xaya::ChannelsTable tbl;
-
-protected:
 
   StateUpdateTests ()
     : tbl(game)
@@ -181,19 +180,19 @@ TEST_F (CreateChannelTests, CreationSuccessful)
   ExpectNumberOfChannels (3);
 
   auto h = ExpectChannel (xaya::SHA256::Hash ("bar"));
-  EXPECT_EQ (h->GetMetadata ().participants_size (), 1);
+  ASSERT_EQ (h->GetMetadata ().participants_size (), 1);
   EXPECT_EQ (h->GetMetadata ().participants (0).name (), "bar");
   EXPECT_EQ (h->GetMetadata ().participants (0).address (), "address 1");
   EXPECT_EQ (h->GetState (), "");
   EXPECT_FALSE (h->HasDispute ());
 
   h = ExpectChannel (xaya::SHA256::Hash ("baz"));
-  EXPECT_EQ (h->GetMetadata ().participants_size (), 1);
+  ASSERT_EQ (h->GetMetadata ().participants_size (), 1);
   EXPECT_EQ (h->GetMetadata ().participants (0).name (), "bar");
   EXPECT_EQ (h->GetMetadata ().participants (0).address (), "address 2");
 
   h = ExpectChannel (xaya::SHA256::Hash ("bah"));
-  EXPECT_EQ (h->GetMetadata ().participants_size (), 1);
+  ASSERT_EQ (h->GetMetadata ().participants_size (), 1);
   EXPECT_EQ (h->GetMetadata ().participants (0).name (), "bar");
   EXPECT_EQ (h->GetMetadata ().participants (0).address (), "address 2");
 }
@@ -211,6 +210,118 @@ TEST_F (CreateChannelTests, FailsForTxidCollision)
     Move ("foo", xaya::SHA256::Hash ("foo"), data),
     Move ("bar", xaya::SHA256::Hash ("foo"), data),
   }), "Already have channel with ID");
+}
+
+/* ************************************************************************** */
+
+using JoinChannelTests = StateUpdateTests;
+
+TEST_F (JoinChannelTests, Malformed)
+{
+  const auto existing = xaya::SHA256::Hash ("foo");
+  tbl.CreateNew (existing)->MutableMetadata ().add_participants ();
+
+  const auto txid = xaya::SHA256::Hash ("bar");
+
+  std::vector<Json::Value> moves;
+  for (const std::string& create : {"42", "null", "{}",
+                                    R"({"addr": 100, "id": "00"})",
+                                    R"({"addr": "addr", "id": 100})",
+                                    R"({"addr": "addr", "id": "00"})",
+                                    R"({"addr": "foo", "id": "00", "x": 5})"})
+    {
+      Json::Value data(Json::objectValue);
+      data["j"] = ParseJson (create);
+      moves.push_back (Move ("foo", txid, data));
+    }
+  UpdateState (10, moves);
+
+  ExpectNumberOfChannels (1);
+  EXPECT_EQ (ExpectChannel (existing)->GetMetadata ().participants_size (), 1);
+}
+
+TEST_F (JoinChannelTests, NonExistantChannel)
+{
+  const auto existing = xaya::SHA256::Hash ("foo");
+  tbl.CreateNew (existing)->MutableMetadata ().add_participants ();
+
+  const auto txid = xaya::SHA256::Hash ("bar");
+  Json::Value data (Json::objectValue);
+  data["j"] = ParseJson (R"({"addr": "address"})");
+  data["j"]["id"] = txid.ToHex ();
+  UpdateState (10, {Move ("foo", txid, data)});
+
+  ExpectNumberOfChannels (1);
+  EXPECT_EQ (ExpectChannel (existing)->GetMetadata ().participants_size (), 1);
+}
+
+TEST_F (JoinChannelTests, AlreadyTwoParticipants)
+{
+  const auto existing = xaya::SHA256::Hash ("foo");
+  auto h = tbl.CreateNew (existing);
+  h->MutableMetadata ().add_participants ()->set_name ("foo");
+  h->MutableMetadata ().add_participants ()->set_name ("bar");
+  h.reset ();
+
+  const auto txid = xaya::SHA256::Hash ("bar");
+  Json::Value data (Json::objectValue);
+  data["j"] = ParseJson (R"({"addr": "address"})");
+  data["j"]["id"] = existing.ToHex ();
+  UpdateState (10, {Move ("baz", txid, data)});
+
+  ExpectNumberOfChannels (1);
+  h = ExpectChannel (existing);
+  ASSERT_EQ (h->GetMetadata ().participants_size (), 2);
+  EXPECT_EQ (h->GetMetadata ().participants (0).name (), "foo");
+  EXPECT_EQ (h->GetMetadata ().participants (1).name (), "bar");
+}
+
+TEST_F (JoinChannelTests, SameNameInChannel)
+{
+  const auto existing = xaya::SHA256::Hash ("foo");
+  auto h = tbl.CreateNew (existing);
+  h->MutableMetadata ().add_participants ()->set_name ("foo");
+  h.reset ();
+
+  const auto txid = xaya::SHA256::Hash ("bar");
+  Json::Value data (Json::objectValue);
+  data["j"] = ParseJson (R"({"addr": "address"})");
+  data["j"]["id"] = existing.ToHex ();
+  UpdateState (10, {Move ("foo", txid, data)});
+
+  ExpectNumberOfChannels (1);
+  h = ExpectChannel (existing);
+  ASSERT_EQ (h->GetMetadata ().participants_size (), 1);
+  EXPECT_EQ (h->GetMetadata ().participants (0).name (), "foo");
+}
+
+TEST_F (JoinChannelTests, SuccessfulJoin)
+{
+  const auto id1 = xaya::SHA256::Hash ("foo");
+  const auto id2 = xaya::SHA256::Hash ("bar");
+
+  std::vector<Json::Value> moves;
+  moves.push_back (Move ("foo", id1, ParseJson (R"({"c": {"addr": "a"}})")));
+
+  Json::Value data(Json::objectValue);
+  data["j"] = ParseJson (R"({"addr": "b"})");
+  data["j"]["id"] = id1.ToHex ();
+  moves.push_back (Move ("bar", id2, data));
+
+  UpdateState (10, moves);
+  ExpectNumberOfChannels (1);
+  auto h = ExpectChannel (id1);
+  ASSERT_EQ (h->GetMetadata ().participants_size (), 2);
+  EXPECT_EQ (h->GetMetadata ().participants (0).name (), "foo");
+  EXPECT_EQ (h->GetMetadata ().participants (0).address (), "a");
+  EXPECT_EQ (h->GetMetadata ().participants (1).name (), "bar");
+  EXPECT_EQ (h->GetMetadata ().participants (1).address (), "b");
+  EXPECT_FALSE (h->HasDispute ());
+
+  proto::BoardState state;
+  CHECK (state.ParseFromString (h->GetState ()));
+  EXPECT_TRUE (state.has_turn ());
+  EXPECT_EQ (state.turn (), 0);
 }
 
 /* ************************************************************************** */
