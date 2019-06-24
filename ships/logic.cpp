@@ -102,6 +102,7 @@ ShipsLogic::UpdateState (sqlite3* db, const Json::Value& blockData)
 
       HandleCreateChannel (data["c"], name, txid);
       HandleJoinChannel (data["j"], name);
+      HandleAbortChannel (data["a"], name);
     }
 
   /* TODO: Go through expired disputes and declare winners for them.  */
@@ -227,6 +228,46 @@ ShipsLogic::HandleJoinChannel (const Json::Value& obj, const std::string& name)
   xaya::BoardState state;
   CHECK (InitialBoardState ().SerializeToString (&state));
   h->SetState (state);
+}
+
+void
+ShipsLogic::HandleAbortChannel (const Json::Value& obj, const std::string& name)
+{
+  if (!obj.isObject ())
+    return;
+
+  if (obj.size () != 1)
+    {
+      LOG (WARNING) << "Invalid abort channel move: " << obj;
+      return;
+    }
+
+  xaya::ChannelsTable tbl(*this);
+  auto h = RetrieveChannelFromMove (obj, tbl);
+  if (h == nullptr)
+    return;
+
+  const xaya::uint256 id = h->GetId ();
+  const auto& meta = h->GetMetadata ();
+  if (meta.participants_size () != 1)
+    {
+      LOG (WARNING)
+          << "Cannot abort channel " << id.ToHex ()
+          << " with " << meta.participants_size () << " participants";
+      return;
+    }
+
+  if (meta.participants (0).name () != name)
+    {
+      LOG (WARNING)
+          << name << " cannot abort channel " << id.ToHex ()
+          << ", only " << meta.participants (0).name () << " can";
+      return;
+    }
+
+  LOG (INFO) << "Aborting channel " << id.ToHex ();
+  h.reset ();
+  tbl.DeleteById (id);
 }
 
 Json::Value

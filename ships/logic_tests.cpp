@@ -326,5 +326,103 @@ TEST_F (JoinChannelTests, SuccessfulJoin)
 
 /* ************************************************************************** */
 
+using AbortChannelTests = StateUpdateTests;
+
+TEST_F (AbortChannelTests, Malformed)
+{
+  const auto existing = xaya::SHA256::Hash ("foo");
+  tbl.CreateNew (existing)->MutableMetadata ().add_participants ();
+
+  const auto txid = xaya::SHA256::Hash ("bar");
+
+  std::vector<Json::Value> moves;
+  for (const std::string& create : {"42", "null", "{}",
+                                    R"({"id": "00"})",
+                                    R"({"id": 100})",
+                                    R"({"id": "00", "x": 5})"})
+    {
+      Json::Value data(Json::objectValue);
+      data["a"] = ParseJson (create);
+      moves.push_back (Move ("foo", txid, data));
+    }
+  UpdateState (10, moves);
+
+  ExpectNumberOfChannels (1);
+  ExpectChannel (existing);
+}
+
+TEST_F (AbortChannelTests, NonExistantChannel)
+{
+  const auto existing = xaya::SHA256::Hash ("foo");
+  tbl.CreateNew (existing)->MutableMetadata ().add_participants ();
+
+  const auto txid = xaya::SHA256::Hash ("bar");
+  Json::Value data (Json::objectValue);
+  data["a"] = Json::Value (Json::objectValue);
+  data["a"]["id"] = txid.ToHex ();
+  UpdateState (10, {Move ("foo", txid, data)});
+
+  ExpectNumberOfChannels (1);
+  ExpectChannel (existing);
+}
+
+TEST_F (AbortChannelTests, AlreadyTwoParticipants)
+{
+  const auto existing = xaya::SHA256::Hash ("foo");
+  auto h = tbl.CreateNew (existing);
+  h->MutableMetadata ().add_participants ()->set_name ("foo");
+  h->MutableMetadata ().add_participants ()->set_name ("bar");
+  h.reset ();
+
+  const auto txid = xaya::SHA256::Hash ("bar");
+  Json::Value data (Json::objectValue);
+  data["a"] = Json::Value (Json::objectValue);
+  data["a"]["id"] = existing.ToHex ();
+  UpdateState (10, {Move ("baz", txid, data)});
+
+  ExpectNumberOfChannels (1);
+  ExpectChannel (existing);
+}
+
+TEST_F (AbortChannelTests, DifferentName)
+{
+  const auto existing = xaya::SHA256::Hash ("foo");
+  auto h = tbl.CreateNew (existing);
+  h->MutableMetadata ().add_participants ()->set_name ("foo");
+  h.reset ();
+
+  const auto txid = xaya::SHA256::Hash ("bar");
+  Json::Value data (Json::objectValue);
+  data["a"] = Json::Value (Json::objectValue);
+  data["a"]["id"] = existing.ToHex ();
+  UpdateState (10, {Move ("bar", txid, data)});
+
+  ExpectNumberOfChannels (1);
+  ExpectChannel (existing);
+}
+
+TEST_F (AbortChannelTests, SuccessfulAbort)
+{
+  const auto existing = xaya::SHA256::Hash ("existing channel");
+  tbl.CreateNew (existing);
+
+  const auto id1 = xaya::SHA256::Hash ("foo");
+  const auto id2 = xaya::SHA256::Hash ("bar");
+
+  std::vector<Json::Value> moves;
+  moves.push_back (Move ("foo", id1, ParseJson (R"({"c": {"addr": "a"}})")));
+
+  Json::Value data(Json::objectValue);
+  data["a"] = Json::Value (Json::objectValue);
+  data["a"]["id"] = id1.ToHex ();
+  moves.push_back (Move ("foo", id2, data));
+
+  UpdateState (10, moves);
+  ExpectNumberOfChannels (1);
+  ExpectChannel (existing);
+}
+
+/* ************************************************************************** */
+
 } // anonymous namespace
 } // namespace ships

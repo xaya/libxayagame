@@ -175,3 +175,17 @@ or if the other participant is the same Xaya account (`p/` name).
 
 After a second player joins a channel successfully, the on-channel game
 begins properly.
+
+#### Aborting a Channel
+
+A channel that is open but has only one participant so far can be closed
+any time by the one participant (e.g. if they waited for someone to join
+but noone did).  This is done with a move of the form:
+
+    {"a": {"id": CHANNEL-ID}}
+
+Here, `CHANNEL-ID` is the channel's ID as hex string.  The move is only
+valid if the channel has one participant and the name sending the move
+is that one participant.
+After processing this move, the channel will simply be closed (deleted from
+the game state), without any changes to game stats of the player.

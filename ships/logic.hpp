@@ -44,6 +44,11 @@ private:
    */
   void HandleJoinChannel (const Json::Value& obj, const std::string& name);
 
+  /**
+   * Tries to process an "abort channel" move.
+   */
+  void HandleAbortChannel (const Json::Value& obj, const std::string& name);
+
   friend class InMemoryLogicFixture;
   friend class StateUpdateTests;
   friend class SchemaTests;
