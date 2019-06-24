@@ -189,3 +189,32 @@ valid if the channel has one participant and the name sending the move
 is that one participant.
 After processing this move, the channel will simply be closed (deleted from
 the game state), without any changes to game stats of the player.
+
+#### Closing a Channel in Agreement
+
+When both participants of a channel agree on the winner, then the channel
+can be closed.  This can be done by anyone (even someone who's not a
+participant, although that is unusual in practice), as long as they provide
+a proof that the *loser* of the game agrees to the outcome.  For this, a move
+of the following form is used:
+
+    {"w": {"id": CHANNEL-ID, "stmt": WINNER-STATEMENT}}
+
+As before, `CHANNEL-ID` is the channel's ID as hex string.
+`WINNER-STATEMENT` is the signed statement where the loser acknowledges
+that they lost.  It is a base64-encoded, serialised
+[`SignedData`](https://github.com/xaya/libxayagame/blob/master/gamechannel/proto/signatures.proto)
+message, where the `data` field is in turn a serialised
+[`WinnerStatement`](https://github.com/xaya/libxayagame/blob/master/ships/proto/winnerstatement.proto)
+message.
+
+The move is valid as long as one of the signatures on the `SignedData`
+was done with the loser's signing key of the channel (where the loser
+is determined as the other player compared to the `winner` field
+in `WinnerStatement`).  In that case, the channel is closed (deleted from
+the game state), and the game stats are updated for both players accordingly.
+
+In case a channel game finishes without disputes, then a suitable
+`SignedData` instance for closing the channel will be provided by the
+loser in the last board move.  With this, the winner can then close
+the channel on-chain.

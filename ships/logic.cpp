@@ -7,6 +7,7 @@
 #include "schema.hpp"
 
 #include <gamechannel/database.hpp>
+#include <xayautil/base64.hpp>
 
 #include <glog/logging.h>
 
@@ -103,6 +104,7 @@ ShipsLogic::UpdateState (sqlite3* db, const Json::Value& blockData)
       HandleCreateChannel (data["c"], name, txid);
       HandleJoinChannel (data["j"], name);
       HandleAbortChannel (data["a"], name);
+      HandleCloseChannel (data["w"]);
     }
 
   /* TODO: Go through expired disputes and declare winners for them.  */
@@ -268,6 +270,137 @@ ShipsLogic::HandleAbortChannel (const Json::Value& obj, const std::string& name)
   LOG (INFO) << "Aborting channel " << id.ToHex ();
   h.reset ();
   tbl.DeleteById (id);
+}
+
+namespace
+{
+
+/**
+ * Extracts a base64-encoded, serialised proto from a JSON string, if possible.
+ */
+template <typename T>
+  bool
+  ExtractProto (const Json::Value& val, T& res)
+{
+  if (!val.isString ())
+    return false;
+  const std::string str = val.asString ();
+
+  std::string bytes;
+  if (!xaya::DecodeBase64 (val.asString (), bytes))
+    {
+      LOG (WARNING) << "Invalid base64: " << str;
+      return false;
+    }
+
+  if (!res.ParseFromString (bytes))
+    {
+      LOG (WARNING) << "Failed to decode serialised proto";
+      return false;
+    }
+
+  return true;
+}
+
+} // anonymous namespace
+
+void
+ShipsLogic::HandleCloseChannel (const Json::Value& obj)
+{
+  if (!obj.isObject ())
+    return;
+
+  if (obj.size () != 2)
+    {
+      LOG (WARNING) << "Invalid close channel move: " << obj;
+      return;
+    }
+
+  xaya::proto::SignedData data;
+  if (!ExtractProto (obj["stmt"], data))
+    {
+      LOG (WARNING) << "Failed to extract SignedData from move: " << obj;
+      return;
+    }
+
+  xaya::ChannelsTable tbl(*this);
+  auto h = RetrieveChannelFromMove (obj, tbl);
+  if (h == nullptr)
+    return;
+
+  const xaya::uint256 id = h->GetId ();
+  const auto& meta = h->GetMetadata ();
+  if (meta.participants_size () != 2)
+    {
+      LOG (WARNING)
+          << "Cannot close channel " << id.ToHex ()
+          << " with " << meta.participants_size () << " participants";
+      return;
+    }
+
+  proto::WinnerStatement stmt;
+  if (!VerifySignedWinnerStatement (GetXayaRpc (), id, meta, data, stmt))
+    {
+      LOG (WARNING)
+          << "Winner statement for closing channel " << id.ToHex ()
+          << " is invalid: " << obj;
+      return;
+    }
+
+  LOG (INFO)
+      << "Closing channel " << id.ToHex ()
+      << " with winner " << stmt.winner ()
+      << " (" << meta.participants (stmt.winner ()).name () << ")";
+
+  UpdateStats (meta, stmt.winner ());
+  h.reset ();
+  tbl.DeleteById (id);
+}
+
+void
+ShipsLogic::BindStringParam (sqlite3_stmt* stmt, const int ind,
+                             const std::string& str)
+{
+  CHECK_EQ (sqlite3_bind_text (stmt, ind, &str[0], str.size (),
+                               SQLITE_TRANSIENT),
+            SQLITE_OK);
+}
+
+void
+ShipsLogic::UpdateStats (const xaya::proto::ChannelMetadata& meta,
+                         const int winner)
+{
+  CHECK_GE (winner, 0);
+  CHECK_LE (winner, 1);
+  CHECK_EQ (meta.participants_size (), 2);
+
+  const int loser = 1 - winner;
+  const std::string& winnerName = meta.participants (winner).name ();
+  const std::string& loserName = meta.participants (loser).name ();
+
+  auto* stmt = PrepareStatement (R"(
+    INSERT OR IGNORE INTO `game_stats`
+      (`name`, `won`, `lost`) VALUES (?1, 0, 0), (?2, 0, 0)
+  )");
+  BindStringParam (stmt, 1, winnerName);
+  BindStringParam (stmt, 2, loserName);
+  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+
+  stmt = PrepareStatement (R"(
+    UPDATE `game_stats`
+      SET `won` = `won` + 1
+      WHERE `name` = ?1
+  )");
+  BindStringParam (stmt, 1, winnerName);
+  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+
+  stmt = PrepareStatement (R"(
+    UPDATE `game_stats`
+      SET `lost` = `lost` + 1
+      WHERE `name` = ?2
+  )");
+  BindStringParam (stmt, 2, loserName);
+  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
 }
 
 Json::Value

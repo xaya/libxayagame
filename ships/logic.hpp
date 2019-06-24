@@ -9,6 +9,7 @@
 
 #include <gamechannel/boardrules.hpp>
 #include <gamechannel/channelgame.hpp>
+#include <gamechannel/proto/metadata.pb.h>
 #include <xayautil/uint256.hpp>
 
 #include <json/json.h>
@@ -48,6 +49,26 @@ private:
    * Tries to process an "abort channel" move.
    */
   void HandleAbortChannel (const Json::Value& obj, const std::string& name);
+
+  /**
+   * Tries to process a channel close with winner statement.
+   */
+  void HandleCloseChannel (const Json::Value& obj);
+
+  /**
+   * Updates the game stats in the global database state for a channel that
+   * is being closed with the given winner.  Note that this does not close
+   * (remove) the channel itself from the database; it just updates the
+   * game_stats table.
+   */
+  void UpdateStats (const xaya::proto::ChannelMetadata& meta, int winner);
+
+  /**
+   * Binds a TEXT SQLite parameter to a string.  This is a utility method that
+   * is also used for tests, and thus exposed here.
+   */
+  static void BindStringParam (sqlite3_stmt* stmt, int ind,
+                               const std::string& str);
 
   friend class InMemoryLogicFixture;
   friend class StateUpdateTests;
