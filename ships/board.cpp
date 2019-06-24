@@ -6,7 +6,6 @@
 
 #include "coord.hpp"
 #include "grid.hpp"
-#include "proto/winnerstatement.pb.h"
 
 #include <gamechannel/signatures.hpp>
 #include <xayautil/hash.hpp>
@@ -591,24 +590,13 @@ ShipsBoardState::ApplyWinnerStatement (const proto::WinnerStatementMove& mv,
     }
 
   proto::WinnerStatement stmt;
-  if (!stmt.ParseFromString (mv.statement ().data ()))
-    {
-      LOG (WARNING) << "Failed to parse WinnerStatement proto";
-      return false;
-    }
-  if (!stmt.has_winner () || stmt.winner () != newState.winner ())
+  if (!VerifySignedWinnerStatement (rpc, channelId, meta,
+                                    mv.statement (), stmt))
+    return false;
+
+  if (stmt.winner () != newState.winner ())
     {
       LOG (WARNING) << "WinnerStatement does not list correct winner";
-      return false;
-    }
-
-  const auto sgn = xaya::VerifyParticipantSignatures (rpc, channelId, meta,
-                                                      "winnerstatement",
-                                                      mv.statement ());
-  const int loser = 1 - newState.winner ();
-  if (sgn.count (loser) == 0)
-    {
-      LOG (WARNING) << "Winner statement is not signed by loser";
       return false;
     }
 
@@ -670,6 +658,42 @@ InitialBoardState ()
   proto::BoardState res;
   res.set_turn (0);
   return res;
+}
+
+bool
+VerifySignedWinnerStatement (XayaRpcClient& rpc,
+                             const xaya::uint256& channelId,
+                             const xaya::proto::ChannelMetadata& meta,
+                             const xaya::proto::SignedData& data,
+                             proto::WinnerStatement& stmt)
+{
+  if (!stmt.ParseFromString (data.data ()))
+    {
+      LOG (WARNING) << "Failed to parse WinnerStatement proto";
+      return false;
+    }
+  if (!stmt.has_winner ())
+    {
+      LOG (WARNING) << "WinnerStatement does not specify a winner";
+      return false;
+    }
+  if (stmt.winner () != 0 && stmt.winner () != 1)
+    {
+      LOG (WARNING) << "Invalid winner in WinnerStatement: " << stmt.winner ();
+      return false;
+    }
+
+  const auto sgn = xaya::VerifyParticipantSignatures (rpc, channelId, meta,
+                                                      "winnerstatement",
+                                                      data);
+  const int loser = 1 - stmt.winner ();
+  if (sgn.count (loser) == 0)
+    {
+      LOG (WARNING) << "Winner statement is not signed by loser";
+      return false;
+    }
+
+  return true;
 }
 
 } // namespace ships

@@ -110,11 +110,11 @@ protected:
   {
     auto* p = meta.add_participants ();
     p->set_name ("alice");
-    p->set_address ("addr 1");
+    p->set_address ("addr 0");
 
     p = meta.add_participants ();
     p->set_name ("bob");
-    p->set_address ("addr 2");
+    p->set_address ("addr 1");
   }
 
   /**
@@ -467,7 +467,6 @@ private:
   jsonrpc::HttpClient httpClient;
 
   xaya::MockXayaRpcServer mockXayaServer;
-  XayaRpcClient rpcClient;
 
   /**
    * Calls ApplyMoveProto with a given move onto a given state, both as
@@ -484,6 +483,8 @@ private:
   }
 
 protected:
+
+  XayaRpcClient rpcClient;
 
   ApplyMoveAndTurnCountTests ()
     : httpServer(xaya::MockXayaRpcServer::HTTP_PORT),
@@ -1280,102 +1281,142 @@ class WinnerStatementTests : public ApplyMoveAndTurnCountTests
 protected:
 
   /**
+   * Returns a SignedData proto holding a winner-statement parsed from
+   * text and with the given signatures.
+   */
+  static xaya::proto::SignedData
+  SignedWinnerStatement (const std::string& stmtStr,
+                         const std::vector<std::string>& signatures = {})
+  {
+    proto::WinnerStatement stmt;
+    CHECK (TextFormat::ParseFromString (stmtStr, &stmt));
+
+    xaya::proto::SignedData res;
+    CHECK (stmt.SerializeToString (res.mutable_data ()));
+
+    for (const auto& sgn : signatures)
+      res.add_signatures (sgn);
+
+    return res;
+  }
+
+  /**
    * Returns a winner-statement move proto where the statement itself
    * is given as text proto.
    */
-  proto::BoardMove
+  static proto::BoardMove
   WinnerStatementMove (const std::string& stmtStr,
                        const std::vector<std::string>& signatures = {})
   {
     proto::BoardMove res;
     auto* signedData = res.mutable_winner_statement ()->mutable_statement ();
-
-    proto::WinnerStatement stmt;
-    CHECK (TextFormat::ParseFromString (stmtStr, &stmt));
-    CHECK (stmt.SerializeToString (signedData->mutable_data ()));
-
-    for (const auto& sgn : signatures)
-      signedData->add_signatures (sgn);
+    *signedData = SignedWinnerStatement (stmtStr, signatures);
 
     return res;
   }
 
 };
 
-TEST_F (WinnerStatementTests, InvalidPhase)
+using VerifySignedWinnerStatementTests = WinnerStatementTests;
+
+TEST_F (VerifySignedWinnerStatementTests, MissingData)
+{
+  const auto data = SignedWinnerStatement ("");
+
+  proto::WinnerStatement stmt;
+  EXPECT_FALSE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
+                                             data, stmt));
+}
+
+TEST_F (VerifySignedWinnerStatementTests, MalformedData)
+{
+  xaya::proto::SignedData data;
+  data.set_data ("invalid proto");
+
+  proto::WinnerStatement stmt;
+  EXPECT_FALSE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
+                                             data, stmt));
+}
+
+TEST_F (VerifySignedWinnerStatementTests, NoWinnerGiven)
+{
+  const auto data = SignedWinnerStatement ("");
+
+  proto::WinnerStatement stmt;
+  EXPECT_FALSE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
+                                             data, stmt));
+}
+
+TEST_F (VerifySignedWinnerStatementTests, InvalidWinnerGiven)
+{
+  const auto data = SignedWinnerStatement ("winner: 2");
+
+  proto::WinnerStatement stmt;
+  EXPECT_FALSE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
+                                             data, stmt));
+}
+
+TEST_F (VerifySignedWinnerStatementTests, InvalidSignature)
+{
+  const auto data = SignedWinnerStatement ("winner: 0", {"sgn 0"});
+  ExpectSignature (data.data (), "sgn 0",  "addr 0");
+
+  proto::WinnerStatement stmt;
+  EXPECT_FALSE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
+                                             data, stmt));
+}
+
+TEST_F (VerifySignedWinnerStatementTests, Valid)
+{
+  const auto data = SignedWinnerStatement ("winner: 1", {"sgn 0"});
+  ExpectSignature (data.data (), "sgn 0",  "addr 0");
+
+  proto::WinnerStatement stmt;
+  ASSERT_TRUE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
+                                            data, stmt));
+  EXPECT_EQ (stmt.winner (), 1);
+}
+
+using WinnerStatementMoveTests = WinnerStatementTests;
+
+TEST_F (WinnerStatementMoveTests, InvalidPhase)
 {
   ExpectInvalid (TextState ("turn: 0"), WinnerStatementMove ("winner: 1"));
 }
 
-TEST_F (WinnerStatementTests, MissingStatementOrData)
+TEST_F (WinnerStatementMoveTests, MissingStatement)
 {
   ExpectInvalid (TextState (R"(
     turn: 0
     winner: 1
   )"), TextMove ("winner_statement: {}"));
 
-  ExpectInvalid (TextState (R"(
-    turn: 0
-    winner: 1
-  )"), TextMove (R"(
-    winner_statement:
-      {
-        statement: {}
-      }
-  )"));
 }
 
-TEST_F (WinnerStatementTests, MalformedData)
+TEST_F (WinnerStatementMoveTests, InvalidWinner)
 {
-  ExpectInvalid (TextState (R"(
-    turn: 0
-    winner: 1
-  )"), TextMove (R"(
-    winner_statement:
-      {
-        statement:
-          {
-            data: "foobar"
-          }
-      }
-  )"));
-}
-
-TEST_F (WinnerStatementTests, InvalidWinner)
-{
-  ExpectInvalid (TextState (R"(
-    turn: 0
-    winner: 1
-  )"), WinnerStatementMove (""));
-
-  ExpectInvalid (TextState (R"(
-    turn: 0
-    winner: 1
-  )"), WinnerStatementMove ("winner: 0"));
-
-  ExpectInvalid (TextState (R"(
-    turn: 1
-    winner: 0
-  )"), WinnerStatementMove ("winner: 1"));
-}
-
-TEST_F (WinnerStatementTests, InvalidSignature)
-{
-  const auto mv = WinnerStatementMove ("winner: 0", {"sgn 1"});
+  auto mv = WinnerStatementMove ("winner: 0", {"sgn 1"});
   ExpectSignature (mv.winner_statement ().statement ().data (),
                    "sgn 1",  "addr 1");
+  ExpectInvalid (TextState (R"(
+    turn: 0
+    winner: 1
+  )"), mv);
 
+  mv = WinnerStatementMove ("winner: 1", {"sgn 0"});
+  ExpectSignature (mv.winner_statement ().statement ().data (),
+                   "sgn 0",  "addr 0");
   ExpectInvalid (TextState (R"(
     turn: 1
     winner: 0
   )"), mv);
 }
 
-TEST_F (WinnerStatementTests, Valid)
+TEST_F (WinnerStatementMoveTests, Valid)
 {
-  const auto mv = WinnerStatementMove ("winner: 1", {"sgn 1"});
+  const auto mv = WinnerStatementMove ("winner: 1", {"sgn 0"});
   ExpectSignature (mv.winner_statement ().statement ().data (),
-                   "sgn 1",  "addr 1");
+                   "sgn 0",  "addr 0");
 
   auto expected = TextState (R"(
     winner: 1

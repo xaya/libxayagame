@@ -7,6 +7,7 @@
 
 #include "proto/boardmove.pb.h"
 #include "proto/boardstate.pb.h"
+#include "proto/winnerstatement.pb.h"
 
 #include <gamechannel/protoboard.hpp>
 #include <gamechannel/proto/metadata.pb.h>
@@ -125,6 +126,18 @@ using ShipsBoardRules = xaya::ProtoBoardRules<ShipsBoardState>;
  * participant has joined).
  */
 proto::BoardState InitialBoardState ();
+
+/**
+ * Checks whether a SignedData proto holding a winner statement is valid
+ * with respect to the given channel metadata.  This means that the statement
+ * is indeed signed by the loser.  If it is valid, then the WinnerStatement
+ * itself is returned as well for further use.
+ */
+bool VerifySignedWinnerStatement (XayaRpcClient& rpc,
+                                  const xaya::uint256& channelId,
+                                  const xaya::proto::ChannelMetadata& meta,
+                                  const xaya::proto::SignedData& data,
+                                  proto::WinnerStatement& stmt);
 
 } // namespace ships
 
