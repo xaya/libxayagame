@@ -115,7 +115,7 @@ TEST_F (DisputeTests, InvalidStateClaimed)
   EXPECT_FALSE (ch->HasDispute ());
 }
 
-TEST_F (DisputeTests, NoLaterTurn)
+TEST_F (DisputeTests, NoLaterTurnPreviousDispute)
 {
   auto ch = GetChannel ("test");
   ch->SetDisputeHeight (50);
@@ -133,6 +133,24 @@ TEST_F (DisputeTests, NoLaterTurn)
   EXPECT_EQ (ch->GetState (), "10 5");
   ASSERT_TRUE (ch->HasDispute ());
   EXPECT_EQ (ch->GetDisputeHeight (), 50);
+}
+
+TEST_F (DisputeTests, EarlierTurnPreviousResolution)
+{
+  auto ch = GetChannel ("test");
+  ch->SetState ("10 5");
+
+  ASSERT_FALSE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
+    initial_state:
+      {
+        data: "20 4"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )")));
+
+  EXPECT_EQ (ch->GetState (), "10 5");
+  EXPECT_FALSE (ch->HasDispute ());
 }
 
 TEST_F (DisputeTests, NoTurnState)
@@ -168,6 +186,25 @@ TEST_F (DisputeTests, SettingValidDispute)
   )")));
 
   EXPECT_EQ (ch->GetState (), "20 6");
+  ASSERT_TRUE (ch->HasDispute ());
+  EXPECT_EQ (ch->GetDisputeHeight (), 100);
+}
+
+TEST_F (DisputeTests, SameTurnAsPreviousResolution)
+{
+  auto ch = GetChannel ("test");
+  ch->SetState ("10 5");
+
+  ASSERT_TRUE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
+    initial_state:
+      {
+        data: "20 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )")));
+
+  EXPECT_EQ (ch->GetState (), "20 5");
   ASSERT_TRUE (ch->HasDispute ());
   EXPECT_EQ (ch->GetDisputeHeight (), 100);
 }
@@ -234,7 +271,7 @@ TEST_F (ResolutionTests, InvalidStateClaimed)
   EXPECT_EQ (ch->GetDisputeHeight (), 100);
 }
 
-TEST_F (ResolutionTests, NoLaterTurn)
+TEST_F (ResolutionTests, NoLaterTurnPreviousDispute)
 {
   auto ch = GetChannel ("test");
   ch->SetDisputeHeight (100);
@@ -252,6 +289,24 @@ TEST_F (ResolutionTests, NoLaterTurn)
   EXPECT_EQ (ch->GetState (), "10 5");
   ASSERT_TRUE (ch->HasDispute ());
   EXPECT_EQ (ch->GetDisputeHeight (), 100);
+}
+
+TEST_F (ResolutionTests, NoLaterTurnPreviousResolution)
+{
+  auto ch = GetChannel ("test");
+  ch->SetState ("10 5");
+
+  ASSERT_FALSE (game.ProcessResolution (*ch, ParseStateProof (R"(
+    initial_state:
+      {
+        data: "20 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )")));
+
+  EXPECT_EQ (ch->GetState (), "10 5");
+  EXPECT_FALSE (ch->HasDispute ());
 }
 
 TEST_F (ResolutionTests, Valid)

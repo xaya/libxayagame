@@ -23,13 +23,15 @@ namespace
 
 /**
  * Verifies if the given state proof is valid and for a state later
- * than (in turn count) the current on-chain state.  This is logic
- * in common between ProcessDispute and ProcessResolution.
+ * than (in turn count) the current on-chain state.  If the turn count is the
+ * same, then a dispute being applied counts as "later" than a previous
+ * non-disputed state.  This is logic in common between ProcessDispute and
+ * ProcessResolution.
  */
 bool
 CheckStateProofIsLater (XayaRpcClient& rpc, const BoardRules& rules,
                         const ChannelData& ch, const proto::StateProof& proof,
-                        BoardState& provenState)
+                        const bool provenIsDispute, BoardState& provenState)
 {
   const auto& id = ch.GetId ();
   const auto& meta = ch.GetMetadata ();
@@ -47,18 +49,24 @@ CheckStateProofIsLater (XayaRpcClient& rpc, const BoardRules& rules,
   const auto provenParsed = rules.ParseState (id, meta, provenState);
   CHECK (provenParsed != nullptr);
 
+  const bool onChainIsDispute = ch.HasDispute ();
   const unsigned onChainCnt = onChainParsed->TurnCount ();
   const unsigned provenCnt = provenParsed->TurnCount ();
-  if (onChainCnt >= provenCnt)
-    {
-      LOG (WARNING)
-          << "Dispute/resolution has turn count " << provenCnt
-          << ", which is not beyond the on-chain count " << onChainCnt;
-      return false;
-    }
-  CHECK_GT (provenCnt, onChainCnt);
 
-  return true;
+  if (provenCnt > onChainCnt)
+    return true;
+  if (provenCnt == onChainCnt && !onChainIsDispute && provenIsDispute)
+    {
+      LOG (INFO)
+          << "Allowing dispute to be filed for non-disputed on-chain state"
+             " of the same turn count " << provenCnt;
+      return true;
+    }
+
+  LOG (WARNING)
+      << "Dispute/resolution has turn count " << provenCnt
+      << ", which is not beyond the on-chain count " << onChainCnt;
+  return false;
 }
 
 } // anonymous namespace
@@ -78,7 +86,8 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
   const auto& rules = GetBoardRules ();
 
   BoardState provenState;
-  if (!CheckStateProofIsLater (GetXayaRpc (), rules, ch, proof, provenState))
+  if (!CheckStateProofIsLater (GetXayaRpc (), rules, ch, proof,
+                               true, provenState))
     return false;
 
   const auto provenParsed = rules.ParseState (id, meta, provenState);
@@ -102,7 +111,7 @@ ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
 {
   BoardState provenState;
   if (!CheckStateProofIsLater (GetXayaRpc (), GetBoardRules (), ch, proof,
-                               provenState))
+                               false, provenState))
     return false;
 
   VLOG (1) << "Resolution is valid, updating state...";
