@@ -1,0 +1,158 @@
+// Copyright (C) 2019 The Xaya developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include "gamestatejson.hpp"
+
+#include "proto/boardstate.pb.h"
+#include "testutils.hpp"
+
+#include <xayautil/base64.hpp>
+#include <xayautil/hash.hpp>
+
+#include <google/protobuf/text_format.h>
+#include <google/protobuf/util/message_differencer.h>
+
+#include <gtest/gtest.h>
+
+#include <sqlite3.h>
+
+#include <sstream>
+
+using google::protobuf::TextFormat;
+using google::protobuf::util::MessageDifferencer;
+
+namespace ships
+{
+namespace
+{
+
+Json::Value
+ParseJson (const std::string& str)
+{
+  std::istringstream in(str);
+  Json::Value res;
+  in >> res;
+  CHECK (in);
+
+  return res;
+}
+
+class GameStateJsonTests : public InMemoryLogicFixture
+{
+
+protected:
+
+  xaya::ChannelsTable tbl;
+  GameStateJson gsj;
+
+  GameStateJsonTests ()
+    : tbl(game), gsj(game)
+  {}
+
+};
+
+TEST_F (GameStateJsonTests, GameStats)
+{
+  CHECK_EQ (sqlite3_exec (GetDb (), R"(
+    INSERT INTO `game_stats`
+      (`name`, `won`, `lost`) VALUES ('foo', 10, 2), ('bar', 5, 5)
+  )", nullptr, nullptr, nullptr), SQLITE_OK);
+
+  EXPECT_EQ (gsj.GetFullJson (), ParseJson (R"(
+    {
+      "channels": {},
+      "gamestats":
+        {
+          "foo": {"won": 10, "lost": 2},
+          "bar": {"won": 5, "lost": 5}
+        }
+    }
+  )"));
+}
+
+TEST_F (GameStateJsonTests, OneParticipantChannel)
+{
+  const auto id = xaya::SHA256::Hash ("channel");
+  auto h = tbl.CreateNew (id);
+  CHECK (TextFormat::ParseFromString (R"(
+    participants:
+      {
+        name: "only me"
+        address: "addr"
+      }
+  )", &h->MutableMetadata ()));
+  h.reset ();
+
+  auto expected = ParseJson (R"(
+    {
+      "channels": {},
+      "gamestats": {}
+    }
+  )");
+  expected["channels"][id.ToHex ()] = ParseJson (R"(
+    {
+      "meta":
+        {
+          "participants": [{"name": "only me", "address": "addr"}]
+        },
+      "state":
+        {
+          "data":
+            {
+              "proto": "",
+              "phase": "single participant"
+            },
+          "whoseturn": null,
+          "turncount": 0
+        }
+    }
+  )");
+  expected["channels"][id.ToHex ()]["id"] = id.ToHex ();
+
+  EXPECT_EQ (gsj.GetFullJson (), expected);
+}
+
+TEST_F (GameStateJsonTests, TwoParticipantChannel)
+{
+  const auto id = xaya::SHA256::Hash ("channel");
+  auto h = tbl.CreateNew (id);
+  CHECK (TextFormat::ParseFromString (R"(
+    participants:
+      {
+        name: "foo"
+        address: "addr 1"
+      }
+    participants:
+      {
+        name: "bar"
+        address: "addr 2"
+      }
+  )", &h->MutableMetadata ()));
+
+  proto::BoardState state;
+  state.set_turn (0);
+
+  std::string serialised;
+  CHECK (state.SerializeToString (&serialised));
+  h->SetState (serialised);
+  h.reset ();
+
+  const auto actual = gsj.GetFullJson ();
+  const auto& stateJson = actual["channels"][id.ToHex ()]["state"];
+  ASSERT_TRUE (stateJson.isObject ());
+
+  EXPECT_EQ (stateJson["whoseturn"].asInt (), 0);
+  EXPECT_EQ (stateJson["turncount"].asInt (), 1);
+  EXPECT_EQ (stateJson["data"]["phase"].asString (), "first commitment");
+
+  std::string protoBytes;
+  ASSERT_TRUE (xaya::DecodeBase64 (stateJson["data"]["proto"].asString (),
+                                   protoBytes));
+  proto::BoardState stateFromJson;
+  ASSERT_TRUE (stateFromJson.ParseFromString (protoBytes));
+  EXPECT_TRUE (MessageDifferencer::Equals (state, stateFromJson));
+}
+
+} // anonymous namespace
+} // namespace ships

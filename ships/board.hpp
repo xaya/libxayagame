@@ -13,6 +13,8 @@
 #include <gamechannel/proto/metadata.pb.h>
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 
+#include <json/json.h>
+
 namespace ships
 {
 
@@ -115,6 +117,13 @@ public:
   bool IsValid () const override;
   int WhoseTurn () const override;
   unsigned TurnCount () const override;
+
+  /**
+   * The JSON format adds the current phase explicitly as another field
+   * (in addition to the super-class-provided base64 proto).  This allows
+   * frontends to make use of our GetPhase implementation more easily.
+   */
+  Json::Value ToJson () const override;
 
 };
 

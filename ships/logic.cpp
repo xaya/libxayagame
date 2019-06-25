@@ -4,6 +4,7 @@
 
 #include "logic.hpp"
 
+#include "gamestatejson.hpp"
 #include "schema.hpp"
 
 #include <gamechannel/database.hpp>
@@ -510,8 +511,8 @@ ShipsLogic::UpdateStats (const xaya::proto::ChannelMetadata& meta,
 Json::Value
 ShipsLogic::GetStateAsJson (sqlite3* db)
 {
-  LOG (WARNING) << "Returning empty JSON state for now";
-  return Json::Value ();
+  GameStateJson gsj(*this);
+  return gsj.GetFullJson ();
 }
 
 } // namespace ships

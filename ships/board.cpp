@@ -163,6 +163,59 @@ ShipsBoardState::GetPhase () const
   return Phase::SHOOT;
 }
 
+Json::Value
+ShipsBoardState::ToJson () const
+{
+  auto res = BaseProtoBoardState::ToJson ();
+
+  if (GetMetadata ().participants_size () == 1)
+    res["phase"] = "single participant";
+  else
+    {
+      const auto phase = GetPhase ();
+      switch (phase)
+        {
+        case Phase::FIRST_COMMITMENT:
+          res["phase"] = "first commitment";
+          break;
+
+        case Phase::SECOND_COMMITMENT:
+          res["phase"] = "second commitment";
+          break;
+
+        case Phase::FIRST_REVEAL_SEED:
+          res["phase"] = "first reveal seed";
+          break;
+
+        case Phase::SHOOT:
+          res["phase"] = "shoot";
+          break;
+
+        case Phase::ANSWER:
+          res["phase"] = "answer";
+          break;
+
+        case Phase::SECOND_REVEAL_POSITION:
+          res["phase"] = "second reveal position";
+          break;
+
+        case Phase::WINNER_DETERMINED:
+          res["phase"] = "winner determined";
+          break;
+
+        case Phase::FINISHED:
+          res["phase"] = "finished";
+          break;
+
+        default:
+          LOG (FATAL) << "Invalid phase: " << static_cast<int> (phase);
+          break;
+        }
+    }
+
+  return res;
+}
+
 int
 ShipsBoardState::WhoseTurn () const
 {

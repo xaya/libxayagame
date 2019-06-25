@@ -86,6 +86,11 @@ private:
   static void BindStringParam (sqlite3_stmt* stmt, int ind,
                                const std::string& str);
 
+  /* This class is not test-code, but it is basically a part of the
+     implementation of ShipsLogic itself that is just moved out to a separate
+     file / compilation unit to make the code easier to read.  */
+  friend class GameStateJson;
+
   friend class InMemoryLogicFixture;
   friend class StateUpdateTests;
   friend class SchemaTests;

@@ -25,6 +25,7 @@ libships_la_LIBADD = \
 libships_la_SOURCES = \
   board.cpp \
   coord.cpp \
+  gamestatejson.cpp \
   grid.cpp \
   logic.cpp \
   schema.cpp \
@@ -32,6 +33,7 @@ libships_la_SOURCES = \
 noinst_HEADERS = \
   board.hpp \
   coord.hpp \
+  gamestatejson.hpp \
   grid.hpp \
   logic.hpp \
   schema.hpp \
@@ -64,6 +66,7 @@ tests_LDADD = \
 tests_SOURCES = \
   board_tests.cpp \
   coord_tests.cpp \
+  gamestatejson_tests.cpp \
   grid_tests.cpp \
   logic_tests.cpp \
   schema_tests.cpp \

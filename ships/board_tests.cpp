@@ -17,7 +17,6 @@
 #include <xayautil/hash.hpp>
 #include <xayautil/uint256.hpp>
 
-#include <json/json.h>
 #include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
