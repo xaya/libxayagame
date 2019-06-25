@@ -107,6 +107,15 @@ public:
     return true;
   }
 
+  Json::Value
+  ToJson () const override
+  {
+    Json::Value res(Json::objectValue);
+    res["number"] = data.number;
+    res["count"] = data.count;
+    return res;
+  }
+
 };
 
 } // anonymous namespace

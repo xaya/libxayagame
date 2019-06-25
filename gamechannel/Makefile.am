@@ -29,6 +29,7 @@ libgamechannel_la_SOURCES = \
   boardrules.cpp \
   channelgame.cpp \
   database.cpp \
+  gamestatejson.cpp \
   schema.cpp \
   signatures.cpp \
   stateproof.cpp \
@@ -37,6 +38,7 @@ gamechannel_HEADERS = \
   boardrules.hpp \
   channelgame.hpp \
   database.hpp \
+  gamestatejson.hpp \
   protoboard.hpp protoboard.tpp \
   schema.hpp \
   signatures.hpp \
@@ -60,6 +62,7 @@ tests_LDADD = \
 tests_SOURCES = \
   channelgame_tests.cpp \
   database_tests.cpp \
+  gamestatejson_tests.cpp \
   protoboard_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \

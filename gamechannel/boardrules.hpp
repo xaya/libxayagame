@@ -10,6 +10,8 @@
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayautil/uint256.hpp>
 
+#include <json/json.h>
+
 #include <memory>
 #include <string>
 
@@ -88,6 +90,12 @@ public:
    */
   virtual bool ApplyMove (XayaRpcClient& rpc, const BoardMove& mv,
                           BoardState& newState) const = 0;
+
+  /**
+   * Returns a JSON representation of the current board state.  This is used
+   * by the game-channels daemons when communicating to frontends.
+   */
+  virtual Json::Value ToJson () const = 0;
 
 };
 
