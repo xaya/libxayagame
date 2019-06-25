@@ -7,6 +7,7 @@
 #include "schema.hpp"
 
 #include <gamechannel/database.hpp>
+#include <gamechannel/proto/stateproof.pb.h>
 #include <xayautil/base64.hpp>
 
 #include <glog/logging.h>
@@ -66,6 +67,12 @@ ShipsLogic::InitialiseState (sqlite3* db)
 void
 ShipsLogic::UpdateState (sqlite3* db, const Json::Value& blockData)
 {
+  const auto& blk = blockData["block"];
+  CHECK (blk.isObject ());
+  const auto& heightVal = blk["height"];
+  CHECK (heightVal.isUInt ());
+  const unsigned height = heightVal.asUInt ();
+
   const auto& moves = blockData["moves"];
   CHECK (moves.isArray ());
   LOG (INFO) << "Processing " << moves.size () << " moves...";
@@ -105,9 +112,11 @@ ShipsLogic::UpdateState (sqlite3* db, const Json::Value& blockData)
       HandleJoinChannel (data["j"], name);
       HandleAbortChannel (data["a"], name);
       HandleCloseChannel (data["w"]);
+      HandleDisputeResolution (data["d"], height, true);
+      HandleDisputeResolution (data["r"], height, false);
     }
 
-  /* TODO: Go through expired disputes and declare winners for them.  */
+  ProcessExpiredDisputes (height);
 }
 
 void
@@ -355,6 +364,101 @@ ShipsLogic::HandleCloseChannel (const Json::Value& obj)
   UpdateStats (meta, stmt.winner ());
   h.reset ();
   tbl.DeleteById (id);
+}
+
+void
+ShipsLogic::HandleDisputeResolution (const Json::Value& obj,
+                                     const unsigned height,
+                                     const bool isDispute)
+{
+  if (!obj.isObject ())
+    return;
+
+  if (obj.size () != 2)
+    {
+      LOG (WARNING) << "Invalid dispute/resolution move: " << obj;
+      return;
+    }
+
+  xaya::proto::StateProof proof;
+  if (!ExtractProto (obj["state"], proof))
+    {
+      LOG (WARNING) << "Failed to extract StateProof from move: " << obj;
+      return;
+    }
+
+  xaya::ChannelsTable tbl(*this);
+  auto h = RetrieveChannelFromMove (obj, tbl);
+  if (h == nullptr)
+    return;
+
+  const xaya::uint256 id = h->GetId ();
+  const auto& meta = h->GetMetadata ();
+  if (meta.participants_size () != 2)
+    {
+      LOG (WARNING)
+          << "Cannot file dispute/resolution for channel " << id.ToHex ()
+          << " with " << meta.participants_size () << " participants";
+      return;
+    }
+
+  LOG (INFO)
+      << "Filing " << (isDispute ? "dispute" : "resolution")
+      << " for channel " << id.ToHex () << " at height " << height;
+
+  bool res;
+  if (isDispute)
+    res = ProcessDispute (*h, height, proof);
+  else
+    res = ProcessResolution (*h, proof);
+
+  if (!res)
+    LOG (WARNING) << "Dispute/resolution is invalid: " << obj;
+}
+
+void
+ShipsLogic::ProcessExpiredDisputes (const unsigned height)
+{
+  LOG (INFO) << "Processing expired disputes for height " << height << "...";
+
+  xaya::ChannelsTable tbl(*this);
+  auto* stmt = tbl.QueryForDisputeHeight (height - DISPUTE_BLOCKS);
+  while (true)
+    {
+      const int rc = sqlite3_step (stmt);
+      if (rc == SQLITE_DONE)
+        break;
+      CHECK_EQ (rc, SQLITE_ROW);
+
+      auto h = tbl.GetFromResult (stmt);
+      const auto id = h->GetId ();
+      const auto& meta = h->GetMetadata ();
+
+      /* If there is a dispute filed on a channel, it means that we can
+         make some assumptions on the channel already.  Mainly, that it has
+         two participants, a valid state and is not in a no-turn state.  */
+      CHECK_EQ (meta.participants_size (), 2);
+
+      auto state = boardRules.ParseState (id, meta, h->GetState ());
+      CHECK (state != nullptr)
+          << "Invalid on-chain state for disputed channel " << id.ToHex ()
+          << ": " << h->GetState ();
+      const int loser = state->WhoseTurn ();
+      CHECK_NE (loser, xaya::ParsedBoardState::NO_TURN);
+      CHECK_GE (loser, 0);
+      CHECK_LE (loser, 1);
+      const int winner = 1 - loser;
+
+      LOG (INFO)
+          << "Dispute on channel " << id.ToHex ()
+          << " expired, force-clsoing it now; "
+          << meta.participants (winner).name () << " won, "
+          << meta.participants (loser).name () << " lost";
+
+      UpdateStats (meta, winner);
+      h.reset ();
+      tbl.DeleteById (id);
+    }
 }
 
 void

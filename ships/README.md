@@ -218,3 +218,32 @@ In case a channel game finishes without disputes, then a suitable
 `SignedData` instance for closing the channel will be provided by the
 loser in the last board move.  With this, the winner can then close
 the channel on-chain.
+
+#### Dispute Handling
+
+Disputes and resolutions can be processed by providing a
+[state proof](https://github.com/xaya/libxayagame/blob/master/gamechannel/proto/stateproof.proto)
+in a move.  To open a dispute in a channel, the move looks like this:
+
+    {"d": {"id": CHANNEL-ID, "state": STATE-PROOF}}
+
+Here, `CHANNEL-ID` is the channel's ID as hex string, and `STATE-PROOF` is
+a base64-encoded, serialised `StateProof` message.  Resolutions have the
+exact same format, except that the initial key is `r` instead of `d`.
+
+Both disputes and resolutions can be filed by anyone, even non-participants
+on the channel (although that will typically not be the case).  They are
+valid as long as the channel has two participants, the state proof is valid
+and the proven state is at least one turn further than the current state
+known on-chain.
+
+If the dispute or resolution is processed successfully, then the proven state
+is recorded on-chain.  For a dispute, also the current block height is
+stored.  For a resolution, any open dispute is marked as resolved.
+
+Note that it is possible to file a resolution without an open dispute,
+in which case simply the on-chain board state of the channel is updated.
+
+After processing each block, all channels with unresolved disputes that
+have been opened **10 blocks before** will be force-closed.  For them, the
+player whose turn it is according to the dispute's state loses.

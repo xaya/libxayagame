@@ -22,6 +22,11 @@ namespace ships
 {
 
 /**
+ * The number of blocks until a dispute "expires" and force-closes the channel.
+ */
+constexpr unsigned DISPUTE_BLOCKS = 10;
+
+/**
  * The main game logic for the on-chain part of Xayaships.  This takes care of
  * the public game state (win/loss statistics for names), management of open
  * channels and dispute processing.
@@ -54,6 +59,17 @@ private:
    * Tries to process a channel close with winner statement.
    */
   void HandleCloseChannel (const Json::Value& obj);
+
+  /**
+   * Tries to process a dispute/resolution move.
+   */
+  void HandleDisputeResolution (const Json::Value& obj, unsigned height,
+                                bool isDispute);
+
+  /**
+   * Processes all expired disputes, force-closing the channels.
+   */
+  void ProcessExpiredDisputes (unsigned height);
 
   /**
    * Updates the game stats in the global database state for a channel that

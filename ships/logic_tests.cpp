@@ -8,15 +8,19 @@
 #include "testutils.hpp"
 
 #include <gamechannel/database.hpp>
+#include <gamechannel/proto/stateproof.pb.h>
 #include <gamechannel/signatures.hpp>
 #include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
+
+#include <google/protobuf/text_format.h>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <vector>
 
+using google::protobuf::TextFormat;
 using testing::_;
 using testing::Return;
 
@@ -685,6 +689,193 @@ TEST_F (CloseChannelTests, Valid)
   ExpectChannel (otherId);
   ExpectStatsRow ("name 0", 0, 1);
   ExpectStatsRow ("name 1", 1, 0);
+}
+
+/* ************************************************************************** */
+
+class DisputeResolutionTests : public StateUpdateTests
+{
+
+protected:
+
+  /**
+   * ID of the channel closed in tests (or not).  This channel is set up
+   * with players "name 0" and "name 1".
+   */
+  const xaya::uint256 channelId = xaya::SHA256::Hash ("test channel");
+
+  /** Txid for use with the move.  */
+  const xaya::uint256 txid = xaya::SHA256::Hash ("txid");
+
+  DisputeResolutionTests ()
+  {
+    auto h = tbl.CreateNew (channelId);
+    auto* p = h->MutableMetadata ().add_participants ();
+    p->set_name ("name 0");
+    p->set_address ("addr 0");
+    p = h->MutableMetadata ().add_participants ();
+    p->set_name ("name 1");
+    p->set_address ("addr 1");
+
+    proto::BoardState state;
+    state.set_turn (0);
+    std::string serialisedState;
+    CHECK (state.SerializeToString (&serialisedState));
+    h->SetState (serialisedState);
+    h.reset ();
+
+    Json::Value signatureOk(Json::objectValue);
+    signatureOk["valid"] = true;
+    signatureOk["address"] = "addr 0";
+    EXPECT_CALL (mockXayaServer, verifymessage ("", _,
+                                                xaya::EncodeBase64 ("sgn 0")))
+        .WillRepeatedly (Return (signatureOk));
+
+    signatureOk["address"] = "addr 1";
+    EXPECT_CALL (mockXayaServer, verifymessage ("", _,
+                                                xaya::EncodeBase64 ("sgn 1")))
+        .WillRepeatedly (Return (signatureOk));
+
+    /* Explicitly add stats rows so we can use ExpectStatsRow even if there
+       were no changes.  */
+    AddStatsRow ("name 0", 0, 0);
+    AddStatsRow ("name 1", 0, 0);
+  }
+
+  /**
+   * Returns a JSON dispute/resolution move object for our channel which has
+   * a state proof for the state parsed from text and signed by the given
+   * signatures.  Key should be either "r" or "d" to build resolutions or
+   * disputes, respectively.
+   */
+  Json::Value
+  BuildMove (const std::string& key, const std::string& stateStr,
+             const std::vector<std::string>& signatures)
+  {
+    proto::BoardState state;
+    CHECK (TextFormat::ParseFromString (stateStr, &state));
+
+    xaya::proto::StateProof proof;
+    auto* is = proof.mutable_initial_state ();
+    CHECK (state.SerializeToString (is->mutable_data ()));
+    for (const auto& sgn : signatures)
+      is->add_signatures (sgn);
+
+    Json::Value data(Json::objectValue);
+    data[key] = Json::Value (Json::objectValue);
+    data[key]["id"] = channelId.ToHex ();
+
+    std::string serialised;
+    CHECK (proof.SerializeToString (&serialised));
+    data[key]["state"] = xaya::EncodeBase64 (serialised);
+
+    return Move ("xyz", txid, data);
+  }
+
+};
+
+TEST_F (DisputeResolutionTests, ExpiringDisputes)
+{
+  ExpectChannel (channelId)->SetDisputeHeight (100);
+
+  UpdateState (109, {});
+  ExpectNumberOfChannels (1);
+  ExpectChannel (channelId);
+  ExpectStatsRow ("name 0", 0, 0);
+  ExpectStatsRow ("name 1", 0, 0);
+
+  UpdateState (110, {});
+  ExpectNumberOfChannels (0);
+  ExpectStatsRow ("name 0", 0, 1);
+  ExpectStatsRow ("name 1", 1, 0);
+}
+
+TEST_F (DisputeResolutionTests, Malformed)
+{
+  std::vector<Json::Value> moves;
+  for (const std::string& str : {"42", "null", "{}",
+                                  R"({"id": "00"})",
+                                  R"({"id": 100, "state": ""})",
+                                  R"({"id": "00", "state": ""})",
+                                  R"({"id": "00", "state": "", "x": 5})"})
+    {
+      Json::Value data(Json::objectValue);
+      data["r"] = ParseJson (str);
+      moves.push_back (Move ("xyz", txid, data));
+
+      data.clear ();
+      data["d"] = ParseJson (str);
+      moves.push_back (Move ("xyz", txid, data));
+    }
+  UpdateState (10, moves);
+
+  ExpectNumberOfChannels (1);
+  EXPECT_FALSE (ExpectChannel (channelId)->HasDispute ());
+}
+
+TEST_F (DisputeResolutionTests, InvalidStateData)
+{
+  Json::Value data(Json::objectValue);
+  data["d"] = Json::Value (Json::objectValue);
+  data["d"]["id"] = channelId.ToHex ();
+  data["d"]["state"] = "invalid base64";
+  UpdateState (10, {Move ("xyz", txid, data)});
+
+  data["d"]["state"] = xaya::EncodeBase64 ("invalid proto");
+  UpdateState (11, {Move ("xyz", txid, data)});
+
+  ExpectNumberOfChannels (1);
+  EXPECT_FALSE (ExpectChannel (channelId)->HasDispute ());
+}
+
+TEST_F (DisputeResolutionTests, NonExistantChannel)
+{
+  auto mv = BuildMove ("d", "turn: 1 winner: 0", {"sgn 0", "sgn 1"});
+  mv["move"]["d"]["id"] = xaya::SHA256::Hash ("invalid channel").ToHex ();
+  UpdateState (10, {mv});
+
+  ExpectNumberOfChannels (1);
+  EXPECT_FALSE (ExpectChannel (channelId)->HasDispute ());
+}
+
+TEST_F (DisputeResolutionTests, WrongNumberOfParticipants)
+{
+  auto h = ExpectChannel (channelId);
+  h->MutableMetadata ().mutable_participants ()->RemoveLast ();
+  h.reset ();
+
+  UpdateState (10, {BuildMove ("d", "turn: 1 winner: 0", {"sgn 0", "sgn 1"})});
+
+  ExpectNumberOfChannels (1);
+  EXPECT_FALSE (ExpectChannel (channelId)->HasDispute ());
+}
+
+TEST_F (DisputeResolutionTests, InvalidStateProof)
+{
+  UpdateState (10, {BuildMove ("d", "turn: 1 winner: 0", {})});
+
+  ExpectNumberOfChannels (1);
+  EXPECT_FALSE (ExpectChannel (channelId)->HasDispute ());
+}
+
+TEST_F (DisputeResolutionTests, ValidDispute)
+{
+  UpdateState (10, {BuildMove ("d", "turn: 0", {})});
+
+  ExpectNumberOfChannels (1);
+  auto h = ExpectChannel (channelId);
+  ASSERT_TRUE (h->HasDispute ());
+  EXPECT_EQ (h->GetDisputeHeight (), 10);
+}
+
+TEST_F (DisputeResolutionTests, ValidResolution)
+{
+  ExpectChannel (channelId)->SetDisputeHeight (100);
+
+  UpdateState (110, {BuildMove ("r", "turn: 1 winner: 0", {"sgn 0", "sgn 1"})});
+
+  ExpectNumberOfChannels (1);
+  ASSERT_FALSE (ExpectChannel (channelId)->HasDispute ());
 }
 
 /* ************************************************************************** */
