@@ -174,6 +174,38 @@ namespace
 
 /* ************************************************************************** */
 
+class SinglePlayerStateTests : public BoardTests
+{
+
+protected:
+
+  SinglePlayerStateTests ()
+  {
+    meta.mutable_participants ()->RemoveLast ();
+    CHECK_EQ (meta.participants_size (), 1);
+  }
+
+};
+
+TEST_F (SinglePlayerStateTests, IsValid)
+{
+  auto p = ParseTextState ("turn: 100", true);
+  EXPECT_TRUE (p->IsValid ());
+}
+
+TEST_F (SinglePlayerStateTests, WhoseTurn)
+{
+  EXPECT_EQ (ParseTextState ("turn: 1")->WhoseTurn (),
+             xaya::ParsedBoardState::NO_TURN);
+}
+
+TEST_F (SinglePlayerStateTests, TurnCount)
+{
+  EXPECT_EQ (ParseTextState ("winner: 1")->TurnCount (), 0);
+}
+
+/* ************************************************************************** */
+
 using InitialBoardStateTests = BoardTests;
 
 TEST_F (InitialBoardStateTests, CorrectInitialState)
@@ -196,7 +228,7 @@ TEST_F (InitialBoardStateTests, WhoseTurn)
 
 TEST_F (InitialBoardStateTests, TurnCount)
 {
-  EXPECT_EQ (ParseState (InitialBoardState ())->TurnCount (), 0);
+  EXPECT_EQ (ParseState (InitialBoardState ())->TurnCount (), 1);
 }
 
 /* ************************************************************************** */
