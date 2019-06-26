@@ -51,12 +51,11 @@ for the configuration and/or build to be successful:
 - [`gflags`](https://github.com/gflags/gflags):
   The package (`libgflags-dev`) included with Debian 9 "Stretch" does
   not include the `pkg-config` file yet, build from source instead.
+- [Protocol buffers]((https://developers.google.com/protocol-buffers/)
+  are used both in C++ and Python.  On Debian, the packages
+  `libprotobuf-dev`, `protobuf-compiler` and `python-protobuf` can be used.
 
 For the unit tests, also the
 [Google test framework](https://github.com/google/googletest) is needed.
 The package included with Debian 9 "Stretch" is not fresh enough,
 it should be built and installed from source instead.
-
-The [mover](mover/README.md) example game also needs
-[protocol buffers](https://developers.google.com/protocol-buffers/).
-On Debian, install `libprotobuf-dev` and `protobuf-compiler`.

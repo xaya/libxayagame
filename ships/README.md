@@ -130,3 +130,120 @@ and she knows that Bob either lied or she sunk all ships.  Thus in that
 situation, she can immediately end the game and is guaranteed to win
 (unless she lied about her ships).  Hence the player who sinks all
 enemy ships first can ensure they win the game.
+
+### Game State and Moves
+
+Xayaships uses the game ID `xs` for its on-chain GSP.  The global game state
+consists of two types of data:
+
+1. The statistics of won and lost games per Xaya name are stored in a simple
+   SQLite database table.
+1. Data about currently open game channels is stored through the game-channels
+   framework (which has also its own table in the SQLite database).
+
+Each **move** of the game must be a *JSON object*, containing *at most one*
+of the following actions:
+
+#### Creating a Channel
+
+To create a new channel as the first participant, the following JSON value
+can be used as move:
+
+    {"c": {"addr": ADDRESS}}
+
+Here, `ADDRESS` must be a string, and it will be set as signing address
+for the player in the channel.  (It need not be a valid Xaya address, but
+if it isn't, then obviously no messages can be signed on the channel
+successfully.)
+
+This will create a new channel, whose ID will be the transaction ID of
+the move that created it.  There will be only one person in it initially,
+waiting for a second player to join.
+
+#### Joining a Channel
+
+If a channel has only one participant, any (other) player may join it.
+To do so, they should send a move of this form:
+
+    {"j": {"id": CHANNEL-ID, "addr": ADDRESS}}
+
+As with creating a channel, `ADDRESS` is the signing address the player
+wishes to use within the channel.  `CHANNEL-ID` is the ID of the channel they
+want to join, given as hex string.
+Joining a channel is not possible if the channel already has two participants
+or if the other participant is the same Xaya account (`p/` name).
+
+After a second player joins a channel successfully, the on-channel game
+begins properly.
+
+#### Aborting a Channel
+
+A channel that is open but has only one participant so far can be closed
+any time by the one participant (e.g. if they waited for someone to join
+but noone did).  This is done with a move of the form:
+
+    {"a": {"id": CHANNEL-ID}}
+
+Here, `CHANNEL-ID` is the channel's ID as hex string.  The move is only
+valid if the channel has one participant and the name sending the move
+is that one participant.
+After processing this move, the channel will simply be closed (deleted from
+the game state), without any changes to game stats of the player.
+
+#### Closing a Channel in Agreement
+
+When both participants of a channel agree on the winner, then the channel
+can be closed.  This can be done by anyone (even someone who's not a
+participant, although that is unusual in practice), as long as they provide
+a proof that the *loser* of the game agrees to the outcome.  For this, a move
+of the following form is used:
+
+    {"w": {"id": CHANNEL-ID, "stmt": WINNER-STATEMENT}}
+
+As before, `CHANNEL-ID` is the channel's ID as hex string.
+`WINNER-STATEMENT` is the signed statement where the loser acknowledges
+that they lost.  It is a base64-encoded, serialised
+[`SignedData`](https://github.com/xaya/libxayagame/blob/master/gamechannel/proto/signatures.proto)
+message, where the `data` field is in turn a serialised
+[`WinnerStatement`](https://github.com/xaya/libxayagame/blob/master/ships/proto/winnerstatement.proto)
+message.
+
+The move is valid as long as one of the signatures on the `SignedData`
+was done with the loser's signing key of the channel (where the loser
+is determined as the other player compared to the `winner` field
+in `WinnerStatement`).  In that case, the channel is closed (deleted from
+the game state), and the game stats are updated for both players accordingly.
+
+In case a channel game finishes without disputes, then a suitable
+`SignedData` instance for closing the channel will be provided by the
+loser in the last board move.  With this, the winner can then close
+the channel on-chain.
+
+#### Dispute Handling
+
+Disputes and resolutions can be processed by providing a
+[state proof](https://github.com/xaya/libxayagame/blob/master/gamechannel/proto/stateproof.proto)
+in a move.  To open a dispute in a channel, the move looks like this:
+
+    {"d": {"id": CHANNEL-ID, "state": STATE-PROOF}}
+
+Here, `CHANNEL-ID` is the channel's ID as hex string, and `STATE-PROOF` is
+a base64-encoded, serialised `StateProof` message.  Resolutions have the
+exact same format, except that the initial key is `r` instead of `d`.
+
+Both disputes and resolutions can be filed by anyone, even non-participants
+on the channel (although that will typically not be the case).  They are
+valid as long as the channel has two participants, the state proof is valid
+and the proven state is at least one turn further than the current state
+known on-chain.
+
+If the dispute or resolution is processed successfully, then the proven state
+is recorded on-chain.  For a dispute, also the current block height is
+stored.  For a resolution, any open dispute is marked as resolved.
+
+Note that it is possible to file a resolution without an open dispute,
+in which case simply the on-chain board state of the channel is updated.
+
+After processing each block, all channels with unresolved disputes that
+have been opened **10 blocks before** will be force-closed.  For them, the
+player whose turn it is according to the dispute's state loses.

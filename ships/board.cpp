@@ -49,6 +49,13 @@ CheckHashValue (const xaya::uint256& actual, const std::string& expected)
 bool
 ShipsBoardState::IsValid () const
 {
+  /* As a special case, all single-participant states are valid without any
+     more processing.  Those are only ever created while waiting for the second
+     player to join, and during that time no changes to the state are made at
+     all.  So just allow them, as needed e.g. for JSON game state.  */
+  if (GetMetadata ().participants_size () == 1)
+    return true;
+
   CHECK_EQ (GetMetadata ().participants_size (), 2);
 
   /* If the phase is not well-defined, then the state is invalid.  */
@@ -156,9 +163,65 @@ ShipsBoardState::GetPhase () const
   return Phase::SHOOT;
 }
 
+Json::Value
+ShipsBoardState::ToJson () const
+{
+  auto res = BaseProtoBoardState::ToJson ();
+
+  if (GetMetadata ().participants_size () == 1)
+    res["phase"] = "single participant";
+  else
+    {
+      const auto phase = GetPhase ();
+      switch (phase)
+        {
+        case Phase::FIRST_COMMITMENT:
+          res["phase"] = "first commitment";
+          break;
+
+        case Phase::SECOND_COMMITMENT:
+          res["phase"] = "second commitment";
+          break;
+
+        case Phase::FIRST_REVEAL_SEED:
+          res["phase"] = "first reveal seed";
+          break;
+
+        case Phase::SHOOT:
+          res["phase"] = "shoot";
+          break;
+
+        case Phase::ANSWER:
+          res["phase"] = "answer";
+          break;
+
+        case Phase::SECOND_REVEAL_POSITION:
+          res["phase"] = "second reveal position";
+          break;
+
+        case Phase::WINNER_DETERMINED:
+          res["phase"] = "winner determined";
+          break;
+
+        case Phase::FINISHED:
+          res["phase"] = "finished";
+          break;
+
+        default:
+          LOG (FATAL) << "Invalid phase: " << static_cast<int> (phase);
+          break;
+        }
+    }
+
+  return res;
+}
+
 int
 ShipsBoardState::WhoseTurn () const
 {
+  if (GetMetadata ().participants_size () == 1)
+    return xaya::ParsedBoardState::NO_TURN;
+
   if (!GetState ().has_turn ())
     return xaya::ParsedBoardState::NO_TURN;
 
@@ -172,6 +235,9 @@ ShipsBoardState::WhoseTurn () const
 unsigned
 ShipsBoardState::TurnCount () const
 {
+  if (GetMetadata ().participants_size () == 1)
+    return 0;
+
   const auto& pb = GetState ();
   unsigned shots = 0;
   for (const auto& known : pb.known_ships ())
@@ -184,21 +250,21 @@ ShipsBoardState::TurnCount () const
   switch (phase)
     {
     case Phase::FIRST_COMMITMENT:
-      return 0;
-
-    case Phase::SECOND_COMMITMENT:
       return 1;
 
-    case Phase::FIRST_REVEAL_SEED:
+    case Phase::SECOND_COMMITMENT:
       return 2;
 
+    case Phase::FIRST_REVEAL_SEED:
+      return 3;
+
     case Phase::SHOOT:
-      return 3 + 2 * shots;
+      return 4 + 2 * shots;
 
     case Phase::ANSWER:
       /* In the answer phase, the count of shots is already incremented, but
          we have not yet made the "second move" of the last "shot cycle".  */
-      return 3 + 2 * shots - 1;
+      return 4 + 2 * shots - 1;
 
     case Phase::SECOND_REVEAL_POSITION:
     case Phase::WINNER_DETERMINED:
@@ -208,7 +274,7 @@ ShipsBoardState::TurnCount () const
          SECOND_REVEAL_POSITION or WINNER_DETERMINED.  Thus those phases are
          handled together.  */
       {
-        unsigned cnt = 3 + 2 * shots;
+        unsigned cnt = 4 + 2 * shots;
         if (pb.has_current_shot ())
           cnt -= 1;
 
