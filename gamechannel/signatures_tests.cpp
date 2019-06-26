@@ -30,12 +30,14 @@ protected:
 
 TEST_F (SignaturesTests, GetChannelSignatureMessage)
 {
+  const std::string dataWithNul("foo\0bar", 7);
+
   SHA256 hasher;
   hasher << channelId;
   hasher << std::string ("topic\0", 6);
-  hasher << "foobar";
+  hasher << dataWithNul;
 
-  EXPECT_EQ (GetChannelSignatureMessage (channelId, "topic", "foobar"),
+  EXPECT_EQ (GetChannelSignatureMessage (channelId, "topic", dataWithNul),
              hasher.Finalise ().ToHex ());
 }
 

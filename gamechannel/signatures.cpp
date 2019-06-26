@@ -26,7 +26,7 @@ GetChannelSignatureMessage (const uint256& channelId,
   SHA256 hasher;
   hasher << channelId;
   hasher << topic << std::string ("\0", 1);
-  hasher << data.data ();
+  hasher << data;
 
   return hasher.Finalise ().ToHex ();
 }
