@@ -14,6 +14,8 @@
 
 #include <glog/logging.h>
 
+#include <sstream>
+
 namespace ships
 {
 
@@ -689,7 +691,12 @@ VerifySignedWinnerStatement (XayaRpcClient& rpc,
   const int loser = 1 - stmt.winner ();
   if (sgn.count (loser) == 0)
     {
-      LOG (WARNING) << "Winner statement is not signed by loser";
+      std::ostringstream signatures;
+      for (const int ind : sgn)
+        signatures << " " << ind;
+      LOG (WARNING)
+          << "Winner statement is not signed by loser, only:"
+          << signatures.str ();
       return false;
     }
 
