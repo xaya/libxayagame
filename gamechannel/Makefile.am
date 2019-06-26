@@ -1,6 +1,8 @@
 lib_LTLIBRARIES = libgamechannel.la
 gamechanneldir = $(includedir)/gamechannel
 protodir = $(gamechanneldir)/proto
+pydir = $(pythondir)/gamechannel
+pyprotodir = $(pydir)/proto
 
 PROTOS = \
   proto/metadata.proto \
@@ -9,12 +11,13 @@ PROTOS = \
   proto/stateproof.proto
 PROTOHEADERS = $(PROTOS:.proto=.pb.h)
 PROTOSOURCES = $(PROTOS:.proto=.pb.cc)
+PROTOPY = $(PROTOS:.proto=_pb2.py)
 
 EXTRA_DIST = $(PROTOS) \
   schema.sql schema_head.cpp schema_tail.cpp
 
-BUILT_SOURCES = $(PROTOHEADERS)
-CLEANFILES = $(PROTOHEADERS) $(PROTOSOURCES) schema.cpp
+BUILT_SOURCES = $(PROTOHEADERS) $(PROTOPY)
+CLEANFILES = $(PROTOHEADERS) $(PROTOSOURCES) $(PROTOPY) schema.cpp
 
 libgamechannel_la_CXXFLAGS = \
   -I$(top_srcdir) \
@@ -44,6 +47,9 @@ gamechannel_HEADERS = \
   signatures.hpp \
   stateproof.hpp
 proto_HEADERS = $(PROTOHEADERS)
+
+py_PYTHON = __init__.py
+pyproto_PYTHON = proto/__init__.py $(PROTOPY)
 
 check_PROGRAMS = tests
 TESTS = tests
@@ -78,3 +84,5 @@ schema.cpp: schema_head.cpp schema.sql schema_tail.cpp
 
 proto/%.pb.h proto/%.pb.cc: $(top_srcdir)/gamechannel/proto/%.proto
 	protoc -I$(top_srcdir) --cpp_out=$(top_builddir) "$<"
+proto/%_pb2.py: $(top_srcdir)/gamechannel/proto/%.proto
+	protoc -I$(top_srcdir) --python_out=$(top_builddir) "$<"
