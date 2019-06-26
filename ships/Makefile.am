@@ -1,3 +1,5 @@
+SUBDIRS = gametest
+
 noinst_LTLIBRARIES = libships.la
 bin_PROGRAMS = shipsd
 

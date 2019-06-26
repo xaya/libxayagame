@@ -50,6 +50,7 @@ AC_CONFIG_FILES([
   mover/Makefile \
   mover/gametest/Makefile \
   ships/Makefile \
+  ships/gametest/Makefile \
   xayagame/Makefile \
   xayagametest/Makefile \
   xayautil/Makefile \
