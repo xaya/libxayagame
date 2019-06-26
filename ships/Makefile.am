@@ -9,12 +9,13 @@ PROTOS = \
   proto/winnerstatement.proto
 PROTOHEADERS = $(PROTOS:.proto=.pb.h)
 PROTOSOURCES = $(PROTOS:.proto=.pb.cc)
+PROTOPY = $(PROTOS:.proto=_pb2.py)
 
 EXTRA_DIST = $(PROTOS) \
   schema.sql schema_head.cpp schema_tail.cpp
 
-BUILT_SOURCES = $(PROTOHEADERS)
-CLEANFILES = $(PROTOHEADERS) $(PROTOSOURCES) schema.cpp
+BUILT_SOURCES = $(PROTOHEADERS) $(PROTOPY)
+CLEANFILES = $(PROTOHEADERS) $(PROTOSOURCES) $(PROTOPY) schema.cpp
 
 libships_la_CXXFLAGS = \
   -I$(top_srcdir) \
@@ -52,6 +53,8 @@ shipsd_LDADD = \
   $(JSONCPP_LIBS) $(GLOG_LIBS) $(GFLAGS_LIBS) $(PROTOBUF_LIBS)
 shipsd_SOURCES = main.cpp
 
+noinst_PYTHON = proto/__init__.py $(PROTOPY)
+
 check_PROGRAMS = tests
 TESTS = tests
 
@@ -82,3 +85,5 @@ schema.cpp: schema_head.cpp schema.sql schema_tail.cpp
 
 proto/%.pb.h proto/%.pb.cc: $(srcdir)/proto/%.proto
 	protoc -I$(top_srcdir) -I$(srcdir)/proto --cpp_out=proto "$<"
+proto/%_pb2.py: $(srcdir)/proto/%.proto
+	protoc -I$(top_srcdir) -I$(srcdir)/proto --python_out=proto "$<"
