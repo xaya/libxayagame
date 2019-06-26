@@ -12,6 +12,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <glog/logging.h>
+
 namespace xaya
 {
 namespace
@@ -37,8 +39,10 @@ TEST_F (SignaturesTests, GetChannelSignatureMessage)
   hasher << std::string ("topic\0", 6);
   hasher << dataWithNul;
 
-  EXPECT_EQ (GetChannelSignatureMessage (channelId, "topic", dataWithNul),
-             hasher.Finalise ().ToHex ());
+  const std::string actual = GetChannelSignatureMessage (channelId, "topic",
+                                                         dataWithNul);
+  EXPECT_EQ (actual, hasher.Finalise ().ToHex ());
+  LOG (INFO) << "Signature message: " << actual;
 }
 
 TEST_F (SignaturesTests, InvalidTopic)

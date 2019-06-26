@@ -48,11 +48,17 @@ gamechannel_HEADERS = \
   stateproof.hpp
 proto_HEADERS = $(PROTOHEADERS)
 
-py_PYTHON = __init__.py
+PYTHONTESTS = \
+  signatures_tests.py
+noinst_PYTHON = $(PYTHONTESTS)
+py_PYTHON = __init__.py signatures.py
 pyproto_PYTHON = proto/__init__.py $(PROTOPY)
 
+AM_TESTS_ENVIRONMENT = \
+  PYTHONPATH=$(srcdir)
+
 check_PROGRAMS = tests
-TESTS = tests
+TESTS = tests $(PYTHONTESTS)
 
 tests_CXXFLAGS = \
   -I$(top_srcdir) \
