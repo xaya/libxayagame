@@ -10,6 +10,7 @@ import os.path
 from gamechannel import signatures
 from gamechannel.proto import stateproof_pb2
 
+from proto import boardstate_pb2
 from proto import winnerstatement_pb2
 
 from google.protobuf import text_format
@@ -49,6 +50,27 @@ class ShipsTest (XayaGameTest):
 
     return cid
 
+  def getStateProof (self, cid, stateStr):
+    """
+    Constructs a base64-encoded, serialised StateProof for the board state
+    given as text proto.  This is then ready to send in a dispute or resolution
+    move for the test.
+    """
+
+    state = self.getGameState ()
+    channel = state["channels"][cid]
+
+    state = boardstate_pb2.BoardState ()
+    text_format.Parse (stateStr, state)
+    stateBytes = state.SerializeToString ()
+
+    res = stateproof_pb2.StateProof ()
+    signedData = signatures.createForChannel (self.rpc.xaya, channel,
+                                              "state", stateBytes)
+    res.initial_state.CopyFrom (signedData)
+
+    return base64.b64encode (res.SerializeToString ())
+
   def getWinnerStatement (self, cid, winner):
     """
     Constructs a winner statement for the given winner index and signs it
@@ -67,3 +89,20 @@ class ShipsTest (XayaGameTest):
                                        "winnerstatement", data)
 
     return base64.b64encode (sgn.SerializeToString ())
+
+  def expectChannelState (self, cid, phase, disputeHeight):
+    """
+    Extracts the state of our test channel and verifies that it matches
+    the given phase and disputeHeight; the latter might be None if there
+    should not be any dispute.
+    """
+
+    state = self.getGameState ()
+    channel = state["channels"][cid]
+
+    if disputeHeight is None:
+      assert "disputeheight" not in channel
+    else:
+      self.assertEqual (channel["disputeheight"], disputeHeight)
+
+    self.assertEqual (channel["state"]["data"]["phase"], phase)
