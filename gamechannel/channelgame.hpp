@@ -38,10 +38,14 @@ protected:
    * current block height for the given game channel and based on the
    * given state proof.  If the request is valid (mainly meaning that the
    * state proof is valid and for a "later" state than the current on-chain
-   * state or at least the same as the current state and it does not have
-   * a dispute yet), then the dispute is opened on the ChannelData instance and
+   * state), then the dispute is opened on the ChannelData instance and
    * true is returned.  If it is not valid, then no changes are made and
    * false is returned.
+   *
+   * It is valid to open a dispute for the state that is currently on-chain
+   * (same turn height but only if it actually Equals() that state) if there
+   * was not already a dispute for it.  This is necessary to avoid a situation
+   * as in https://github.com/xaya/libxayagame/issues/51.
    */
   bool ProcessDispute (ChannelData& ch, unsigned height,
                        const proto::StateProof& proof);
