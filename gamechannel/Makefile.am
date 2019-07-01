@@ -33,6 +33,7 @@ libgamechannel_la_SOURCES = \
   channelgame.cpp \
   database.cpp \
   gamestatejson.cpp \
+  rollingstate.cpp \
   schema.cpp \
   signatures.cpp \
   stateproof.cpp \
@@ -43,6 +44,7 @@ gamechannel_HEADERS = \
   database.hpp \
   gamestatejson.hpp \
   protoboard.hpp protoboard.tpp \
+  rollingstate.hpp \
   schema.hpp \
   signatures.hpp \
   stateproof.hpp
@@ -76,6 +78,7 @@ tests_SOURCES = \
   database_tests.cpp \
   gamestatejson_tests.cpp \
   protoboard_tests.cpp \
+  rollingstate_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \
   stateproof_tests.cpp \

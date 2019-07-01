@@ -37,7 +37,7 @@ bool VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
 bool VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
                        const uint256& channelId,
                        const proto::ChannelMetadata& meta,
-                       const BoardState& onChainState,
+                       const BoardState& reinitState,
                        const proto::StateProof& proof,
                        BoardState& endState);
 
