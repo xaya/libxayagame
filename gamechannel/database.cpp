@@ -19,8 +19,9 @@ namespace
 /* Indices of the columns for the channels table from SELECT's.  */
 constexpr int COLUMN_ID = 0;
 constexpr int COLUMN_METADATA = 1;
-constexpr int COLUMN_STATE = 2;
-constexpr int COLUMN_DISPUTEHEIGHT = 3;
+constexpr int COLUMN_REINIT = 2;
+constexpr int COLUMN_STATEPROOF = 3;
+constexpr int COLUMN_DISPUTEHEIGHT = 4;
 
 /**
  * Extracts a binary string from a BLOB column.
@@ -56,24 +57,53 @@ BindBlobUint256 (sqlite3_stmt* stmt, const int ind, const uint256& val)
             SQLITE_OK);
 }
 
+/**
+ * Binds a protocol buffer message to a BLOB parameter.
+ */
+template <typename Proto>
+  void
+  BindBlobProto (sqlite3_stmt* stmt, const int ind, const Proto& msg)
+{
+  std::string serialised;
+  CHECK (msg.SerializeToString (&serialised));
+  BindBlobString (stmt, ind, serialised);
+}
+
+/**
+ * Sets a state proof to be just based on the reinitialisation state.
+ */
+void
+StateProofFromReinit (const BoardState& reinit, proto::StateProof& proof)
+{
+  proof.Clear ();
+  proof.mutable_initial_state ()->set_data (reinit);
+}
+
 } // anonymous namespace
 
 ChannelData::ChannelData (ChannelGame& g, const uint256& i)
-  : game(g), id(i), disputeHeight(0), dirty(true)
+  : game(g), id(i), initialised(false), disputeHeight(0), dirty(true)
 {
   LOG (INFO) << "Created new ChannelData instance for ID " << id.ToHex ();
 }
 
 ChannelData::ChannelData (ChannelGame& g, sqlite3_stmt* row)
-  : game(g), dirty(false)
+  : game(g), initialised(true), dirty(false)
 {
-  int len = sqlite3_column_bytes (row, COLUMN_ID);
+  const int len = sqlite3_column_bytes (row, COLUMN_ID);
   CHECK_EQ (len, uint256::NUM_BYTES);
   const void* data = sqlite3_column_blob (row, COLUMN_ID);
   id.FromBlob (static_cast<const unsigned char*> (data));
 
   CHECK (metadata.ParseFromString (ExtractBlobString (row, COLUMN_METADATA)));
-  state = ExtractBlobString (row, COLUMN_STATE);
+  reinit = ExtractBlobString (row, COLUMN_REINIT);
+
+  /* See if there is an explicit state proof in the database.  If not, we just
+     set it to one based on the reinit state.  */
+  if (sqlite3_column_type (row, COLUMN_STATEPROOF) == SQLITE_NULL)
+    StateProofFromReinit (reinit, proof);
+  else
+    CHECK (proof.ParseFromString (ExtractBlobString (row, COLUMN_STATEPROOF)));
 
   if (sqlite3_column_type (row, COLUMN_DISPUTEHEIGHT) == SQLITE_NULL)
     disputeHeight = 0;
@@ -86,6 +116,8 @@ ChannelData::ChannelData (ChannelGame& g, sqlite3_stmt* row)
 
 ChannelData::~ChannelData ()
 {
+  CHECK (initialised);
+
   if (!dirty)
     {
       LOG (INFO) << "ChannelData " << id.ToHex () << " is not dirty";
@@ -96,25 +128,83 @@ ChannelData::~ChannelData ()
 
   auto* stmt = game.PrepareStatement (R"(
     INSERT OR REPLACE INTO `xayagame_game_channels`
-      (`id`, `metadata`, `state`, `disputeHeight`)
-      VALUES (?1, ?2, ?3, ?4)
+      (`id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`)
+      VALUES (?1, ?2, ?3, ?4, ?5)
   )");
 
   BindBlobUint256 (stmt, 1, id);
+  BindBlobProto (stmt, 2, metadata);
+  BindBlobString (stmt, 3, reinit);
 
-  std::string metadataStr;
-  CHECK (metadata.SerializeToString (&metadataStr));
-  BindBlobString (stmt, 2, metadataStr);
-
-  BindBlobString (stmt, 3, state);
-
-  if (disputeHeight == 0)
+  if (proof.transitions_size () == 0
+        && proof.initial_state ().data () == reinit)
     CHECK_EQ (sqlite3_bind_null (stmt, 4), SQLITE_OK);
   else
-    CHECK_EQ (sqlite3_bind_int64 (stmt, 4, disputeHeight),
-              SQLITE_OK);
+    BindBlobProto (stmt, 4, proof);
+
+  if (disputeHeight == 0)
+    CHECK_EQ (sqlite3_bind_null (stmt, 5), SQLITE_OK);
+  else
+    CHECK_EQ (sqlite3_bind_int64 (stmt, 5, disputeHeight), SQLITE_OK);
 
   CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+}
+
+const proto::ChannelMetadata&
+ChannelData::GetMetadata () const
+{
+  CHECK (initialised);
+  return metadata;
+}
+
+const BoardState&
+ChannelData::GetReinitState () const
+{
+  CHECK (initialised);
+  return reinit;
+}
+
+void
+ChannelData::Reinitialise (const proto::ChannelMetadata& m,
+                           const BoardState& initialisedState)
+{
+  LOG (INFO)
+      << "Reinitialising channel " << id.ToHex ()
+      << " to new state: " << initialisedState;
+
+  metadata = m;
+  reinit = initialisedState;
+  StateProofFromReinit (reinit, proof);
+
+  initialised = true;
+  dirty = true;
+}
+
+const proto::StateProof&
+ChannelData::GetStateProof () const
+{
+  CHECK (initialised);
+  return proof;
+}
+
+const BoardState&
+ChannelData::GetLatestState () const
+{
+  CHECK (initialised);
+
+  const int n = proof.transitions_size ();
+  if (n > 0)
+    return proof.transitions (n - 1).new_state ().data ();
+
+  return proof.initial_state ().data ();
+}
+
+void
+ChannelData::SetStateProof (const proto::StateProof& p)
+{
+  CHECK (initialised);
+  dirty = true;
+  proof = p;
 }
 
 unsigned
@@ -142,7 +232,7 @@ ChannelsTable::Handle
 ChannelsTable::GetById (const uint256& id)
 {
   auto* stmt = game.PrepareStatement (R"(
-    SELECT `id`, `metadata`, `state`, `disputeHeight`
+    SELECT `id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`
       FROM `xayagame_game_channels`
       WHERE `id` = ?1
   )");
@@ -173,9 +263,7 @@ ChannelsTable::DeleteById (const uint256& id)
     DELETE FROM `xayagame_game_channels`
       WHERE `id` = ?1
   )");
-
   BindBlobUint256 (stmt, 1, id);
-
   CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
 }
 
@@ -183,7 +271,7 @@ sqlite3_stmt*
 ChannelsTable::QueryAll ()
 {
   return game.PrepareStatement (R"(
-    SELECT `id`, `metadata`, `state`, `disputeHeight`
+    SELECT `id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`
       FROM `xayagame_game_channels`
       ORDER BY `id`
   )");
@@ -193,7 +281,7 @@ sqlite3_stmt*
 ChannelsTable::QueryForDisputeHeight (const unsigned height)
 {
   auto* stmt = game.PrepareStatement (R"(
-    SELECT `id`, `metadata`, `state`, `disputeHeight`
+    SELECT `id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`
       FROM `xayagame_game_channels`
       WHERE `disputeHeight` <= ?1
       ORDER BY `id`

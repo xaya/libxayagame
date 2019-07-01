@@ -12,8 +12,12 @@ CREATE TABLE IF NOT EXISTS `xayagame_game_channels` (
   -- ChannelMetadata protocol buffer instance.
   `metadata` BLOB NOT NULL,
 
-  -- The latest board state that is put on-chain as encoded data.
-  `state` BLOB NOT NULL,
+  -- The encoded state at the last reinitialisation.
+  `reinit` BLOB NOT NULL,
+
+  -- The latest known state as a full serialised state proof.  Can be NULL
+  -- if there is no state beyond the reinit state.
+  `stateproof` BLOB NULL,
 
   -- If there is a dispute open (based on the current proven state), then
   -- the block height when it was filed.

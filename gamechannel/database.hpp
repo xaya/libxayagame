@@ -8,6 +8,7 @@
 #include "boardrules.hpp"
 
 #include "proto/metadata.pb.h"
+#include "proto/stateproof.pb.h"
 
 #include <xayautil/uint256.hpp>
 
@@ -40,8 +41,17 @@ private:
   /** The channel's metadata.  */
   proto::ChannelMetadata metadata;
 
-  /** The channel's current state.  */
-  BoardState state;
+  /** The channel's reinitialisation state.  */
+  BoardState reinit;
+
+  /** The latest state proof.  */
+  proto::StateProof proof;
+
+  /**
+   * Set to true if we have initialised metadata and reinit state.  This is
+   * false initially for newly constructed channels.
+   */
+  bool initialised;
 
   /** The dispute height or 0 if there is no dispute.  */
   unsigned disputeHeight;
@@ -68,7 +78,7 @@ public:
 
   /**
    * If this instance has been modified, the destructor updates the
-   * database to reflect the new state.
+   * database to reflect the changes not directly saved to the DB.
    */
   ~ChannelData ();
 
@@ -82,31 +92,20 @@ public:
     return id;
   }
 
-  const proto::ChannelMetadata&
-  GetMetadata () const
-  {
-    return metadata;
-  }
+  const proto::ChannelMetadata& GetMetadata () const;
 
-  proto::ChannelMetadata&
-  MutableMetadata ()
-  {
-    dirty = true;
-    return metadata;
-  }
+  const BoardState& GetReinitState () const;
 
-  const BoardState&
-  GetState () const
-  {
-    return state;
-  }
+  /**
+   * Reinitialises the channel.  This allows changes to the metadata, purges
+   * all archived states and sets the state to the given initial state.
+   */
+  void Reinitialise (const proto::ChannelMetadata& m,
+                     const BoardState& initialState);
 
-  void
-  SetState (const BoardState& s)
-  {
-    dirty = true;
-    state = s;
-  }
+  const proto::StateProof& GetStateProof () const;
+  const BoardState& GetLatestState () const;
+  void SetStateProof (const proto::StateProof& p);
 
   bool
   HasDispute () const

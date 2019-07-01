@@ -22,6 +22,8 @@ protected:
 
   ChannelsTable tbl;
 
+  proto::ChannelMetadata meta;
+
   ChannelDbTests ()
     : tbl(game)
   {}
@@ -30,20 +32,24 @@ protected:
 
 TEST_F (ChannelDbTests, Creating)
 {
+  meta.add_participants ()->set_name ("domob");
+
   auto h = tbl.CreateNew (SHA256::Hash ("id"));
-  h->MutableMetadata ().add_participants ()->set_name ("domob");
-  h->SetState ("state");
+  h->Reinitialise (meta, "state");
   h->SetDisputeHeight (1234);
   h.reset ();
 
-  tbl.CreateNew (SHA256::Hash ("default"));
+  h = tbl.CreateNew (SHA256::Hash ("default"));
+  h->Reinitialise (proto::ChannelMetadata (), "");
+  h.reset ();
 
   h = tbl.GetById (SHA256::Hash ("id"));
   ASSERT_NE (h, nullptr);
   EXPECT_EQ (h->GetId (), SHA256::Hash ("id"));
   EXPECT_EQ (h->GetMetadata ().participants_size (), 1);
   EXPECT_EQ (h->GetMetadata ().participants (0).name (), "domob");
-  EXPECT_EQ (h->GetState (), "state");
+  EXPECT_EQ (h->GetReinitState (), "state");
+  EXPECT_EQ (h->GetLatestState (), "state");
   ASSERT_TRUE (h->HasDispute ());
   EXPECT_EQ (h->GetDisputeHeight (), 1234);
 
@@ -51,15 +57,17 @@ TEST_F (ChannelDbTests, Creating)
   ASSERT_NE (h, nullptr);
   EXPECT_EQ (h->GetId (), SHA256::Hash ("default"));
   EXPECT_EQ (h->GetMetadata ().participants_size (), 0);
-  EXPECT_EQ (h->GetState (), "");
+  EXPECT_EQ (h->GetReinitState (), "");
+  EXPECT_EQ (h->GetLatestState (), "");
   EXPECT_FALSE (h->HasDispute ());
 }
 
-TEST_F (ChannelDbTests, Updating)
+TEST_F (ChannelDbTests, UpdatingWithReinit)
 {
+  meta.add_participants ();
+
   auto h = tbl.CreateNew (SHA256::Hash ("id"));
-  h->MutableMetadata ().add_participants ();
-  h->SetState ("state");
+  h->Reinitialise (meta, "state");
   h->SetDisputeHeight (1234);
   h.reset ();
 
@@ -67,12 +75,13 @@ TEST_F (ChannelDbTests, Updating)
   ASSERT_NE (h, nullptr);
   EXPECT_EQ (h->GetId (), SHA256::Hash ("id"));
   EXPECT_EQ (h->GetMetadata ().participants_size (), 1);
-  EXPECT_EQ (h->GetState (), "state");
+  EXPECT_EQ (h->GetReinitState (), "state");
+  EXPECT_EQ (h->GetLatestState (), "state");
   ASSERT_TRUE (h->HasDispute ());
   EXPECT_EQ (h->GetDisputeHeight (), 1234);
 
-  h->MutableMetadata ().Clear ();
-  h->SetState ("other state");
+  meta.Clear ();
+  h->Reinitialise (meta, "other state");
   h->ClearDispute ();
   h.reset ();
 
@@ -80,8 +89,33 @@ TEST_F (ChannelDbTests, Updating)
   ASSERT_NE (h, nullptr);
   EXPECT_EQ (h->GetId (), SHA256::Hash ("id"));
   EXPECT_EQ (h->GetMetadata ().participants_size (), 0);
-  EXPECT_EQ (h->GetState (), "other state");
+  EXPECT_EQ (h->GetReinitState (), "other state");
+  EXPECT_EQ (h->GetLatestState (), "other state");
   EXPECT_FALSE (h->HasDispute ());
+}
+
+TEST_F (ChannelDbTests, UpdatingWithStateProof)
+{
+  auto h = tbl.CreateNew (SHA256::Hash ("id"));
+  h->Reinitialise (meta, "state");
+  h.reset ();
+
+  h = tbl.GetById (SHA256::Hash ("id"));
+  ASSERT_NE (h, nullptr);
+  EXPECT_EQ (h->GetId (), SHA256::Hash ("id"));
+  EXPECT_EQ (h->GetReinitState (), "state");
+  EXPECT_EQ (h->GetLatestState (), "state");
+
+  proto::StateProof proof;
+  proof.add_transitions ()->mutable_new_state ()->set_data ("other state");
+  h->SetStateProof (proof);
+  h.reset ();
+
+  h = tbl.GetById (SHA256::Hash ("id"));
+  ASSERT_NE (h, nullptr);
+  EXPECT_EQ (h->GetId (), SHA256::Hash ("id"));
+  EXPECT_EQ (h->GetReinitState (), "state");
+  EXPECT_EQ (h->GetLatestState (), "other state");
 }
 
 TEST_F (ChannelDbTests, StringsWithNul)
@@ -93,9 +127,9 @@ TEST_F (ChannelDbTests, StringsWithNul)
   ASSERT_EQ (str2.size (), 3);
   ASSERT_EQ (str2[1], 0);
 
+  meta.add_participants ()->set_name (str1);
   auto h = tbl.CreateNew (SHA256::Hash ("id"));
-  h->MutableMetadata ().add_participants ()->set_name (str1);
-  h->SetState (str2);
+  h->Reinitialise (meta, str2);
   h.reset ();
 
   h = tbl.GetById (SHA256::Hash ("id"));
@@ -103,7 +137,8 @@ TEST_F (ChannelDbTests, StringsWithNul)
   EXPECT_EQ (h->GetId (), SHA256::Hash ("id"));
   EXPECT_EQ (h->GetMetadata ().participants_size (), 1);
   EXPECT_EQ (h->GetMetadata ().participants (0).name (), str1);
-  EXPECT_EQ (h->GetState (), str2);
+  EXPECT_EQ (h->GetReinitState (), str2);
+  EXPECT_EQ (h->GetLatestState (), str2);
 }
 
 TEST_F (ChannelDbTests, GetByUnknownId)
@@ -113,8 +148,8 @@ TEST_F (ChannelDbTests, GetByUnknownId)
 
 TEST_F (ChannelDbTests, DeleteById)
 {
-  tbl.CreateNew (SHA256::Hash ("first"))->SetState ("first state");
-  tbl.CreateNew (SHA256::Hash ("second"))->SetState ("second state");
+  tbl.CreateNew (SHA256::Hash ("first"))->Reinitialise (meta, "first state");
+  tbl.CreateNew (SHA256::Hash ("second"))->Reinitialise (meta, "second state");
 
   tbl.DeleteById (SHA256::Hash ("invalid"));
   tbl.DeleteById (SHA256::Hash ("first"));
@@ -122,7 +157,7 @@ TEST_F (ChannelDbTests, DeleteById)
   EXPECT_EQ (tbl.GetById (SHA256::Hash ("first")), nullptr);
   auto h = tbl.GetById (SHA256::Hash ("second"));
   ASSERT_NE (h, nullptr);
-  EXPECT_EQ (h->GetState (), "second state");
+  EXPECT_EQ (h->GetLatestState (), "second state");
 
   tbl.DeleteById (SHA256::Hash ("second"));
   EXPECT_EQ (tbl.GetById (SHA256::Hash ("first")), nullptr);
@@ -135,8 +170,8 @@ TEST_F (ChannelDbTests, QueryAll)
   const uint256 id2 = SHA256::Hash ("second");
   ASSERT_LT (id2.ToHex (), id1.ToHex ());
 
-  tbl.CreateNew (id1);
-  tbl.CreateNew (id2);
+  tbl.CreateNew (id1)->Reinitialise (meta, "foo");
+  tbl.CreateNew (id2)->Reinitialise (meta, "bar");
 
   auto* stmt = tbl.QueryAll ();
   ASSERT_EQ (sqlite3_step (stmt), SQLITE_ROW);
@@ -154,10 +189,25 @@ TEST_F (ChannelDbTests, QueryForDisputeHeight)
   const uint256 id4 = SHA256::Hash ("fourth");
   ASSERT_LT (id2.ToHex (), id1.ToHex ());
 
-  tbl.CreateNew (id1)->SetDisputeHeight (10);
-  tbl.CreateNew (id2)->SetDisputeHeight (15);
-  tbl.CreateNew (id3)->SetDisputeHeight (16);
-  tbl.CreateNew (id4)->ClearDispute ();
+  auto h = tbl.CreateNew (id1);
+  h->Reinitialise (meta, "");
+  h->SetDisputeHeight (10);
+  h.reset ();
+
+  h = tbl.CreateNew (id2);
+  h->Reinitialise (meta, "");
+  h->SetDisputeHeight (15);
+  h.reset ();
+
+  h = tbl.CreateNew (id3);
+  h->Reinitialise (meta, "");
+  h->SetDisputeHeight (16);
+  h.reset ();
+
+  h = tbl.CreateNew (id4);
+  h->Reinitialise (meta, "");
+  h->ClearDispute ();
+  h.reset ();
 
   auto* stmt = tbl.QueryForDisputeHeight (15);
   ASSERT_EQ (sqlite3_step (stmt), SQLITE_ROW);

@@ -30,7 +30,7 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
 
   const auto& id = ch.GetId ();
   const auto& meta = ch.GetMetadata ();
-  const auto& onChainState = ch.GetState ();
+  const auto& onChainState = ch.GetLatestState ();
   const auto& rules = GetBoardRules ();
 
   BoardState provenState;
@@ -60,7 +60,7 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
       VLOG (1)
           << "Disputing on-chain state at " << onChainCnt
           << " with new state at turn count " << provenCnt;
-      ch.SetState (provenState);
+      ch.SetStateProof (proof);
       ch.SetDisputeHeight (height);
       return true;
     }
@@ -101,7 +101,7 @@ ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
 {
   const auto& id = ch.GetId ();
   const auto& meta = ch.GetMetadata ();
-  const auto& onChainState = ch.GetState ();
+  const auto& onChainState = ch.GetLatestState ();
   const auto& rules = GetBoardRules ();
 
   BoardState provenState;
@@ -128,7 +128,7 @@ ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
     }
 
   VLOG (1) << "Resolution is valid, updating state...";
-  ch.SetState (provenState);
+  ch.SetStateProof (proof);
   ch.ClearDispute ();
   return true;
 }

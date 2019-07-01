@@ -31,10 +31,10 @@ ChannelToGameStateJson (const ChannelData& ch, const BoardRules& r)
   res["meta"] = meta;
 
   Json::Value state(Json::objectValue);
-  auto parsed = r.ParseState (id, metaPb, ch.GetState ());
+  auto parsed = r.ParseState (id, metaPb, ch.GetLatestState ());
   CHECK (parsed != nullptr)
       << "Channel " << id.ToHex () << " has invalid state on chain: "
-      << ch.GetState ();
+      << ch.GetLatestState ();
   state["data"] = parsed->ToJson ();
 
   state["whoseturn"] = Json::Value ();

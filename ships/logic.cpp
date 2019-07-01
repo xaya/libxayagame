@@ -148,10 +148,11 @@ ShipsLogic::HandleCreateChannel (const Json::Value& obj,
   CHECK (h == nullptr) << "Already have channel with ID " << txid.ToHex ();
 
   h = tbl.CreateNew (txid);
-  auto* p = h->MutableMetadata ().add_participants ();
+  xaya::proto::ChannelMetadata meta;
+  auto* p = meta.add_participants ();
   p->set_name (name);
   p->set_address (addr);
-  CHECK_EQ (h->GetMetadata ().participants_size (), 1);
+  h->Reinitialise (meta, "");
 }
 
 namespace
@@ -232,14 +233,15 @@ ShipsLogic::HandleJoinChannel (const Json::Value& obj, const std::string& name)
       << "Adding " << name << " to channel " << h->GetId ().ToHex ()
       << " with address " << addr;
 
-  auto* p = h->MutableMetadata ().add_participants ();
+  xaya::proto::ChannelMetadata newMeta = meta;
+  auto* p = newMeta.add_participants ();
   p->set_name (name);
   p->set_address (addr);
-  CHECK_EQ (h->GetMetadata ().participants_size (), 2);
+  CHECK_EQ (newMeta.participants_size (), 2);
 
   xaya::BoardState state;
   CHECK (InitialBoardState ().SerializeToString (&state));
-  h->SetState (state);
+  h->Reinitialise (newMeta, state);
 }
 
 void
@@ -440,10 +442,10 @@ ShipsLogic::ProcessExpiredDisputes (const unsigned height)
          two participants, a valid state and is not in a no-turn state.  */
       CHECK_EQ (meta.participants_size (), 2);
 
-      auto state = boardRules.ParseState (id, meta, h->GetState ());
+      auto state = boardRules.ParseState (id, meta, h->GetLatestState ());
       CHECK (state != nullptr)
           << "Invalid on-chain state for disputed channel " << id.ToHex ()
-          << ": " << h->GetState ();
+          << ": " << h->GetLatestState ();
       const int loser = state->WhoseTurn ();
       CHECK_NE (loser, xaya::ParsedBoardState::NO_TURN);
       CHECK_GE (loser, 0);

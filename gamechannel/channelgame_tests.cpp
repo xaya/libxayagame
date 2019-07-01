@@ -56,22 +56,15 @@ protected:
   }
 
   /**
-   * Creates or retrieves a handle for a channel based on a given "name".
-   * The channel's ID is derived from the name, so that multiple channels
-   * can be used in tests as needed.  The channel has its metadata set to
-   * the "meta" default instance, else no changes are made.
+   * Creates a new test channel, initialised to the given state and
+   * with our metadata.
    */
   ChannelsTable::Handle
-  GetChannel (const std::string& name)
+  CreateChannel (const std::string& name, const BoardState& initial)
   {
     const uint256 id = SHA256::Hash (name);
-
-    auto h = tbl.GetById (id);
-    if (h == nullptr)
-      h = tbl.CreateNew (id);
-
-    h->MutableMetadata () = meta;
-
+    auto h = tbl.CreateNew (id);
+    h->Reinitialise (meta, initial);
     return h;
   }
 
@@ -83,8 +76,7 @@ using DisputeTests = ChannelGameTests;
 
 TEST_F (DisputeTests, InvalidStateProof)
 {
-  auto ch = GetChannel ("test");
-  ch->SetState ("0 1");
+  auto ch = CreateChannel ("test", "0 1");
 
   ASSERT_FALSE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
     initial_state:
@@ -93,14 +85,13 @@ TEST_F (DisputeTests, InvalidStateProof)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "0 1");
+  EXPECT_EQ (ch->GetLatestState (), "0 1");
   EXPECT_FALSE (ch->HasDispute ());
 }
 
 TEST_F (DisputeTests, InvalidStateClaimed)
 {
-  auto ch = GetChannel ("test");
-  ch->SetState ("0 1");
+  auto ch = CreateChannel ("test", "0 1");
 
   ASSERT_FALSE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
     initial_state:
@@ -111,14 +102,13 @@ TEST_F (DisputeTests, InvalidStateClaimed)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "0 1");
+  EXPECT_EQ (ch->GetLatestState (), "0 1");
   EXPECT_FALSE (ch->HasDispute ());
 }
 
 TEST_F (DisputeTests, EarlierTurn)
 {
-  auto ch = GetChannel ("test");
-  ch->SetState ("10 5");
+  auto ch = CreateChannel ("test", "10 5");
 
   ASSERT_FALSE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
     initial_state:
@@ -129,14 +119,13 @@ TEST_F (DisputeTests, EarlierTurn)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "10 5");
+  EXPECT_EQ (ch->GetLatestState (), "10 5");
   EXPECT_FALSE (ch->HasDispute ());
 }
 
 TEST_F (DisputeTests, SameTurnAndDifferentState)
 {
-  auto ch = GetChannel ("test");
-  ch->SetState ("10 5");
+  auto ch = CreateChannel ("test", "10 5");
 
   ASSERT_FALSE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
     initial_state:
@@ -147,15 +136,14 @@ TEST_F (DisputeTests, SameTurnAndDifferentState)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "10 5");
+  EXPECT_EQ (ch->GetLatestState (), "10 5");
   EXPECT_FALSE (ch->HasDispute ());
 }
 
 TEST_F (DisputeTests, SameTurnAndStatePreviousDispute)
 {
-  auto ch = GetChannel ("test");
+  auto ch = CreateChannel ("test", "10 5");
   ch->SetDisputeHeight (50);
-  ch->SetState ("10 5");
 
   ASSERT_FALSE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
     initial_state:
@@ -166,15 +154,14 @@ TEST_F (DisputeTests, SameTurnAndStatePreviousDispute)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "10 5");
+  EXPECT_EQ (ch->GetLatestState (), "10 5");
   ASSERT_TRUE (ch->HasDispute ());
   EXPECT_EQ (ch->GetDisputeHeight (), 50);
 }
 
 TEST_F (DisputeTests, NoTurnState)
 {
-  auto ch = GetChannel ("test");
-  ch->SetState ("100 5");
+  auto ch = CreateChannel ("test", "100 5");
 
   ASSERT_FALSE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
     initial_state:
@@ -185,14 +172,13 @@ TEST_F (DisputeTests, NoTurnState)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "100 5");
+  EXPECT_EQ (ch->GetLatestState (), "100 5");
   EXPECT_FALSE (ch->HasDispute ());
 }
 
 TEST_F (DisputeTests, SettingValidDispute)
 {
-  auto ch = GetChannel ("test");
-  ch->SetState ("10 5");
+  auto ch = CreateChannel ("test", "10 5");
 
   ASSERT_TRUE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
     initial_state:
@@ -203,15 +189,14 @@ TEST_F (DisputeTests, SettingValidDispute)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "20 6");
+  EXPECT_EQ (ch->GetLatestState (), "20 6");
   ASSERT_TRUE (ch->HasDispute ());
   EXPECT_EQ (ch->GetDisputeHeight (), 100);
 }
 
 TEST_F (DisputeTests, SameTurnAndStatePreviousResolution)
 {
-  auto ch = GetChannel ("test");
-  ch->SetState ("10 5");
+  auto ch = CreateChannel ("test", "10 5");
 
   ASSERT_TRUE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
     initial_state:
@@ -222,16 +207,15 @@ TEST_F (DisputeTests, SameTurnAndStatePreviousResolution)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "10 5");
+  EXPECT_EQ (ch->GetLatestState (), "10 5");
   ASSERT_TRUE (ch->HasDispute ());
   EXPECT_EQ (ch->GetDisputeHeight (), 100);
 }
 
 TEST_F (DisputeTests, UpdateAtSameHeight)
 {
-  auto ch = GetChannel ("test");
+  auto ch = CreateChannel ("test", "10 5");
   ch->SetDisputeHeight (100);
-  ch->SetState ("10 5");
 
   ASSERT_TRUE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
     initial_state:
@@ -242,7 +226,7 @@ TEST_F (DisputeTests, UpdateAtSameHeight)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "20 6");
+  EXPECT_EQ (ch->GetLatestState (), "20 6");
   ASSERT_TRUE (ch->HasDispute ());
   EXPECT_EQ (ch->GetDisputeHeight (), 100);
 }
@@ -253,9 +237,8 @@ using ResolutionTests = ChannelGameTests;
 
 TEST_F (ResolutionTests, InvalidStateProof)
 {
-  auto ch = GetChannel ("test");
+  auto ch = CreateChannel ("test", "0 1");
   ch->SetDisputeHeight (100);
-  ch->SetState ("0 1");
 
   ASSERT_FALSE (game.ProcessResolution (*ch, ParseStateProof (R"(
     initial_state:
@@ -264,16 +247,15 @@ TEST_F (ResolutionTests, InvalidStateProof)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "0 1");
+  EXPECT_EQ (ch->GetLatestState (), "0 1");
   ASSERT_TRUE (ch->HasDispute ());
   EXPECT_EQ (ch->GetDisputeHeight (), 100);
 }
 
 TEST_F (ResolutionTests, InvalidStateClaimed)
 {
-  auto ch = GetChannel ("test");
+  auto ch = CreateChannel ("test", "0 1");
   ch->SetDisputeHeight (100);
-  ch->SetState ("0 1");
 
   ASSERT_FALSE (game.ProcessResolution (*ch, ParseStateProof (R"(
     initial_state:
@@ -284,16 +266,15 @@ TEST_F (ResolutionTests, InvalidStateClaimed)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "0 1");
+  EXPECT_EQ (ch->GetLatestState (), "0 1");
   ASSERT_TRUE (ch->HasDispute ());
   EXPECT_EQ (ch->GetDisputeHeight (), 100);
 }
 
 TEST_F (ResolutionTests, NoLaterTurn)
 {
-  auto ch = GetChannel ("test");
+  auto ch = CreateChannel ("test", "10 5");
   ch->SetDisputeHeight (100);
-  ch->SetState ("10 5");
 
   ASSERT_FALSE (game.ProcessResolution (*ch, ParseStateProof (R"(
     initial_state:
@@ -304,16 +285,15 @@ TEST_F (ResolutionTests, NoLaterTurn)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "10 5");
+  EXPECT_EQ (ch->GetLatestState (), "10 5");
   ASSERT_TRUE (ch->HasDispute ());
   EXPECT_EQ (ch->GetDisputeHeight (), 100);
 }
 
 TEST_F (ResolutionTests, Valid)
 {
-  auto ch = GetChannel ("test");
+  auto ch = CreateChannel ("test", "10 5");
   ch->SetDisputeHeight (100);
-  ch->SetState ("10 5");
 
   ASSERT_TRUE (game.ProcessResolution (*ch, ParseStateProof (R"(
     initial_state:
@@ -324,15 +304,14 @@ TEST_F (ResolutionTests, Valid)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "20 6");
+  EXPECT_EQ (ch->GetLatestState (), "20 6");
   EXPECT_FALSE (ch->HasDispute ());
 }
 
 TEST_F (ResolutionTests, ResolvesToNoTurnState)
 {
-  auto ch = GetChannel ("test");
+  auto ch = CreateChannel ("test", "10 5");
   ch->SetDisputeHeight (100);
-  ch->SetState ("10 5");
 
   ASSERT_TRUE (game.ProcessResolution (*ch, ParseStateProof (R"(
     initial_state:
@@ -343,7 +322,7 @@ TEST_F (ResolutionTests, ResolvesToNoTurnState)
       }
   )")));
 
-  EXPECT_EQ (ch->GetState (), "100 6");
+  EXPECT_EQ (ch->GetLatestState (), "100 6");
   EXPECT_FALSE (ch->HasDispute ());
 }
 

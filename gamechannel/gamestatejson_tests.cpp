@@ -11,9 +11,13 @@
 
 #include <gtest/gtest.h>
 
+#include <google/protobuf/text_format.h>
+
 #include <glog/logging.h>
 
 #include <sstream>
+
+using google::protobuf::TextFormat;
 
 namespace xaya
 {
@@ -47,25 +51,28 @@ protected:
   GameStateJsonTests ()
     : tbl(game)
   {
+    proto::ChannelMetadata meta;
+    CHECK (TextFormat::ParseFromString (R"(
+      participants:
+        {
+          name: "foo"
+          address: "addr 1"
+        }
+      participants:
+        {
+          name: "bar"
+          address: "addr 2"
+        }
+    )", &meta));
+
     auto h = tbl.CreateNew (id1);
-    auto* p = h->MutableMetadata ().add_participants ();
-    p->set_name ("foo");
-    p->set_address ("addr 1");
-    p = h->MutableMetadata ().add_participants ();
-    p->set_name ("bar");
-    p->set_address ("addr 2");
-    h->SetState ("100 2");
+    h->Reinitialise (meta, "100 2");
     h.reset ();
 
     h = tbl.CreateNew (id2);
-    p = h->MutableMetadata ().add_participants ();
-    p->set_name ("foo");
-    p->set_address ("addr 1");
-    p = h->MutableMetadata ().add_participants ();
-    p->set_name ("baz");
-    p->set_address ("addr 2");
-    h->SetState ("40 10");
+    meta.mutable_participants (1)->set_name ("baz");
     h->SetDisputeHeight (55);
+    h->Reinitialise (meta, "40 10");
     h.reset ();
   }
 
@@ -122,16 +129,6 @@ TEST_F (GameStateJsonTests, WithDispute)
 
   auto h = tbl.GetById (id2);
   EXPECT_EQ (ChannelToGameStateJson (*h, game.rules), expected);
-}
-
-TEST_F (GameStateJsonTests, InvalidState)
-{
-  const auto id = xaya::SHA256::Hash ("third channel");
-  auto h = tbl.CreateNew (id);
-  h->SetState ("invalid state");
-
-  EXPECT_DEATH (ChannelToGameStateJson (*h, game.rules),
-                "invalid state on chain");
 }
 
 TEST_F (GameStateJsonTests, AllChannels)
