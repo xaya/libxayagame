@@ -96,9 +96,20 @@ TEST_F (GameStateJsonTests, OneParticipantChannel)
     {
       "meta":
         {
+          "reinit": "",
           "participants": [{"name": "only me", "address": "addr"}]
         },
       "state":
+        {
+          "data":
+            {
+              "proto": "",
+              "phase": "single participant"
+            },
+          "whoseturn": null,
+          "turncount": 0
+        },
+      "reinit":
         {
           "data":
             {
@@ -112,7 +123,10 @@ TEST_F (GameStateJsonTests, OneParticipantChannel)
   )");
   expected["channels"][id.ToHex ()]["id"] = id.ToHex ();
 
-  EXPECT_EQ (gsj.GetFullJson (), expected);
+  auto actual = gsj.GetFullJson ();
+  actual["channels"][id.ToHex ()]["meta"].removeMember ("proto");
+  actual["channels"][id.ToHex ()]["state"].removeMember ("proof");
+  EXPECT_EQ (actual, expected);
 }
 
 TEST_F (GameStateJsonTests, TwoParticipantChannel)
