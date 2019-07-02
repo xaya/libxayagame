@@ -7,6 +7,8 @@
 #include "schema.hpp"
 #include "stateproof.hpp"
 
+#include <xayautil/hash.hpp>
+
 #include <glog/logging.h>
 
 namespace xaya
@@ -131,6 +133,16 @@ ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
   ch.SetStateProof (proof);
   ch.ClearDispute ();
   return true;
+}
+
+void
+UpdateMetadataReinit (const uint256& txid, proto::ChannelMetadata& meta)
+{
+  SHA256 hasher;
+  hasher << meta.reinit ();
+  hasher << txid;
+
+  meta.set_reinit (hasher.Finalise ().GetBinaryString ());
 }
 
 } // namespace xaya

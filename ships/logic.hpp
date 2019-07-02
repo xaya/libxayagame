@@ -48,7 +48,8 @@ private:
   /**
    * Tries to process a "join channel" move.
    */
-  void HandleJoinChannel (const Json::Value& obj, const std::string& name);
+  void HandleJoinChannel (const Json::Value& obj, const std::string& name,
+                          const xaya::uint256& txid);
 
   /**
    * Tries to process an "abort channel" move.

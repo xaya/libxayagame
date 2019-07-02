@@ -172,6 +172,10 @@ ChannelData::Reinitialise (const proto::ChannelMetadata& m,
       << "Reinitialising channel " << id.ToHex ()
       << " to new state: " << initialisedState;
 
+  if (initialised)
+    CHECK_NE (metadata.reinit (), m.reinit ())
+        << "Metadata reinitialisation ID is not changed in reinit of channel";
+
   metadata = m;
   reinit = initialisedState;
   StateProofFromReinit (reinit, proof);

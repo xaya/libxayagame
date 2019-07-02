@@ -8,9 +8,11 @@
 #include "boardrules.hpp"
 #include "database.hpp"
 
+#include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
 
 #include <xayagame/sqlitegame.hpp>
+#include <xayautil/uint256.hpp>
 
 namespace xaya
 {
@@ -74,6 +76,15 @@ public:
   using SQLiteGame::SQLiteGame;
 
 };
+
+/**
+ * Updates the reinitialisation ID in the given metadata proto for an update
+ * done by the passed-in txid.  This is one way to update the reinit IDs and
+ * make sure that they yield a unique sequence that does not allow for any
+ * replay attacks.  It need not be used by games, though, in case they have
+ * a more suitable update mechanism.
+ */
+void UpdateMetadataReinit (const uint256& txid, proto::ChannelMetadata& meta);
 
 } // namespace xaya
 

@@ -75,12 +75,14 @@ TEST_F (ChannelDbTests, UpdatingWithReinit)
   ASSERT_NE (h, nullptr);
   EXPECT_EQ (h->GetId (), SHA256::Hash ("id"));
   EXPECT_EQ (h->GetMetadata ().participants_size (), 1);
+  EXPECT_EQ (h->GetMetadata ().reinit (), "");
   EXPECT_EQ (h->GetReinitState (), "state");
   EXPECT_EQ (h->GetLatestState (), "state");
   ASSERT_TRUE (h->HasDispute ());
   EXPECT_EQ (h->GetDisputeHeight (), 1234);
 
   meta.Clear ();
+  meta.set_reinit ("init 2");
   h->Reinitialise (meta, "other state");
   h->ClearDispute ();
   h.reset ();
@@ -89,6 +91,7 @@ TEST_F (ChannelDbTests, UpdatingWithReinit)
   ASSERT_NE (h, nullptr);
   EXPECT_EQ (h->GetId (), SHA256::Hash ("id"));
   EXPECT_EQ (h->GetMetadata ().participants_size (), 0);
+  EXPECT_EQ (h->GetMetadata ().reinit (), "init 2");
   EXPECT_EQ (h->GetReinitState (), "other state");
   EXPECT_EQ (h->GetLatestState (), "other state");
   EXPECT_FALSE (h->HasDispute ());

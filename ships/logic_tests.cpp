@@ -700,6 +700,7 @@ TEST_F (CloseChannelTests, WrongNumberOfParticipants)
   auto h = ExpectChannel (channelId);
   xaya::proto::ChannelMetadata meta = h->GetMetadata ();
   meta.mutable_participants ()->RemoveLast ();
+  meta.set_reinit ("init 2");
   h->Reinitialise (meta, "");
   h.reset ();
 
@@ -893,6 +894,7 @@ TEST_F (DisputeResolutionTests, WrongNumberOfParticipants)
   auto h = ExpectChannel (channelId);
   xaya::proto::ChannelMetadata meta = h->GetMetadata ();
   meta.mutable_participants ()->RemoveLast ();
+  meta.set_reinit ("init 2");
   h->Reinitialise (meta, h->GetLatestState ());
   h.reset ();
 

@@ -110,7 +110,7 @@ ShipsLogic::UpdateState (sqlite3* db, const Json::Value& blockData)
         }
 
       HandleCreateChannel (data["c"], name, txid);
-      HandleJoinChannel (data["j"], name);
+      HandleJoinChannel (data["j"], name, txid);
       HandleAbortChannel (data["a"], name);
       HandleCloseChannel (data["w"]);
       HandleDisputeResolution (data["d"], height, true);
@@ -194,7 +194,8 @@ RetrieveChannelFromMove (const Json::Value& obj, xaya::ChannelsTable& tbl)
 } // anonymous namespace
 
 void
-ShipsLogic::HandleJoinChannel (const Json::Value& obj, const std::string& name)
+ShipsLogic::HandleJoinChannel (const Json::Value& obj, const std::string& name,
+                               const xaya::uint256& txid)
 {
   if (!obj.isObject ())
     return;
@@ -234,6 +235,7 @@ ShipsLogic::HandleJoinChannel (const Json::Value& obj, const std::string& name)
       << " with address " << addr;
 
   xaya::proto::ChannelMetadata newMeta = meta;
+  xaya::UpdateMetadataReinit (txid, newMeta);
   auto* p = newMeta.add_participants ();
   p->set_name (name);
   p->set_address (addr);

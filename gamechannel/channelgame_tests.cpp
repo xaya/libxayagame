@@ -328,5 +328,28 @@ TEST_F (ResolutionTests, ResolvesToNoTurnState)
 
 /* ************************************************************************** */
 
+TEST (UpdateMetadataReinitTests, Works)
+{
+  proto::ChannelMetadata meta;
+  const std::string reinit1 = meta.reinit ();
+
+  UpdateMetadataReinit (SHA256::Hash ("foo"), meta);
+  const std::string reinit2 = meta.reinit ();
+
+  UpdateMetadataReinit (SHA256::Hash ("bar"), meta);
+  const std::string reinit3 = meta.reinit ();
+
+  EXPECT_NE (reinit1, reinit2);
+  EXPECT_NE (reinit1, reinit3);
+  EXPECT_NE (reinit2, reinit3);
+
+  uint256 val;
+  val.FromBlob (reinterpret_cast<const unsigned char*> (reinit2.data ()));
+  EXPECT_EQ (val.ToHex (),
+      "c7ade88fc7a21498a6a5e5c385e1f68bed822b72aa63c4a9a48a02c2466ee29e");
+}
+
+/* ************************************************************************** */
+
 } // anonymous namespace
 } // namespace xaya
