@@ -21,8 +21,8 @@ message SignedData
    * is the "signmessage" output of Xaya Core, but base64-decoded to binary.
    *
    * For the message, the channel's ID (uint256) is concatenated with
-   * a string describing what the data is (e.g. "state"), a nul byte
-   * and finally the value of "data".
+   * the base64-encoded reinit ID, a nul byte, a string describing what the
+   * data is (e.g. "state"), another nul byte and finally the value of "data".
    *
    * All this is hashed with SHA-256 and then converted to a lower-case
    * hex string, which is the "message" for "signmessage".

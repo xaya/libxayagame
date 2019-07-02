@@ -17,15 +17,18 @@ namespace xaya
 
 std::string
 GetChannelSignatureMessage (const uint256& channelId,
+                            const proto::ChannelMetadata& meta,
                             const std::string& topic,
                             const std::string& data)
 {
   CHECK_EQ (topic.find ('\0'), std::string::npos)
       << "Topic string contains nul character";
+  const std::string nulByte("\0", 1);
 
   SHA256 hasher;
   hasher << channelId;
-  hasher << topic << std::string ("\0", 1);
+  hasher << EncodeBase64 (meta.reinit ()) << nulByte;
+  hasher << topic << nulByte;
   hasher << data;
 
   return hasher.Finalise ().ToHex ();
@@ -38,7 +41,7 @@ VerifyParticipantSignatures (XayaRpcClient& rpc,
                              const std::string& topic,
                              const proto::SignedData& data)
 {
-  const std::string msg = GetChannelSignatureMessage (channelId, topic,
+  const std::string msg = GetChannelSignatureMessage (channelId, meta, topic,
                                                       data.data ());
 
   std::set<std::string> addresses;

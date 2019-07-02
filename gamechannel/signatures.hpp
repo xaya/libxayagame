@@ -28,6 +28,7 @@ namespace xaya
  * values can be used for game-specific needs.
  */
 std::string GetChannelSignatureMessage (const uint256& channelId,
+                                        const proto::ChannelMetadata& meta,
                                         const std::string& topic,
                                         const std::string& data);
 

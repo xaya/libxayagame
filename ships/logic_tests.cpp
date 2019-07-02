@@ -528,6 +528,8 @@ class CloseChannelTests : public StateUpdateTests
 
 protected:
 
+  xaya::proto::ChannelMetadata meta;
+
   /**
    * ID of the channel closed in tests (or not).  This channel is set up
    * with players "name 0" and "name 1".
@@ -542,7 +544,6 @@ protected:
 
   CloseChannelTests ()
   {
-    xaya::proto::ChannelMetadata meta;
     CHECK (TextFormat::ParseFromString (R"(
       participants:
         {
@@ -582,7 +583,8 @@ protected:
     CHECK (stmt.SerializeToString (&data));
 
     const std::string hashed
-        = xaya::GetChannelSignatureMessage (channelId, "winnerstatement", data);
+        = xaya::GetChannelSignatureMessage (channelId, meta,
+                                            "winnerstatement", data);
     EXPECT_CALL (mockXayaServer, verifymessage ("", hashed,
                                                 xaya::EncodeBase64 (sgn)))
         .WillOnce (Return (res));

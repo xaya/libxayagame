@@ -207,6 +207,7 @@ TestGameFixture::ValidSignature (const std::string& sgn,
 
 void
 TestGameFixture::ExpectSignature (const uint256& channelId,
+                                  const proto::ChannelMetadata& meta,
                                   const std::string& topic,
                                   const std::string& msg,
                                   const std::string& sgn,
@@ -216,7 +217,8 @@ TestGameFixture::ExpectSignature (const uint256& channelId,
   res["valid"] = true;
   res["address"] = addr;
 
-  const std::string hashed = GetChannelSignatureMessage (channelId, topic, msg);
+  const std::string hashed
+      = GetChannelSignatureMessage (channelId, meta, topic, msg);
   EXPECT_CALL (mockXayaServer, verifymessage ("", hashed, EncodeBase64 (sgn)))
       .WillOnce (Return (res));
 }

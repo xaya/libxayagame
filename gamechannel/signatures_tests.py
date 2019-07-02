@@ -6,7 +6,7 @@
 
 import signatures
 
-from proto import signatures_pb2
+from proto import (metadata_pb2, signatures_pb2)
 
 from google.protobuf import text_format
 
@@ -22,9 +22,12 @@ class SignaturesTest (unittest.TestCase):
     h.update ("channel id")
     channelId = h.digest ()
 
+    meta = metadata_pb2.ChannelMetadata ()
+    meta.reinit = "re\0init"
+
     # This is logged by the C++ signatures test.
-    msg = "1fbc6c2e13b35e90f55b913576ae9f519134d185a20325c312d7dd5eb63b8156"
-    actual = signatures.getChannelMessage (channelId, "topic", "foo\0bar")
+    msg = "917ad3494da16c7728ef5f8f44f2285d7d7fd3ed7b78278be440fa644927d5cc"
+    actual = signatures.getChannelMessage (channelId, meta, "topic", "foo\0bar")
     self.assertEqual (actual, msg)
 
   def testCreateForChannel (self):
@@ -46,16 +49,19 @@ class SignaturesTest (unittest.TestCase):
             return base64.b64encode ("sgn %d" % i)
         raise AssertionError ("Invalid test address: %s" % addr)
 
+    meta = metadata_pb2.ChannelMetadata ()
+    text_format.Parse ("""
+      reinit: "reinit"
+      participants: { address: "addr 2" }
+      participants: { address: "other address" }
+    """, meta)
+
     rpc = FakeRpc ()
     channel = {
       "id": "ab" * 32,
       "meta":
         {
-          "participants":
-            [
-              {"address": "addr 2"},
-              {"address": "other address"},
-            ],
+          "proto": base64.b64encode (meta.SerializeToString ()),
         },
     }
 

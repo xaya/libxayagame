@@ -6,13 +6,13 @@
 Utility methods for working with SignedData objects from game channels.
 """
 
-from proto import signatures_pb2
+from proto import (metadata_pb2, signatures_pb2)
 
 import base64
 import hashlib
 
 
-def getChannelMessage (channelId, topic, data):
+def getChannelMessage (channelId, meta, topic, data):
   """
   Returns the raw message that is signed (as string, using signmessage)
   for signing the given data in a channel with the given ID and topic.
@@ -25,9 +25,10 @@ def getChannelMessage (channelId, topic, data):
   hasher = hashlib.sha256 ()
 
   hasher.update (channelId)
+  hasher.update (base64.b64encode (meta.reinit))
+  hasher.update ("\0")
   hasher.update (topic)
   hasher.update ("\0")
-
   hasher.update (data)
 
   return hasher.digest ().encode ("hex")
@@ -41,23 +42,25 @@ def createForChannel (rpc, channel, topic, data):
 
   channel should be an object similar to how game channels are represented
   in the game state JSON.  In particular, it should have an "id" field with
-  the channel ID as hex, and meta.participants with the participants and their
-  signing addresses.
+  the channel ID as hex, and meta.proto should be the base64-encoded serialised
+  metadata proto.
   """
 
   res = signatures_pb2.SignedData ()
   res.data = data
 
   channelId = channel["id"].decode ("hex")
-  msg = getChannelMessage (channelId, topic, data)
+  meta = metadata_pb2.ChannelMetadata ()
+  meta.ParseFromString (base64.b64decode (channel["meta"]["proto"]))
+  msg = getChannelMessage (channelId, meta, topic, data)
 
-  for p in channel["meta"]["participants"]:
-    valid = rpc.validateaddress (p["address"])
+  for p in meta.participants:
+    valid = rpc.validateaddress (p.address)
     if not valid["isvalid"]:
       continue
-    info = rpc.getaddressinfo (p["address"])
+    info = rpc.getaddressinfo (p.address)
     if info["ismine"]:
-      sgn = rpc.signmessage (p["address"], msg)
+      sgn = rpc.signmessage (p.address, msg)
       res.signatures.append (base64.b64decode (sgn))
 
   return res

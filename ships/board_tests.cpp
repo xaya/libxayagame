@@ -107,13 +107,18 @@ protected:
 
   BoardTests ()
   {
-    auto* p = meta.add_participants ();
-    p->set_name ("alice");
-    p->set_address ("addr 0");
-
-    p = meta.add_participants ();
-    p->set_name ("bob");
-    p->set_address ("addr 1");
+    CHECK (TextFormat::ParseFromString (R"(
+      participants:
+        {
+          name: "alice"
+          address: "addr 0"
+        }
+      participants:
+        {
+          name: "bob"
+          address: "addr 1"
+        }
+    )", &meta));
   }
 
   /**
@@ -575,7 +580,8 @@ protected:
     res["address"] = addr;
 
     const std::string hashed
-        = xaya::GetChannelSignatureMessage (channelId, "winnerstatement", data);
+        = xaya::GetChannelSignatureMessage (channelId, meta,
+                                            "winnerstatement", data);
     EXPECT_CALL (mockXayaServer, verifymessage ("", hashed,
                                                 xaya::EncodeBase64 (sgn)))
         .WillOnce (Return (res));
