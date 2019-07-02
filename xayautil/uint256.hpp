@@ -68,6 +68,12 @@ public:
   void FromBlob (const unsigned char* blob);
 
   /**
+   * Returns a binary string representing this as raw bytes (i.e. GetBlob()
+   * as std::string).
+   */
+  std::string GetBinaryString () const;
+
+  /**
    * Checks if this number is all-zeros, which is used as "null" value.
    */
   bool IsNull () const;

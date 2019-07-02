@@ -128,7 +128,9 @@ protected:
    * and signature (both as binary, they will be hashed / base64-encoded).
    * Returns a valid response for the given address.
    */
-  void ExpectSignature (const uint256& channelId, const std::string& topic,
+  void ExpectSignature (const uint256& channelId,
+                        const proto::ChannelMetadata& meta,
+                        const std::string& topic,
                         const std::string& msg, const std::string& sgn,
                         const std::string& addr);
 

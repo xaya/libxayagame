@@ -37,11 +37,7 @@ CheckHashValue (const xaya::uint256& actual, const std::string& expected)
       return false;
     }
 
-  const auto* bytes = reinterpret_cast<const unsigned char*> (expected.data ());
-  xaya::uint256 expectedValue;
-  expectedValue.FromBlob (bytes);
-
-  return actual == expectedValue;
+  return actual.GetBinaryString () == expected;
 }
 
 } // anonymous namespace

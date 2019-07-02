@@ -75,13 +75,15 @@ TEST_F (GameStateJsonTests, OneParticipantChannel)
 {
   const auto id = xaya::SHA256::Hash ("channel");
   auto h = tbl.CreateNew (id);
+  xaya::proto::ChannelMetadata meta;
   CHECK (TextFormat::ParseFromString (R"(
     participants:
       {
         name: "only me"
         address: "addr"
       }
-  )", &h->MutableMetadata ()));
+  )", &meta));
+  h->Reinitialise (meta, "");
   h.reset ();
 
   auto expected = ParseJson (R"(
@@ -94,9 +96,20 @@ TEST_F (GameStateJsonTests, OneParticipantChannel)
     {
       "meta":
         {
+          "reinit": "",
           "participants": [{"name": "only me", "address": "addr"}]
         },
       "state":
+        {
+          "data":
+            {
+              "proto": "",
+              "phase": "single participant"
+            },
+          "whoseturn": null,
+          "turncount": 0
+        },
+      "reinit":
         {
           "data":
             {
@@ -110,13 +123,17 @@ TEST_F (GameStateJsonTests, OneParticipantChannel)
   )");
   expected["channels"][id.ToHex ()]["id"] = id.ToHex ();
 
-  EXPECT_EQ (gsj.GetFullJson (), expected);
+  auto actual = gsj.GetFullJson ();
+  actual["channels"][id.ToHex ()]["meta"].removeMember ("proto");
+  actual["channels"][id.ToHex ()]["state"].removeMember ("proof");
+  EXPECT_EQ (actual, expected);
 }
 
 TEST_F (GameStateJsonTests, TwoParticipantChannel)
 {
   const auto id = xaya::SHA256::Hash ("channel");
   auto h = tbl.CreateNew (id);
+  xaya::proto::ChannelMetadata meta;
   CHECK (TextFormat::ParseFromString (R"(
     participants:
       {
@@ -128,14 +145,15 @@ TEST_F (GameStateJsonTests, TwoParticipantChannel)
         name: "bar"
         address: "addr 2"
       }
-  )", &h->MutableMetadata ()));
+  )", &meta));
 
   proto::BoardState state;
   state.set_turn (0);
 
   std::string serialised;
   CHECK (state.SerializeToString (&serialised));
-  h->SetState (serialised);
+
+  h->Reinitialise (meta, serialised);
   h.reset ();
 
   const auto actual = gsj.GetFullJson ();

@@ -31,6 +31,7 @@ protected:
 
   GeneralStateProofTests ()
   {
+    meta.set_reinit ("reinit");
     meta.add_participants ()->set_address ("addr0");
     meta.add_participants ()->set_address ("addr1");
 
@@ -139,7 +140,8 @@ TEST_F (StateTransitionTests, InvalidSignature)
 
 TEST_F (StateTransitionTests, Valid)
 {
-  ExpectSignature (channelId, "state", " 11 2 ", "signed by zero", "addr0");
+  ExpectSignature (channelId, meta, "state",
+                   " 11 2 ", "signed by zero", "addr0");
 
   EXPECT_TRUE (VerifyTransition ("10 1", R"(
     move: "1",
@@ -237,8 +239,8 @@ TEST_F (StateProofTests, OnlyInitialOnChain)
 
 TEST_F (StateProofTests, OnlyInitialSigned)
 {
-  ExpectSignature (channelId, "state", "42 5", "signature 0", "addr0");
-  ExpectSignature (channelId, "state", "42 5", "signature 1", "addr1");
+  ExpectSignature (channelId, meta, "state", "42 5", "signature 0", "addr0");
+  ExpectSignature (channelId, meta, "state", "42 5", "signature 1", "addr1");
 
   ASSERT_TRUE (VerifyProof ("0 1", R"(
     initial_state:
@@ -323,35 +325,6 @@ TEST_F (StateProofTests, MissingSignature)
           }
       }
   )"));
-}
-
-TEST_F (StateProofTests, IntermediateStateOnChain)
-{
-  ASSERT_TRUE (VerifyProof (" 44 11 ", R"(
-    initial_state:
-      {
-        data: "42 10"
-      }
-    transitions:
-      {
-        move: "2"
-        new_state:
-          {
-            data: "44 11"
-            signatures: "sgn0"
-          }
-      }
-    transitions:
-      {
-        move: "2"
-        new_state:
-          {
-            data: "46 12"
-            signatures: "sgn0"
-          }
-      }
-  )"));
-  EXPECT_EQ (endState, "46 12");
 }
 
 TEST_F (StateProofTests, SignedInitialState)

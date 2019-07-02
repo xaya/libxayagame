@@ -79,6 +79,12 @@ uint256::FromBlob (const unsigned char* blob)
   std::copy (blob, blob + NUM_BYTES, data.data ());
 }
 
+std::string
+uint256::GetBinaryString () const
+{
+  return std::string (reinterpret_cast<const char*> (GetBlob ()), NUM_BYTES);
+}
+
 bool
 uint256::IsNull () const
 {

@@ -25,4 +25,24 @@ message ChannelMetadata
   /** The participants of the channel.  The order matters.  */
   repeated ChannelParticipant participants = 1;
 
+  /**
+   * Identifier for the current "reinitialisation" of the channel.  This should
+   * be a string of bytes that uniquely identifies the current state of the
+   * channel with respect to changes to metadata and other "significant"
+   * on-chain changes.  For instance, if some participant joins the channel
+   * or leaves it, the reinitialisation should be updated.  But also if at
+   * a later stage the channel again has the same set of participants as
+   * previously, it should probably have a different reinitialisation ID then.
+   *
+   * The exact format of this string and how it is updated may depend on the
+   * particular game and its rules for how metadata and participants can change.
+   * A good rule of thumb could be to set this to a hash based on the previous
+   * identifier and the txid that led to the update.
+   *
+   * Leaving this field unset is equivalent to an empty string.  This is fine,
+   * e.g. for the very first state of a channel that was just created, as long
+   * as it will be set to something else later on when more changes happen.
+   */
+  optional bytes reinit = 2;
+
 }

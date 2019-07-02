@@ -160,6 +160,21 @@ Move (const std::string& name, const xaya::uint256& txid,
   return res;
 }
 
+/**
+ * Returns a serialised state for the given text proto.
+ */
+xaya::BoardState
+SerialisedState (const std::string& str)
+{
+  proto::BoardState state;
+  CHECK (TextFormat::ParseFromString (str, &state));
+
+  xaya::BoardState res;
+  CHECK (state.SerializeToString (&res));
+
+  return res;
+}
+
 TEST_F (StateUpdateTests, MoveNotAnObject)
 {
   const auto txid = xaya::SHA256::Hash ("foo");
@@ -239,7 +254,7 @@ TEST_F (CreateChannelTests, CreationSuccessful)
   ASSERT_EQ (h->GetMetadata ().participants_size (), 1);
   EXPECT_EQ (h->GetMetadata ().participants (0).name (), "bar");
   EXPECT_EQ (h->GetMetadata ().participants (0).address (), "address 1");
-  EXPECT_EQ (h->GetState (), "");
+  EXPECT_EQ (h->GetLatestState (), "");
   EXPECT_FALSE (h->HasDispute ());
 
   h = ExpectChannel (xaya::SHA256::Hash ("baz"));
@@ -275,7 +290,11 @@ using JoinChannelTests = StateUpdateTests;
 TEST_F (JoinChannelTests, Malformed)
 {
   const auto existing = xaya::SHA256::Hash ("foo");
-  tbl.CreateNew (existing)->MutableMetadata ().add_participants ();
+  auto h = tbl.CreateNew (existing);
+  xaya::proto::ChannelMetadata meta;
+  meta.add_participants ();
+  h->Reinitialise (meta, "");
+  h.reset ();
 
   const auto txid = xaya::SHA256::Hash ("bar");
 
@@ -299,7 +318,11 @@ TEST_F (JoinChannelTests, Malformed)
 TEST_F (JoinChannelTests, NonExistantChannel)
 {
   const auto existing = xaya::SHA256::Hash ("foo");
-  tbl.CreateNew (existing)->MutableMetadata ().add_participants ();
+  auto h = tbl.CreateNew (existing);
+  xaya::proto::ChannelMetadata meta;
+  meta.add_participants ();
+  h->Reinitialise (meta, "");
+  h.reset ();
 
   const auto txid = xaya::SHA256::Hash ("bar");
   Json::Value data (Json::objectValue);
@@ -315,8 +338,10 @@ TEST_F (JoinChannelTests, AlreadyTwoParticipants)
 {
   const auto existing = xaya::SHA256::Hash ("foo");
   auto h = tbl.CreateNew (existing);
-  h->MutableMetadata ().add_participants ()->set_name ("foo");
-  h->MutableMetadata ().add_participants ()->set_name ("bar");
+  xaya::proto::ChannelMetadata meta;
+  meta.add_participants ()->set_name ("foo");
+  meta.add_participants ()->set_name ("bar");
+  h->Reinitialise (meta, SerialisedState ("turn: 0"));
   h.reset ();
 
   const auto txid = xaya::SHA256::Hash ("bar");
@@ -336,7 +361,9 @@ TEST_F (JoinChannelTests, SameNameInChannel)
 {
   const auto existing = xaya::SHA256::Hash ("foo");
   auto h = tbl.CreateNew (existing);
-  h->MutableMetadata ().add_participants ()->set_name ("foo");
+  xaya::proto::ChannelMetadata meta;
+  meta.add_participants ()->set_name ("foo");
+  h->Reinitialise (meta, "");
   h.reset ();
 
   const auto txid = xaya::SHA256::Hash ("bar");
@@ -375,7 +402,7 @@ TEST_F (JoinChannelTests, SuccessfulJoin)
   EXPECT_FALSE (h->HasDispute ());
 
   proto::BoardState state;
-  CHECK (state.ParseFromString (h->GetState ()));
+  CHECK (state.ParseFromString (h->GetLatestState ()));
   EXPECT_TRUE (state.has_turn ());
   EXPECT_EQ (state.turn (), 0);
 }
@@ -387,7 +414,11 @@ using AbortChannelTests = StateUpdateTests;
 TEST_F (AbortChannelTests, Malformed)
 {
   const auto existing = xaya::SHA256::Hash ("foo");
-  tbl.CreateNew (existing)->MutableMetadata ().add_participants ();
+  auto h = tbl.CreateNew (existing);
+  xaya::proto::ChannelMetadata meta;
+  meta.add_participants ();
+  h->Reinitialise (meta, "");
+  h.reset ();
 
   const auto txid = xaya::SHA256::Hash ("bar");
 
@@ -410,7 +441,11 @@ TEST_F (AbortChannelTests, Malformed)
 TEST_F (AbortChannelTests, NonExistantChannel)
 {
   const auto existing = xaya::SHA256::Hash ("foo");
-  tbl.CreateNew (existing)->MutableMetadata ().add_participants ();
+  auto h = tbl.CreateNew (existing);
+  xaya::proto::ChannelMetadata meta;
+  meta.add_participants ();
+  h->Reinitialise (meta, "");
+  h.reset ();
 
   const auto txid = xaya::SHA256::Hash ("bar");
   Json::Value data (Json::objectValue);
@@ -426,8 +461,10 @@ TEST_F (AbortChannelTests, AlreadyTwoParticipants)
 {
   const auto existing = xaya::SHA256::Hash ("foo");
   auto h = tbl.CreateNew (existing);
-  h->MutableMetadata ().add_participants ()->set_name ("foo");
-  h->MutableMetadata ().add_participants ()->set_name ("bar");
+  xaya::proto::ChannelMetadata meta;
+  meta.add_participants ()->set_name ("foo");
+  meta.add_participants ()->set_name ("bar");
+  h->Reinitialise (meta, SerialisedState ("turn: 0"));
   h.reset ();
 
   const auto txid = xaya::SHA256::Hash ("bar");
@@ -444,7 +481,9 @@ TEST_F (AbortChannelTests, DifferentName)
 {
   const auto existing = xaya::SHA256::Hash ("foo");
   auto h = tbl.CreateNew (existing);
-  h->MutableMetadata ().add_participants ()->set_name ("foo");
+  xaya::proto::ChannelMetadata meta;
+  meta.add_participants ()->set_name ("foo");
+  h->Reinitialise (meta, "");
   h.reset ();
 
   const auto txid = xaya::SHA256::Hash ("bar");
@@ -460,7 +499,11 @@ TEST_F (AbortChannelTests, DifferentName)
 TEST_F (AbortChannelTests, SuccessfulAbort)
 {
   const auto existing = xaya::SHA256::Hash ("existing channel");
-  tbl.CreateNew (existing);
+  auto h = tbl.CreateNew (existing);
+  xaya::proto::ChannelMetadata meta;
+  meta.add_participants ();
+  h->Reinitialise (meta, "");
+  h.reset ();
 
   const auto id1 = xaya::SHA256::Hash ("foo");
   const auto id2 = xaya::SHA256::Hash ("bar");
@@ -485,6 +528,8 @@ class CloseChannelTests : public StateUpdateTests
 
 protected:
 
+  xaya::proto::ChannelMetadata meta;
+
   /**
    * ID of the channel closed in tests (or not).  This channel is set up
    * with players "name 0" and "name 1".
@@ -499,22 +544,25 @@ protected:
 
   CloseChannelTests ()
   {
+    CHECK (TextFormat::ParseFromString (R"(
+      participants:
+        {
+          name: "name 0"
+          address: "addr 0"
+        }
+      participants:
+        {
+          name: "name 1"
+          address: "addr 1"
+        }
+    )", &meta));
+
     auto h = tbl.CreateNew (channelId);
-    auto* p = h->MutableMetadata ().add_participants ();
-    p->set_name ("name 0");
-    p->set_address ("addr 0");
-    p = h->MutableMetadata ().add_participants ();
-    p->set_name ("name 1");
-    p->set_address ("addr 1");
+    h->Reinitialise (meta, SerialisedState ("turn: 0"));
     h.reset ();
 
     h = tbl.CreateNew (otherId);
-    p = h->MutableMetadata ().add_participants ();
-    p->set_name ("name 0");
-    p->set_address ("addr 0");
-    p = h->MutableMetadata ().add_participants ();
-    p->set_name ("name 1");
-    p->set_address ("addr 1");
+    h->Reinitialise (meta, SerialisedState ("turn: 0"));
     h.reset ();
   }
 
@@ -535,7 +583,8 @@ protected:
     CHECK (stmt.SerializeToString (&data));
 
     const std::string hashed
-        = xaya::GetChannelSignatureMessage (channelId, "winnerstatement", data);
+        = xaya::GetChannelSignatureMessage (channelId, meta,
+                                            "winnerstatement", data);
     EXPECT_CALL (mockXayaServer, verifymessage ("", hashed,
                                                 xaya::EncodeBase64 (sgn)))
         .WillOnce (Return (res));
@@ -651,7 +700,10 @@ TEST_F (CloseChannelTests, NonExistantChannel)
 TEST_F (CloseChannelTests, WrongNumberOfParticipants)
 {
   auto h = ExpectChannel (channelId);
-  h->MutableMetadata ().mutable_participants ()->RemoveLast ();
+  xaya::proto::ChannelMetadata meta = h->GetMetadata ();
+  meta.mutable_participants ()->RemoveLast ();
+  meta.set_reinit ("init 2");
+  h->Reinitialise (meta, "");
   h.reset ();
 
   auto mv = CloseMove (xaya::proto::SignedData ());
@@ -710,18 +762,22 @@ protected:
   DisputeResolutionTests ()
   {
     auto h = tbl.CreateNew (channelId);
-    auto* p = h->MutableMetadata ().add_participants ();
-    p->set_name ("name 0");
-    p->set_address ("addr 0");
-    p = h->MutableMetadata ().add_participants ();
-    p->set_name ("name 1");
-    p->set_address ("addr 1");
 
-    proto::BoardState state;
-    state.set_turn (0);
-    std::string serialisedState;
-    CHECK (state.SerializeToString (&serialisedState));
-    h->SetState (serialisedState);
+    xaya::proto::ChannelMetadata meta;
+    CHECK (TextFormat::ParseFromString (R"(
+      participants:
+        {
+          name: "name 0"
+          address: "addr 0"
+        }
+      participants:
+        {
+          name: "name 1"
+          address: "addr 1"
+        }
+    )", &meta));
+
+    h->Reinitialise (meta, SerialisedState ("turn: 0"));
     h.reset ();
 
     Json::Value signatureOk(Json::objectValue);
@@ -752,12 +808,9 @@ protected:
   BuildMove (const std::string& key, const std::string& stateStr,
              const std::vector<std::string>& signatures)
   {
-    proto::BoardState state;
-    CHECK (TextFormat::ParseFromString (stateStr, &state));
-
     xaya::proto::StateProof proof;
     auto* is = proof.mutable_initial_state ();
-    CHECK (state.SerializeToString (is->mutable_data ()));
+    *is->mutable_data () = SerialisedState (stateStr);
     for (const auto& sgn : signatures)
       is->add_signatures (sgn);
 
@@ -841,7 +894,10 @@ TEST_F (DisputeResolutionTests, NonExistantChannel)
 TEST_F (DisputeResolutionTests, WrongNumberOfParticipants)
 {
   auto h = ExpectChannel (channelId);
-  h->MutableMetadata ().mutable_participants ()->RemoveLast ();
+  xaya::proto::ChannelMetadata meta = h->GetMetadata ();
+  meta.mutable_participants ()->RemoveLast ();
+  meta.set_reinit ("init 2");
+  h->Reinitialise (meta, h->GetLatestState ());
   h.reset ();
 
   UpdateState (10, {BuildMove ("d", "turn: 1 winner: 0", {"sgn 0", "sgn 1"})});

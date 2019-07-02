@@ -158,8 +158,7 @@ std::string
 KeyForUndoData (const uint256& hash)
 {
   std::string key(1, KEY_PREFIX_UNDO);
-  key.insert (1, reinterpret_cast<const char*> (hash.GetBlob ()),
-              uint256::NUM_BYTES);
+  key += hash.GetBinaryString ();
 
   return key;
 }

@@ -27,6 +27,14 @@ class SignaturesTests : public TestGameFixture
 protected:
 
   const uint256 channelId = SHA256::Hash ("channel id");
+  proto::ChannelMetadata meta;
+
+  SignaturesTests ()
+  {
+    meta.set_reinit (std::string ("re\0init", 7));
+    meta.add_participants ()->set_address ("address 1");
+    meta.add_participants ()->set_address ("address 2");
+  }
 
 };
 
@@ -36,11 +44,13 @@ TEST_F (SignaturesTests, GetChannelSignatureMessage)
 
   SHA256 hasher;
   hasher << channelId;
+  hasher << EncodeBase64 (std::string ("re\0init", 7))
+         << std::string ("\0", 1);
   hasher << std::string ("topic\0", 6);
   hasher << dataWithNul;
 
-  const std::string actual = GetChannelSignatureMessage (channelId, "topic",
-                                                         dataWithNul);
+  const std::string actual
+      = GetChannelSignatureMessage (channelId, meta, "topic", dataWithNul);
   EXPECT_EQ (actual, hasher.Finalise ().ToHex ());
   LOG (INFO) << "Signature message: " << actual;
 }
@@ -51,7 +61,8 @@ TEST_F (SignaturesTests, InvalidTopic)
   ASSERT_EQ (invalidTopic.size (), 3);
   ASSERT_EQ (invalidTopic[1], '\0');
 
-  EXPECT_DEATH (GetChannelSignatureMessage (channelId, invalidTopic, "foobar"),
+  EXPECT_DEATH (GetChannelSignatureMessage (channelId, meta,
+                                            invalidTopic, "foobar"),
                 "Topic string contains nul character");
 }
 
@@ -67,7 +78,7 @@ TEST_F (SignaturesTests, VerifyParticipantSignatures)
   data.add_signatures ("signature 2");
   data.add_signatures ("signature 3");
 
-  const std::string msg = GetChannelSignatureMessage (channelId, "topic",
+  const std::string msg = GetChannelSignatureMessage (channelId, meta, "topic",
                                                       data.data ());
 
   EXPECT_CALL (mockXayaServer,

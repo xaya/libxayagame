@@ -36,8 +36,15 @@ class DisputeTest (ShipsTest):
     self.generate (1)
     self.expectChannelState (cid, "first commitment", disputeHeight)
 
+    # Also filing a new dispute without more turns won't work in
+    # shifting forward the height.
+    self.mainLogger.info ("Trying to dispute again without more moves...")
+    self.sendMove ("xyz", {"d": {"id": cid, "state": state}})
+    self.generate (1)
+    self.expectChannelState (cid, "first commitment", disputeHeight)
+
     # Successfully resolve now, right at the expiry height.
-    self.generate (8)
+    self.generate (7)
     state = self.getStateProof (cid, """
       turn: 1
       position_hashes: "foo"

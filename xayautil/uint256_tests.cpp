@@ -80,6 +80,19 @@ TEST (Uint256Tests, FromBlob)
   EXPECT_TRUE (obj == copy);
 }
 
+TEST (Uint256Tests, GetBinaryString)
+{
+  uint256 obj;
+  ASSERT_TRUE (obj.FromHex ("42" + std::string (60, '0') + "ff"));
+
+  const std::string str = obj.GetBinaryString ();
+  ASSERT_EQ (str.size (), 32);
+  EXPECT_EQ (str[0], static_cast<char> (0x42));
+  for (size_t i = 1; i < 31; ++i)
+    EXPECT_EQ (str[i], '\0');
+  EXPECT_EQ (str[31], static_cast<char> (0xff));
+}
+
 TEST (Uint256Tests, IsNull)
 {
   uint256 obj;
