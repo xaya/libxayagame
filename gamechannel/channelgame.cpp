@@ -32,17 +32,17 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
 
   const auto& id = ch.GetId ();
   const auto& meta = ch.GetMetadata ();
-  const auto& onChainState = ch.GetLatestState ();
   const auto& rules = GetBoardRules ();
 
   BoardState provenState;
-  if (!VerifyStateProof (GetXayaRpc (), rules, id, meta, onChainState, proof,
-                         provenState))
+  if (!VerifyStateProof (GetXayaRpc (), rules, id, meta, ch.GetReinitState (),
+                         proof, provenState))
     {
       LOG (WARNING) << "Dispute has invalid state proof";
       return false;
     }
 
+  const auto& onChainState = ch.GetLatestState ();
   const auto onChainParsed = rules.ParseState (id, meta, onChainState);
   CHECK (onChainParsed != nullptr);
   const auto provenParsed = rules.ParseState (id, meta, provenState);
@@ -103,18 +103,17 @@ ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
 {
   const auto& id = ch.GetId ();
   const auto& meta = ch.GetMetadata ();
-  const auto& onChainState = ch.GetLatestState ();
   const auto& rules = GetBoardRules ();
 
   BoardState provenState;
-  if (!VerifyStateProof (GetXayaRpc (), rules, id, meta, onChainState, proof,
-                         provenState))
+  if (!VerifyStateProof (GetXayaRpc (), rules, id, meta, ch.GetReinitState (),
+                         proof, provenState))
     {
-      LOG (WARNING) << "Dispute has invalid state proof";
+      LOG (WARNING) << "Resolution has invalid state proof";
       return false;
     }
 
-  const auto onChainParsed = rules.ParseState (id, meta, onChainState);
+  const auto onChainParsed = rules.ParseState (id, meta, ch.GetLatestState ());
   CHECK (onChainParsed != nullptr);
   const auto provenParsed = rules.ParseState (id, meta, provenState);
   CHECK (provenParsed != nullptr);

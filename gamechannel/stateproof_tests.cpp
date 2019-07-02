@@ -327,35 +327,6 @@ TEST_F (StateProofTests, MissingSignature)
   )"));
 }
 
-TEST_F (StateProofTests, IntermediateStateOnChain)
-{
-  ASSERT_TRUE (VerifyProof (" 44 11 ", R"(
-    initial_state:
-      {
-        data: "42 10"
-      }
-    transitions:
-      {
-        move: "2"
-        new_state:
-          {
-            data: "44 11"
-            signatures: "sgn0"
-          }
-      }
-    transitions:
-      {
-        move: "2"
-        new_state:
-          {
-            data: "46 12"
-            signatures: "sgn0"
-          }
-      }
-  )"));
-  EXPECT_EQ (endState, "46 12");
-}
-
 TEST_F (StateProofTests, SignedInitialState)
 {
   ASSERT_TRUE (VerifyProof ("0 1", R"(

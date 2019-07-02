@@ -94,7 +94,7 @@ bool
 VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
                   const uint256& channelId,
                   const proto::ChannelMetadata& meta,
-                  const BoardState& onChainState,
+                  const BoardState& reinitState,
                   const proto::StateProof& proof,
                   BoardState& endState)
 {
@@ -111,7 +111,7 @@ VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
     }
 
   endState = proof.initial_state ().data ();
-  bool foundOnChain = parsed->Equals (onChainState);
+  const bool foundOnChain = parsed->Equals (reinitState);
 
   for (const auto& t : proof.transitions ())
     {
@@ -124,13 +124,11 @@ VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
       signatures.insert (newSignatures.begin (), newSignatures.end ());
       parsed = std::move (parsedNew);
       endState = t.new_state ().data ();
-      if (!foundOnChain)
-        foundOnChain = parsed->Equals (onChainState);
     }
 
   if (foundOnChain)
     {
-      VLOG (1) << "StateProof has on-chain state and is valid";
+      VLOG (1) << "StateProof starts from reinit state and is valid";
       return true;
     }
 

@@ -30,11 +30,20 @@ message StateTransition
 /**
  * A full proof of some state of the game channel and that every participant
  * agrees to it.  This starts off some base state and then applies state
- * transitions ending at the target state.  As long as the base or any later
- * state was known to be good (i.e. already put on-chain) or every participant
- * signed a state during the steps, this is ensured.  It is also fine
- * if someone signed only a state even if they were not the one who did a move,
- * although that is unlikely to occur in practice.
+ * transitions ending at the target state.  This is valid as long as the
+ * transitions themselves are valid and all channel participants signed one
+ * of the intermediate states.  If the initial state is the channel's
+ * reinitialisation state, then that is also good and no signatures are
+ * required (as long as the transitions themselves are signed by the
+ * proper players).  It is also fine if someone signed only a state even
+ * if they were not the one who did a move, although that is unlikely to occur
+ * in practice.
+ *
+ * A state proof is always seen in context of a particular channel and its
+ * current reinitialisation (i.e. these are not part of the explicit
+ * state proof itself).  This is enforced since that data is part of the
+ * signatures made, so that a state proof moved to a different channel
+ * or reinit of the same channel is not valid anymore.
  *
  * Note that there are possible efficiency-improvements to the format
  * and rules of such a state proof.  For instance, it would be enough if for

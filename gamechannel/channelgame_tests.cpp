@@ -108,7 +108,16 @@ TEST_F (DisputeTests, InvalidStateClaimed)
 
 TEST_F (DisputeTests, EarlierTurn)
 {
-  auto ch = CreateChannel ("test", "10 5");
+  auto ch = CreateChannel ("test", "2 2");
+
+  /* The reinit state would be early enough (earlier than the resolution),
+     but the latest state we set is not.  This verifies that we use the latest
+     state for the turn-count check.  */
+  ch->SetStateProof (ParseStateProof (R"(
+    initial_state: { data: "10 5" }
+  )"));
+  ASSERT_EQ (ch->GetReinitState (), "2 2");
+  ASSERT_EQ (ch->GetLatestState (), "10 5");
 
   ASSERT_FALSE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
     initial_state:
@@ -180,12 +189,24 @@ TEST_F (DisputeTests, SettingValidDispute)
 {
   auto ch = CreateChannel ("test", "10 5");
 
+  /* Set a different latest state than the reinit state.  The state proof
+     based on the reinit state should be valid.  */
+  ch->SetStateProof (ParseStateProof (R"(
+    initial_state: { data: "15 5" }
+  )"));
+  ASSERT_EQ (ch->GetReinitState (), "10 5");
+  ASSERT_EQ (ch->GetLatestState (), "15 5");
+
   ASSERT_TRUE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
-    initial_state:
+    initial_state: { data: "10 5" }
+    transitions:
       {
-        data: "20 6"
-        signatures: "sgn0"
-        signatures: "sgn1"
+        move: "10"
+        new_state:
+          {
+            data: "20 6"
+            signatures: "sgn0"
+          }
       }
   )")));
 
@@ -273,8 +294,17 @@ TEST_F (ResolutionTests, InvalidStateClaimed)
 
 TEST_F (ResolutionTests, NoLaterTurn)
 {
-  auto ch = CreateChannel ("test", "10 5");
+  auto ch = CreateChannel ("test", "4 4");
   ch->SetDisputeHeight (100);
+
+  /* The reinit state would be early enough (earlier than the resolution),
+     but the latest state we set is not.  This verifies that we use the latest
+     state for the turn-count check.  */
+  ch->SetStateProof (ParseStateProof (R"(
+    initial_state: { data: "10 5" }
+  )"));
+  ASSERT_EQ (ch->GetReinitState (), "4 4");
+  ASSERT_EQ (ch->GetLatestState (), "10 5");
 
   ASSERT_FALSE (game.ProcessResolution (*ch, ParseStateProof (R"(
     initial_state:
@@ -295,12 +325,24 @@ TEST_F (ResolutionTests, Valid)
   auto ch = CreateChannel ("test", "10 5");
   ch->SetDisputeHeight (100);
 
+  /* Set a different latest state than the reinit state.  The state proof
+     based on the reinit state should be valid.  */
+  ch->SetStateProof (ParseStateProof (R"(
+    initial_state: { data: "15 5" }
+  )"));
+  ASSERT_EQ (ch->GetReinitState (), "10 5");
+  ASSERT_EQ (ch->GetLatestState (), "15 5");
+
   ASSERT_TRUE (game.ProcessResolution (*ch, ParseStateProof (R"(
-    initial_state:
+    initial_state: { data: "10 5" }
+    transitions:
       {
-        data: "20 6"
-        signatures: "sgn0"
-        signatures: "sgn1"
+        move: "10"
+        new_state:
+          {
+            data: "20 6"
+            signatures: "sgn0"
+          }
       }
   )")));
 
