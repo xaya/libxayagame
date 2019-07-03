@@ -93,9 +93,15 @@ public:
 
   /**
    * Returns a JSON representation of the current board state.  This is used
-   * by the game-channels daemons when communicating to frontends.
+   * by the game-channels daemons when communicating to frontends.  The default
+   * implementation simply returns JSON null.  If there is a useful
+   * representation of the state for the frontend, subclasses may override
+   * the method accordingly to return more information.
+   *
+   * Note that the full board state is always returned as encoded data as well,
+   * independently of what this method does.
    */
-  virtual Json::Value ToJson () const = 0;
+  virtual Json::Value ToJson () const;
 
 };
 

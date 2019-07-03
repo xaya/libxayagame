@@ -4,8 +4,6 @@
 
 /* Template implementation code for protoboard.hpp.  */
 
-#include <xayautil/base64.hpp>
-
 #include <google/protobuf/util/message_differencer.h>
 
 #include <glog/logging.h>
@@ -70,19 +68,6 @@ template <typename State, typename Move>
 
   CHECK (pn.SerializeToString (&newState));
   return true;
-}
-
-template <typename State, typename Move>
-  Json::Value
-  ProtoBoardState<State, Move>::ToJson () const
-{
-  std::string serialised;
-  CHECK (state.SerializeToString (&serialised));
-
-  Json::Value res(Json::objectValue);
-  res["proto"] = xaya::EncodeBase64 (serialised);
-
-  return res;
 }
 
 template <typename StateClass>

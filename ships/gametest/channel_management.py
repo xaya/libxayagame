@@ -39,14 +39,14 @@ class ChannelManagementTest (ShipsTest):
     self.assertEqual (ch1["meta"]["participants"], [
       {"name": "foo", "address": addr1}
     ])
-    self.assertEqual (ch1["state"]["data"]["phase"], "single participant")
+    self.assertEqual (ch1["state"]["parsed"]["phase"], "single participant")
 
     assert id2 in channels
     ch2 = channels[id2]
     self.assertEqual (ch2["meta"]["participants"], [
       {"name": "bar", "address": addr2}
     ])
-    self.assertEqual (ch2["state"]["data"]["phase"], "single participant")
+    self.assertEqual (ch2["state"]["parsed"]["phase"], "single participant")
 
     # Perform an invalid join and abort on the channels. This should not affect
     # the state at all.
@@ -74,7 +74,7 @@ class ChannelManagementTest (ShipsTest):
       {"name": "foo", "address": addr1},
       {"name": "baz", "address": addr3},
     ])
-    self.assertEqual (ch1["state"]["data"]["phase"], "first commitment")
+    self.assertEqual (ch1["state"]["parsed"]["phase"], "first commitment")
 
     assert id2 not in channels
 

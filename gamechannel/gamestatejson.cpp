@@ -34,11 +34,16 @@ EncodeBoardState (const ChannelData& ch, const BoardRules& r,
   const auto& id = ch.GetId ();
 
   Json::Value res(Json::objectValue);
+  res["base64"] = EncodeBase64 (state);
+
   auto parsed = r.ParseState (id, ch.GetMetadata (), state);
   CHECK (parsed != nullptr)
       << "Channel " << id.ToHex () << " has invalid state on chain: "
       << state;
-  res["data"] = parsed->ToJson ();
+
+  const Json::Value parsedJson = parsed->ToJson ();
+  if (!parsedJson.isNull ())
+    res["parsed"] = parsedJson;
 
   res["whoseturn"] = Json::Value ();
   const int turn = parsed->WhoseTurn ();

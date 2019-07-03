@@ -9,4 +9,10 @@ namespace xaya
 
 constexpr int ParsedBoardState::NO_TURN;
 
+Json::Value
+ParsedBoardState::ToJson () const
+{
+  return Json::Value ();
+}
+
 } // namespace xaya

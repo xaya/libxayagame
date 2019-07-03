@@ -126,14 +126,6 @@ public:
   bool ApplyMove (XayaRpcClient& rpc, const BoardMove& mv,
                   BoardState& newState) const override;
 
-  /**
-   * Returns a JSON object that contains the base64-encoded, serialised proto
-   * data as a field.  This is the default implementation, and it provides
-   * frontends with all data about the state if they can handle protos.
-   * Subclasses can override this method and replace or extend it as needed.
-   */
-  Json::Value ToJson () const override;
-
 };
 
 /**

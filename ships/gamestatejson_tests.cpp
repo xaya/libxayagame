@@ -101,21 +101,21 @@ TEST_F (GameStateJsonTests, OneParticipantChannel)
         },
       "state":
         {
-          "data":
+          "parsed":
             {
-              "proto": "",
               "phase": "single participant"
             },
+          "base64": "",
           "whoseturn": null,
           "turncount": 0
         },
       "reinit":
         {
-          "data":
+          "parsed":
             {
-              "proto": "",
               "phase": "single participant"
             },
+          "base64": "",
           "whoseturn": null,
           "turncount": 0
         }
@@ -162,10 +162,10 @@ TEST_F (GameStateJsonTests, TwoParticipantChannel)
 
   EXPECT_EQ (stateJson["whoseturn"].asInt (), 0);
   EXPECT_EQ (stateJson["turncount"].asInt (), 1);
-  EXPECT_EQ (stateJson["data"]["phase"].asString (), "first commitment");
+  EXPECT_EQ (stateJson["parsed"]["phase"].asString (), "first commitment");
 
   std::string protoBytes;
-  ASSERT_TRUE (xaya::DecodeBase64 (stateJson["data"]["proto"].asString (),
+  ASSERT_TRUE (xaya::DecodeBase64 (stateJson["base64"].asString (),
                                    protoBytes));
   proto::BoardState stateFromJson;
   ASSERT_TRUE (stateFromJson.ParseFromString (protoBytes));

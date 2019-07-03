@@ -105,4 +105,4 @@ class ShipsTest (XayaGameTest):
     else:
       self.assertEqual (channel["disputeheight"], disputeHeight)
 
-    self.assertEqual (channel["state"]["data"]["phase"], phase)
+    self.assertEqual (channel["state"]["parsed"]["phase"], phase)
