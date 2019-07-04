@@ -43,6 +43,7 @@ gamechannel_HEADERS = \
   channelgame.hpp \
   database.hpp \
   gamestatejson.hpp \
+  movesender.hpp \
   protoboard.hpp protoboard.tpp \
   rollingstate.hpp \
   schema.hpp \
