@@ -143,4 +143,13 @@ VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
   return true;
 }
 
+const BoardState&
+UnverifiedProofEndState (const proto::StateProof& proof)
+{
+  const int n = proof.transitions_size ();
+  if (n == 0)
+    return proof.initial_state ().data ();
+  return proof.transitions (n - 1).new_state ().data ();
+}
+
 } // namespace xaya

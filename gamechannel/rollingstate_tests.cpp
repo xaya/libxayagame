@@ -4,6 +4,7 @@
 
 #include "rollingstate.hpp"
 
+#include "stateproof.hpp"
 #include "testgame.hpp"
 
 #include <xayautil/hash.hpp>
@@ -70,13 +71,7 @@ protected:
   {
     EXPECT_EQ (state.GetReinitId (), reinitId);
     EXPECT_TRUE (state.GetLatestState ().Equals (expectedState));
-
-    const auto& proof = state.GetStateProof ();
-    const int n = proof.transitions_size ();
-    if (n == 0)
-      EXPECT_EQ (proof.initial_state ().data (), expectedState);
-    else
-      EXPECT_EQ (proof.transitions (n - 1).new_state ().data (), expectedState);
+    EXPECT_EQ (UnverifiedProofEndState (state.GetStateProof ()), expectedState);
   }
 
 };

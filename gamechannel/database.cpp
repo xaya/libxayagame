@@ -5,6 +5,7 @@
 #include "database.hpp"
 
 #include "channelgame.hpp"
+#include "stateproof.hpp"
 
 #include <glog/logging.h>
 
@@ -136,8 +137,7 @@ ChannelData::~ChannelData ()
   BindBlobProto (stmt, 2, metadata);
   BindBlobString (stmt, 3, reinit);
 
-  if (proof.transitions_size () == 0
-        && proof.initial_state ().data () == reinit)
+  if (GetLatestState () == reinit)
     CHECK_EQ (sqlite3_bind_null (stmt, 4), SQLITE_OK);
   else
     BindBlobProto (stmt, 4, proof);
@@ -195,12 +195,7 @@ const BoardState&
 ChannelData::GetLatestState () const
 {
   CHECK (initialised);
-
-  const int n = proof.transitions_size ();
-  if (n > 0)
-    return proof.transitions (n - 1).new_state ().data ();
-
-  return proof.initial_state ().data ();
+  return UnverifiedProofEndState (proof);
 }
 
 void

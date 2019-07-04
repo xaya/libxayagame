@@ -21,6 +21,14 @@ namespace
 
 using google::protobuf::TextFormat;
 
+proto::StateProof
+TextProof (const std::string& str)
+{
+  proto::StateProof res;
+  CHECK (TextFormat::ParseFromString (str, &res));
+  return res;
+}
+
 class GeneralStateProofTests : public TestGameFixture
 {
 
@@ -170,11 +178,8 @@ protected:
   bool
   VerifyProof (const BoardState& chainState, const std::string& proof)
   {
-    proto::StateProof proto;
-    CHECK (TextFormat::ParseFromString (proof, &proto));
-
     return VerifyStateProof (rpcClient, game.rules, channelId, meta, chainState,
-                             proto, endState);
+                             TextProof (proof), endState);
   }
 
 };
@@ -367,6 +372,32 @@ TEST_F (StateProofTests, MultiSignedLaterState)
       }
   )"));
   EXPECT_EQ (endState, "43 6");
+}
+
+/* ************************************************************************** */
+
+using UnverifiedProofEndStateTests = testing::Test;
+
+TEST_F (UnverifiedProofEndStateTests, InitialState)
+{
+  EXPECT_EQ (UnverifiedProofEndState (TextProof (R"(
+    initial_state: { data: "42 5" }
+  )")), "42 5");
+}
+
+TEST_F (UnverifiedProofEndStateTests, LastTransition)
+{
+  EXPECT_EQ (UnverifiedProofEndState (TextProof (R"(
+    initial_state: { data: "42 5" }
+    transitions:
+      {
+        new_state: { data: "50 6" }
+      }
+    transitions:
+      {
+        new_state: { data: "90 10" }
+      }
+  )")), "90 10");
 }
 
 /* ************************************************************************** */

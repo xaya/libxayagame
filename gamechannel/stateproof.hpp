@@ -41,6 +41,14 @@ bool VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
                        const proto::StateProof& proof,
                        BoardState& endState);
 
+/**
+ * Extracts the endstate from a StateProof without checking it.  This is useful
+ * if it has been checked already or is otherwise known to be good (e.g. because
+ * it was retrieved from the on-chain GSP).  In that situation, it is a lot more
+ * efficient than VerifyStateProof.
+ */
+const BoardState& UnverifiedProofEndState (const proto::StateProof& proof);
+
 } // namespace xaya
 
 #endif // GAMECHANNEL_STATEPROOF_HPP
