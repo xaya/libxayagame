@@ -42,6 +42,15 @@ RollingState::GetReinitId () const
   return reinitId;
 }
 
+const proto::ChannelMetadata&
+RollingState::GetMetadata () const
+{
+  CHECK (!reinits.empty ()) << "RollingState has not been initialised yet";
+  const auto mit = reinits.find (reinitId);
+  CHECK (mit != reinits.end ());
+  return mit->second.meta;
+}
+
 void
 RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
                              const BoardState& reinitState,

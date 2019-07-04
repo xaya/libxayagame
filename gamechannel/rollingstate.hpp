@@ -65,7 +65,7 @@ private:
   };
 
   /** Board rules to use for our game.  */
-  BoardRules& rules;
+  const BoardRules& rules;
 
   /** RPC client for signature verification.  */
   XayaRpcClient& rpc;
@@ -85,7 +85,8 @@ private:
 
 public:
 
-  explicit RollingState (BoardRules& r, XayaRpcClient& c, const uint256& id)
+  explicit RollingState (const BoardRules& r, XayaRpcClient& c,
+                         const uint256& id)
     : rules(r), rpc(c), channelId(id)
   {}
 
@@ -108,6 +109,12 @@ public:
    * latest state (as returned by GetLatestState and GetStateProof) is.
    */
   const std::string& GetReinitId () const;
+
+  /**
+   * Returns the channel metadata corresponding to the currently best
+   * reinitId.
+   */
+  const proto::ChannelMetadata& GetMetadata () const;
 
   /**
    * Updates the state for a newly received on-chain update.  This assumes

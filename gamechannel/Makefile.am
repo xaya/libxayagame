@@ -31,6 +31,7 @@ libgamechannel_la_LIBADD = \
 libgamechannel_la_SOURCES = \
   boardrules.cpp \
   channelgame.cpp \
+  channelmanager.cpp \
   database.cpp \
   gamestatejson.cpp \
   rollingstate.cpp \
@@ -41,6 +42,7 @@ libgamechannel_la_SOURCES = \
 gamechannel_HEADERS = \
   boardrules.hpp \
   channelgame.hpp \
+  channelmanager.hpp \
   database.hpp \
   gamestatejson.hpp \
   movesender.hpp \
@@ -76,6 +78,7 @@ tests_LDADD = \
   $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(PROTOBUF_LIBS)
 tests_SOURCES = \
   channelgame_tests.cpp \
+  channelmanager_tests.cpp \
   database_tests.cpp \
   gamestatejson_tests.cpp \
   protoboard_tests.cpp \
