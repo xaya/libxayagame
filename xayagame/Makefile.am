@@ -4,13 +4,15 @@ rpcstubdir = $(xayagamedir)/rpc-stubs
 
 pkgconfig_DATA = libxayagame.pc
 
-EXTRA_DIST = rpc-stubs/game.json rpc-stubs/xaya.json
+EXTRA_DIST = rpc-stubs/game.json rpc-stubs/xaya.json rpc-stubs/xaya-wallet.json
 
 RPC_STUBS = \
   rpc-stubs/gamerpcclient.h \
   rpc-stubs/gamerpcserverstub.h \
   rpc-stubs/xayarpcclient.h \
-  rpc-stubs/xayarpcserverstub.h
+  rpc-stubs/xayarpcserverstub.h \
+  rpc-stubs/xayawalletrpcclient.h \
+  rpc-stubs/xayawalletrpcserverstub.h
 BUILT_SOURCES = $(RPC_STUBS)
 CLEANFILES = $(RPC_STUBS)
 
@@ -55,11 +57,7 @@ xayagame_HEADERS = \
   storage.hpp \
   transactionmanager.hpp \
   zmqsubscriber.hpp
-rpcstub_HEADERS = \
-  rpc-stubs/gamerpcclient.h \
-  rpc-stubs/gamerpcserverstub.h \
-  rpc-stubs/xayarpcclient.h \
-  rpc-stubs/xayarpcserverstub.h
+rpcstub_HEADERS = $(RPC_STUBS)
 
 check_LTLIBRARIES = libtestutils.la
 check_PROGRAMS = tests
@@ -114,3 +112,10 @@ rpc-stubs/xayarpcclient.h: $(srcdir)/rpc-stubs/xaya.json
 	jsonrpcstub "$<" --cpp-client=XayaRpcClient --cpp-client-file="$@"
 rpc-stubs/xayarpcserverstub.h: $(srcdir)/rpc-stubs/xaya.json
 	jsonrpcstub "$<" --cpp-server=XayaRpcServerStub --cpp-server-file="$@"
+
+rpc-stubs/xayawalletrpcclient.h: $(srcdir)/rpc-stubs/xaya-wallet.json
+	jsonrpcstub "$<" --cpp-client=XayaWalletRpcClient --cpp-client-file="$@"
+rpc-stubs/xayawalletrpcserverstub.h: $(srcdir)/rpc-stubs/xaya-wallet.json
+	jsonrpcstub "$<" \
+	  --cpp-server=XayaWalletRpcServerStub \
+	  --cpp-server-file="$@"
