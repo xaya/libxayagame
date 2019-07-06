@@ -11,6 +11,7 @@
 #include "proto/stateproof.pb.h"
 
 #include <xayagame/rpc-stubs/xayarpcclient.h>
+#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
 namespace xaya
@@ -48,6 +49,25 @@ bool VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
  * efficient than VerifyStateProof.
  */
 const BoardState& UnverifiedProofEndState (const proto::StateProof& proof);
+
+/**
+ * Tries to apply the given move onto the latest state of the given proof,
+ * updating the proof for the new state if possible (signing it through
+ * the given wallet connection).
+ *
+ * The state proof must be known to be valid already (e.g. because it is
+ * the on-chain state from the GSP, or because it has been validated previously
+ * already).
+ *
+ * Returns true if the state proof was extended successfully.
+ */
+bool ExtendStateProof (XayaRpcClient& rpc, XayaWalletRpcClient& wallet,
+                       const BoardRules& rules,
+                       const uint256& channelId,
+                       const proto::ChannelMetadata& meta,
+                       const proto::StateProof& oldProof,
+                       const BoardMove& mv,
+                       proto::StateProof& newProof);
 
 } // namespace xaya
 

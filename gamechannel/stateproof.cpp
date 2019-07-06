@@ -6,8 +6,13 @@
 
 #include "signatures.hpp"
 
+#include <xayautil/base64.hpp>
+
+#include <jsonrpccpp/common/exception.h>
+
 #include <glog/logging.h>
 
+#include <iterator>
 #include <set>
 
 namespace xaya
@@ -150,6 +155,99 @@ UnverifiedProofEndState (const proto::StateProof& proof)
   if (n == 0)
     return proof.initial_state ().data ();
   return proof.transitions (n - 1).new_state ().data ();
+}
+
+bool
+ExtendStateProof (XayaRpcClient& rpc, XayaWalletRpcClient& wallet,
+                  const BoardRules& rules,
+                  const uint256& channelId,
+                  const proto::ChannelMetadata& meta,
+                  const proto::StateProof& oldProof,
+                  const BoardMove& mv,
+                  proto::StateProof& newProof)
+{
+  const BoardState oldState = UnverifiedProofEndState (oldProof);
+  const auto parsedOld = rules.ParseState (channelId, meta, oldState);
+  CHECK (parsedOld != nullptr) << "Invalid state-proof endstate: " << oldState;
+
+  const int turn = parsedOld->WhoseTurn ();
+  if (turn == ParsedBoardState::NO_TURN)
+    {
+      LOG (ERROR) << "Cannot extend state proof in no-turn state";
+      return false;
+    }
+  CHECK_GE (turn, 0);
+  CHECK_LT (turn, meta.participants_size ());
+  const std::string& addr = meta.participants (turn).address ();
+
+  BoardState newState;
+  if (!parsedOld->ApplyMove (rpc, mv, newState))
+    {
+      LOG (ERROR) << "Invalid move for extending a state proof: " << mv;
+      return false;
+    }
+
+  proto::StateTransition trans;
+  trans.set_move (mv);
+  auto* ns = trans.mutable_new_state ();
+  ns->set_data (newState);
+
+  LOG (INFO)
+      << "Trying to sign new state for participant " << turn
+      << " with address " << addr;
+  try
+    {
+      const auto& msg
+          = GetChannelSignatureMessage (channelId, meta, "state", newState);
+      const std::string sgn = wallet.signmessage (addr, msg);
+      CHECK (DecodeBase64 (sgn, *ns->add_signatures ()));
+    }
+  catch (const jsonrpc::JsonRpcException& exc)
+    {
+      LOG (ERROR) << "Signature with " << addr << " failed: " << exc.what ();
+      return false;
+    }
+
+  /* We got a valid signature of the new state.  Now we have to figure out what
+     the "minimal" valid state proof for the new state is.  For this, we first
+     "normalise" all state transitions (including the old initial state and
+     the new last transition) into one large array, and then find the
+     trailing subset of it that is sufficient.  */
+
+  std::vector<proto::StateTransition> transitions;
+  transitions.emplace_back ();
+  *transitions.back ().mutable_new_state () = oldProof.initial_state ();
+  for (const auto& t : oldProof.transitions ())
+    transitions.push_back (t);
+  transitions.emplace_back (std::move (trans));
+
+  std::set<int> signatures;
+  auto begin = std::prev (transitions.end ());
+  const size_t n = meta.participants_size ();
+  while (true)
+    {
+      const auto newSigs
+          = VerifyParticipantSignatures (rpc, channelId, meta, "state",
+                                         begin->new_state ());
+      signatures.insert (newSigs.begin (), newSigs.end ());
+
+      CHECK_LE (signatures.size (), n);
+      if (signatures.size () == n || begin == transitions.begin ())
+        break;
+
+      --begin;
+    }
+
+  newProof.Clear ();
+  for (auto it = begin; it != transitions.end (); ++it)
+    {
+      if (it == begin)
+        newProof.mutable_initial_state ()->Swap (it->mutable_new_state ());
+      else
+        newProof.add_transitions ()->Swap (&*it);
+    }
+
+  return true;
 }
 
 } // namespace xaya

@@ -10,6 +10,7 @@
 
 #include <xayagame/testutils.hpp>
 #include <xayagame/rpc-stubs/xayarpcclient.h>
+#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
@@ -93,10 +94,16 @@ private:
   jsonrpc::HttpServer httpServer;
   jsonrpc::HttpClient httpClient;
 
+  jsonrpc::HttpServer httpServerWallet;
+  jsonrpc::HttpClient httpClientWallet;
+
 protected:
 
   MockXayaRpcServer mockXayaServer;
   XayaRpcClient rpcClient;
+
+  MockXayaWalletRpcServer mockXayaWallet;
+  XayaWalletRpcClient rpcWallet;
 
   TestGame game;
 
