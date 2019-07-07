@@ -7,7 +7,10 @@
 #include "stateproof.hpp"
 #include "testgame.hpp"
 
+#include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
+
+#include <jsonrpccpp/common/exception.h>
 
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
@@ -20,6 +23,8 @@
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
 using testing::_;
+using testing::Return;
+using testing::Throw;
 using testing::Truly;
 
 namespace xaya
@@ -62,6 +67,22 @@ public:
 
 };
 
+class MockOffChainBroadcast : public OffChainBroadcast
+{
+
+public:
+
+  MockOffChainBroadcast ()
+  {
+    /* Expect no calls by default.  */
+    EXPECT_CALL (*this, SendNewState (_, _)).Times (0);
+  }
+
+  MOCK_METHOD2 (SendNewState, void (const std::string& reinitId,
+                                    const proto::StateProof& proof));
+
+};
+
 } // anonymous namespace
 
 class ChannelManagerTests : public TestGameFixture
@@ -74,11 +95,13 @@ protected:
 
   ChannelManager cm;
   MockMoveSender onChain;
+  MockOffChainBroadcast offChain;
 
   ChannelManagerTests ()
-    : cm(game.rules, rpcClient, channelId, "player")
+    : cm(game.rules, rpcClient, rpcWallet, channelId, "player")
   {
     cm.SetMoveSender (onChain);
+    cm.SetOffChainBroadcast (offChain);
 
     CHECK (TextFormat::ParseFromString (R"(
       participants:
@@ -95,6 +118,11 @@ protected:
 
     ValidSignature ("sgn", "my addr");
     ValidSignature ("other sgn", "not my addr");
+
+    EXPECT_CALL (mockXayaWallet, signmessage ("my addr", _))
+        .WillRepeatedly (Return (EncodeBase64 ("sgn")));
+    EXPECT_CALL (mockXayaWallet, signmessage ("not my addr", _))
+        .WillRepeatedly (Throw (jsonrpc::JsonRpcException (-5)));
   }
 
   /**
@@ -146,6 +174,26 @@ protected:
         return MessageDifferencer::Equals (p, expected);
       };
     EXPECT_CALL (onChain, SendResolution (Truly (isOk))).Times (n);
+  }
+
+  /**
+   * Expects exactly one off-chain broadcast to be sent with the latest state.
+   */
+  void
+  ExpectOneBroadcast ()
+  {
+    auto isLatestReinit = [this] (const std::string& reinit)
+      {
+        return reinit == GetBoardStates ().GetReinitId ();
+      };
+    auto isLatestProof = [this] (const proto::StateProof& p)
+      {
+        const auto& expected = GetBoardStates ().GetStateProof ();
+        return MessageDifferencer::Equals (p, expected);
+      };
+    EXPECT_CALL (offChain,
+                 SendNewState (Truly (isLatestReinit), Truly (isLatestProof)))
+        .Times (1);
   }
 
 };
@@ -220,6 +268,47 @@ TEST_F (ProcessOffChainTests, WhenNotExists)
   cm.ProcessOffChain ("", ValidProof ("20 10"));
   cm.ProcessOnChain (meta, "0 0", ValidProof ("15 7"), 0);
   EXPECT_EQ (GetLatestState (), "20 10");
+}
+
+/* ************************************************************************** */
+
+using ProcessLocalMoveTests = ChannelManagerTests;
+
+TEST_F (ProcessLocalMoveTests, WhenNotExists)
+{
+  cm.ProcessOnChainNonExistant ();
+  cm.ProcessLocalMove ("1");
+  EXPECT_FALSE (GetExists ());
+}
+
+TEST_F (ProcessLocalMoveTests, InvalidUpdate)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.ProcessLocalMove ("invalid move");
+  EXPECT_EQ (GetLatestState (), "10 5");
+}
+
+TEST_F (ProcessLocalMoveTests, NotMyTurn)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("11 5"), 0);
+  cm.ProcessLocalMove ("1");
+  EXPECT_EQ (GetLatestState (), "11 5");
+}
+
+TEST_F (ProcessLocalMoveTests, Valid)
+{
+  ExpectOneBroadcast ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.ProcessLocalMove ("1");
+  EXPECT_EQ (GetLatestState (), "11 6");
+}
+
+TEST_F (ProcessLocalMoveTests, TriggersResolution)
+{
+  ExpectOneBroadcast ();
+  ExpectResolutions (1);
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
+  cm.ProcessLocalMove ("1");
 }
 
 /* ************************************************************************** */

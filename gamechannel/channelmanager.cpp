@@ -11,9 +11,10 @@
 namespace xaya
 {
 
-ChannelManager::ChannelManager (const BoardRules& r, XayaRpcClient& c,
+ChannelManager::ChannelManager (const BoardRules& r,
+                                XayaRpcClient& c, XayaWalletRpcClient& w,
                                 const uint256& id, const std::string& name)
-  : rules(r), rpc(c), channelId(id), playerName(name),
+  : rules(r), rpc(c), wallet(w), channelId(id), playerName(name),
     boardStates(rules, rpc, channelId)
 {}
 
@@ -144,6 +145,36 @@ ChannelManager::ProcessOnChain (const proto::ChannelMetadata& meta,
       dispute->turn = p->WhoseTurn ();
       dispute->count = p->TurnCount ();
     }
+
+  TryResolveDispute ();
+}
+
+void
+ChannelManager::ProcessLocalMove (const BoardMove& mv)
+{
+  LOG (INFO) << "Local move: " << mv;
+  std::lock_guard<std::mutex> lock(mut);
+
+  if (!exists)
+    {
+      LOG (ERROR) << "Channel does not exist on chain, ingoring local move";
+      return;
+    }
+
+  proto::StateProof newProof;
+  if (!ExtendStateProof (rpc, wallet, rules, channelId,
+                         boardStates.GetMetadata (),
+                         boardStates.GetStateProof (), mv, newProof))
+    {
+      LOG (ERROR) << "Failed to extend state with local move";
+      return;
+    }
+
+  const auto& reinit = boardStates.GetReinitId ();
+  boardStates.UpdateWithMove (reinit, newProof);
+
+  CHECK (offChainSender != nullptr);
+  offChainSender->SendNewState (reinit, newProof);
 
   TryResolveDispute ();
 }

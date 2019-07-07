@@ -12,6 +12,7 @@
 #include "proto/stateproof.pb.h"
 
 #include <xayagame/rpc-stubs/xayarpcclient.h>
+#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
 #include <memory>
@@ -80,6 +81,9 @@ private:
   /** RPC connection to Xaya Core used for verifying signatures.  */
   XayaRpcClient& rpc;
 
+  /** RPC connection to the Xaya wallet used for signing local moves.  */
+  XayaWalletRpcClient& wallet;
+
   /** The ID of the managed channel.  */
   const uint256 channelId;
 
@@ -131,7 +135,8 @@ private:
 
 public:
 
-  explicit ChannelManager (const BoardRules& r, XayaRpcClient& c,
+  explicit ChannelManager (const BoardRules& r,
+                           XayaRpcClient& c, XayaWalletRpcClient& w,
                            const uint256& id, const std::string& name);
 
   ChannelManager () = delete;
@@ -160,6 +165,13 @@ public:
                        const BoardState& reinitState,
                        const proto::StateProof& proof,
                        unsigned disputeHeight);
+
+  /**
+   * Processes a move made locally, i.e. by the player who runs the channel
+   * manager.  This tries to apply the move to the current state, sign the
+   * resulting state, build a new state proof, and then broadcast it.
+   */
+  void ProcessLocalMove (const BoardMove& mv);
 
   /**
    * Requests to file a dispute with the current state.
