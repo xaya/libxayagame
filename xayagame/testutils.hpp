@@ -11,6 +11,7 @@
 #include "storage.hpp"
 
 #include "rpc-stubs/xayarpcserverstub.h"
+#include "rpc-stubs/xayawalletrpcserverstub.h"
 
 #include <xayautil/uint256.hpp>
 
@@ -84,6 +85,41 @@ public:
   MOCK_METHOD3 (verifymessage, Json::Value (const std::string& address,
                                             const std::string& message,
                                             const std::string& signature));
+
+};
+
+/**
+ * Mock server for Xaya Core's wallet JSON-RPC interface.
+ */
+class MockXayaWalletRpcServer : public XayaWalletRpcServerStub
+{
+
+public:
+
+  /** The listening port for the mock server in tests.  */
+  static constexpr int HTTP_PORT = 32101;
+
+  /** The listening address of the mock server.  */
+  static constexpr const char* HTTP_URL = "http://localhost:32101";
+
+  /**
+   * Constructs the server at the given connector.  It does not start
+   * listening yet.
+   *
+   * This also sets the mock expectations to no calls at all, so that
+   * tests can explicitly specify the calls they want.
+   */
+  explicit MockXayaWalletRpcServer (jsonrpc::AbstractServerConnector& conn);
+
+  MockXayaWalletRpcServer () = delete;
+  MockXayaWalletRpcServer (const MockXayaWalletRpcServer&) = delete;
+  void operator= (const MockXayaWalletRpcServer&) = delete;
+
+  MOCK_METHOD1 (getaddressinfo, Json::Value (const std::string& addr));
+  MOCK_METHOD2 (signmessage, std::string (const std::string& addr,
+                                          const std::string& msg));
+  MOCK_METHOD2 (name_update, std::string (const std::string& name,
+                                          const std::string& value));
 
 };
 

@@ -59,6 +59,15 @@ MockXayaRpcServer::MockXayaRpcServer (jsonrpc::AbstractServerConnector& conn)
   EXPECT_CALL (*this, verifymessage (_, _, _)).Times (0);
 }
 
+MockXayaWalletRpcServer::MockXayaWalletRpcServer (
+    jsonrpc::AbstractServerConnector& conn)
+  : XayaWalletRpcServerStub(conn)
+{
+  EXPECT_CALL (*this, getaddressinfo (_)).Times (0);
+  EXPECT_CALL (*this, signmessage (_, _)).Times (0);
+  EXPECT_CALL (*this, name_update (_, _)).Times (0);
+}
+
 void
 GameTestFixture::CallBlockAttach (Game& g, const std::string& reqToken,
                                   const uint256& parentHash,
