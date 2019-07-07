@@ -27,17 +27,6 @@ namespace xaya
 namespace
 {
 
-Json::Value
-ParseJson (const std::string& str)
-{
-  std::istringstream in(str);
-  Json::Value res;
-  in >> res;
-  CHECK (in);
-
-  return res;
-}
-
 /**
  * Checks if the given actual game-state JSON for a channel matches the
  * expected one, taking into account potential differences in protocol buffer

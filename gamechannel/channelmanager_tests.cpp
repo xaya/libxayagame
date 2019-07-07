@@ -416,5 +416,61 @@ TEST_F (FileDisputeTests, RetryAfterBlock)
 
 /* ************************************************************************** */
 
+using ChannelToJsonTests = ChannelManagerTests;
+
+TEST_F (ChannelToJsonTests, NonExistant)
+{
+  auto expected = ParseJson (R"({
+    "playername": "player",
+    "existsonchain": false
+  })");
+  expected["id"] = channelId.ToHex ();
+
+  cm.ProcessOnChainNonExistant ();
+  EXPECT_EQ (cm.ToJson (), expected);
+}
+
+TEST_F (ChannelToJsonTests, CurrentState)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+
+  auto actual = cm.ToJson ();
+  EXPECT_EQ (actual["current"]["meta"]["participants"], ParseJson (R"([
+    {"name": "player", "address": "my addr"},
+    {"name": "other", "address": "not my addr"}
+  ])"));
+  EXPECT_EQ (actual["current"]["state"]["parsed"], ParseJson (R"({
+    "number": 10,
+    "count": 5
+  })"));
+  actual.removeMember ("current");
+
+  auto expected = ParseJson (R"({
+    "playername": "player",
+    "existsonchain": true
+  })");
+  expected["id"] = channelId.ToHex ();
+  EXPECT_EQ (actual, expected);
+}
+
+TEST_F (ChannelToJsonTests, Dispute)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("11 5"), 5);
+  EXPECT_EQ (cm.ToJson ()["dispute"], ParseJson (R"({
+    "height": 5,
+    "whoseturn": 1,
+    "canresolve": false
+  })"));
+
+  cm.ProcessOffChain ("", ValidProof ("20 6"));
+  EXPECT_EQ (cm.ToJson ()["dispute"], ParseJson (R"({
+    "height": 5,
+    "whoseturn": 1,
+    "canresolve": true
+  })"));
+}
+
+/* ************************************************************************** */
+
 } // anonymous namespace
 } // namespace xaya

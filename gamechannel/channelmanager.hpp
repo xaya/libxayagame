@@ -15,6 +15,8 @@
 #include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
+#include <json/json.h>
+
 #include <memory>
 #include <mutex>
 #include <string>
@@ -177,6 +179,12 @@ public:
    * Requests to file a dispute with the current state.
    */
   void FileDispute ();
+
+  /**
+   * Returns the current state of this channel as JSON, suitable to be
+   * sent to frontends.
+   */
+  Json::Value ToJson () const;
 
 };
 

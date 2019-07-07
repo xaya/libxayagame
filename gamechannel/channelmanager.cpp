@@ -4,6 +4,7 @@
 
 #include "channelmanager.hpp"
 
+#include "gamestatejson.hpp"
 #include "stateproof.hpp"
 
 #include <glog/logging.h>
@@ -204,6 +205,42 @@ ChannelManager::FileDispute ()
   CHECK (onChainSender != nullptr);
   onChainSender->SendDispute (boardStates.GetStateProof ());
   pendingDispute = true;
+}
+
+Json::Value
+ChannelManager::ToJson () const
+{
+  std::lock_guard<std::mutex> lock(mut);
+
+  Json::Value res(Json::objectValue);
+  res["id"] = channelId.ToHex ();
+  res["playername"] = playerName;
+  res["existsonchain"] = exists;
+
+  if (!exists)
+    return res;
+
+  Json::Value current(Json::objectValue);
+  const auto& meta = boardStates.GetMetadata ();
+  const auto& proof = boardStates.GetStateProof ();
+  current["meta"] = ChannelMetadataToJson (boardStates.GetMetadata ());
+  current["state"] = BoardStateToJson (rules, channelId, meta,
+                                       UnverifiedProofEndState (proof));
+  res["current"] = current;
+
+  if (dispute != nullptr)
+    {
+      Json::Value disp(Json::objectValue);
+      disp["height"] = static_cast<int> (dispute->height);
+      disp["whoseturn"] = dispute->turn;
+
+      const unsigned knownCount = boardStates.GetLatestState ().TurnCount ();
+      disp["canresolve"] = (knownCount > dispute->count);
+
+      res["dispute"] = disp;
+    }
+
+  return res;
 }
 
 } // namespace xaya
