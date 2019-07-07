@@ -24,21 +24,40 @@ template <typename Proto>
   return EncodeBase64 (serialised);
 }
 
-/**
- * Encodes a board state as JSON object.
- */
+} // anonymous namespace
+
 Json::Value
-EncodeBoardState (const ChannelData& ch, const BoardRules& r,
+ChannelMetadataToJson (const proto::ChannelMetadata& meta)
+{
+  Json::Value res(Json::objectValue);
+
+  Json::Value participants(Json::arrayValue);
+  for (const auto& p : meta.participants ())
+    {
+      Json::Value cur(Json::objectValue);
+      cur["name"] = p.name ();
+      cur["address"] = p.address ();
+      participants.append (cur);
+    }
+  res["participants"] = participants;
+
+  res["reinit"] = EncodeBase64 (meta.reinit ());
+  res["proto"] = EncodeProto (meta);
+
+  return res;
+}
+
+Json::Value
+BoardStateToJson (const BoardRules& r,
+                  const uint256& channelId, const proto::ChannelMetadata& meta,
                   const BoardState& state)
 {
-  const auto& id = ch.GetId ();
-
   Json::Value res(Json::objectValue);
   res["base64"] = EncodeBase64 (state);
 
-  auto parsed = r.ParseState (id, ch.GetMetadata (), state);
+  auto parsed = r.ParseState (channelId, meta, state);
   CHECK (parsed != nullptr)
-      << "Channel " << id.ToHex () << " has invalid state on chain: "
+      << "Channel " << channelId.ToHex () << " has invalid state: "
       << state;
 
   const Json::Value parsedJson = parsed->ToJson ();
@@ -54,36 +73,21 @@ EncodeBoardState (const ChannelData& ch, const BoardRules& r,
   return res;
 }
 
-} // anonymous namespace
-
 Json::Value
 ChannelToGameStateJson (const ChannelData& ch, const BoardRules& r)
 {
   const auto& id = ch.GetId ();
-  const auto& metaPb = ch.GetMetadata ();
+  const auto& meta = ch.GetMetadata ();
 
   Json::Value res(Json::objectValue);
   res["id"] = id.ToHex ();
   if (ch.HasDispute ())
     res["disputeheight"] = static_cast<int> (ch.GetDisputeHeight ());
+  res["meta"] = ChannelMetadataToJson (meta);
 
-  Json::Value meta(Json::objectValue);
-  Json::Value participants(Json::arrayValue);
-  for (const auto& p : metaPb.participants ())
-    {
-      Json::Value cur(Json::objectValue);
-      cur["name"] = p.name ();
-      cur["address"] = p.address ();
-      participants.append (cur);
-    }
-  meta["participants"] = participants;
-  meta["reinit"] = EncodeBase64 (metaPb.reinit ());
-  meta["proto"] = EncodeProto (metaPb);
-  res["meta"] = meta;
-
-  res["state"] = EncodeBoardState (ch, r, ch.GetLatestState ());
+  res["state"] = BoardStateToJson (r, id, meta, ch.GetLatestState ());
   res["state"]["proof"] = EncodeProto (ch.GetStateProof ());
-  res["reinit"] = EncodeBoardState (ch, r, ch.GetReinitState ());
+  res["reinit"] = BoardStateToJson (r, id, meta, ch.GetReinitState ());
 
   return res;
 }
