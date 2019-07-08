@@ -27,17 +27,6 @@ namespace xaya
 namespace
 {
 
-Json::Value
-ParseJson (const std::string& str)
-{
-  std::istringstream in(str);
-  Json::Value res;
-  in >> res;
-  CHECK (in);
-
-  return res;
-}
-
 /**
  * Checks if the given actual game-state JSON for a channel matches the
  * expected one, taking into account potential differences in protocol buffer
@@ -53,15 +42,10 @@ CheckChannelJson (Json::Value actual, const std::string& expected,
   ASSERT_EQ (actual["id"].asString (), id.ToHex ());
   actual.removeMember ("id");
 
-  ASSERT_EQ (actual["meta"]["reinit"], EncodeBase64 (meta.reinit ()));
-  actual["meta"].removeMember ("reinit");
-
-  std::string bytes;
-  ASSERT_TRUE (DecodeBase64 (actual["meta"]["proto"].asString (), bytes));
-  proto::ChannelMetadata actualMeta;
-  ASSERT_TRUE (actualMeta.ParseFromString (bytes));
-  ASSERT_TRUE (MessageDifferencer::Equals (actualMeta, meta));
-  actual["meta"].removeMember ("proto");
+  /* Metadata serialisation is checked separately, so ignore it for testing
+     the full channels (just to avoid the need for duplicating the code that
+     handles the encoded fields).  */
+  actual.removeMember ("meta");
 
   ASSERT_EQ (actual["reinit"]["base64"].asString (),
              EncodeBase64 (reinitState));
@@ -70,6 +54,7 @@ CheckChannelJson (Json::Value actual, const std::string& expected,
   ASSERT_EQ (actual["state"]["base64"].asString (), EncodeBase64 (proofState));
   actual["state"].removeMember ("base64");
 
+  std::string bytes;
   ASSERT_TRUE (DecodeBase64 (actual["state"]["proof"].asString (), bytes));
   proto::StateProof proof;
   ASSERT_TRUE (proof.ParseFromString (bytes));
@@ -135,19 +120,48 @@ protected:
 
 };
 
+TEST_F (GameStateJsonTests, ChannelMetadataToJson)
+{
+  auto actual = ChannelMetadataToJson (meta2);
+
+  ASSERT_EQ (actual["reinit"], EncodeBase64 (meta2.reinit ()));
+  actual.removeMember ("reinit");
+
+  std::string bytes;
+  ASSERT_TRUE (DecodeBase64 (actual["proto"].asString (), bytes));
+  proto::ChannelMetadata actualMeta;
+  ASSERT_TRUE (actualMeta.ParseFromString (bytes));
+  ASSERT_TRUE (MessageDifferencer::Equals (actualMeta, meta2));
+  actual.removeMember ("proto");
+
+  EXPECT_EQ (actual, ParseJson (R"({
+    "participants":
+      [
+        {"name": "foo", "address": "addr 1"},
+        {"name": "baz", "address": "addr 2"}
+      ]
+  })"));
+}
+
+TEST_F (GameStateJsonTests, BoardStateToJson)
+{
+  auto actual = BoardStateToJson (game.rules, id1, meta1, "10 5");
+
+  ASSERT_EQ (actual["base64"].asString (), EncodeBase64 ("10 5"));
+  actual.removeMember ("base64");
+
+  EXPECT_EQ (actual, ParseJson (R"({
+    "parsed": {"count": 5, "number": 10},
+    "turncount": 5,
+    "whoseturn": 0
+  })"));
+}
+
 TEST_F (GameStateJsonTests, WithoutDispute)
 {
   auto h = tbl.GetById (id1);
   CheckChannelJson (ChannelToGameStateJson (*h, game.rules), R"(
     {
-      "meta":
-        {
-          "participants":
-            [
-              {"name": "foo", "address": "addr 1"},
-              {"name": "bar", "address": "addr 2"}
-            ]
-        },
       "state":
         {
           "parsed": {"count": 2, "number": 100},
@@ -170,14 +184,6 @@ TEST_F (GameStateJsonTests, WithDispute)
   CheckChannelJson (ChannelToGameStateJson (*h, game.rules), R"(
     {
       "disputeheight": 55,
-      "meta":
-        {
-          "participants":
-            [
-              {"name": "foo", "address": "addr 1"},
-              {"name": "baz", "address": "addr 2"}
-            ]
-        },
       "state":
         {
           "parsed": {"count": 20, "number": 50},

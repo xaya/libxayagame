@@ -6,7 +6,10 @@
 
 #include "testgame.hpp"
 
+#include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
+
+#include <jsonrpccpp/common/exception.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -20,6 +23,9 @@ namespace
 {
 
 using google::protobuf::TextFormat;
+using testing::_;
+using testing::Return;
+using testing::Throw;
 
 proto::StateProof
 TextProof (const std::string& str)
@@ -398,6 +404,154 @@ TEST_F (UnverifiedProofEndStateTests, LastTransition)
         new_state: { data: "90 10" }
       }
   )")), "90 10");
+}
+
+/* ************************************************************************** */
+
+class ExtendStateProofTests : public GeneralStateProofTests
+{
+
+protected:
+
+  proto::StateProof newProof;
+
+  bool
+  ExtendProof (const std::string& oldProof, const BoardMove& mv)
+  {
+    return ExtendStateProof (rpcClient, rpcWallet, game.rules, channelId, meta,
+                             TextProof (oldProof), mv, newProof);
+  }
+
+};
+
+TEST_F (ExtendStateProofTests, NoTurnState)
+{
+  EXPECT_FALSE (ExtendProof (R"(
+    initial_state:
+      {
+        data: "100 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )", "1"));
+}
+
+TEST_F (ExtendStateProofTests, InvalidMove)
+{
+  EXPECT_FALSE (ExtendProof (R"(
+    initial_state:
+      {
+        data: "10 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )", "invalid move"));
+}
+
+TEST_F (ExtendStateProofTests, SignatureFailure)
+{
+  EXPECT_CALL (mockXayaWallet, signmessage ("addr0", _))
+      .WillOnce (Throw (jsonrpc::JsonRpcException (-5)));
+
+  EXPECT_FALSE (ExtendProof (R"(
+    initial_state:
+      {
+        data: "10 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )", "5"));
+}
+
+TEST_F (ExtendStateProofTests, Valid)
+{
+  EXPECT_CALL (mockXayaWallet, signmessage ("addr0", _))
+      .WillRepeatedly (Return (EncodeBase64 ("sgn0")));
+  EXPECT_CALL (mockXayaWallet, signmessage ("addr1", _))
+      .WillRepeatedly (Return (EncodeBase64 ("sgn1")));
+
+  struct Test
+  {
+    std::string name;
+    std::string oldProof;
+    std::string mv;
+    std::string newState;
+    unsigned numTrans;
+  };
+  const Test tests[] =
+    {
+
+      {
+        "from reinit",
+        R"(
+          initial_state: { data: "0 0" }
+        )",
+        "42",
+        "42 1",
+        1,
+      },
+
+      {
+        "still keep initial",
+        R"(
+          initial_state:
+            {
+              data: "10 2"
+              signatures: "sgn1"
+            }
+          transitions:
+            {
+              move: "4"
+              new_state:
+                {
+                  data: "14 3"
+                  signatures: "sgn0"
+                }
+            }
+        )",
+        "5",
+        "19 4",
+        2,
+      },
+
+      {
+        "removing previous step",
+        R"(
+          initial_state:
+            {
+              data: "10 2"
+              signatures: "sgn 1"
+            }
+          transitions:
+            {
+              move: "1"
+              new_state:
+                {
+                  data: "11 3"
+                  signatures: "sgn0"
+                }
+            }
+        )",
+        "1",
+        "12 4",
+        1,
+      }
+
+    };
+
+  for (const auto& t : tests)
+    {
+      LOG (INFO) << "Test case: " << t.name;
+      ASSERT_TRUE (ExtendProof (t.oldProof, t.mv));
+      EXPECT_EQ (newProof.transitions_size (), t.numTrans);
+
+      BoardState provenState;
+      CHECK (VerifyStateProof (rpcClient, game.rules, channelId, meta, "0 0",
+                               newProof, provenState));
+      auto p = game.rules.ParseState (channelId, meta, provenState);
+      CHECK (p != nullptr);
+      EXPECT_TRUE (p->Equals (t.newState));
+    }
 }
 
 /* ************************************************************************** */

@@ -171,8 +171,12 @@ TestGame::GetBoardRules () const
 TestGameFixture::TestGameFixture ()
   : httpServer(MockXayaRpcServer::HTTP_PORT),
     httpClient(MockXayaRpcServer::HTTP_URL),
+    httpServerWallet(MockXayaWalletRpcServer::HTTP_PORT),
+    httpClientWallet(MockXayaWalletRpcServer::HTTP_URL),
     mockXayaServer(httpServer),
-    rpcClient(httpClient)
+    rpcClient(httpClient),
+    mockXayaWallet(httpServerWallet),
+    rpcWallet(httpClientWallet)
 {
   game.Initialise (":memory:");
   game.InitialiseGameContext (Chain::MAIN, "add", &rpcClient);
@@ -180,11 +184,13 @@ TestGameFixture::TestGameFixture ()
   /* The initialisation above already sets up the database schema.  */
 
   mockXayaServer.StartListening ();
+  mockXayaWallet.StartListening ();
 }
 
 TestGameFixture::~TestGameFixture ()
 {
   mockXayaServer.StopListening ();
+  mockXayaWallet.StopListening ();
 }
 
 sqlite3*
