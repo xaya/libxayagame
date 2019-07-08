@@ -19,6 +19,12 @@ ChannelManager::ChannelManager (const BoardRules& r,
     boardStates(rules, rpc, channelId)
 {}
 
+ChannelManager::~ChannelManager ()
+{
+  std::lock_guard<std::mutex> lock(mut);
+  CHECK (stopped);
+}
+
 void
 ChannelManager::SetOffChainBroadcast (OffChainBroadcast& s)
 {
@@ -94,6 +100,12 @@ ChannelManager::ProcessOffChain (const std::string& reinitId,
 {
   std::lock_guard<std::mutex> lock(mut);
 
+  if (stopped)
+    {
+      LOG (INFO) << "ChannelManager is stopped, ignoring update";
+      return;
+    }
+
   boardStates.UpdateWithMove (reinitId, proof);
 
   TryResolveDispute ();
@@ -106,6 +118,12 @@ ChannelManager::ProcessOnChainNonExistant ()
   LOG_IF (INFO, exists)
       << "Channel " << channelId.ToHex () << " no longer exists on-chain";
   std::lock_guard<std::mutex> lock(mut);
+
+  if (stopped)
+    {
+      LOG (INFO) << "ChannelManager is stopped, ignoring update";
+      return;
+    }
 
   exists = false;
   NotifyStateChange ();
@@ -120,6 +138,12 @@ ChannelManager::ProcessOnChain (const proto::ChannelMetadata& meta,
   LOG_IF (INFO, !exists)
       << "Channel " << channelId.ToHex () << " is now found on-chain";
   std::lock_guard<std::mutex> lock(mut);
+
+  if (stopped)
+    {
+      LOG (INFO) << "ChannelManager is stopped, ignoring update";
+      return;
+    }
 
   pendingDispute = false;
   exists = true;
@@ -159,6 +183,12 @@ ChannelManager::ProcessLocalMove (const BoardMove& mv)
 {
   LOG (INFO) << "Local move: " << mv;
   std::lock_guard<std::mutex> lock(mut);
+
+  if (stopped)
+    {
+      LOG (INFO) << "ChannelManager is stopped, ignoring update";
+      return;
+    }
 
   if (!exists)
     {
@@ -210,6 +240,14 @@ ChannelManager::FileDispute ()
   CHECK (onChainSender != nullptr);
   onChainSender->SendDispute (boardStates.GetStateProof ());
   pendingDispute = true;
+}
+
+void
+ChannelManager::StopUpdates ()
+{
+  std::lock_guard<std::mutex> lock(mut);
+  stopped = true;
+  NotifyStateChange ();
 }
 
 Json::Value
@@ -267,9 +305,14 @@ ChannelManager::WaitForChange () const
 {
   std::unique_lock<std::mutex> lock(mut);
 
-  VLOG (1) << "Waiting for state change on condition variable...";
-  cvStateChanged.wait (lock);
-  VLOG (1) << "Potential state change detected in WaitForChange";
+  if (stopped)
+    VLOG (1) << "ChannelManager is stopped, not waiting for changes";
+  else
+    {
+      VLOG (1) << "Waiting for state change on condition variable...";
+      cvStateChanged.wait (lock);
+      VLOG (1) << "Potential state change detected in WaitForChange";
+    }
 
   return UnlockedToJson ();
 }

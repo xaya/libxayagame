@@ -127,6 +127,11 @@ protected:
         .WillRepeatedly (Throw (jsonrpc::JsonRpcException (-5)));
   }
 
+  ~ChannelManagerTests ()
+  {
+    cm.StopUpdates ();
+  }
+
   /**
    * Extracts the latest state from boardStates.
    */
@@ -550,6 +555,56 @@ TEST_F (WaitForChangeTests, LocalMove)
   CallWaitForChange ();
   cm.ProcessLocalMove ("1");
   JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, WhenStopped)
+{
+  cm.StopUpdates ();
+  CallWaitForChange ();
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, StopNotifies)
+{
+  CallWaitForChange ();
+  cm.StopUpdates ();
+  JoinWaiter ();
+}
+
+/* ************************************************************************** */
+
+using StopUpdatesTests = ChannelManagerTests;
+
+TEST_F (StopUpdatesTests, OnChain)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.StopUpdates ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("20 6"), 0);
+  EXPECT_EQ (GetLatestState (), "10 5");
+}
+
+TEST_F (StopUpdatesTests, OnChainNonExistant)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.StopUpdates ();
+  cm.ProcessOnChainNonExistant ();
+  EXPECT_TRUE (GetExists ());
+}
+
+TEST_F (StopUpdatesTests, OffChain)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.StopUpdates ();
+  cm.ProcessOffChain ("", ValidProof ("12 6"));
+  EXPECT_EQ (GetLatestState (), "10 5");
+}
+
+TEST_F (StopUpdatesTests, LocalMove)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.StopUpdates ();
+  cm.ProcessLocalMove ("1");
+  EXPECT_EQ (GetLatestState (), "10 5");
 }
 
 /* ************************************************************************** */

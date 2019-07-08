@@ -121,6 +121,14 @@ private:
   MoveSender* onChainSender = nullptr;
 
   /**
+   * If set to true, then no more updates will be processed.  This is used
+   * when shutting down the channel daemon and to make sure that we can properly
+   * handle waking up all waitforchange callers (without them re-calling
+   * and blocking again).
+   */
+  bool stopped = false;
+
+  /**
    * If set to false, it means that there is no on-chain data about the
    * channel ID.  This may be the case because the channel creation has not
    * been confirmed yet, or perhaps because the channel is already closed.
@@ -164,6 +172,8 @@ public:
                            XayaRpcClient& c, XayaWalletRpcClient& w,
                            const uint256& id, const std::string& name);
 
+  ~ChannelManager ();
+
   ChannelManager () = delete;
   ChannelManager (const ChannelManager&) = delete;
   void operator= (const ChannelManager&) = delete;
@@ -202,6 +212,18 @@ public:
    * Requests to file a dispute with the current state.
    */
   void FileDispute ();
+
+  /**
+   * Disables processing of updates in the future.  This should be called
+   * when shutting down the channel daemon.  It makes sure that all waiting
+   * callers to WaitForChange are woken up, and no more callers will block
+   * in the future.  Thus, this mechanism ensures that we can properly
+   * shut down WaitForChange.
+   *
+   * This function must be called before a ChannelManager instance is
+   * destructed.  Otherwise the destructor will CHECK-fail.
+   */
+  void StopUpdates ();
 
   /**
    * Returns the current state of this channel as JSON, suitable to be
