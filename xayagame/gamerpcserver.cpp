@@ -24,19 +24,33 @@ GameRpcServer::getcurrentstate ()
 }
 
 Json::Value
-GameRpcServer::waitforchange ()
+GameRpcServer::waitforchange (const std::string& knownBlock)
 {
-  LOG (INFO) << "RPC method called: waitforchange";
+  LOG (INFO) << "RPC method called: waitforchange " << knownBlock;
+  return DefaultWaitForChange (game, knownBlock);
+}
 
-  uint256 block;
-  game.WaitForChange (&block);
+Json::Value
+GameRpcServer::DefaultWaitForChange (const Game& g,
+                                     const std::string& knownBlock)
+{
+  LOG (INFO) << "RPC method called: waitforchange " << knownBlock;
+
+  uint256 oldBlock;
+  oldBlock.SetNull ();
+  if (!knownBlock.empty () && !oldBlock.FromHex (knownBlock))
+    LOG (ERROR)
+        << "Invalid block hash passed as known block: " << knownBlock;
+
+  uint256 newBlock;
+  g.WaitForChange (oldBlock, newBlock);
 
   /* If there is no best block so far, return JSON null.  */
-  if (block.IsNull ())
+  if (newBlock.IsNull ())
     return Json::Value ();
 
   /* Otherwise, return the block hash.  */
-  return block.ToHex ();
+  return newBlock.ToHex ();
 }
 
 } // namespace xaya

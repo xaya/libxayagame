@@ -680,8 +680,12 @@ private:
 
 protected:
 
+  uint256 nullOldBlock;
+
   WaitForChangeTests ()
   {
+    nullOldBlock.SetNull ();
+
     /* Since WaitForChange only really blocks when there is an active
        ZMQ subscriber, we need to set up a fake one.  So we can just use
        some address where hopefully no publishers are; we won't need
@@ -708,12 +712,12 @@ protected:
    * uint256 output pointer (can be null).
    */
   void
-  CallWaitForChange (uint256* bestBlock)
+  CallWaitForChange (const uint256& oldBlock, uint256& newBlock)
   {
     ASSERT_EQ (waiter, nullptr);
-    waiter = std::make_unique<std::thread> ([this, bestBlock] ()
+    waiter = std::make_unique<std::thread> ([this, &oldBlock, &newBlock] ()
       {
-        g.WaitForChange (bestBlock);
+        g.WaitForChange (oldBlock, newBlock);
       });
   }
 
@@ -735,20 +739,23 @@ TEST_F (WaitForChangeTests, ZmqNotRunning)
 {
   g.Stop ();
 
-  CallWaitForChange (nullptr);
+  uint256 newBlock;
+  CallWaitForChange (nullOldBlock, newBlock);
   JoinWaiter ();
 }
 
 TEST_F (WaitForChangeTests, StopWakesUpWaiters)
 {
-  CallWaitForChange (nullptr);
+  uint256 newBlock;
+  CallWaitForChange (nullOldBlock, newBlock);
   g.Stop ();
   JoinWaiter ();
 }
 
 TEST_F (WaitForChangeTests, InitialState)
 {
-  CallWaitForChange (nullptr);
+  uint256 newBlock;
+  CallWaitForChange (nullOldBlock, newBlock);
   SleepSome ();
 
   EXPECT_EQ (GetState (g), State::PREGENESIS);
@@ -765,7 +772,8 @@ TEST_F (WaitForChangeTests, BlockAttach)
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
 
-  CallWaitForChange (nullptr);
+  uint256 newBlock;
+  CallWaitForChange (nullOldBlock, newBlock);
   SleepSome ();
   AttachBlock (g, BlockHash (11), Moves (""));
   JoinWaiter ();
@@ -778,7 +786,8 @@ TEST_F (WaitForChangeTests, BlockDetach)
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   AttachBlock (g, BlockHash (11), Moves (""));
 
-  CallWaitForChange (nullptr);
+  uint256 newBlock;
+  CallWaitForChange (nullOldBlock, newBlock);
   SleepSome ();
   DetachBlock (g);
   JoinWaiter ();
@@ -788,12 +797,12 @@ TEST_F (WaitForChangeTests, ReturnsNoBestBlock)
 {
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
-  uint256 bestBlock;
-  CallWaitForChange (&bestBlock);
+  uint256 newBlock;
+  CallWaitForChange (BlockHash (42), newBlock);
   g.Stop ();
   JoinWaiter ();
 
-  EXPECT_TRUE (bestBlock.IsNull ());
+  EXPECT_TRUE (newBlock.IsNull ());
 }
 
 TEST_F (WaitForChangeTests, ReturnsBestBlock)
@@ -802,13 +811,45 @@ TEST_F (WaitForChangeTests, ReturnsBestBlock)
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
 
-  uint256 bestBlock;
-  CallWaitForChange (&bestBlock);
+  uint256 newBlock;
+  CallWaitForChange (nullOldBlock, newBlock);
   g.Stop ();
   JoinWaiter ();
 
-  EXPECT_FALSE (bestBlock.IsNull ());
-  EXPECT_TRUE (bestBlock == TestGame::GenesisBlockHash ());
+  EXPECT_FALSE (newBlock.IsNull ());
+  EXPECT_TRUE (newBlock == TestGame::GenesisBlockHash ());
+}
+
+TEST_F (WaitForChangeTests, UpToDateOldBlock)
+{
+  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+
+  uint256 newBlock;
+  CallWaitForChange (TestGame::GenesisBlockHash (), newBlock);
+  SleepSome ();
+  AttachBlock (g, BlockHash (11), Moves (""));
+  JoinWaiter ();
+
+  EXPECT_FALSE (newBlock.IsNull ());
+  EXPECT_TRUE (newBlock == BlockHash (11));
+}
+
+TEST_F (WaitForChangeTests, OutdatedOldBlock)
+{
+  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  AttachBlock (g, BlockHash (11), Moves (""));
+
+  uint256 newBlock;
+  CallWaitForChange (TestGame::GenesisBlockHash (), newBlock);
+  SleepSome ();
+  JoinWaiter ();
+
+  EXPECT_FALSE (newBlock.IsNull ());
+  EXPECT_TRUE (newBlock == BlockHash (11));
 }
 
 /* ************************************************************************** */

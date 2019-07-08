@@ -37,7 +37,11 @@ class ForChangeWaiter (threading.Thread):
 
   def run (self):
     rpc = self.node.createRpc ()
-    self.result = rpc.waitforchange ()
+    state = rpc.getcurrentstate ()
+    oldBlock = ""
+    if "blockhash" in state:
+      oldBlock = state["blockhash"]
+    self.result = rpc.waitforchange (oldBlock)
 
   def shouldBeRunning (self):
     sleepSome ()
@@ -63,7 +67,7 @@ class WaitForChangeTest (MoverTest):
     # best block and null is returned from the RPC.
 
   def test_attach (self):
-    self.log.info ("Testing block attaches...")
+    self.mainLogger.info ("Block attaches...")
 
     waiter = ForChangeWaiter (self.gamenode)
     waiter.shouldBeRunning ()
@@ -72,7 +76,7 @@ class WaitForChangeTest (MoverTest):
     waiter.shouldBeDone (self.rpc.xaya.getbestblockhash ())
 
   def test_detach (self):
-    self.log.info ("Testing block detaches...")
+    self.mainLogger.info ("Block detaches...")
 
     self.generate (1)
     blk = self.rpc.xaya.getbestblockhash ()
@@ -84,7 +88,7 @@ class WaitForChangeTest (MoverTest):
     waiter.shouldBeDone (self.rpc.xaya.getbestblockhash ())
 
   def test_stopped (self):
-    self.log.info ("Testing stopping the daemon while a waiter is active...")
+    self.mainLogger.info ("Stopping the daemon while a waiter is active...")
 
     waiter = ForChangeWaiter (self.gamenode)
     waiter.shouldBeRunning ()

@@ -344,9 +344,15 @@ public:
    * RPC methods, e.g. for front-ends.  Note that this function may return
    * spuriously in situations when there is no new state.
    *
-   * If a non-null pointer is passed in, then the new current block is
-   * returned in it.  This is set to null if there is not yet any known
-   * state associated to a block (during initial sync).
+   * When oldBlock is non-null and does not match the best block at the time
+   * of entering WaitForChange, then the function returns immediately.  This
+   * can be used to prevent race conditions where a new state came in between
+   * the last return from WaitForChange and when a client finishes processing
+   * that change and calls again.
+   *
+   * The new new best block is returned after the detected change.  This is set
+   * to null if there is not yet any known state associated to a block
+   * (during initial sync).
    *
    * After this function returns, clients will likely want to check if the
    * new current state matches what they already have.  If not, they should
@@ -356,7 +362,7 @@ public:
    * Otherwise, it will simply return immediately, as there are no changes
    * expected anyway.
    */
-  void WaitForChange (uint256* currentBlock = nullptr) const;
+  void WaitForChange (const uint256& oldBlock, uint256& newBlock) const;
 
   /**
    * Starts the ZMQ subscriber and other logic.  Must not be called before
