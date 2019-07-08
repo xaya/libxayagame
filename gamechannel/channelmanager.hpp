@@ -17,6 +17,7 @@
 
 #include <json/json.h>
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -74,8 +75,17 @@ private:
    * may be multiple threads calling functions on the ChannelManager (e.g.
    * one thread listing to the GSP's waitforchange and another on the real-time
    * broadcast network).
+   *
+   * This is also used as lock for the waitforchange condition variable.
    */
   mutable std::mutex mut;
+
+  /**
+   * Condition variable that gets signalled when the state is changed due
+   * to on-chain updates, off-chain updates or local moves.  This is used
+   * for waitforchange.
+   */
+  mutable std::condition_variable cvStateChanged;
 
   /** The board rules of the game being played.  */
   const BoardRules& rules;
@@ -133,6 +143,19 @@ private:
    */
   void TryResolveDispute ();
 
+  /**
+   * Returns the current state of the channel as JSON, assuming that mut is
+   * already locked.  This is used internally for ToJson as well as
+   * WaitForChange (the latter cannot call the former directly, since that would
+   * lock the mutex twice).
+   */
+  Json::Value UnlockedToJson () const;
+
+  /**
+   * Notifies threads waiting on cvStateChanged that a new state is available.
+   */
+  void NotifyStateChange () const;
+
   friend class ChannelManagerTests;
 
 public:
@@ -185,6 +208,17 @@ public:
    * sent to frontends.
    */
   Json::Value ToJson () const;
+
+  /**
+   * Blocks the calling thread until the state of the channel has (probably)
+   * been changed.  This can be used by frontends to implement long-polling
+   * RPC methods like waitforchange.  Note that the function may return
+   * spuriously even if there is no new state.
+   *
+   * On return, the current (i.e. likely new) state is returned in the same
+   * format as ToJson() would return.
+   */
+  Json::Value WaitForChange () const;
 
 };
 

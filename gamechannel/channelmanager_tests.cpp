@@ -20,6 +20,8 @@
 
 #include <glog/logging.h>
 
+#include <thread>
+
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
 using testing::_;
@@ -468,6 +470,86 @@ TEST_F (ChannelToJsonTests, Dispute)
     "whoseturn": 1,
     "canresolve": true
   })"));
+}
+
+/* ************************************************************************** */
+
+class WaitForChangeTests : public ChannelManagerTests
+{
+
+private:
+
+  /** The thread that is used to call WaitForChange.  */
+  std::unique_ptr<std::thread> waiter;
+
+  /** The JSON value returned from WaitForChange.  */
+  Json::Value returnedJson;
+
+protected:
+
+  /**
+   * Calls WaitForChange on a newly started thread.
+   */
+  void
+  CallWaitForChange ()
+  {
+    CHECK (waiter == nullptr);
+    waiter = std::make_unique<std::thread> ([this] ()
+      {
+        LOG (INFO) << "Calling WaitForChange...";
+        returnedJson = cm.WaitForChange ();
+        LOG (INFO) << "WaitForChange returned";
+      });
+
+    /* Make sure the thread had time to start and make the call.  */
+    SleepSome ();
+  }
+
+  /**
+   * Waits for the waiter thread to return and checks that the JSON value
+   * from it matches the then-correct ToJson output.
+   */
+  void
+  JoinWaiter ()
+  {
+    CHECK (waiter != nullptr);
+    LOG (INFO) << "Joining the waiter thread...";
+    waiter->join ();
+    LOG (INFO) << "Waiter thread finished";
+    waiter.reset ();
+    ASSERT_EQ (returnedJson, cm.ToJson ());
+  }
+
+};
+
+TEST_F (WaitForChangeTests, OnChain)
+{
+  CallWaitForChange ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, OnChainNonExistant)
+{
+  CallWaitForChange ();
+  cm.ProcessOnChainNonExistant ();
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, OffChain)
+{
+  CallWaitForChange ();
+  cm.ProcessOffChain ("", ValidProof ("12 6"));
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, LocalMove)
+{
+  ExpectOneBroadcast ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  CallWaitForChange ();
+  cm.ProcessLocalMove ("1");
+  JoinWaiter ();
 }
 
 /* ************************************************************************** */

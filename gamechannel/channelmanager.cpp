@@ -95,7 +95,9 @@ ChannelManager::ProcessOffChain (const std::string& reinitId,
   std::lock_guard<std::mutex> lock(mut);
 
   boardStates.UpdateWithMove (reinitId, proof);
+
   TryResolveDispute ();
+  NotifyStateChange ();
 }
 
 void
@@ -106,6 +108,7 @@ ChannelManager::ProcessOnChainNonExistant ()
   std::lock_guard<std::mutex> lock(mut);
 
   exists = false;
+  NotifyStateChange ();
 }
 
 void
@@ -148,6 +151,7 @@ ChannelManager::ProcessOnChain (const proto::ChannelMetadata& meta,
     }
 
   TryResolveDispute ();
+  NotifyStateChange ();
 }
 
 void
@@ -178,6 +182,7 @@ ChannelManager::ProcessLocalMove (const BoardMove& mv)
   offChainSender->SendNewState (reinit, newProof);
 
   TryResolveDispute ();
+  NotifyStateChange ();
 }
 
 void
@@ -208,10 +213,8 @@ ChannelManager::FileDispute ()
 }
 
 Json::Value
-ChannelManager::ToJson () const
+ChannelManager::UnlockedToJson () const
 {
-  std::lock_guard<std::mutex> lock(mut);
-
   Json::Value res(Json::objectValue);
   res["id"] = channelId.ToHex ();
   res["playername"] = playerName;
@@ -241,6 +244,34 @@ ChannelManager::ToJson () const
     }
 
   return res;
+}
+
+Json::Value
+ChannelManager::ToJson () const
+{
+  std::lock_guard<std::mutex> lock(mut);
+  return UnlockedToJson ();
+}
+
+void
+ChannelManager::NotifyStateChange () const
+{
+  /* Callers are expected to hold a lock on mut already, as is the case in
+     all the updating code that will call here anyway.  */
+  VLOG (1) << "Notifying waiting threads about state change...";
+  cvStateChanged.notify_all ();
+}
+
+Json::Value
+ChannelManager::WaitForChange () const
+{
+  std::unique_lock<std::mutex> lock(mut);
+
+  VLOG (1) << "Waiting for state change on condition variable...";
+  cvStateChanged.wait (lock);
+  VLOG (1) << "Potential state change detected in WaitForChange";
+
+  return UnlockedToJson ();
 }
 
 } // namespace xaya
