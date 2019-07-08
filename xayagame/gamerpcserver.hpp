@@ -40,10 +40,16 @@ public:
   {}
 
   virtual void stop () override;
-
   virtual Json::Value getcurrentstate () override;
+  virtual Json::Value waitforchange (const std::string& knownBlock) override;
 
-  virtual Json::Value waitforchange () override;
+  /**
+   * Implements the standard waitforchange RPC method independent of a
+   * particular server instance.  This can be used by customised RPC servers
+   * of games that have more methods, so that the code can still be reused.
+   */
+  static Json::Value DefaultWaitForChange (const Game& g,
+                                           const std::string& knownBlock);
 
 };
 

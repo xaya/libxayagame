@@ -502,9 +502,18 @@ Game::NotifyStateChange () const
 }
 
 void
-Game::WaitForChange (uint256* currentBlock) const
+Game::WaitForChange (const uint256& oldBlock, uint256& newBlock) const
 {
   std::unique_lock<std::mutex> lock(mut);
+
+  if (!oldBlock.IsNull () && storage->GetCurrentBlockHash (newBlock)
+          && newBlock != oldBlock)
+    {
+      VLOG (1)
+          << "Current block is different from old block,"
+             " immediate return from WaitForChange";
+      return;
+    }
 
   if (zmq.IsRunning ())
     {
@@ -517,8 +526,8 @@ Game::WaitForChange (uint256* currentBlock) const
         << "WaitForChange called with no active ZMQ listener,"
            " returning immediately";
 
-  if (currentBlock != nullptr && !storage->GetCurrentBlockHash (*currentBlock))
-    currentBlock->SetNull ();
+  if (!storage->GetCurrentBlockHash (newBlock))
+    newBlock.SetNull ();
 }
 
 void
