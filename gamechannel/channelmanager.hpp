@@ -121,6 +121,14 @@ private:
   MoveSender* onChainSender = nullptr;
 
   /**
+   * Version counter for the current state.  Whenever the state is changed,
+   * this value is incremented.  It can be used to identify a certain state,
+   * so that callers of WaitForChange can tell it which state they already
+   * know and get notified on changes from that state.
+   */
+  int stateVersion = 1;
+
+  /**
    * If set to true, then no more updates will be processed.  This is used
    * when shutting down the channel daemon and to make sure that we can properly
    * handle waking up all waitforchange callers (without them re-calling
@@ -161,12 +169,19 @@ private:
 
   /**
    * Notifies threads waiting on cvStateChanged that a new state is available.
+   * This also increments the state version.
    */
-  void NotifyStateChange () const;
+  void NotifyStateChange ();
 
   friend class ChannelManagerTests;
 
 public:
+
+  /**
+   * Special value for the known version in WaitForChange that tells the
+   * function to always block.
+   */
+  static constexpr int WAITFORCHANGE_ALWAYS_BLOCK = 0;
 
   explicit ChannelManager (const BoardRules& r,
                            XayaRpcClient& c, XayaWalletRpcClient& w,
@@ -237,10 +252,19 @@ public:
    * RPC methods like waitforchange.  Note that the function may return
    * spuriously even if there is no new state.
    *
+   * If the passed-in version is different from the current state version
+   * already when starting the call, the function returns immediately.  Ideally,
+   * clients should pass in the version they currently know (as returned
+   * in the JSON state in "version"), so that we can avoid race conditions
+   * when a change happens between two calls to WaitForChange.
+   *
+   * When WAITFORCHANGE_ALWAYS_BLOCK is passed as the known version, then the
+   * function will always block until the next update.
+   *
    * On return, the current (i.e. likely new) state is returned in the same
    * format as ToJson() would return.
    */
-  Json::Value WaitForChange () const;
+  Json::Value WaitForChange (int knownVersion) const;
 
 };
 

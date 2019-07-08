@@ -429,7 +429,8 @@ TEST_F (ChannelToJsonTests, NonExistant)
 {
   auto expected = ParseJson (R"({
     "playername": "player",
-    "existsonchain": false
+    "existsonchain": false,
+    "version": 2
   })");
   expected["id"] = channelId.ToHex ();
 
@@ -439,6 +440,7 @@ TEST_F (ChannelToJsonTests, NonExistant)
 
 TEST_F (ChannelToJsonTests, CurrentState)
 {
+  cm.ProcessOnChainNonExistant ();
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
 
   auto actual = cm.ToJson ();
@@ -454,7 +456,8 @@ TEST_F (ChannelToJsonTests, CurrentState)
 
   auto expected = ParseJson (R"({
     "playername": "player",
-    "existsonchain": true
+    "existsonchain": true,
+    "version": 3
   })");
   expected["id"] = channelId.ToHex ();
   EXPECT_EQ (actual, expected);
@@ -496,13 +499,13 @@ protected:
    * Calls WaitForChange on a newly started thread.
    */
   void
-  CallWaitForChange ()
+  CallWaitForChange (int known = ChannelManager::WAITFORCHANGE_ALWAYS_BLOCK)
   {
     CHECK (waiter == nullptr);
-    waiter = std::make_unique<std::thread> ([this] ()
+    waiter = std::make_unique<std::thread> ([this, known] ()
       {
         LOG (INFO) << "Calling WaitForChange...";
-        returnedJson = cm.WaitForChange ();
+        returnedJson = cm.WaitForChange (known);
         LOG (INFO) << "WaitForChange returned";
       });
 
@@ -568,6 +571,22 @@ TEST_F (WaitForChangeTests, StopNotifies)
 {
   CallWaitForChange ();
   cm.StopUpdates ();
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, OutdatedKnownVersion)
+{
+  const int known = cm.ToJson ()["version"].asInt ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  CallWaitForChange (known);
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, UpToDateKnownVersion)
+{
+  const int known = cm.ToJson ()["version"].asInt ();
+  CallWaitForChange (known);
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
   JoinWaiter ();
 }
 

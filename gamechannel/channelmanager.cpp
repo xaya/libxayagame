@@ -257,6 +257,7 @@ ChannelManager::UnlockedToJson () const
   res["id"] = channelId.ToHex ();
   res["playername"] = playerName;
   res["existsonchain"] = exists;
+  res["version"] = stateVersion;
 
   if (!exists)
     return res;
@@ -292,18 +293,31 @@ ChannelManager::ToJson () const
 }
 
 void
-ChannelManager::NotifyStateChange () const
+ChannelManager::NotifyStateChange ()
 {
   /* Callers are expected to hold a lock on mut already, as is the case in
      all the updating code that will call here anyway.  */
-  VLOG (1) << "Notifying waiting threads about state change...";
+  CHECK_GT (stateVersion, WAITFORCHANGE_ALWAYS_BLOCK);
+  ++stateVersion;
+  VLOG (1)
+      << "Notifying waiting threads about state change, new version: "
+      << stateVersion;
   cvStateChanged.notify_all ();
 }
 
 Json::Value
-ChannelManager::WaitForChange () const
+ChannelManager::WaitForChange (const int knownVersion) const
 {
   std::unique_lock<std::mutex> lock(mut);
+
+  if (knownVersion != WAITFORCHANGE_ALWAYS_BLOCK
+          && knownVersion != stateVersion)
+    {
+      VLOG (1)
+          << "Known version differs from current one,"
+             " returning immediately from WaitForChange";
+      return UnlockedToJson ();
+    }
 
   if (stopped)
     VLOG (1) << "ChannelManager is stopped, not waiting for changes";
