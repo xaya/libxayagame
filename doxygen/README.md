@@ -3,6 +3,7 @@
 In this folder you'll find a `Doxyfile` file. You can use this in Doxywizard to generate HTML and LaTex documentation for libxayagame. To do so:
 
 1. Open Doxywizard 
+1. Load `Doxyfile` (File > Open)
 1. Click the `Run` tab
 1. Click the `Run doxygen` button
 1. Wait until it finishes
