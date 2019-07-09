@@ -69,6 +69,7 @@ protected:
   virtual const BoardRules& GetBoardRules () const = 0;
 
   friend class ChannelData;
+  friend class ChannelGspRpcServer;
   friend class ChannelsTable;
 
 public:

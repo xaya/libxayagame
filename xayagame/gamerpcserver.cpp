@@ -34,8 +34,6 @@ Json::Value
 GameRpcServer::DefaultWaitForChange (const Game& g,
                                      const std::string& knownBlock)
 {
-  LOG (INFO) << "RPC method called: waitforchange " << knownBlock;
-
   uint256 oldBlock;
   oldBlock.SetNull ();
   if (!knownBlock.empty () && !oldBlock.FromHex (knownBlock))

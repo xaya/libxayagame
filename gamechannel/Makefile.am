@@ -1,8 +1,13 @@
 lib_LTLIBRARIES = libgamechannel.la
 gamechanneldir = $(includedir)/gamechannel
+rpcstubdir = $(gamechanneldir)/rpc-stubs
 protodir = $(gamechanneldir)/proto
 pydir = $(pythondir)/gamechannel
 pyprotodir = $(pydir)/proto
+
+RPC_STUBS = \
+  rpc-stubs/channelgsprpcclient.h \
+  rpc-stubs/channelgsprpcserverstub.h
 
 PROTOS = \
   proto/metadata.proto \
@@ -14,10 +19,11 @@ PROTOSOURCES = $(PROTOS:.proto=.pb.cc)
 PROTOPY = $(PROTOS:.proto=_pb2.py)
 
 EXTRA_DIST = $(PROTOS) \
+  rpc-stubs/gsp.json \
   schema.sql schema_head.cpp schema_tail.cpp
 
-BUILT_SOURCES = $(PROTOHEADERS) $(PROTOPY)
-CLEANFILES = $(PROTOHEADERS) $(PROTOSOURCES) $(PROTOPY) schema.cpp
+BUILT_SOURCES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOPY)
+CLEANFILES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOSOURCES) $(PROTOPY) schema.cpp
 
 libgamechannel_la_CXXFLAGS = \
   -I$(top_srcdir) \
@@ -34,6 +40,7 @@ libgamechannel_la_SOURCES = \
   channelmanager.cpp \
   database.cpp \
   gamestatejson.cpp \
+  gsprpc.cpp \
   rollingstate.cpp \
   schema.cpp \
   signatures.cpp \
@@ -45,12 +52,14 @@ gamechannel_HEADERS = \
   channelmanager.hpp \
   database.hpp \
   gamestatejson.hpp \
+  gsprpc.hpp \
   movesender.hpp \
   protoboard.hpp protoboard.tpp \
   rollingstate.hpp \
   schema.hpp \
   signatures.hpp \
   stateproof.hpp
+rpcstub_HEADERS = $(RPC_STUBS)
 proto_HEADERS = $(PROTOHEADERS)
 
 PYTHONTESTS = \
@@ -94,6 +103,13 @@ check_HEADERS = \
 
 schema.cpp: schema_head.cpp schema.sql schema_tail.cpp
 	cat $^ >$@
+
+rpc-stubs/channelgsprpcclient.h: $(srcdir)/rpc-stubs/gsp.json
+	jsonrpcstub "$<" --cpp-client=ChannelGspRpcClient --cpp-client-file="$@"
+rpc-stubs/channelgsprpcserverstub.h: $(srcdir)/rpc-stubs/gsp.json
+	jsonrpcstub "$<" \
+	  --cpp-server=ChannelGspRpcServerStub \
+	  --cpp-server-file="$@"
 
 proto/%.pb.h proto/%.pb.cc: $(top_srcdir)/gamechannel/proto/%.proto
 	protoc -I$(top_srcdir) --cpp_out=$(top_builddir) "$<"

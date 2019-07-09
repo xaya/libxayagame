@@ -1,0 +1,21 @@
+[
+  {
+    "name": "stop",
+    "params": {}
+  },
+  {
+    "name": "getcurrentstate",
+    "params": {},
+    "returns": {}
+  },
+  {
+    "name": "getchannel",
+    "params": [ "channel id" ],
+    "returns": {}
+  },
+  {
+    "name": "waitforchange",
+    "params": [ "known block" ],
+    "returns": {}
+  }
+]

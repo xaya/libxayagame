@@ -6,6 +6,7 @@ TEST_LIBRARY = shipstest.py
 REGTESTS = \
   channel_management.py \
   disputes.py \
+  getchannel.py \
   reorg.py \
   winner_statement.py
 

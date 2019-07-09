@@ -29,5 +29,7 @@ Makefile.in
 *.pb.cc
 *_pb2.py
 
+*/rpc-stubs/*.h
+
 .dirstamp
 tests
