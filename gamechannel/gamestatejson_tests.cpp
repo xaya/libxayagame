@@ -4,6 +4,7 @@
 
 #include "gamestatejson.hpp"
 
+#include "protoutils.hpp"
 #include "testgame.hpp"
 
 #include <xayautil/base64.hpp>
@@ -54,10 +55,8 @@ CheckChannelJson (Json::Value actual, const std::string& expected,
   ASSERT_EQ (actual["state"]["base64"].asString (), EncodeBase64 (proofState));
   actual["state"].removeMember ("base64");
 
-  std::string bytes;
-  ASSERT_TRUE (DecodeBase64 (actual["state"]["proof"].asString (), bytes));
   proto::StateProof proof;
-  ASSERT_TRUE (proof.ParseFromString (bytes));
+  ASSERT_TRUE (ProtoFromBase64 (actual["state"]["proof"].asString (), proof));
   ASSERT_EQ (proof.initial_state ().data (), proofState);
   actual["state"].removeMember ("proof");
 
@@ -127,10 +126,8 @@ TEST_F (GameStateJsonTests, ChannelMetadataToJson)
   ASSERT_EQ (actual["reinit"], EncodeBase64 (meta2.reinit ()));
   actual.removeMember ("reinit");
 
-  std::string bytes;
-  ASSERT_TRUE (DecodeBase64 (actual["proto"].asString (), bytes));
   proto::ChannelMetadata actualMeta;
-  ASSERT_TRUE (actualMeta.ParseFromString (bytes));
+  ASSERT_TRUE (ProtoFromBase64 (actual["proto"].asString (), actualMeta));
   ASSERT_TRUE (MessageDifferencer::Equals (actualMeta, meta2));
   actual.removeMember ("proto");
 

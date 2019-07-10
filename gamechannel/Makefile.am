@@ -57,6 +57,7 @@ gamechannel_HEADERS = \
   gsprpc.hpp \
   movesender.hpp \
   protoboard.hpp protoboard.tpp \
+  protoutils.hpp protoutils.tpp \
   rollingstate.hpp \
   schema.hpp \
   signatures.hpp \
@@ -94,6 +95,7 @@ tests_SOURCES = \
   database_tests.cpp \
   gamestatejson_tests.cpp \
   protoboard_tests.cpp \
+  protoutils_tests.cpp \
   rollingstate_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \

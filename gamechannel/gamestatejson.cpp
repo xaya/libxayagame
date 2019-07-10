@@ -1,5 +1,7 @@
 #include "gamestatejson.hpp"
 
+#include "protoutils.hpp"
+
 #include <xayautil/base64.hpp>
 
 #include <glog/logging.h>
@@ -8,23 +10,6 @@
 
 namespace xaya
 {
-
-namespace
-{
-
-/**
- * Encodes a protocol buffer as base64 string.
- */
-template <typename Proto>
-  std::string
-  EncodeProto (const Proto& msg)
-{
-  std::string serialised;
-  CHECK (msg.SerializeToString (&serialised));
-  return EncodeBase64 (serialised);
-}
-
-} // anonymous namespace
 
 Json::Value
 ChannelMetadataToJson (const proto::ChannelMetadata& meta)
@@ -42,7 +27,7 @@ ChannelMetadataToJson (const proto::ChannelMetadata& meta)
   res["participants"] = participants;
 
   res["reinit"] = EncodeBase64 (meta.reinit ());
-  res["proto"] = EncodeProto (meta);
+  res["proto"] = ProtoToBase64 (meta);
 
   return res;
 }
@@ -86,7 +71,7 @@ ChannelToGameStateJson (const ChannelData& ch, const BoardRules& r)
   res["meta"] = ChannelMetadataToJson (meta);
 
   res["state"] = BoardStateToJson (r, id, meta, ch.GetLatestState ());
-  res["state"]["proof"] = EncodeProto (ch.GetStateProof ());
+  res["state"]["proof"] = ProtoToBase64 (ch.GetStateProof ());
   res["reinit"] = BoardStateToJson (r, id, meta, ch.GetReinitState ());
 
   return res;

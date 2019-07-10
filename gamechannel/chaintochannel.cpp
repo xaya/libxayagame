@@ -4,6 +4,8 @@
 
 #include "chaintochannel.hpp"
 
+#include "protoutils.hpp"
+
 #include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
 
@@ -43,11 +45,8 @@ template <typename Proto>
 {
   CHECK (val.isString ());
 
-  std::string bytes;
-  CHECK (DecodeBase64 (val.asString (), bytes));
-
   Proto res;
-  CHECK (res.ParseFromString (bytes));
+  CHECK (ProtoFromBase64 (val.asString (), res));
 
   return res;
 }
