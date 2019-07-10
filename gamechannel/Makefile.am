@@ -38,6 +38,7 @@ libgamechannel_la_SOURCES = \
   boardrules.cpp \
   channelgame.cpp \
   channelmanager.cpp \
+  chaintochannel.cpp \
   database.cpp \
   gamestatejson.cpp \
   gsprpc.cpp \
@@ -50,6 +51,7 @@ gamechannel_HEADERS = \
   boardrules.hpp \
   channelgame.hpp \
   channelmanager.hpp \
+  chaintochannel.hpp \
   database.hpp \
   gamestatejson.hpp \
   gsprpc.hpp \
@@ -88,6 +90,7 @@ tests_LDADD = \
 tests_SOURCES = \
   channelgame_tests.cpp \
   channelmanager_tests.cpp \
+  chaintochannel_tests.cpp \
   database_tests.cpp \
   gamestatejson_tests.cpp \
   protoboard_tests.cpp \
