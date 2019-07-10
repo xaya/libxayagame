@@ -16,6 +16,6 @@
   {
     "name": "waitforchange",
     "params": [ "known block" ],
-    "returns": {}
+    "returns": ""
   }
 ]

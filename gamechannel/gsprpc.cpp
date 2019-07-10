@@ -40,7 +40,7 @@ ChannelGspRpcServer::getchannel (const std::string& channelId)
   return DefaultGetChannel (game, chGame, channelId);
 }
 
-Json::Value
+std::string
 ChannelGspRpcServer::waitforchange (const std::string& knownBlock)
 {
   LOG (INFO) << "RPC method called: waitforchange " << knownBlock;

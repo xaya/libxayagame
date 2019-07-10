@@ -45,7 +45,7 @@ public:
   virtual void stop () override;
   virtual Json::Value getcurrentstate () override;
   virtual Json::Value getchannel (const std::string& channelId) override;
-  virtual Json::Value waitforchange (const std::string& knownBlock) override;
+  virtual std::string waitforchange (const std::string& knownBlock) override;
 
   /**
    * Implements the standard getchannel method.  This can be used by
