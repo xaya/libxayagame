@@ -9,8 +9,22 @@
 
 #include <glog/logging.h>
 
+#include <chrono>
+
 namespace xaya
 {
+
+namespace
+{
+
+/**
+ * Timeout for WaitForChange (i.e. return after this time even if there
+ * has not been any change).  Having a timeout in the first place avoids
+ * collecting more and more blocked threads in the worst case.
+ */
+constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
+
+} // anonymous namespace
 
 ChannelManager::ChannelManager (const BoardRules& r,
                                 XayaRpcClient& c, XayaWalletRpcClient& w,
@@ -324,7 +338,7 @@ ChannelManager::WaitForChange (const int knownVersion) const
   else
     {
       VLOG (1) << "Waiting for state change on condition variable...";
-      cvStateChanged.wait (lock);
+      cvStateChanged.wait_for (lock, WAITFORCHANGE_TIMEOUT);
       VLOG (1) << "Potential state change detected in WaitForChange";
     }
 

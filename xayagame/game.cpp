@@ -13,6 +13,18 @@
 namespace xaya
 {
 
+namespace
+{
+
+/**
+ * Timeout for WaitForChange (i.e. return after this time even if there
+ * has not been any change).  Having a timeout in the first place avoids
+ * collecting more and more blocked threads in the worst case.
+ */
+constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
+
+} // anonymous namespace
+
 Game::Game (const std::string& id)
   : gameId(id)
 {
@@ -518,7 +530,7 @@ Game::WaitForChange (const uint256& oldBlock, uint256& newBlock) const
   if (zmq.IsRunning ())
     {
       VLOG (1) << "Waiting for state change on condition variable...";
-      cvStateChanged.wait (lock);
+      cvStateChanged.wait_for (lock, WAITFORCHANGE_TIMEOUT);
       VLOG (1) << "Potential state change detected in WaitForChange";
     }
   else
