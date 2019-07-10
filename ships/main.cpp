@@ -6,6 +6,7 @@
 
 #include "logic.hpp"
 
+#include <gamechannel/gsprpc.hpp>
 #include <xayagame/defaultmain.hpp>
 
 #include <gflags/gflags.h>
@@ -70,8 +71,10 @@ main (int argc, char** argv)
   config.DataDirectory = FLAGS_datadir;
 
   ships::ShipsLogic rules;
-  const int res = xaya::SQLiteMain (config, "xs", rules);
+  xaya::ChannelGspInstanceFactory instanceFact(rules);
+  config.InstanceFactory = &instanceFact;
 
+  const int res = xaya::SQLiteMain (config, "xs", rules);
   google::protobuf::ShutdownProtobufLibrary ();
   return res;
 }

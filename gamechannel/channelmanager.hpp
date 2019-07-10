@@ -174,6 +174,7 @@ private:
   void NotifyStateChange ();
 
   friend class ChannelManagerTests;
+  friend class ChainToChannelFeederTests;
 
 public:
 
@@ -195,6 +196,12 @@ public:
 
   void SetOffChainBroadcast (OffChainBroadcast& s);
   void SetMoveSender (MoveSender& s);
+
+  const uint256&
+  GetChannelId () const
+  {
+    return channelId;
+  }
 
   /**
    * Processes a (potentially) new move retrieved through the off-chain

@@ -9,6 +9,11 @@
     "returns": {}
   },
   {
+    "name": "getchannel",
+    "params": [ "channel id" ],
+    "returns": {}
+  },
+  {
     "name": "waitforchange",
     "params": [ "known block" ],
     "returns": ""
