@@ -4,6 +4,7 @@
 
 #include "channelmanager.hpp"
 
+#include "protoutils.hpp"
 #include "stateproof.hpp"
 #include "testgame.hpp"
 
@@ -51,24 +52,6 @@ ValidProof (const std::string& state)
   return res;
 }
 
-class MockMoveSender : public MoveSender
-{
-
-public:
-
-  MockMoveSender ()
-  {
-    /* By default, we do not expect any calls.  Tests should explicitly
-       overwrite these expectations as needed.  */
-    EXPECT_CALL (*this, SendDispute (_)).Times (0);
-    EXPECT_CALL (*this, SendResolution (_)).Times (0);
-  }
-
-  MOCK_METHOD1 (SendDispute, void (const proto::StateProof& proof));
-  MOCK_METHOD1 (SendResolution, void (const proto::StateProof& proof));
-
-};
-
 class MockOffChainBroadcast : public OffChainBroadcast
 {
 
@@ -96,11 +79,12 @@ protected:
   proto::ChannelMetadata meta;
 
   ChannelManager cm;
-  MockMoveSender onChain;
+  MoveSender onChain;
   MockOffChainBroadcast offChain;
 
   ChannelManagerTests ()
-    : cm(game.rules, rpcClient, rpcWallet, channelId, "player")
+    : cm(game.rules, rpcClient, rpcWallet, channelId, "player"),
+      onChain("game id", channelId, "player", rpcWallet, game.channel)
   {
     cm.SetMoveSender (onChain);
     cm.SetOffChainBroadcast (offChain);
@@ -169,18 +153,60 @@ protected:
   }
 
   /**
-   * Expects exactly n calls to SendResolution to be made, with the state
-   * proof from GetBoardStates().
+   * Expects exactly n disputes or resolutions to be sent through the
+   * wallet with name_update's, and checks that the associated state proof
+   * matches that from GetBoardStates().
    */
   void
-  ExpectResolutions (const int n)
+  ExpectMoves (const int n, const std::string& type)
   {
-    auto isOk = [this] (const proto::StateProof& p)
+    auto isOk = [this, type] (const std::string& val)
       {
+        VLOG (1) << "name_update sent: " << val;
+
+        const auto parsed = ParseJson (val);
+        const auto& mv = parsed["g"]["game id"];
+
+        if (!mv.isObject ())
+          {
+            VLOG (1) << "Not an object: " << mv;
+            return false;
+          }
+
+        if (mv["type"].asString () != type)
+          {
+            VLOG (1) << "Mismatch in expected type, should be " << type;
+            return false;
+          }
+        if (mv["id"].asString () != channelId.ToHex ())
+          {
+            VLOG (1) << "Mismatch in expected channel ID";
+            return false;
+          }
+
+        proto::StateProof proof;
+        if (!ProtoFromBase64 (mv["proof"].asString (), proof))
+          {
+            VLOG (1) << "Failed to parse proof from base64";
+            return false;
+          }
+
         const auto& expected = GetBoardStates ().GetStateProof ();
-        return MessageDifferencer::Equals (p, expected);
+        if (!MessageDifferencer::Equals (proof, expected))
+          {
+            VLOG (1)
+                << "State proof differs from expected proto"
+                << "\nActual:\n" << proof.DebugString ()
+                << "\nExpected:\n" << expected.DebugString ();
+            return false;
+          }
+
+        return true;
       };
-    EXPECT_CALL (onChain, SendResolution (Truly (isOk))).Times (n);
+
+    EXPECT_CALL (mockXayaWallet, name_update ("p/player", Truly (isOk)))
+        .Times (n)
+        .WillRepeatedly (Return (SHA256::Hash ("txid").ToHex ()));
   }
 
   /**
@@ -244,7 +270,7 @@ TEST_F (ProcessOnChainTests, Dispute)
 
 TEST_F (ProcessOnChainTests, TriggersResolutionn)
 {
-  ExpectResolutions (1);
+  ExpectMoves (1, "resolution");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
@@ -263,7 +289,7 @@ TEST_F (ProcessOffChainTests, UpdatesState)
 
 TEST_F (ProcessOffChainTests, TriggersResolutionn)
 {
-  ExpectResolutions (1);
+  ExpectMoves (1, "resolution");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 }
@@ -313,7 +339,7 @@ TEST_F (ProcessLocalMoveTests, Valid)
 TEST_F (ProcessLocalMoveTests, TriggersResolution)
 {
   ExpectOneBroadcast ();
-  ExpectResolutions (1);
+  ExpectMoves (1, "resolution");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
   cm.ProcessLocalMove ("1");
 }
@@ -324,14 +350,14 @@ using ResolveDisputeTests = ChannelManagerTests;
 
 TEST_F (ResolveDisputeTests, SendsResolution)
 {
-  ExpectResolutions (1);
+  ExpectMoves (1, "resolution");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 }
 
 TEST_F (ResolveDisputeTests, ChannelDoesNotExist)
 {
-  ExpectResolutions (0);
+  ExpectMoves (0, "resolution");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
   cm.ProcessOnChainNonExistant ();
   cm.ProcessOffChain ("", ValidProof ("12 6"));
@@ -339,7 +365,7 @@ TEST_F (ResolveDisputeTests, ChannelDoesNotExist)
 
 TEST_F (ResolveDisputeTests, AlreadyPending)
 {
-  ExpectResolutions (1);
+  ExpectMoves (1, "resolution");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   cm.ProcessOffChain ("", ValidProof ("14 8"));
@@ -347,66 +373,46 @@ TEST_F (ResolveDisputeTests, AlreadyPending)
 
 TEST_F (ResolveDisputeTests, OtherPlayer)
 {
-  ExpectResolutions (0);
+  ExpectMoves (0, "resolution");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("11 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 }
 
 TEST_F (ResolveDisputeTests, NoBetterTurn)
 {
-  ExpectResolutions (0);
+  ExpectMoves (0, "resolution");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 5"));
 }
 
 /* ************************************************************************** */
 
-class FileDisputeTests : public ChannelManagerTests
-{
-
-protected:
-
-  /**
-   * Expects exactly n calls to SendDispute to be made, with the state
-   * proof from GetBoardStates().
-   */
-  void
-  ExpectDisputes (const int n)
-  {
-    auto isOk = [this] (const proto::StateProof& p)
-      {
-        const auto& expected = GetBoardStates ().GetStateProof ();
-        return MessageDifferencer::Equals (p, expected);
-      };
-    EXPECT_CALL (onChain, SendDispute (Truly (isOk))).Times (n);
-  }
-
-};
+using FileDisputeTests = ChannelManagerTests;
 
 TEST_F (FileDisputeTests, Successful)
 {
-  ExpectDisputes (1);
+  ExpectMoves (1, "dispute");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
   cm.FileDispute ();
 }
 
 TEST_F (FileDisputeTests, ChannelDoesNotExist)
 {
-  ExpectDisputes (0);
+  ExpectMoves (0, "dispute");
   cm.ProcessOnChainNonExistant ();
   cm.FileDispute ();
 }
 
 TEST_F (FileDisputeTests, HasOtherDispute)
 {
-  ExpectDisputes (0);
+  ExpectMoves (0, "dispute");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 10);
   cm.FileDispute ();
 }
 
 TEST_F (FileDisputeTests, AlreadyPending)
 {
-  ExpectDisputes (1);
+  ExpectMoves (1, "dispute");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
   cm.FileDispute ();
   cm.FileDispute ();
@@ -414,7 +420,7 @@ TEST_F (FileDisputeTests, AlreadyPending)
 
 TEST_F (FileDisputeTests, RetryAfterBlock)
 {
-  ExpectDisputes (2);
+  ExpectMoves (2, "dispute");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
   cm.FileDispute ();
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);

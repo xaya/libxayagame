@@ -7,20 +7,24 @@
 
 #include "boardrules.hpp"
 #include "channelgame.hpp"
+#include "openchannel.hpp"
+
+#include "proto/metadata.pb.h"
+#include "proto/stateproof.pb.h"
 
 #include <xayagame/testutils.hpp>
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
+#include <xayagame/rpc-stubs/xayarpcclient.h>
+#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
+
+#include <json/json.h>
 #include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <gtest/gtest.h>
 
 #include <sqlite3.h>
-
-#include <json/json.h>
 
 #include <memory>
 #include <string>
@@ -53,6 +57,22 @@ public:
 };
 
 /**
+ * OpenChannel implementation for our test game.
+ */
+class AdditionChannel : public OpenChannel
+{
+
+public:
+
+  Json::Value ResolutionMove (const uint256& channelId,
+                              const proto::StateProof& proof) const override;
+
+  Json::Value DisputeMove (const uint256& channelId,
+                           const proto::StateProof& proof) const override;
+
+};
+
+/**
  * Subclass of ChannelGame that implements a trivial game only as much as
  * necessary for unit tests of the game-channel framework.
  */
@@ -75,6 +95,7 @@ protected:
 public:
 
   AdditionRules rules;
+  AdditionChannel channel;
 
   using ChannelGame::ProcessDispute;
   using ChannelGame::ProcessResolution;

@@ -101,7 +101,7 @@ private:
 
   /**
    * The Xaya name that corresponds to the player that is using the
-   * current channel daemon.
+   * current channel daemon (without p/ prefix).
    */
   const std::string playerName;
 
