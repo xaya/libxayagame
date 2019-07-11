@@ -19,34 +19,6 @@ namespace xaya
 {
 
 /**
- * Interface for a class that allows broadcasting moves / state-proofs
- * off-chain to the channel participants.  This is implemented by the
- * real-time implementations and mocked for testing.
- *
- * Functions of the interface may be called by different threads, but it is
- * guaranteed that only one thread at a time is accessing the instance.
- */
-class OffChainBroadcast
-{
-
-protected:
-
-  OffChainBroadcast () = default;
-
-public:
-
-  virtual ~OffChainBroadcast () = default;
-
-  /**
-   * Sends a new state (presumably after the player made a move) to all
-   * channel participants.
-   */
-  virtual void SendNewState (const std::string& reinitId,
-                             const proto::StateProof& proof) = 0;
-
-};
-
-/**
  * A connection to the Xaya wallet that allows sending moves (mainly
  * disputes and resolutions from ChannelManager, but also game-specific code
  * may use it e.g. for winner statements).  They are sent by name_update's

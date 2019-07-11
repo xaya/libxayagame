@@ -6,6 +6,7 @@
 #define GAMECHANNEL_CHANNELMANAGER_HPP
 
 #include "boardrules.hpp"
+#include "broadcast.hpp"
 #include "movesender.hpp"
 #include "rollingstate.hpp"
 

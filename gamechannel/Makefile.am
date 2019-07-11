@@ -50,6 +50,7 @@ libgamechannel_la_SOURCES = \
   $(PROTOSOURCES)
 gamechannel_HEADERS = \
   boardrules.hpp \
+  broadcast.hpp \
   channelgame.hpp \
   channelmanager.hpp \
   chaintochannel.hpp \
