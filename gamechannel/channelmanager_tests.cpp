@@ -7,8 +7,7 @@
 #include "protoutils.hpp"
 #include "stateproof.hpp"
 
-#include <xayautil/base64.hpp>
-#include <xayautil/hash.hpp>
+#include "proto/broadcast.pb.h"
 
 #include <jsonrpccpp/common/exception.h>
 
@@ -88,14 +87,14 @@ class MockOffChainBroadcast : public OffChainBroadcast
 
 public:
 
-  MockOffChainBroadcast ()
+  MockOffChainBroadcast (ChannelManager& cm)
+    : OffChainBroadcast(cm)
   {
     /* Expect no calls by default.  */
-    EXPECT_CALL (*this, SendNewState (_, _)).Times (0);
+    EXPECT_CALL (*this, SendMessage (_)).Times (0);
   }
 
-  MOCK_METHOD2 (SendNewState, void (const std::string& reinitId,
-                                    const proto::StateProof& proof));
+  MOCK_METHOD1 (SendMessage, void (const std::string& msg));
 
 };
 
@@ -108,7 +107,8 @@ protected:
   MockOffChainBroadcast offChain;
 
   ChannelManagerTests ()
-    : onChain("game id", channelId, "player", rpcWallet, game.channel)
+    : onChain("game id", channelId, "player", rpcWallet, game.channel),
+      offChain(cm)
   {
     cm.SetMoveSender (onChain);
     cm.SetOffChainBroadcast (offChain);
@@ -177,18 +177,18 @@ protected:
   void
   ExpectOneBroadcast ()
   {
-    auto isLatestReinit = [this] (const std::string& reinit)
+    auto isOk = [this] (const std::string& msg)
       {
-        return reinit == GetBoardStates ().GetReinitId ();
+        proto::BroadcastMessage pb;
+        CHECK (pb.ParseFromString (msg));
+
+        if (pb.reinit () != GetBoardStates ().GetReinitId ())
+          return false;
+
+        const auto& expectedProof = GetBoardStates ().GetStateProof ();
+        return MessageDifferencer::Equals (pb.proof (), expectedProof);
       };
-    auto isLatestProof = [this] (const proto::StateProof& p)
-      {
-        const auto& expected = GetBoardStates ().GetStateProof ();
-        return MessageDifferencer::Equals (p, expected);
-      };
-    EXPECT_CALL (offChain,
-                 SendNewState (Truly (isLatestReinit), Truly (isLatestProof)))
-        .Times (1);
+    EXPECT_CALL (offChain, SendMessage (Truly (isOk))).Times (1);
   }
 
 };

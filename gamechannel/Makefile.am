@@ -10,6 +10,7 @@ RPC_STUBS = \
   rpc-stubs/channelgsprpcserverstub.h
 
 PROTOS = \
+  proto/broadcast.proto \
   proto/metadata.proto \
   proto/protoboardtest.proto \
   proto/signatures.proto \
@@ -36,6 +37,7 @@ libgamechannel_la_LIBADD = \
   $(GLOG_LIBS) $(SQLITE3_LIBS) $(PROTOBUF_LIBS)
 libgamechannel_la_SOURCES = \
   boardrules.cpp \
+  broadcast.cpp \
   channelgame.cpp \
   channelmanager.cpp \
   chaintochannel.cpp \
@@ -92,6 +94,7 @@ tests_LDADD = \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(PROTOBUF_LIBS)
 tests_SOURCES = \
+  broadcast_tests.cpp \
   channelgame_tests.cpp \
   channelmanager_tests.cpp \
   chaintochannel_tests.cpp \
