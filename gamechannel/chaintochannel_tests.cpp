@@ -4,10 +4,10 @@
 
 #include "chaintochannel.hpp"
 
+#include "channelmanager_tests.hpp"
 #include "database.hpp"
 #include "gamestatejson.hpp"
 #include "stateproof.hpp"
-#include "testgame.hpp"
 
 #include "rpc-stubs/channelgsprpcserverstub.h"
 
@@ -34,28 +34,11 @@ using google::protobuf::TextFormat;
 
 namespace xaya
 {
-
 namespace
 {
 
 /** Timeout (in milliseconds) for the test GSP connection.  */
 constexpr int RPC_TIMEOUT_MS = 50;
-
-/**
- * Constructs a state proof for the given state, signed by both players
- * (and thus valid).
- */
-proto::StateProof
-ValidProof (const std::string& state)
-{
-  proto::StateProof res;
-  auto* is = res.mutable_initial_state ();
-  is->set_data (state);
-  is->add_signatures ("sgn");
-  is->add_signatures ("other sgn");
-
-  return res;
-}
 
 /**
  * GSP RPC server for use in the tests.  It allows to set a current
@@ -201,51 +184,26 @@ public:
 
 };
 
-} // anonymous namespace
-
-class ChainToChannelFeederTests : public TestGameFixture
+class ChainToChannelFeederTests : public ChannelManagerTestFixture
 {
 
 private:
-
-  const uint256 channelId = SHA256::Hash ("channel id");
 
   jsonrpc::HttpServer httpServerGsp;
   jsonrpc::HttpClient httpClientGsp;
 
 protected:
 
-  proto::ChannelMetadata meta;
-
-  ChannelManager cm;
   ChainToChannelFeeder feeder;
   TestGspServer gspServer;
 
   ChainToChannelFeederTests ()
     : httpServerGsp(32200),
       httpClientGsp("http://localhost:32200"),
-      cm(game.rules, rpcClient, rpcWallet, channelId, "player"),
       feeder(httpClientGsp, cm),
       gspServer(channelId, meta, game, httpServerGsp)
   {
     httpClientGsp.SetTimeout (RPC_TIMEOUT_MS);
-
-    CHECK (TextFormat::ParseFromString (R"(
-      reinit: "reinit id"
-      participants:
-        {
-          name: "player"
-          address: "my addr"
-        }
-      participants:
-        {
-          name: "other"
-          address: "not my addr"
-        }
-    )", &meta));
-
-    ValidSignature ("sgn", "my addr");
-    ValidSignature ("other sgn", "not my addr");
 
     gspServer.StartListening ();
   }
@@ -257,35 +215,7 @@ protected:
     feeder.Stop ();
     gspServer.NotifyChange ();
 
-    cm.StopUpdates ();
     gspServer.StopListening ();
-  }
-
-  /**
-   * Extracts the latest state from boardStates.
-   */
-  BoardState
-  GetLatestState () const
-  {
-    return UnverifiedProofEndState (cm.boardStates.GetStateProof ());
-  }
-
-  /**
-   * Exposes the boardStates member of our ChannelManager to subtests.
-   */
-  const RollingState&
-  GetBoardStates () const
-  {
-    return cm.boardStates;
-  }
-
-  /**
-   * Exposes the exists member to subtests.
-   */
-  bool
-  GetExists () const
-  {
-    return cm.exists;
   }
 
   /**
@@ -294,15 +224,13 @@ protected:
   unsigned
   GetDisputeHeight () const
   {
-    if (cm.dispute == nullptr)
+    const auto* disp = GetDispute ();
+    if (disp == nullptr)
       return 0;
-    return cm.dispute->height;
+    return disp->height;
   }
 
 };
-
-namespace
-{
 
 /* ************************************************************************** */
 

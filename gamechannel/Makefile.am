@@ -108,6 +108,8 @@ tests_SOURCES = \
   \
   testgame.cpp
 check_HEADERS = \
+  channelmanager_tests.hpp \
+  \
   testgame.hpp
 
 schema.cpp: schema_head.cpp schema.sql schema_tail.cpp

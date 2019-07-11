@@ -174,8 +174,7 @@ private:
    */
   void NotifyStateChange ();
 
-  friend class ChannelManagerTests;
-  friend class ChainToChannelFeederTests;
+  friend class ChannelManagerTestFixture;
 
 public:
 
