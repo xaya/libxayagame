@@ -4,6 +4,7 @@
 
 #include "testgame.hpp"
 
+#include "protoutils.hpp"
 #include "signatures.hpp"
 
 #include <xayautil/base64.hpp>
@@ -130,6 +131,30 @@ AdditionRules::ParseState (const uint256& channelId,
     return nullptr;
 
   return std::make_unique<AdditionState> (p);
+}
+
+Json::Value
+AdditionChannel::ResolutionMove (const uint256& channelId,
+                                 const proto::StateProof& proof) const
+{
+  Json::Value res(Json::objectValue);
+  res["type"] = "resolution";
+  res["id"] = channelId.ToHex ();
+  res["proof"] = ProtoToBase64 (proof);
+
+  return res;
+}
+
+Json::Value
+AdditionChannel::DisputeMove (const uint256& channelId,
+                              const proto::StateProof& proof) const
+{
+  Json::Value res(Json::objectValue);
+  res["type"] = "dispute";
+  res["id"] = channelId.ToHex ();
+  res["proof"] = ProtoToBase64 (proof);
+
+  return res;
 }
 
 void
