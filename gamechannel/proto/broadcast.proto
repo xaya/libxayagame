@@ -1,0 +1,25 @@
+// Copyright (C) 2019 The Xaya developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+syntax = "proto2";
+
+import "gamechannel/proto/stateproof.proto";
+
+package xaya.proto;
+
+/** A message on the off-chain broadcast channel.  */
+message BroadcastMessage
+{
+
+  /** The channel reinit ID this corresponds to.  */
+  optional string reinit = 1;
+
+  /* There is no need to also store the channel ID, since that is part of the
+     broadcast channel itself (and implementations of OffChainBroadcast need
+     to make sure that routing by channel works).  */
+
+  /** The state proof for the move that this represents.  */
+  optional StateProof proof = 2;
+
+}

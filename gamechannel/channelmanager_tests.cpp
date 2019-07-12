@@ -2,14 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "channelmanager.hpp"
+#include "channelmanager_tests.hpp"
 
 #include "protoutils.hpp"
 #include "stateproof.hpp"
-#include "testgame.hpp"
 
-#include <xayautil/base64.hpp>
-#include <xayautil/hash.hpp>
+#include "proto/broadcast.pb.h"
 
 #include <jsonrpccpp/common/exception.h>
 
@@ -33,13 +31,6 @@ using testing::Truly;
 namespace xaya
 {
 
-namespace
-{
-
-/**
- * Constructs a state proof for the given state, signed by both players
- * (and thus valid).
- */
 proto::StateProof
 ValidProof (const std::string& state)
 {
@@ -52,104 +43,75 @@ ValidProof (const std::string& state)
   return res;
 }
 
+ChannelManagerTestFixture::ChannelManagerTestFixture ()
+  : cm(game.rules, rpcClient, rpcWallet, channelId, "player")
+{
+  CHECK (TextFormat::ParseFromString (R"(
+    participants:
+      {
+        name: "player"
+        address: "my addr"
+      }
+    participants:
+      {
+        name: "other"
+        address: "not my addr"
+      }
+  )", &meta));
+
+  ValidSignature ("sgn", "my addr");
+  ValidSignature ("other sgn", "not my addr");
+
+  EXPECT_CALL (mockXayaWallet, signmessage ("my addr", _))
+      .WillRepeatedly (Return (EncodeBase64 ("sgn")));
+  EXPECT_CALL (mockXayaWallet, signmessage ("not my addr", _))
+      .WillRepeatedly (Throw (jsonrpc::JsonRpcException (-5)));
+}
+
+ChannelManagerTestFixture::~ChannelManagerTestFixture ()
+{
+  cm.StopUpdates ();
+}
+
+BoardState
+ChannelManagerTestFixture::GetLatestState () const
+{
+  return UnverifiedProofEndState (cm.boardStates.GetStateProof ());
+}
+
+namespace
+{
+
 class MockOffChainBroadcast : public OffChainBroadcast
 {
 
 public:
 
-  MockOffChainBroadcast ()
+  MockOffChainBroadcast (ChannelManager& cm)
+    : OffChainBroadcast(cm)
   {
     /* Expect no calls by default.  */
-    EXPECT_CALL (*this, SendNewState (_, _)).Times (0);
+    EXPECT_CALL (*this, SendMessage (_)).Times (0);
   }
 
-  MOCK_METHOD2 (SendNewState, void (const std::string& reinitId,
-                                    const proto::StateProof& proof));
+  MOCK_METHOD1 (SendMessage, void (const std::string& msg));
 
 };
 
-} // anonymous namespace
-
-class ChannelManagerTests : public TestGameFixture
+class ChannelManagerTests : public ChannelManagerTestFixture
 {
 
 protected:
 
-  const uint256 channelId = SHA256::Hash ("channel id");
-  proto::ChannelMetadata meta;
-
-  ChannelManager cm;
   MoveSender onChain;
   MockOffChainBroadcast offChain;
 
   ChannelManagerTests ()
-    : cm(game.rules, rpcClient, rpcWallet, channelId, "player"),
-      onChain("game id", channelId, "player", rpcWallet, game.channel)
+    : onChain("game id", channelId, "player", rpcWallet, game.channel),
+      offChain(cm)
   {
     cm.SetMoveSender (onChain);
     cm.SetOffChainBroadcast (offChain);
-
-    CHECK (TextFormat::ParseFromString (R"(
-      participants:
-        {
-          name: "player"
-          address: "my addr"
-        }
-      participants:
-        {
-          name: "other"
-          address: "not my addr"
-        }
-    )", &meta));
-
-    ValidSignature ("sgn", "my addr");
-    ValidSignature ("other sgn", "not my addr");
-
-    EXPECT_CALL (mockXayaWallet, signmessage ("my addr", _))
-        .WillRepeatedly (Return (EncodeBase64 ("sgn")));
-    EXPECT_CALL (mockXayaWallet, signmessage ("not my addr", _))
-        .WillRepeatedly (Throw (jsonrpc::JsonRpcException (-5)));
-  }
-
-  ~ChannelManagerTests ()
-  {
-    cm.StopUpdates ();
-  }
-
-  /**
-   * Extracts the latest state from boardStates.
-   */
-  BoardState
-  GetLatestState () const
-  {
-    return UnverifiedProofEndState (cm.boardStates.GetStateProof ());
-  }
-
-  /**
-   * Exposes the boardStates member of our ChannelManager to subtests.
-   */
-  const RollingState&
-  GetBoardStates () const
-  {
-    return cm.boardStates;
-  }
-
-  /**
-   * Exposes the exists member to subtests.
-   */
-  bool
-  GetExists () const
-  {
-    return cm.exists;
-  }
-
-  /**
-   * Exposes the dispute member to subtests.
-   */
-  const ChannelManager::DisputeData*
-  GetDispute () const
-  {
-    return cm.dispute.get ();
   }
 
   /**
@@ -215,24 +177,21 @@ protected:
   void
   ExpectOneBroadcast ()
   {
-    auto isLatestReinit = [this] (const std::string& reinit)
+    auto isOk = [this] (const std::string& msg)
       {
-        return reinit == GetBoardStates ().GetReinitId ();
+        proto::BroadcastMessage pb;
+        CHECK (pb.ParseFromString (msg));
+
+        if (pb.reinit () != GetBoardStates ().GetReinitId ())
+          return false;
+
+        const auto& expectedProof = GetBoardStates ().GetStateProof ();
+        return MessageDifferencer::Equals (pb.proof (), expectedProof);
       };
-    auto isLatestProof = [this] (const proto::StateProof& p)
-      {
-        const auto& expected = GetBoardStates ().GetStateProof ();
-        return MessageDifferencer::Equals (p, expected);
-      };
-    EXPECT_CALL (offChain,
-                 SendNewState (Truly (isLatestReinit), Truly (isLatestProof)))
-        .Times (1);
+    EXPECT_CALL (offChain, SendMessage (Truly (isOk))).Times (1);
   }
 
 };
-
-namespace
-{
 
 TEST_F (ChannelManagerTests, ProcessOnChainNonExistant)
 {

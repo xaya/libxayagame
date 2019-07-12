@@ -140,6 +140,12 @@ ChannelManager::ProcessOnChainNonExistant ()
     }
 
   exists = false;
+
+  /* If the channel no longer exists on chain, set the list of participants
+     for the broadcaster to empty.  */
+  if (offChainSender != nullptr)
+    offChainSender->SetParticipants (proto::ChannelMetadata ());
+
   NotifyStateChange ();
 }
 
@@ -187,6 +193,11 @@ ChannelManager::ProcessOnChain (const proto::ChannelMetadata& meta,
       dispute->turn = p->WhoseTurn ();
       dispute->count = p->TurnCount ();
     }
+
+  /* Update the list of participants for the off-chain broadcaster to the
+     latest known version.  */
+  if (offChainSender != nullptr)
+    offChainSender->SetParticipants (meta);
 
   TryResolveDispute ();
   NotifyStateChange ();

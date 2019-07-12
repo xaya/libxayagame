@@ -6,6 +6,7 @@
 #define GAMECHANNEL_CHANNELMANAGER_HPP
 
 #include "boardrules.hpp"
+#include "broadcast.hpp"
 #include "movesender.hpp"
 #include "rollingstate.hpp"
 
@@ -173,8 +174,7 @@ private:
    */
   void NotifyStateChange ();
 
-  friend class ChannelManagerTests;
-  friend class ChainToChannelFeederTests;
+  friend class ChannelManagerTestFixture;
 
 public:
 
