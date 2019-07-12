@@ -1,4 +1,5 @@
 lib_LTLIBRARIES = libgamechannel.la
+dist_bin_SCRIPTS = rpc-channel-server.py
 gamechanneldir = $(includedir)/gamechannel
 rpcstubdir = $(gamechanneldir)/rpc-stubs
 protodir = $(gamechanneldir)/proto
@@ -7,7 +8,8 @@ pyprotodir = $(pydir)/proto
 
 RPC_STUBS = \
   rpc-stubs/channelgsprpcclient.h \
-  rpc-stubs/channelgsprpcserverstub.h
+  rpc-stubs/channelgsprpcserverstub.h \
+  rpc-stubs/rpcbroadcastclient.h
 
 PROTOS = \
   proto/broadcast.proto \
@@ -21,6 +23,7 @@ PROTOPY = $(PROTOS:.proto=_pb2.py)
 
 EXTRA_DIST = $(PROTOS) \
   rpc-stubs/gsp.json \
+  rpc-stubs/rpcbroadcast.json \
   schema.sql schema_head.cpp schema_tail.cpp
 
 BUILT_SOURCES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOPY)
@@ -46,6 +49,7 @@ libgamechannel_la_SOURCES = \
   gsprpc.cpp \
   movesender.cpp \
   rollingstate.cpp \
+  rpcbroadcast.cpp \
   schema.cpp \
   signatures.cpp \
   stateproof.cpp \
@@ -64,6 +68,7 @@ gamechannel_HEADERS = \
   protoboard.hpp protoboard.tpp \
   protoutils.hpp protoutils.tpp \
   rollingstate.hpp \
+  rpcbroadcast.hpp \
   schema.hpp \
   signatures.hpp \
   stateproof.hpp
@@ -71,15 +76,19 @@ rpcstub_HEADERS = $(RPC_STUBS)
 proto_HEADERS = $(PROTOHEADERS)
 
 PYTHONTESTS = \
-  signatures_tests.py
+  signatures_tests.py \
+  test_rpcbroadcast.py
 noinst_PYTHON = $(PYTHONTESTS)
-py_PYTHON = __init__.py signatures.py
+py_PYTHON = \
+  __init__.py \
+  rpcbroadcast.py \
+  signatures.py
 pyproto_PYTHON = proto/__init__.py $(PROTOPY)
 
 AM_TESTS_ENVIRONMENT = \
   PYTHONPATH=$(srcdir)
 
-check_PROGRAMS = tests
+check_PROGRAMS = tests test_rpcbroadcast
 TESTS = tests $(PYTHONTESTS)
 
 tests_CXXFLAGS = \
@@ -115,6 +124,18 @@ check_HEADERS = \
   \
   testgame.hpp
 
+test_rpcbroadcast_CXXFLAGS = \
+  -I$(top_srcdir) \
+  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
+  $(GLOG_CFLAGS) $(GFLAGS_CFLAGS) $(PROTOBUF_CFLAGS)
+test_rpcbroadcast_LDADD = \
+  $(builddir)/libgamechannel.la \
+  $(top_builddir)/xayautil/libxayautil.la \
+  $(top_builddir)/xayagame/libxayagame.la \
+  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
+  $(GLOG_LIBS) $(GFLAGS_LIBS) $(PROTOBUF_LIBS)
+test_rpcbroadcast_SOURCES = test_rpcbroadcast.cpp
+
 schema.cpp: schema_head.cpp schema.sql schema_tail.cpp
 	cat $^ >$@
 
@@ -124,6 +145,9 @@ rpc-stubs/channelgsprpcserverstub.h: $(srcdir)/rpc-stubs/gsp.json
 	jsonrpcstub "$<" \
 	  --cpp-server=ChannelGspRpcServerStub \
 	  --cpp-server-file="$@"
+
+rpc-stubs/rpcbroadcastclient.h: $(srcdir)/rpc-stubs/rpcbroadcast.json
+	jsonrpcstub "$<" --cpp-client=RpcBroadcastClient --cpp-client-file="$@"
 
 proto/%.pb.h proto/%.pb.cc: $(top_srcdir)/gamechannel/proto/%.proto
 	protoc -I$(top_srcdir) --cpp_out=$(top_builddir) "$<"

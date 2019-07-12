@@ -1,0 +1,27 @@
+[
+  {
+    "name": "send",
+    "params":
+      {
+        "channel": "hex",
+        "message": "string"
+      }
+  },
+  {
+    "name": "getseq",
+    "params":
+      {
+        "channel": "hex"
+      },
+    "returns": {}
+  },
+  {
+    "name": "receive",
+    "params":
+      {
+        "channel": "hex",
+        "fromseq": 42
+      },
+    "returns": {}
+  }
+]

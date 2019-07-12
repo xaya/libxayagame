@@ -118,6 +118,10 @@ protected:
    * the default Start/Stop and event loop, then they should override this
    * method.  Calls should never block for an unlimited amount of time,
    * but time out and return an empty vector after some delay.
+   *
+   * It is guaranteed that this function is only called by one concurrent
+   * thread at any given time (when used in combination with the default
+   * Start/Stop event loop).
    */
   virtual std::vector<std::string> GetMessages ();
 
