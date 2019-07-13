@@ -86,7 +86,8 @@ private:
 public:
 
   explicit TestRpcBroadcast (const std::string& rpcUrl, const uint256& id)
-    : cm(NullReference<BoardRules> (), NullReference<XayaRpcClient> (),
+    : cm(NullReference<BoardRules> (), NullReference<OpenChannel> (),
+         NullReference<XayaRpcClient> (),
          NullReference<XayaWalletRpcClient> (), id, "player name"),
       bc(rpcUrl, cm)
   {

@@ -48,6 +48,7 @@ libgamechannel_la_SOURCES = \
   gamestatejson.cpp \
   gsprpc.cpp \
   movesender.cpp \
+  openchannel.cpp \
   rollingstate.cpp \
   rpcbroadcast.cpp \
   schema.cpp \

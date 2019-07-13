@@ -5,6 +5,7 @@
 #ifndef GAMECHANNEL_OPENCHANNEL_HPP
 #define GAMECHANNEL_OPENCHANNEL_HPP
 
+#include "boardrules.hpp"
 #include "proto/stateproof.pb.h"
 
 #include <xayautil/uint256.hpp>
@@ -47,6 +48,20 @@ public:
    */
   virtual Json::Value DisputeMove (const uint256& channelId,
                                    const proto::StateProof& proof) const = 0;
+
+  /**
+   * Checks if an automatic move can be sent right now for the given game
+   * state.  This is useful for situations where moves are made according
+   * to some protocol, e.g. for hash commitments and random numbers.  The
+   * default implementation just returns false, i.e. indicating that auto
+   * moves are never available.
+   *
+   * This function is not marked as "const", since it may change the internal
+   * state of the game-specific data.  For instance, when computing the auto
+   * move, the game might construct and save some random salt value for
+   * a hash commitment.
+   */
+  virtual bool MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv);
 
 };
 

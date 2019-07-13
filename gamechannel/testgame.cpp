@@ -117,6 +117,16 @@ public:
     return res;
   }
 
+  bool
+  MaybeAutoMove (BoardMove& mv) const
+  {
+    if (data.number % 10 < 6)
+      return false;
+
+    mv = "2";
+    return true;
+  }
+
 };
 
 } // anonymous namespace
@@ -155,6 +165,13 @@ AdditionChannel::DisputeMove (const uint256& channelId,
   res["proof"] = ProtoToBase64 (proof);
 
   return res;
+}
+
+bool
+AdditionChannel::MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv)
+{
+  const auto& addState = dynamic_cast<const AdditionState&> (state);
+  return addState.MaybeAutoMove (mv);
 }
 
 void

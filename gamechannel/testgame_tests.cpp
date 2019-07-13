@@ -109,5 +109,51 @@ TEST_F (AdditionRulesTests, ApplyMoveInvalid)
   EXPECT_FALSE (ApplyMove ("42 1", "-1", newState));
 }
 
+class AdditionChannelTests : public TestGameFixture
+{
+
+private:
+
+  const uint256 channelId = SHA256::Hash ("foo");
+  proto::ChannelMetadata meta;
+
+protected:
+
+  /**
+   * Calls MaybeAutoMove after parsing the given state.
+   */
+  bool
+  MaybeAutoMove (const BoardState& state, BoardMove& mv)
+  {
+    const auto p = game.rules.ParseState (channelId, meta, state);
+    CHECK (p != nullptr);
+    return game.channel.MaybeAutoMove (*p, mv);
+  }
+
+};
+
+TEST_F (AdditionChannelTests, AutoMoves)
+{
+  BoardMove mv;
+
+  EXPECT_FALSE (MaybeAutoMove ("5 0", mv));
+  EXPECT_FALSE (MaybeAutoMove ("30 0", mv));
+
+  ASSERT_TRUE (MaybeAutoMove ("6 5", mv));
+  EXPECT_EQ (mv, "2");
+
+  ASSERT_TRUE (MaybeAutoMove ("17 5", mv));
+  EXPECT_EQ (mv, "2");
+
+  ASSERT_TRUE (MaybeAutoMove ("88 5", mv));
+  EXPECT_EQ (mv, "2");
+
+  ASSERT_TRUE (MaybeAutoMove ("99 5", mv));
+  EXPECT_EQ (mv, "2");
+
+  ASSERT_TRUE (MaybeAutoMove ("108 5", mv));
+  EXPECT_EQ (mv, "2");
+}
+
 } // anonymous namespace
 } // namespace xaya

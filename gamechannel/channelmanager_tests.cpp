@@ -44,7 +44,7 @@ ValidProof (const std::string& state)
 }
 
 ChannelManagerTestFixture::ChannelManagerTestFixture ()
-  : cm(game.rules, rpcClient, rpcWallet, channelId, "player")
+  : cm(game.rules, game.channel, rpcClient, rpcWallet, channelId, "player")
 {
   CHECK (TextFormat::ParseFromString (R"(
     participants:
@@ -172,17 +172,21 @@ protected:
   }
 
   /**
-   * Expects exactly one off-chain broadcast to be sent with the latest state.
+   * Expects exactly one off-chain broadcast to be sent with the latest state
+   * proof, and verifies that the corresponding state matches the given one.
    */
   void
-  ExpectOneBroadcast ()
+  ExpectOneBroadcast (const std::string& expectedState)
   {
-    auto isOk = [this] (const std::string& msg)
+    auto isOk = [this, expectedState] (const std::string& msg)
       {
         proto::BroadcastMessage pb;
         CHECK (pb.ParseFromString (msg));
 
         if (pb.reinit () != GetBoardStates ().GetReinitId ())
+          return false;
+
+        if (!GetBoardStates ().GetLatestState ().Equals (expectedState))
           return false;
 
         const auto& expectedProof = GetBoardStates ().GetStateProof ();
@@ -289,7 +293,7 @@ TEST_F (ProcessLocalMoveTests, NotMyTurn)
 
 TEST_F (ProcessLocalMoveTests, Valid)
 {
-  ExpectOneBroadcast ();
+  ExpectOneBroadcast ("11 6");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
   cm.ProcessLocalMove ("1");
   EXPECT_EQ (GetLatestState (), "11 6");
@@ -297,10 +301,70 @@ TEST_F (ProcessLocalMoveTests, Valid)
 
 TEST_F (ProcessLocalMoveTests, TriggersResolution)
 {
-  ExpectOneBroadcast ();
+  ExpectOneBroadcast ("11 6");
   ExpectMoves (1, "resolution");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
   cm.ProcessLocalMove ("1");
+}
+
+/* ************************************************************************** */
+
+using AutoMoveTests = ChannelManagerTests;
+
+TEST_F (AutoMoveTests, OneMove)
+{
+  ExpectOneBroadcast ("20 6");
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("18 5"), 0);
+  EXPECT_EQ (GetLatestState (), "20 6");
+}
+
+TEST_F (AutoMoveTests, TwoMoves)
+{
+  ExpectOneBroadcast ("30 7");
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("26 5"), 0);
+  EXPECT_EQ (GetLatestState (), "30 7");
+}
+
+TEST_F (AutoMoveTests, NoTurnState)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("108 5"), 0);
+  EXPECT_EQ (GetLatestState (), "108 5");
+}
+
+TEST_F (AutoMoveTests, NotMyTurn)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("37 5"), 0);
+  EXPECT_EQ (GetLatestState (), "37 5");
+}
+
+TEST_F (AutoMoveTests, NoAutoMove)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("44 5"), 0);
+  EXPECT_EQ (GetLatestState (), "44 5");
+}
+
+TEST_F (AutoMoveTests, WithDisputeResolution)
+{
+  ExpectOneBroadcast ("50 6");
+  ExpectMoves (1, "resolution");
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("48 5"), 1);
+  EXPECT_EQ (GetLatestState (), "50 6");
+}
+
+TEST_F (AutoMoveTests, ProcessOffChain)
+{
+  ExpectOneBroadcast ("20 9");
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.ProcessOffChain ("", ValidProof ("18 8"));
+  EXPECT_EQ (GetLatestState (), "20 9");
+}
+
+TEST_F (AutoMoveTests, ProcessLocalMove)
+{
+  ExpectOneBroadcast ("20 8");
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.ProcessLocalMove ("6");
+  EXPECT_EQ (GetLatestState (), "20 8");
 }
 
 /* ************************************************************************** */
@@ -556,7 +620,7 @@ TEST_F (WaitForChangeTests, OffChainNoChange)
 
 TEST_F (WaitForChangeTests, LocalMove)
 {
-  ExpectOneBroadcast ();
+  ExpectOneBroadcast ("11 6");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
   CallWaitForChange ();
   cm.ProcessLocalMove ("1");
