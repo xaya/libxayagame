@@ -51,7 +51,7 @@ RollingState::GetMetadata () const
   return mit->second.meta;
 }
 
-void
+bool
 RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
                              const BoardState& reinitState,
                              const proto::StateProof& proof)
@@ -65,7 +65,10 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
   const unsigned parsedCnt = parsed->TurnCount ();
 
   /* First of all, store the current on-chain update's reinit ID as the
-     "latest known".  */
+     "latest known".  We also keep track of whether or not the ID changed,
+     which we need to determine what to return for the case that the
+     ID exists already and our state is not as fresh as the known one.  */
+  const bool reinitChange = (reinitId != meta.reinit ());
   reinitId = meta.reinit ();
   LOG (INFO)
       << "Performing on-chain update for channel " << channelId.ToHex ()
@@ -85,7 +88,7 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
       reinits.emplace (reinitId, std::move (entry));
 
       LOG (INFO) << "Added previously unknown reinitialisation";
-      return;
+      return true;
     }
 
   /* Update the entry to the new state, in case it is actually fresher
@@ -100,15 +103,16 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
       LOG (INFO)
           << "The new state is not fresher than the known one"
           << " with turn count " << currentCnt;
-      return;
+      return reinitChange;
     }
 
   LOG (INFO) << "The new state is fresher, updating";
   entry.proof = proof;
   entry.latestState = std::move (parsed);
+  return true;
 }
 
-void
+bool
 RollingState::UpdateWithMove (const std::string& updReinit,
                               const proto::StateProof& proof)
 {
@@ -125,7 +129,7 @@ RollingState::UpdateWithMove (const std::string& updReinit,
       LOG (WARNING)
           << "Off-chain update for channel " << channelId.ToHex ()
           << " has unknown reinitialisation ID: " << EncodeBase64 (updReinit);
-      return;
+      return false;
     }
   ReinitData& entry = mit->second;
 
@@ -139,7 +143,7 @@ RollingState::UpdateWithMove (const std::string& updReinit,
       LOG (WARNING)
           << "Off-chain update for channel " << channelId.ToHex ()
           << " has an invalid state proof";
-      return;
+      return false;
     }
   auto parsed = rules.ParseState (channelId, entry.meta, provenState);
   CHECK (parsed != nullptr);
@@ -157,12 +161,18 @@ RollingState::UpdateWithMove (const std::string& updReinit,
       LOG (INFO)
           << "The new state is not fresher than the known one"
           << " with turn count " << currentCnt;
-      return;
+      return false;
     }
 
   LOG (INFO) << "The new state is fresher, updating";
   entry.proof = proof;
   entry.latestState = std::move (parsed);
+
+  /* In this case, we return a change if and only if the update was done to
+     the current reinit ID.  We do not want to signal a change when another
+     reinit ID was updated (that will instead be signalled by UpdateOnChain
+     when switching to that reinit ID).  */
+  return (updReinit == reinitId);
 }
 
 } // namespace xaya

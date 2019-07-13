@@ -455,6 +455,12 @@ private:
   /** The thread that is used to call WaitForChange.  */
   std::unique_ptr<std::thread> waiter;
 
+  /** Set to true while the thread is actively waiting.  */
+  bool waiting;
+
+  /** Lock for waiting.  */
+  mutable std::mutex mut;
+
   /** The JSON value returned from WaitForChange.  */
   Json::Value returnedJson;
 
@@ -470,7 +476,15 @@ protected:
     waiter = std::make_unique<std::thread> ([this, known] ()
       {
         LOG (INFO) << "Calling WaitForChange...";
+        {
+          std::lock_guard<std::mutex> lock(mut);
+          waiting = true;
+        }
         returnedJson = cm.WaitForChange (known);
+        {
+          std::lock_guard<std::mutex> lock(mut);
+          waiting = false;
+        }
         LOG (INFO) << "WaitForChange returned";
       });
 
@@ -493,6 +507,18 @@ protected:
     ASSERT_EQ (returnedJson, cm.ToJson ());
   }
 
+  /**
+   * Returns true if the thread is currently waiting.
+   */
+  bool
+  IsWaiting () const
+  {
+    CHECK (waiter != nullptr);
+
+    std::lock_guard<std::mutex> lock(mut);
+    return waiting;
+  }
+
 };
 
 TEST_F (WaitForChangeTests, OnChain)
@@ -513,6 +539,18 @@ TEST_F (WaitForChangeTests, OffChain)
 {
   CallWaitForChange ();
   cm.ProcessOffChain ("", ValidProof ("12 6"));
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, OffChainNoChange)
+{
+  CallWaitForChange ();
+  cm.ProcessOffChain ("", ValidProof ("10 5"));
+
+  SleepSome ();
+  EXPECT_TRUE (IsWaiting ());
+
+  cm.StopUpdates ();
   JoinWaiter ();
 }
 

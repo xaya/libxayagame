@@ -120,7 +120,8 @@ ChannelManager::ProcessOffChain (const std::string& reinitId,
       return;
     }
 
-  boardStates.UpdateWithMove (reinitId, proof);
+  if (!boardStates.UpdateWithMove (reinitId, proof))
+    return;
 
   TryResolveDispute ();
   NotifyStateChange ();
@@ -231,7 +232,10 @@ ChannelManager::ProcessLocalMove (const BoardMove& mv)
     }
 
   const auto& reinit = boardStates.GetReinitId ();
-  boardStates.UpdateWithMove (reinit, newProof);
+
+  /* The update is guaranteed to yield a change at this point, since otherwise
+     ExtendStateProof would already have failed.  */
+  CHECK (boardStates.UpdateWithMove (reinit, newProof));
 
   CHECK (offChainSender != nullptr);
   offChainSender->SendNewState (reinit, newProof);
