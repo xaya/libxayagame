@@ -179,6 +179,16 @@ private:
   bool ProcessAutoMoves ();
 
   /**
+   * Performs internal updates after the state was changed.  In particular,
+   * this performs automoves, resolves disputes and notifies the OpenChannel
+   * and WaitForChange listeners about a new change.
+   *
+   * If automoves were found or broadcast is true, then it also broadcasts
+   * the new state to the off-chain channel.
+   */
+  void ProcessStateUpdate (bool broadcast);
+
+  /**
    * Returns the current state of the channel as JSON, assuming that mut is
    * already locked.  This is used internally for ToJson as well as
    * WaitForChange (the latter cannot call the former directly, since that would

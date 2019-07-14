@@ -148,6 +148,29 @@ ChannelManager::ProcessAutoMoves ()
 }
 
 void
+ChannelManager::ProcessStateUpdate (bool broadcast)
+{
+  if (ProcessAutoMoves ())
+    broadcast = true;
+
+  if (broadcast)
+    {
+      CHECK (offChainSender != nullptr);
+      offChainSender->SendNewState (boardStates.GetReinitId (),
+                                    boardStates.GetStateProof ());
+    }
+
+  TryResolveDispute ();
+
+  if (onChainSender != nullptr)
+    game.MaybeOnChainMove (boardStates.GetMetadata (),
+                           boardStates.GetLatestState (),
+                           *onChainSender);
+
+  NotifyStateChange ();
+}
+
+void
 ChannelManager::ProcessOffChain (const std::string& reinitId,
                                  const proto::StateProof& proof)
 {
@@ -162,15 +185,7 @@ ChannelManager::ProcessOffChain (const std::string& reinitId,
   if (!boardStates.UpdateWithMove (reinitId, proof))
     return;
 
-  if (ProcessAutoMoves ())
-    {
-      CHECK (offChainSender != nullptr);
-      offChainSender->SendNewState (boardStates.GetReinitId (),
-                                    boardStates.GetStateProof ());
-    }
-
-  TryResolveDispute ();
-  NotifyStateChange ();
+  ProcessStateUpdate (false);
 }
 
 void
@@ -246,15 +261,7 @@ ChannelManager::ProcessOnChain (const proto::ChannelMetadata& meta,
   if (offChainSender != nullptr)
     offChainSender->SetParticipants (meta);
 
-  if (ProcessAutoMoves ())
-    {
-      CHECK (offChainSender != nullptr);
-      offChainSender->SendNewState (boardStates.GetReinitId (),
-                                    boardStates.GetStateProof ());
-    }
-
-  TryResolveDispute ();
-  NotifyStateChange ();
+  ProcessStateUpdate (false);
 }
 
 bool
@@ -299,14 +306,7 @@ ChannelManager::ProcessLocalMove (const BoardMove& mv)
   if (!ApplyLocalMove (mv))
     return;
 
-  ProcessAutoMoves ();
-
-  CHECK (offChainSender != nullptr);
-  offChainSender->SendNewState (boardStates.GetReinitId (),
-                                boardStates.GetStateProof ());
-
-  TryResolveDispute ();
-  NotifyStateChange ();
+  ProcessStateUpdate (true);
 }
 
 void

@@ -78,6 +78,14 @@ public:
    */
   bool MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv) override;
 
+  /**
+   * If the state reached exactly 100, then we send an on-chain move (that
+   * is just a string "100").  This can be triggered through auto-moves as well.
+   */
+  void MaybeOnChainMove (const proto::ChannelMetadata& meta,
+                         const ParsedBoardState& state,
+                         MoveSender& sender) override;
+
 };
 
 /**

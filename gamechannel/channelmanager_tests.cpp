@@ -369,6 +369,60 @@ TEST_F (AutoMoveTests, ProcessLocalMove)
 
 /* ************************************************************************** */
 
+class MaybeOnChainMoveTests : public ChannelManagerTests
+{
+
+protected:
+
+  /**
+   * Adds an expectation for one of the "100" moves to be sent, as triggered
+   * by the test game during MaybeOnChainMove.
+   */
+  void
+  ExpectOnChainMove ()
+  {
+    const std::string expectedVal = R"({"g":{"game id":"100"}})";
+    EXPECT_CALL (mockXayaWallet, name_update ("p/player", expectedVal))
+        .WillOnce (Return (SHA256::Hash ("txid").ToHex ()));
+  }
+
+};
+
+TEST_F (MaybeOnChainMoveTests, OnChain)
+{
+  ExpectOnChainMove ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("100 2"), 0);
+}
+
+TEST_F (MaybeOnChainMoveTests, OffChain)
+{
+  ExpectOnChainMove ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("55 2"), 0);
+  cm.ProcessOffChain ("", ValidProof ("100 3"));
+}
+
+TEST_F (MaybeOnChainMoveTests, LocalMove)
+{
+  ExpectOneBroadcast ("100 3");
+  ExpectOnChainMove ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("50 2"), 0);
+  cm.ProcessLocalMove ("50");
+}
+
+TEST_F (MaybeOnChainMoveTests, AutoMoves)
+{
+  ExpectOneBroadcast ("100 4");
+  ExpectOnChainMove ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("96 2"), 0);
+}
+
+TEST_F (MaybeOnChainMoveTests, NoOnChainMove)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("110 2"), 0);
+}
+
+/* ************************************************************************** */
+
 using ResolveDisputeTests = ChannelManagerTests;
 
 TEST_F (ResolveDisputeTests, SendsResolution)

@@ -4,6 +4,8 @@
 
 #include "openchannel.hpp"
 
+#include "movesender.hpp"
+
 namespace xaya
 {
 
@@ -12,5 +14,11 @@ OpenChannel::MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv)
 {
   return false;
 }
+
+void
+OpenChannel::MaybeOnChainMove (const proto::ChannelMetadata& meta,
+                               const ParsedBoardState& state,
+                               MoveSender& sender)
+{}
 
 } // namespace xaya

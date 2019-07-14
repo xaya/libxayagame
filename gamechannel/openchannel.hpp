@@ -6,6 +6,7 @@
 #define GAMECHANNEL_OPENCHANNEL_HPP
 
 #include "boardrules.hpp"
+#include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
 
 #include <xayautil/uint256.hpp>
@@ -14,6 +15,8 @@
 
 namespace xaya
 {
+
+class MoveSender;
 
 /**
  * Data that a game wants to store about a particular open channel the player
@@ -62,6 +65,19 @@ public:
    * a hash commitment.
    */
   virtual bool MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv);
+
+  /**
+   * Checks if the game-specific logic wants to send an on-chain move in
+   * response to the current channel state.  This can be used, for instance,
+   * to close a channel in agreement after the off-chain game has finished.
+   *
+   * Note that this function is called independent of whose turn it is
+   * (unlike auto moves, which are processed only if the player owning the
+   * channel daemon is to play).
+   */
+  virtual void MaybeOnChainMove (const proto::ChannelMetadata& meta,
+                                 const ParsedBoardState& state,
+                                 MoveSender& sender);
 
 };
 
