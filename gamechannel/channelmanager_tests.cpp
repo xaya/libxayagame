@@ -44,7 +44,7 @@ ValidProof (const std::string& state)
 }
 
 ChannelManagerTestFixture::ChannelManagerTestFixture ()
-  : cm(game.rules, rpcClient, rpcWallet, channelId, "player")
+  : cm(game.rules, game.channel, rpcClient, rpcWallet, channelId, "player")
 {
   CHECK (TextFormat::ParseFromString (R"(
     participants:
@@ -172,17 +172,21 @@ protected:
   }
 
   /**
-   * Expects exactly one off-chain broadcast to be sent with the latest state.
+   * Expects exactly one off-chain broadcast to be sent with the latest state
+   * proof, and verifies that the corresponding state matches the given one.
    */
   void
-  ExpectOneBroadcast ()
+  ExpectOneBroadcast (const std::string& expectedState)
   {
-    auto isOk = [this] (const std::string& msg)
+    auto isOk = [this, expectedState] (const std::string& msg)
       {
         proto::BroadcastMessage pb;
         CHECK (pb.ParseFromString (msg));
 
         if (pb.reinit () != GetBoardStates ().GetReinitId ())
+          return false;
+
+        if (!GetBoardStates ().GetLatestState ().Equals (expectedState))
           return false;
 
         const auto& expectedProof = GetBoardStates ().GetStateProof ();
@@ -289,7 +293,7 @@ TEST_F (ProcessLocalMoveTests, NotMyTurn)
 
 TEST_F (ProcessLocalMoveTests, Valid)
 {
-  ExpectOneBroadcast ();
+  ExpectOneBroadcast ("11 6");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
   cm.ProcessLocalMove ("1");
   EXPECT_EQ (GetLatestState (), "11 6");
@@ -297,10 +301,124 @@ TEST_F (ProcessLocalMoveTests, Valid)
 
 TEST_F (ProcessLocalMoveTests, TriggersResolution)
 {
-  ExpectOneBroadcast ();
+  ExpectOneBroadcast ("11 6");
   ExpectMoves (1, "resolution");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
   cm.ProcessLocalMove ("1");
+}
+
+/* ************************************************************************** */
+
+using AutoMoveTests = ChannelManagerTests;
+
+TEST_F (AutoMoveTests, OneMove)
+{
+  ExpectOneBroadcast ("20 6");
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("18 5"), 0);
+  EXPECT_EQ (GetLatestState (), "20 6");
+}
+
+TEST_F (AutoMoveTests, TwoMoves)
+{
+  ExpectOneBroadcast ("30 7");
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("26 5"), 0);
+  EXPECT_EQ (GetLatestState (), "30 7");
+}
+
+TEST_F (AutoMoveTests, NoTurnState)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("108 5"), 0);
+  EXPECT_EQ (GetLatestState (), "108 5");
+}
+
+TEST_F (AutoMoveTests, NotMyTurn)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("37 5"), 0);
+  EXPECT_EQ (GetLatestState (), "37 5");
+}
+
+TEST_F (AutoMoveTests, NoAutoMove)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("44 5"), 0);
+  EXPECT_EQ (GetLatestState (), "44 5");
+}
+
+TEST_F (AutoMoveTests, WithDisputeResolution)
+{
+  ExpectOneBroadcast ("50 6");
+  ExpectMoves (1, "resolution");
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("48 5"), 1);
+  EXPECT_EQ (GetLatestState (), "50 6");
+}
+
+TEST_F (AutoMoveTests, ProcessOffChain)
+{
+  ExpectOneBroadcast ("20 9");
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.ProcessOffChain ("", ValidProof ("18 8"));
+  EXPECT_EQ (GetLatestState (), "20 9");
+}
+
+TEST_F (AutoMoveTests, ProcessLocalMove)
+{
+  ExpectOneBroadcast ("20 8");
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.ProcessLocalMove ("6");
+  EXPECT_EQ (GetLatestState (), "20 8");
+}
+
+/* ************************************************************************** */
+
+class MaybeOnChainMoveTests : public ChannelManagerTests
+{
+
+protected:
+
+  /**
+   * Adds an expectation for one of the "100" moves to be sent, as triggered
+   * by the test game during MaybeOnChainMove.
+   */
+  void
+  ExpectOnChainMove ()
+  {
+    const std::string expectedVal = R"({"g":{"game id":"100"}})";
+    EXPECT_CALL (mockXayaWallet, name_update ("p/player", expectedVal))
+        .WillOnce (Return (SHA256::Hash ("txid").ToHex ()));
+  }
+
+};
+
+TEST_F (MaybeOnChainMoveTests, OnChain)
+{
+  ExpectOnChainMove ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("100 2"), 0);
+}
+
+TEST_F (MaybeOnChainMoveTests, OffChain)
+{
+  ExpectOnChainMove ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("55 2"), 0);
+  cm.ProcessOffChain ("", ValidProof ("100 3"));
+}
+
+TEST_F (MaybeOnChainMoveTests, LocalMove)
+{
+  ExpectOneBroadcast ("100 3");
+  ExpectOnChainMove ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("50 2"), 0);
+  cm.ProcessLocalMove ("50");
+}
+
+TEST_F (MaybeOnChainMoveTests, AutoMoves)
+{
+  ExpectOneBroadcast ("100 4");
+  ExpectOnChainMove ();
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("96 2"), 0);
+}
+
+TEST_F (MaybeOnChainMoveTests, NoOnChainMove)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("110 2"), 0);
 }
 
 /* ************************************************************************** */
@@ -455,6 +573,12 @@ private:
   /** The thread that is used to call WaitForChange.  */
   std::unique_ptr<std::thread> waiter;
 
+  /** Set to true while the thread is actively waiting.  */
+  bool waiting;
+
+  /** Lock for waiting.  */
+  mutable std::mutex mut;
+
   /** The JSON value returned from WaitForChange.  */
   Json::Value returnedJson;
 
@@ -470,7 +594,15 @@ protected:
     waiter = std::make_unique<std::thread> ([this, known] ()
       {
         LOG (INFO) << "Calling WaitForChange...";
+        {
+          std::lock_guard<std::mutex> lock(mut);
+          waiting = true;
+        }
         returnedJson = cm.WaitForChange (known);
+        {
+          std::lock_guard<std::mutex> lock(mut);
+          waiting = false;
+        }
         LOG (INFO) << "WaitForChange returned";
       });
 
@@ -491,6 +623,18 @@ protected:
     LOG (INFO) << "Waiter thread finished";
     waiter.reset ();
     ASSERT_EQ (returnedJson, cm.ToJson ());
+  }
+
+  /**
+   * Returns true if the thread is currently waiting.
+   */
+  bool
+  IsWaiting () const
+  {
+    CHECK (waiter != nullptr);
+
+    std::lock_guard<std::mutex> lock(mut);
+    return waiting;
   }
 
 };
@@ -516,9 +660,21 @@ TEST_F (WaitForChangeTests, OffChain)
   JoinWaiter ();
 }
 
+TEST_F (WaitForChangeTests, OffChainNoChange)
+{
+  CallWaitForChange ();
+  cm.ProcessOffChain ("", ValidProof ("10 5"));
+
+  SleepSome ();
+  EXPECT_TRUE (IsWaiting ());
+
+  cm.StopUpdates ();
+  JoinWaiter ();
+}
+
 TEST_F (WaitForChangeTests, LocalMove)
 {
-  ExpectOneBroadcast ();
+  ExpectOneBroadcast ("11 6");
   cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
   CallWaitForChange ();
   cm.ProcessLocalMove ("1");

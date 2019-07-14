@@ -70,6 +70,22 @@ public:
   Json::Value DisputeMove (const uint256& channelId,
                            const proto::StateProof& proof) const override;
 
+  /**
+   * When the last digit of the current number in the addition game is 6-9,
+   * we apply an automove of +2.  This way, we can test both a situation
+   * where just one automove is applied (8 -> 10) and one where
+   * two moves in a row are automatic (6 -> 8 -> 10).
+   */
+  bool MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv) override;
+
+  /**
+   * If the state reached exactly 100, then we send an on-chain move (that
+   * is just a string "100").  This can be triggered through auto-moves as well.
+   */
+  void MaybeOnChainMove (const proto::ChannelMetadata& meta,
+                         const ParsedBoardState& state,
+                         MoveSender& sender) override;
+
 };
 
 /**

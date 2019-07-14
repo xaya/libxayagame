@@ -4,6 +4,7 @@
 
 #include "testgame.hpp"
 
+#include "movesender.hpp"
 #include "protoutils.hpp"
 #include "signatures.hpp"
 
@@ -117,6 +118,23 @@ public:
     return res;
   }
 
+  bool
+  MaybeAutoMove (BoardMove& mv) const
+  {
+    if (data.number % 10 < 6)
+      return false;
+
+    mv = "2";
+    return true;
+  }
+
+  void
+  MaybeOnChainMove (MoveSender& sender) const
+  {
+    if (data.number == 100)
+      sender.SendMove (Json::Value ("100"));
+  }
+
 };
 
 } // anonymous namespace
@@ -155,6 +173,22 @@ AdditionChannel::DisputeMove (const uint256& channelId,
   res["proof"] = ProtoToBase64 (proof);
 
   return res;
+}
+
+bool
+AdditionChannel::MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv)
+{
+  const auto& addState = dynamic_cast<const AdditionState&> (state);
+  return addState.MaybeAutoMove (mv);
+}
+
+void
+AdditionChannel::MaybeOnChainMove (const proto::ChannelMetadata& meta,
+                                   const ParsedBoardState& state,
+                                   MoveSender& sender)
+{
+  const auto& addState = dynamic_cast<const AdditionState&> (state);
+  addState.MaybeOnChainMove (sender);
 }
 
 void

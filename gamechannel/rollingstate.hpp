@@ -120,8 +120,11 @@ public:
    * Updates the state for a newly received on-chain update.  This assumes
    * that the state proof is valid, and it also updates the "current"
    * reinitialisation to the one seen in the update.
+   *
+   * Returns true if an actual change has been made (i.e. the provided
+   * state proof was valid and newer than what we had so far).
    */
-  void UpdateOnChain (const proto::ChannelMetadata& meta,
+  bool UpdateOnChain (const proto::ChannelMetadata& meta,
                       const BoardState& reinitState,
                       const proto::StateProof& proof);
 
@@ -129,8 +132,11 @@ public:
    * Updates the state for a newly received off-chain state with the
    * given reinitialisation ID (if we know it).  This verifies the state proof,
    * and ignores invalid updates.
+   *
+   * Returns true if an actual change has been made, i.e. the reinit was
+   * known and the state advanced forward with the new state proof.
    */
-  void UpdateWithMove (const std::string& updReinit,
+  bool UpdateWithMove (const std::string& updReinit,
                        const proto::StateProof& proof);
 
 };

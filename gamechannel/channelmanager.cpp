@@ -26,10 +26,10 @@ constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
 
 } // anonymous namespace
 
-ChannelManager::ChannelManager (const BoardRules& r,
+ChannelManager::ChannelManager (const BoardRules& r, OpenChannel& oc,
                                 XayaRpcClient& c, XayaWalletRpcClient& w,
                                 const uint256& id, const std::string& name)
-  : rules(r), rpc(c), wallet(w), channelId(id), playerName(name),
+  : rules(r), game(oc), rpc(c), wallet(w), channelId(id), playerName(name),
     boardStates(rules, rpc, channelId)
 {}
 
@@ -108,6 +108,68 @@ ChannelManager::TryResolveDispute ()
   dispute->pendingResolution = true;
 }
 
+bool
+ChannelManager::ProcessAutoMoves ()
+{
+  VLOG (1) << "Processing potential auto moves...";
+  bool found = false;
+  while (true)
+    {
+      const auto& state = boardStates.GetLatestState ();
+
+      const auto& meta = boardStates.GetMetadata ();
+      const int turn = state.WhoseTurn ();
+      if (turn == ParsedBoardState::NO_TURN)
+        {
+          VLOG (1) << "We are in a no-turn state";
+          break;
+        }
+      CHECK_GE (turn, 0);
+      CHECK_LT (turn, meta.participants_size ());
+      if (meta.participants (turn).name () != playerName)
+        {
+          VLOG (1) << "It is not our turn";
+          break;
+        }
+
+      BoardMove mv;
+      if (!game.MaybeAutoMove (state, mv))
+        {
+          VLOG (1) << "I didn't find an automove";
+          break;
+        }
+
+      LOG (INFO) << "Found automove: " << mv;
+      CHECK (ApplyLocalMove (mv));
+      found = true;
+    }
+
+  return found;
+}
+
+void
+ChannelManager::ProcessStateUpdate (bool broadcast)
+{
+  if (ProcessAutoMoves ())
+    broadcast = true;
+
+  if (broadcast)
+    {
+      CHECK (offChainSender != nullptr);
+      offChainSender->SendNewState (boardStates.GetReinitId (),
+                                    boardStates.GetStateProof ());
+    }
+
+  TryResolveDispute ();
+
+  if (onChainSender != nullptr)
+    game.MaybeOnChainMove (boardStates.GetMetadata (),
+                           boardStates.GetLatestState (),
+                           *onChainSender);
+
+  NotifyStateChange ();
+}
+
 void
 ChannelManager::ProcessOffChain (const std::string& reinitId,
                                  const proto::StateProof& proof)
@@ -120,10 +182,10 @@ ChannelManager::ProcessOffChain (const std::string& reinitId,
       return;
     }
 
-  boardStates.UpdateWithMove (reinitId, proof);
+  if (!boardStates.UpdateWithMove (reinitId, proof))
+    return;
 
-  TryResolveDispute ();
-  NotifyStateChange ();
+  ProcessStateUpdate (false);
 }
 
 void
@@ -199,8 +261,28 @@ ChannelManager::ProcessOnChain (const proto::ChannelMetadata& meta,
   if (offChainSender != nullptr)
     offChainSender->SetParticipants (meta);
 
-  TryResolveDispute ();
-  NotifyStateChange ();
+  ProcessStateUpdate (false);
+}
+
+bool
+ChannelManager::ApplyLocalMove (const BoardMove& mv)
+{
+  CHECK (!stopped && exists);
+
+  proto::StateProof newProof;
+  if (!ExtendStateProof (rpc, wallet, rules, channelId,
+                         boardStates.GetMetadata (),
+                         boardStates.GetStateProof (), mv, newProof))
+    {
+      LOG (ERROR) << "Failed to extend state with local move";
+      return false;
+    }
+
+  /* The update is guaranteed to yield a change at this point, since otherwise
+     ExtendStateProof would already have failed.  */
+  CHECK (boardStates.UpdateWithMove (boardStates.GetReinitId (), newProof));
+
+  return true;
 }
 
 void
@@ -221,23 +303,10 @@ ChannelManager::ProcessLocalMove (const BoardMove& mv)
       return;
     }
 
-  proto::StateProof newProof;
-  if (!ExtendStateProof (rpc, wallet, rules, channelId,
-                         boardStates.GetMetadata (),
-                         boardStates.GetStateProof (), mv, newProof))
-    {
-      LOG (ERROR) << "Failed to extend state with local move";
-      return;
-    }
+  if (!ApplyLocalMove (mv))
+    return;
 
-  const auto& reinit = boardStates.GetReinitId ();
-  boardStates.UpdateWithMove (reinit, newProof);
-
-  CHECK (offChainSender != nullptr);
-  offChainSender->SendNewState (reinit, newProof);
-
-  TryResolveDispute ();
-  NotifyStateChange ();
+  ProcessStateUpdate (true);
 }
 
 void

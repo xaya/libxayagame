@@ -78,12 +78,12 @@ protected:
 
 TEST_F (RollingStateTests, OnChainUpdate)
 {
-  state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
+  EXPECT_TRUE (state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
     initial_state: { data: "13 5" }
-  )"));
+  )")));
   ExpectState ("13 5", "reinit 1");
 
-  state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+  EXPECT_TRUE (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
     initial_state: { data: "25 4" }
     transitions:
       {
@@ -94,10 +94,10 @@ TEST_F (RollingStateTests, OnChainUpdate)
             signatures: "sgn 2"
           }
       }
-  )"));
+  )")));
   ExpectState ("65 5", "reinit 2");
 
-  state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
+  EXPECT_TRUE (state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
     initial_state: { data: "13 5" }
     transitions:
       {
@@ -108,21 +108,30 @@ TEST_F (RollingStateTests, OnChainUpdate)
             signatures: "sgn 1"
           }
       }
-  )"));
+  )")));
   ExpectState ("63 6", "reinit 1");
 
-  state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
-    initial_state: { data: "25 4" }
-    transitions:
+  /* This provides a state proof that is older than the best known state,
+     but it does change the current reinit ID.  */
+  EXPECT_TRUE (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+    initial_state:
       {
-        move: "20"
-        new_state:
-          {
-            data: "45 5"
-            signatures: "sgn 2"
-          }
+        data: "45 5"
+        signatures: "sgn 0"
+        signatures: "sgn 2"
       }
-  )"));
+  )")));
+  ExpectState ("65 5", "reinit 2");
+
+  /* This is an older state and does not change the reinit ID.  */
+  EXPECT_FALSE (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+    initial_state:
+      {
+        data: "45 5"
+        signatures: "sgn 0"
+        signatures: "sgn 2"
+      }
+  )")));
   ExpectState ("65 5", "reinit 2");
 }
 
@@ -153,9 +162,9 @@ TEST_F (RollingStateTests, UpdateWithMoveInvalidProof)
     initial_state: { data: "13 5" }
   )"));
 
-  state.UpdateWithMove ("reinit 1", ParseStateProof (R"(
+  EXPECT_FALSE (state.UpdateWithMove ("reinit 1", ParseStateProof (R"(
     initial_state: { data: "50 6" }
-  )"));
+  )")));
 
   ExpectState ("13 5", "reinit 1");
 }
@@ -175,7 +184,7 @@ TEST_F (RollingStateTests, UpdateWithMoveNotFresher)
       }
   )"));
 
-  state.UpdateWithMove ("reinit 1", ParseStateProof (R"(
+  EXPECT_FALSE (state.UpdateWithMove ("reinit 1", ParseStateProof (R"(
     initial_state: { data: "13 5" }
     transitions:
       {
@@ -186,7 +195,7 @@ TEST_F (RollingStateTests, UpdateWithMoveNotFresher)
             signatures: "sgn 1"
           }
       }
-  )"));
+  )")));
 
   ExpectState ("63 6", "reinit 1");
 }
@@ -203,7 +212,7 @@ TEST_F (RollingStateTests, UpdateWithMoveSuccessful)
 
   /* Successful off-chain update, although to a reinitialisation that is not
      the current one.  */
-  state.UpdateWithMove ("reinit 1", ParseStateProof (R"(
+  EXPECT_FALSE (state.UpdateWithMove ("reinit 1", ParseStateProof (R"(
     initial_state: { data: "13 5" }
     transitions:
       {
@@ -223,12 +232,12 @@ TEST_F (RollingStateTests, UpdateWithMoveSuccessful)
             signatures: "sgn 0"
           }
       }
-  )"));
+  )")));
   ExpectState ("25 4", "reinit 2");
 
   /* This on-chain update switches to "reinit 1" but is not fresher in turn
      count than the off-chain update from before.  */
-  state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
+  EXPECT_TRUE (state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
     initial_state: { data: "13 5" }
     transitions:
       {
@@ -239,7 +248,7 @@ TEST_F (RollingStateTests, UpdateWithMoveSuccessful)
             signatures: "sgn 1"
           }
       }
-  )"));
+  )")));
   ExpectState ("60 7", "reinit 1");
 }
 

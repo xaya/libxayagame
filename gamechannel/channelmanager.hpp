@@ -8,6 +8,7 @@
 #include "boardrules.hpp"
 #include "broadcast.hpp"
 #include "movesender.hpp"
+#include "openchannel.hpp"
 #include "rollingstate.hpp"
 
 #include "proto/stateproof.pb.h"
@@ -91,6 +92,9 @@ private:
   /** The board rules of the game being played.  */
   const BoardRules& rules;
 
+  /** OpenChannel instance for this game.  */
+  OpenChannel& game;
+
   /** RPC connection to Xaya Core used for verifying signatures.  */
   XayaRpcClient& rpc;
 
@@ -154,11 +158,35 @@ private:
   bool pendingDispute = false;
 
   /**
+   * Tries to apply a local move to the current state.  Returns true if
+   * a change was made successfully.  This method just updates the
+   * state, without triggering any more processing by itself.  It is
+   * the shared code between ProcessLocalMove and processing of automoves.
+   */
+  bool ApplyLocalMove (const BoardMove& mv);
+
+  /**
    * Tries to resolve the current dispute, if there is any.  This can be called
    * whenever a change may have happened that affects this, like a new state
    * being known (e.g. off-chain / local move) or an on-chain update.
    */
   void TryResolveDispute ();
+
+  /**
+   * Tries to apply a chain of automoves to the current state, if applicable.
+   * Returns true if at least one move was found.
+   */
+  bool ProcessAutoMoves ();
+
+  /**
+   * Performs internal updates after the state was changed.  In particular,
+   * this performs automoves, resolves disputes and notifies the OpenChannel
+   * and WaitForChange listeners about a new change.
+   *
+   * If automoves were found or broadcast is true, then it also broadcasts
+   * the new state to the off-chain channel.
+   */
+  void ProcessStateUpdate (bool broadcast);
 
   /**
    * Returns the current state of the channel as JSON, assuming that mut is
@@ -184,7 +212,7 @@ public:
    */
   static constexpr int WAITFORCHANGE_ALWAYS_BLOCK = 0;
 
-  explicit ChannelManager (const BoardRules& r,
+  explicit ChannelManager (const BoardRules& r, OpenChannel& oc,
                            XayaRpcClient& c, XayaWalletRpcClient& w,
                            const uint256& id, const std::string& name);
 
