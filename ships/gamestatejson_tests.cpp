@@ -7,7 +7,7 @@
 #include "proto/boardstate.pb.h"
 #include "testutils.hpp"
 
-#include <xayautil/base64.hpp>
+#include <gamechannel/protoutils.hpp>
 #include <xayautil/hash.hpp>
 
 #include <google/protobuf/text_format.h>
@@ -164,11 +164,9 @@ TEST_F (GameStateJsonTests, TwoParticipantChannel)
   EXPECT_EQ (stateJson["turncount"].asInt (), 1);
   EXPECT_EQ (stateJson["parsed"]["phase"].asString (), "first commitment");
 
-  std::string protoBytes;
-  ASSERT_TRUE (xaya::DecodeBase64 (stateJson["base64"].asString (),
-                                   protoBytes));
   proto::BoardState stateFromJson;
-  ASSERT_TRUE (stateFromJson.ParseFromString (protoBytes));
+  ASSERT_TRUE (xaya::ProtoFromBase64 (stateJson["base64"].asString (),
+                                      stateFromJson));
   EXPECT_TRUE (MessageDifferencer::Equals (state, stateFromJson));
 }
 

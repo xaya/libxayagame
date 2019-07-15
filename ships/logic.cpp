@@ -9,7 +9,7 @@
 
 #include <gamechannel/database.hpp>
 #include <gamechannel/proto/stateproof.pb.h>
-#include <xayautil/base64.hpp>
+#include <gamechannel/protoutils.hpp>
 
 #include <glog/logging.h>
 
@@ -300,16 +300,9 @@ template <typename T>
     return false;
   const std::string str = val.asString ();
 
-  std::string bytes;
-  if (!xaya::DecodeBase64 (val.asString (), bytes))
+  if (!xaya::ProtoFromBase64 (val.asString (), res))
     {
-      LOG (WARNING) << "Invalid base64: " << str;
-      return false;
-    }
-
-  if (!res.ParseFromString (bytes))
-    {
-      LOG (WARNING) << "Failed to decode serialised proto";
+      LOG (WARNING) << "Could not get proto from base64 string";
       return false;
     }
 
