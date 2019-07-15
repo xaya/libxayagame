@@ -6,7 +6,6 @@
 #define GAMECHANNEL_OPENCHANNEL_HPP
 
 #include "boardrules.hpp"
-#include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
 
 #include <xayautil/uint256.hpp>
@@ -75,8 +74,7 @@ public:
    * (unlike auto moves, which are processed only if the player owning the
    * channel daemon is to play).
    */
-  virtual void MaybeOnChainMove (const proto::ChannelMetadata& meta,
-                                 const ParsedBoardState& state,
+  virtual void MaybeOnChainMove (const ParsedBoardState& state,
                                  MoveSender& sender);
 
 };

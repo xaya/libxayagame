@@ -16,8 +16,7 @@ OpenChannel::MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv)
 }
 
 void
-OpenChannel::MaybeOnChainMove (const proto::ChannelMetadata& meta,
-                               const ParsedBoardState& state,
+OpenChannel::MaybeOnChainMove (const ParsedBoardState& state,
                                MoveSender& sender)
 {}
 
