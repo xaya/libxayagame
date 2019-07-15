@@ -103,6 +103,12 @@ private:
                                     Phase phase,
                                     proto::BoardState& newState);
 
+  /* ShipsChannel handles the automoves and is thus directly tied to the
+     board state itself.  We split the logic out nevertheless, because then
+     there is a clear separation between "core board state" stuff (e.g.
+     applying moves) and the logic needed only for channel daemons.  */
+  friend class ShipsChannel;
+
   friend class BoardTests;
 
 protected:

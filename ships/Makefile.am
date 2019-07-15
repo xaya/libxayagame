@@ -27,6 +27,7 @@ libships_la_LIBADD = \
   $(JSONCPP_LIBS) $(SQLITE3_CFLAGS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
 libships_la_SOURCES = \
   board.cpp \
+  channel.cpp \
   coord.cpp \
   gamestatejson.cpp \
   grid.cpp \
@@ -35,6 +36,7 @@ libships_la_SOURCES = \
   $(PROTOSOURCES)
 noinst_HEADERS = \
   board.hpp \
+  channel.hpp \
   coord.hpp \
   gamestatejson.hpp \
   grid.hpp \
@@ -70,6 +72,7 @@ tests_LDADD = \
   $(JSONCPP_LIBS) $(GLOG_LIBS) $(GTEST_LIBS) $(PROTOBUF_LIBS)
 tests_SOURCES = \
   board_tests.cpp \
+  channel_tests.cpp \
   coord_tests.cpp \
   gamestatejson_tests.cpp \
   grid_tests.cpp \
