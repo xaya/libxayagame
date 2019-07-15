@@ -9,6 +9,7 @@
 #include "proto/signatures.pb.h"
 
 #include <xayagame/rpc-stubs/xayarpcclient.h>
+#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
 #include <set>
@@ -49,6 +50,17 @@ std::set<int> VerifyParticipantSignatures (XayaRpcClient& rpc,
                                            const proto::ChannelMetadata& meta,
                                            const std::string& topic,
                                            const proto::SignedData& data);
+
+/**
+ * Tries to sign the given data for the given participant index, using
+ * the provided Xaya wallet.  Returns true if a signature could be made.
+ */
+bool SignDataForParticipant (XayaWalletRpcClient& wallet,
+                             const uint256& channelId,
+                             const proto::ChannelMetadata& meta,
+                             const std::string& topic,
+                             int index,
+                             proto::SignedData& data);
 
 } // namespace xaya
 
