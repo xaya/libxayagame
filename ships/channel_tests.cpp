@@ -10,10 +10,13 @@
 #include "testutils.hpp"
 
 #include <gamechannel/protoutils.hpp>
+#include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayagame/testutils.hpp>
+#include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
 
+#include <jsonrpccpp/common/exception.h>
 #include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
@@ -32,7 +35,9 @@ namespace
 
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
+using testing::_;
 using testing::Return;
+using testing::Throw;
 using testing::Truly;
 
 /**
@@ -76,18 +81,32 @@ FakeWinnerStatement (const int winner)
 class ChannelTests : public testing::Test
 {
 
+private:
+
+  jsonrpc::HttpServer httpServerWallet;
+  jsonrpc::HttpClient httpClientWallet;
+
 protected:
 
   const xaya::uint256 channelId = xaya::SHA256::Hash ("foo");
 
-  /** In the metadata, "we" are player 0.  */
-  xaya::proto::ChannelMetadata meta;
+  /**
+   * Two metadata instances, where "we" are either the first or second player.
+   */
+  xaya::proto::ChannelMetadata meta[2];
+
+  xaya::MockXayaWalletRpcServer mockXayaWallet;
+  XayaWalletRpcClient rpcWallet;
 
   ShipsBoardRules rules;
   ShipsChannel channel;
 
   ChannelTests ()
-    : channel("player")
+    : httpServerWallet(xaya::MockXayaWalletRpcServer::HTTP_PORT),
+      httpClientWallet(xaya::MockXayaWalletRpcServer::HTTP_URL),
+      mockXayaWallet(httpServerWallet),
+      rpcWallet(httpClientWallet),
+      channel(rpcWallet, "player")
   {
     CHECK (TextFormat::ParseFromString (R"(
       participants:
@@ -100,19 +119,54 @@ protected:
           name: "other player"
           address: "other addr"
         }
-    )", &meta));
+    )", &meta[0]));
+
+    CHECK (TextFormat::ParseFromString (R"(
+      participants:
+        {
+          name: "other player"
+          address: "other addr"
+        }
+      participants:
+        {
+          name: "player"
+          address: "my addr"
+        }
+    )", &meta[1]));
+
+    mockXayaWallet.StartListening ();
+  }
+
+  ~ChannelTests ()
+  {
+    mockXayaWallet.StopListening ();
   }
 
   /**
-   * Parses a BoardState proto into a ParsedBoardState.
+   * Parses a BoardState proto into a ParsedBoardState.  This automatically
+   * associates the correct metadata instance, where the current player
+   * is the one to play next.
    */
   std::unique_ptr<xaya::ParsedBoardState>
   ParseState (const proto::BoardState& pb)
   {
+    /* In some situations, pb.turn might not be set.  But then we just use
+       the default value of zero, which is fine for those.  */
+    return ParseState (pb, meta[pb.turn ()]);
+  }
+
+  /**
+   * Parses a BoardState proto into a ParsedBoardState, using the given
+   * metadata instance.
+   */
+  std::unique_ptr<xaya::ParsedBoardState>
+  ParseState (const proto::BoardState& pb,
+              const xaya::proto::ChannelMetadata& m)
+  {
     std::string serialised;
     CHECK (pb.SerializeToString (&serialised));
 
-    auto res = rules.ParseState (channelId, meta, serialised);
+    auto res = rules.ParseState (channelId, m, serialised);
     CHECK (res != nullptr);
 
     return res;
@@ -125,32 +179,14 @@ protected:
 class OnChainMoveTests : public ChannelTests
 {
 
-private:
-
-  jsonrpc::HttpServer httpServerWallet;
-  jsonrpc::HttpClient httpClientWallet;
 
 protected:
-
-  xaya::MockXayaWalletRpcServer mockXayaWallet;
-  XayaWalletRpcClient rpcWallet;
 
   xaya::MoveSender sender;
 
   OnChainMoveTests ()
-    : httpServerWallet(xaya::MockXayaWalletRpcServer::HTTP_PORT),
-      httpClientWallet(xaya::MockXayaWalletRpcServer::HTTP_URL),
-      mockXayaWallet(httpServerWallet),
-      rpcWallet(httpClientWallet),
-      sender("xs", channelId, "player", rpcWallet, channel)
-  {
-    mockXayaWallet.StartListening ();
-  }
-
-  ~OnChainMoveTests ()
-  {
-    mockXayaWallet.StopListening ();
-  }
+    : sender("xs", channelId, "player", rpcWallet, channel)
+  {}
 
   /**
    * Verifies that a given JSON object matches the expected move format
@@ -250,6 +286,460 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveSending)
   *state.mutable_winner_statement () = stmt;
 
   channel.MaybeOnChainMove (*ParseState (state), sender);
+}
+
+/* ************************************************************************** */
+
+using PositionStoringTests = ChannelTests;
+
+TEST_F (PositionStoringTests, SetPosition)
+{
+  ASSERT_FALSE (channel.IsPositionSet ());
+  channel.SetPosition (GridFromString (
+    "xxxx...."
+    "........"
+    "xxx....."
+    "........"
+    "xxx....."
+    "........"
+    ".x.x.x.x"
+    ".x.x.x.x"
+  ));
+  EXPECT_TRUE (channel.IsPositionSet ());
+}
+
+TEST_F (PositionStoringTests, InvalidPosition)
+{
+  channel.SetPosition (GridFromString (
+    "xxxx...."
+    "........"
+    "xxx....."
+    "........"
+    "xxx....."
+    "........"
+    "........"
+    "........"
+  ));
+  EXPECT_FALSE (channel.IsPositionSet ());
+}
+
+/* ************************************************************************** */
+
+/**
+ * Basic tests for automoves with Xayaships.  Those verify only some situations
+ * including edge cases.  Other verification (e.g. that the actual hash values
+ * work fine with revealing later) is done separately with tests that run
+ * a full board game through the move processor.
+ */
+class AutoMoveTests : public ChannelTests
+{
+
+protected:
+
+  /** Some valid ships position.  */
+  Grid validPosition;
+
+  AutoMoveTests ()
+  {
+    validPosition = GridFromString (
+      "xxxx...."
+      "........"
+      "xxx....."
+      "........"
+      "xxx....."
+      "........"
+      ".x.x.x.x"
+      ".x.x.x.x"
+    );
+  }
+
+  /**
+   * Calls MaybeAutoMove on our channel and verifies that there is no automove.
+   */
+  void
+  ExpectNoAutoMove (const xaya::ParsedBoardState& state)
+  {
+    xaya::BoardMove mv;
+    ASSERT_FALSE (channel.MaybeAutoMove (state, mv));
+  }
+
+  /**
+   * Calls MaybeAutoMove on our channel, verifies that there is an automove,
+   * and returns the resulting proto.
+   */
+  proto::BoardMove
+  ExpectAutoMove (const xaya::ParsedBoardState& state)
+  {
+    xaya::BoardMove mv;
+    if (!channel.MaybeAutoMove (state, mv))
+      {
+        ADD_FAILURE () << "No auto move provided, expected one";
+        return proto::BoardMove ();
+      }
+
+    proto::BoardMove res;
+    CHECK (res.ParseFromString (mv));
+
+    return res;
+  }
+
+};
+
+TEST_F (AutoMoveTests, FirstPositionCommitmentNotYetSet)
+{
+  ExpectNoAutoMove (*ParseState (TextState ("turn: 0")));
+}
+
+TEST_F (AutoMoveTests, FirstPositionCommitmentOk)
+{
+  channel.SetPosition (validPosition);
+
+  const auto mv = ExpectAutoMove (*ParseState (TextState ("turn: 0")));
+  ASSERT_TRUE (mv.has_position_commitment ());
+  EXPECT_TRUE (mv.position_commitment ().has_position_hash ());
+  EXPECT_TRUE (mv.position_commitment ().has_seed_hash ());
+  EXPECT_FALSE (mv.position_commitment ().has_seed ());
+}
+
+TEST_F (AutoMoveTests, SecondPositionCommitmentNotYetSet)
+{
+  ExpectNoAutoMove (*ParseState (TextState (R"(
+    turn: 1
+    position_hashes: "foo"
+  )")));
+}
+
+TEST_F (AutoMoveTests, SecondPositionCommitmentOk)
+{
+  channel.SetPosition (validPosition);
+
+  const auto mv = ExpectAutoMove (*ParseState (TextState (R"(
+    turn: 1
+    position_hashes: "foo"
+  )")));
+  ASSERT_TRUE (mv.has_position_commitment ());
+  EXPECT_TRUE (mv.position_commitment ().has_position_hash ());
+  EXPECT_FALSE (mv.position_commitment ().has_seed_hash ());
+  EXPECT_EQ (mv.position_commitment ().seed ().size (), 32);
+}
+
+TEST_F (AutoMoveTests, FirstRevealSeed)
+{
+  /* Perform a position commitment first, so that we initialise the seed
+     randomly.  Then we can verify it was really set and not just to
+     an empty string.  */
+  channel.SetPosition (validPosition);
+  ExpectAutoMove (*ParseState (TextState ("turn: 0")));
+
+  const auto mv = ExpectAutoMove (*ParseState (TextState (R"(
+    turn: 0
+    position_hashes: "foo"
+    position_hashes: "bar"
+  )")));
+  ASSERT_TRUE (mv.has_seed_reveal ());
+  EXPECT_EQ (mv.seed_reveal ().seed ().size (), 32);
+}
+
+TEST_F (AutoMoveTests, ShootNotAllHit)
+{
+  ExpectNoAutoMove (*ParseState (TextState (R"(
+    turn: 1
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: {}
+    known_ships: {}
+  )")));
+}
+
+TEST_F (AutoMoveTests, ShootAllShipsHit)
+{
+  channel.SetPosition (validPosition);
+
+  const Grid allAndMore = GridFromString (
+      "xxxx...x"
+      ".......x"
+      "xxx....x"
+      ".......x"
+      "xxx....x"
+      "........"
+      ".x.x.x.x"
+      ".x.x.x.x"
+  );
+
+  auto statePb = TextState (R"(
+    turn: 0
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: {}
+    known_ships: {}
+  )");
+  statePb.mutable_known_ships (1)->set_hits (allAndMore.GetBits ());
+
+  const auto mv = ExpectAutoMove (*ParseState (statePb));
+  ASSERT_TRUE (mv.has_position_reveal ());
+  EXPECT_EQ (mv.position_reveal ().salt ().size (), 32);
+}
+
+TEST_F (AutoMoveTests, Answer)
+{
+  channel.SetPosition (validPosition);
+
+  auto statePb = TextState (R"(
+    turn: 0
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: {}
+    known_ships: {}
+  )");
+
+  statePb.set_current_shot (0);
+  auto mv = ExpectAutoMove (*ParseState (statePb));
+  ASSERT_TRUE (mv.has_reply ());
+  EXPECT_EQ (mv.reply ().reply (), proto::ReplyMove::HIT);
+
+  statePb.set_current_shot (7);
+  mv = ExpectAutoMove (*ParseState (statePb));
+  ASSERT_TRUE (mv.has_reply ());
+  EXPECT_EQ (mv.reply ().reply (), proto::ReplyMove::MISS);
+}
+
+TEST_F (AutoMoveTests, SecondRevealPosition)
+{
+  channel.SetPosition (validPosition);
+
+  const auto mv = ExpectAutoMove (*ParseState (TextState (R"(
+    turn: 0
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: {}
+    known_ships: {}
+    positions: 0
+    positions: 42
+  )")));
+  ASSERT_TRUE (mv.has_position_reveal ());
+  EXPECT_EQ (mv.position_reveal ().salt ().size (), 32);
+}
+
+TEST_F (AutoMoveTests, WinnerDeterminedSignatureFailure)
+{
+  EXPECT_CALL (mockXayaWallet, signmessage ("my addr", _))
+      .WillOnce (Throw (jsonrpc::JsonRpcException (-5)));
+
+  ExpectNoAutoMove (*ParseState (TextState (R"(
+    turn: 0
+    winner: 1
+  )")));
+}
+
+TEST_F (AutoMoveTests, WinnerDeterminedOk)
+{
+  EXPECT_CALL (mockXayaWallet, signmessage ("my addr", _))
+      .WillOnce (Return (xaya::EncodeBase64 ("sgn")));
+
+  const auto mv = ExpectAutoMove (*ParseState (TextState (R"(
+    turn: 0
+    winner: 1
+  )")));
+  ASSERT_TRUE (mv.has_winner_statement ());
+  const auto& data = mv.winner_statement ().statement ();
+  EXPECT_EQ (data.signatures_size (), 1);
+  EXPECT_EQ (data.signatures (0), "sgn");
+
+  proto::WinnerStatement stmt;
+  ASSERT_TRUE (stmt.ParseFromString (data.data ()));
+  EXPECT_EQ (stmt.winner (), 1);
+}
+
+/* ************************************************************************** */
+
+/**
+ * Tests that run a full game between two channel instances, just like
+ * it would be done with automoves and real frontends.
+ */
+class FullGameTests : public ChannelTests
+{
+
+private:
+
+  jsonrpc::HttpServer httpServer;
+  jsonrpc::HttpClient httpClient;
+
+  xaya::MockXayaRpcServer mockXayaServer;
+  XayaRpcClient rpcClient;
+
+  /** Indexable array of the channels.  */
+  ShipsChannel* channels[2];
+
+protected:
+
+  ShipsChannel otherChannel;
+
+  /** The current game state.  This is updated as moves are made.  */
+  std::unique_ptr<xaya::ParsedBoardState> state;
+
+  FullGameTests ()
+    : httpServer(xaya::MockXayaRpcServer::HTTP_PORT),
+      httpClient(xaya::MockXayaRpcServer::HTTP_URL),
+      mockXayaServer(httpServer),
+      rpcClient(httpClient),
+      otherChannel(rpcWallet, "other player")
+  {
+    channels[0] = &channel;
+    channels[1] = &otherChannel;
+
+    /* The positions are chosen such that "channel" wins when guessed in
+       increasing order (0, 1, ...).  That is because otherChannel has
+       the ships more towards the "lower end" of the coordinates.  */
+    channel.SetPosition (GridFromString (
+      "........"
+      "........"
+      "........"
+      "xx.xx.xx"
+      "........"
+      "..xx.xxx"
+      "........"
+      "xxx.xxxx"
+    ));
+    otherChannel.SetPosition (GridFromString (
+      "xx.xx.xx"
+      "........"
+      "..xx.xxx"
+      "........"
+      "xxx.xxxx"
+      "........"
+      "........"
+      "........"
+    ));
+    CHECK (channel.IsPositionSet ());
+    CHECK (otherChannel.IsPositionSet ());
+
+    state = ParseState (InitialBoardState (), meta[0]);
+
+    mockXayaServer.StartListening ();
+
+    /* Set up the mock RPC servers so that we can "validate" signatures
+       and "sign" messages.  */
+    EXPECT_CALL (mockXayaWallet, signmessage ("my addr", _))
+        .WillRepeatedly (Return (xaya::EncodeBase64 ("my sgn")));
+    EXPECT_CALL (mockXayaWallet, signmessage ("other addr", _))
+        .WillRepeatedly (Return (xaya::EncodeBase64 ("other sgn")));
+
+    Json::Value res(Json::objectValue);
+    res["valid"] = true;
+    res["address"] = "my addr";
+    EXPECT_CALL (mockXayaServer,
+                 verifymessage ("", _, xaya::EncodeBase64 ("my sgn")))
+        .WillRepeatedly (Return (res));
+
+    res["address"] = "other addr";
+    EXPECT_CALL (mockXayaServer,
+                 verifymessage ("", _, xaya::EncodeBase64 ("other sgn")))
+        .WillRepeatedly (Return (res));
+  }
+
+  ~FullGameTests ()
+  {
+    mockXayaServer.StopListening ();
+  }
+
+  /**
+   * Returns the channel reference for the player whose turn it is.
+   */
+  ShipsChannel&
+  GetCurrentChannel ()
+  {
+    const int turn = state->WhoseTurn ();
+    CHECK_NE (turn, xaya::ParsedBoardState::NO_TURN);
+    return *channels[turn];
+  }
+
+  /**
+   * Updates the current board state with the given move.
+   */
+  void
+  ProcessMove (const proto::BoardMove& mv)
+  {
+    xaya::BoardMove serialised;
+    CHECK (mv.SerializeToString (&serialised));
+
+    xaya::BoardState newState;
+    CHECK (state->ApplyMove (rpcClient, serialised, newState));
+
+    state = rules.ParseState (channelId, meta[0], newState);
+    CHECK (state != nullptr);
+  }
+
+  /**
+   * Processes all automoves that can be processed.  Returns true if some
+   * moves were made.
+   */
+  bool
+  ProcessAuto ()
+  {
+    if (state->WhoseTurn () == xaya::ParsedBoardState::NO_TURN)
+      return false;
+
+    xaya::BoardMove mv;
+    if (!GetCurrentChannel ().MaybeAutoMove (*state, mv))
+      return false;
+
+    proto::BoardMove mvPb;
+    CHECK (mvPb.ParseFromString (mv));
+
+    ProcessMove (mvPb);
+    return ProcessAuto ();
+  }
+
+  /**
+   * Expects that the game is finished and the given player won.
+   */
+  void
+  ExpectWinner (const int winner) const
+  {
+    ASSERT_EQ (state->WhoseTurn (), xaya::ParsedBoardState::NO_TURN);
+
+    const auto& shipsState = dynamic_cast<const ShipsBoardState&> (*state);
+    const auto& pb = shipsState.GetState ();
+
+    ASSERT_TRUE (pb.has_winner ());
+    ASSERT_TRUE (pb.has_winner_statement ());
+    EXPECT_EQ (pb.winner (), winner);
+  }
+
+};
+
+TEST_F (FullGameTests, PrematureReveal)
+{
+  ProcessAuto ();
+
+  if (state->WhoseTurn () == 1)
+    {
+      ProcessMove (GetCurrentChannel ().GetShotMove (Coord (0)));
+      ProcessAuto ();
+    }
+  ASSERT_EQ (state->WhoseTurn (), 0);
+
+  ProcessMove (GetCurrentChannel ().GetPositionRevealMove ());
+  ProcessAuto ();
+
+  LOG (INFO) << "Final state has turn count: " << state->TurnCount ();
+  ExpectWinner (1);
+}
+
+TEST_F (FullGameTests, WithShots)
+{
+  ProcessAuto ();
+
+  int nextTarget[] = {0, 0};
+  while (state->WhoseTurn () != xaya::ParsedBoardState::NO_TURN)
+    {
+      const Coord target(nextTarget[state->WhoseTurn ()]++);
+      ProcessMove (GetCurrentChannel ().GetShotMove (target));
+      ProcessAuto ();
+    }
+
+  LOG (INFO) << "Final state has turn count: " << state->TurnCount ();
+  ExpectWinner (0);
 }
 
 /* ************************************************************************** */
