@@ -587,32 +587,6 @@ protected:
     channels[0] = &channel;
     channels[1] = &otherChannel;
 
-    /* The positions are chosen such that "channel" wins when guessed in
-       increasing order (0, 1, ...).  That is because otherChannel has
-       the ships more towards the "lower end" of the coordinates.  */
-    channel.SetPosition (GridFromString (
-      "........"
-      "........"
-      "........"
-      "xx.xx.xx"
-      "........"
-      "..xx.xxx"
-      "........"
-      "xxx.xxxx"
-    ));
-    otherChannel.SetPosition (GridFromString (
-      "xx.xx.xx"
-      "........"
-      "..xx.xxx"
-      "........"
-      "xxx.xxxx"
-      "........"
-      "........"
-      "........"
-    ));
-    CHECK (channel.IsPositionSet ());
-    CHECK (otherChannel.IsPositionSet ());
-
     state = ParseState (InitialBoardState (), meta[0]);
 
     mockXayaServer.StartListening ();
@@ -640,6 +614,39 @@ protected:
   ~FullGameTests ()
   {
     mockXayaServer.StopListening ();
+  }
+
+  /**
+   * Sets up the positions of both channels.  They are chosen in such a way
+   * that "channel" wins when guesses are made in increasing order (0, 1, ...),
+   * i.e. the ships of "channel" are more towards the "higher coordinates".
+   */
+  void
+  SetupPositions ()
+  {
+    channel.SetPosition (GridFromString (
+      "........"
+      "........"
+      "........"
+      "xx.xx.xx"
+      "........"
+      "..xx.xxx"
+      "........"
+      "xxx.xxxx"
+    ));
+    otherChannel.SetPosition (GridFromString (
+      "xx.xx.xx"
+      "........"
+      "..xx.xxx"
+      "........"
+      "xxx.xxxx"
+      "........"
+      "........"
+      "........"
+    ));
+
+    CHECK (channel.IsPositionSet ());
+    CHECK (otherChannel.IsPositionSet ());
   }
 
   /**
@@ -676,18 +683,22 @@ protected:
   bool
   ProcessAuto ()
   {
-    if (state->WhoseTurn () == xaya::ParsedBoardState::NO_TURN)
-      return false;
+    bool res = false;
+    while (true)
+      {
+        if (state->WhoseTurn () == xaya::ParsedBoardState::NO_TURN)
+          return res;
 
-    xaya::BoardMove mv;
-    if (!GetCurrentChannel ().MaybeAutoMove (*state, mv))
-      return false;
+        xaya::BoardMove mv;
+        if (!GetCurrentChannel ().MaybeAutoMove (*state, mv))
+          return res;
 
-    proto::BoardMove mvPb;
-    CHECK (mvPb.ParseFromString (mv));
+        proto::BoardMove mvPb;
+        CHECK (mvPb.ParseFromString (mv));
 
-    ProcessMove (mvPb);
-    return ProcessAuto ();
+        ProcessMove (mvPb);
+        res = true;
+      }
   }
 
   /**
@@ -708,8 +719,20 @@ protected:
 
 };
 
+TEST_F (FullGameTests, PositionsNotSet)
+{
+  EXPECT_FALSE (ProcessAuto ());
+  EXPECT_EQ (state->TurnCount (), 1);
+
+  SetupPositions ();
+
+  EXPECT_TRUE (ProcessAuto ());
+  EXPECT_EQ (state->TurnCount (), 4);
+}
+
 TEST_F (FullGameTests, PrematureReveal)
 {
+  SetupPositions ();
   ProcessAuto ();
 
   if (state->WhoseTurn () == 1)
@@ -728,6 +751,7 @@ TEST_F (FullGameTests, PrematureReveal)
 
 TEST_F (FullGameTests, WithShots)
 {
+  SetupPositions ();
   ProcessAuto ();
 
   int nextTarget[] = {0, 0};
