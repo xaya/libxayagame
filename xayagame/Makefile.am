@@ -62,8 +62,8 @@ xayagame_HEADERS = \
 rpcstub_HEADERS = $(RPC_STUBS)
 
 check_LTLIBRARIES = libtestutils.la
-check_PROGRAMS = tests
-TESTS = tests
+check_PROGRAMS = tests test_exceptions
+TESTS = tests test_exceptions
 
 libtestutils_la_CXXFLAGS = \
   -I$(top_srcdir) \
@@ -103,6 +103,10 @@ tests_SOURCES = \
   transactionmanager_tests.cpp \
   zmqsubscriber_tests.cpp
 TESTHEADERS = storage_tests.hpp
+
+test_exceptions_CXXFLAGS = $(GLOG_CFLAGS)
+test_exceptions_LDADD = $(GLOG_LIBS)
+test_exceptions_SOURCES = test_exceptions.cpp
 
 check_HEADERS = $(TESTUTILHEADERS) $(TESTHEADERS)
 
