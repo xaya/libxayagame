@@ -9,6 +9,8 @@
 #include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
 
+#include <jsonrpccpp/common/exception.h>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -19,7 +21,9 @@ namespace xaya
 namespace
 {
 
+using testing::_;
 using testing::Return;
+using testing::Throw;
 
 class SignaturesTests : public TestGameFixture
 {
@@ -32,8 +36,11 @@ protected:
   SignaturesTests ()
   {
     meta.set_reinit (std::string ("re\0init", 7));
+    meta.add_participants ()->set_address ("address 0");
     meta.add_participants ()->set_address ("address 1");
-    meta.add_participants ()->set_address ("address 2");
+
+    ValidSignature ("sgn 0", "address 0");
+    ValidSignature ("sgn 1", "address 1");
   }
 
 };
@@ -68,33 +75,25 @@ TEST_F (SignaturesTests, InvalidTopic)
 
 TEST_F (SignaturesTests, VerifyParticipantSignatures)
 {
-  proto::ChannelMetadata meta;
-  meta.add_participants ()->set_address ("address 1");
-  meta.add_participants ()->set_address ("address 2");
-
   proto::SignedData data;
   data.set_data ("foobar");
+  data.add_signatures ("signature 0");
   data.add_signatures ("signature 1");
   data.add_signatures ("signature 2");
-  data.add_signatures ("signature 3");
 
   const std::string msg = GetChannelSignatureMessage (channelId, meta, "topic",
                                                       data.data ());
 
   EXPECT_CALL (mockXayaServer,
-               verifymessage ("", msg, EncodeBase64 ("signature 1")))
+               verifymessage ("", msg, EncodeBase64 ("signature 0")))
       .WillOnce (Return (ParseJson (R"({
         "valid": true,
         "address": "some other address"
       })")));
+  ExpectSignature (channelId, meta, "topic", data.data (),
+                   "signature 1", "address 1");
   EXPECT_CALL (mockXayaServer,
                verifymessage ("", msg, EncodeBase64 ("signature 2")))
-      .WillOnce (Return (ParseJson (R"({
-        "valid": true,
-        "address": "address 2"
-      })")));
-  EXPECT_CALL (mockXayaServer,
-               verifymessage ("", msg, EncodeBase64 ("signature 3")))
       .WillOnce (Return (ParseJson (R"({
         "valid": false
       })")));
@@ -102,6 +101,44 @@ TEST_F (SignaturesTests, VerifyParticipantSignatures)
   EXPECT_EQ (VerifyParticipantSignatures (rpcClient, channelId, meta,
                                           "topic", data),
              std::set<int> ({1}));
+}
+
+TEST_F (SignaturesTests, SignDataForParticipantError)
+{
+  EXPECT_CALL (mockXayaWallet, signmessage ("address 1", _))
+      .WillOnce (Throw (jsonrpc::JsonRpcException (-5)));
+
+  proto::SignedData data;
+  data.set_data ("foobar");
+  data.add_signatures ("sgn 0");
+
+  EXPECT_FALSE (SignDataForParticipant (rpcWallet, channelId, meta, "topic",
+                                        1, data));
+
+  EXPECT_EQ (VerifyParticipantSignatures (rpcClient, channelId, meta,
+                                          "topic", data),
+             std::set<int> ({0}));
+}
+
+TEST_F (SignaturesTests, SignDataForParticipantSuccess)
+{
+  proto::SignedData data;
+  data.set_data ("foobar");
+  data.add_signatures ("sgn 0");
+
+  const std::string msg = GetChannelSignatureMessage (channelId, meta, "topic",
+                                                      data.data ());
+  EXPECT_CALL (mockXayaWallet, signmessage ("address 1", msg))
+      .WillOnce (Return (EncodeBase64 ("signature 1")));
+  ExpectSignature (channelId, meta, "topic", data.data (),
+                   "signature 1", "address 1");
+
+  ASSERT_TRUE (SignDataForParticipant (rpcWallet, channelId, meta, "topic",
+                                       1, data));
+
+  EXPECT_EQ (VerifyParticipantSignatures (rpcClient, channelId, meta,
+                                          "topic", data),
+             std::set<int> ({0, 1}));
 }
 
 } // anonymous namespace

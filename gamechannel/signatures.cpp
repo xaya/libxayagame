@@ -8,6 +8,8 @@
 #include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
 
+#include <jsonrpccpp/common/exception.h>
+
 #include <glog/logging.h>
 
 #include <string>
@@ -57,6 +59,34 @@ VerifyParticipantSignatures (XayaRpcClient& rpc,
       res.emplace (i);
 
   return res;
+}
+
+bool
+SignDataForParticipant (XayaWalletRpcClient& wallet,
+                        const uint256& channelId,
+                        const proto::ChannelMetadata& meta,
+                        const std::string& topic,
+                        const int index,
+                        proto::SignedData& data)
+{
+  CHECK_GE (index, 0);
+  CHECK_LT (index, meta.participants_size ());
+  const std::string& addr = meta.participants (index).address ();
+  LOG (INFO) << "Trying to sign data with address " << addr << "...";
+
+  try
+    {
+      const auto msg
+          = GetChannelSignatureMessage (channelId, meta, topic, data.data ());
+      const std::string sgn = wallet.signmessage (addr, msg);
+      CHECK (DecodeBase64 (sgn, *data.add_signatures ()));
+      return true;
+    }
+  catch (const jsonrpc::JsonRpcException& exc)
+    {
+      LOG (ERROR) << "Signature with " << addr << " failed: " << exc.what ();
+      return false;
+    }
 }
 
 } // namespace xaya

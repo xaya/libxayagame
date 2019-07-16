@@ -6,10 +6,6 @@
 
 #include "signatures.hpp"
 
-#include <xayautil/base64.hpp>
-
-#include <jsonrpccpp/common/exception.h>
-
 #include <glog/logging.h>
 
 #include <iterator>
@@ -176,9 +172,6 @@ ExtendStateProof (XayaRpcClient& rpc, XayaWalletRpcClient& wallet,
       LOG (ERROR) << "Cannot extend state proof in no-turn state";
       return false;
     }
-  CHECK_GE (turn, 0);
-  CHECK_LT (turn, meta.participants_size ());
-  const std::string& addr = meta.participants (turn).address ();
 
   BoardState newState;
   if (!parsedOld->ApplyMove (rpc, mv, newState))
@@ -192,21 +185,9 @@ ExtendStateProof (XayaRpcClient& rpc, XayaWalletRpcClient& wallet,
   auto* ns = trans.mutable_new_state ();
   ns->set_data (newState);
 
-  LOG (INFO)
-      << "Trying to sign new state for participant " << turn
-      << " with address " << addr;
-  try
-    {
-      const auto& msg
-          = GetChannelSignatureMessage (channelId, meta, "state", newState);
-      const std::string sgn = wallet.signmessage (addr, msg);
-      CHECK (DecodeBase64 (sgn, *ns->add_signatures ()));
-    }
-  catch (const jsonrpc::JsonRpcException& exc)
-    {
-      LOG (ERROR) << "Signature with " << addr << " failed: " << exc.what ();
-      return false;
-    }
+  LOG (INFO) << "Trying to sign new state for participant " << turn;
+  if (!SignDataForParticipant (wallet, channelId, meta, "state", turn, *ns))
+    return false;
 
   /* We got a valid signature of the new state.  Now we have to figure out what
      the "minimal" valid state proof for the new state is.  For this, we first

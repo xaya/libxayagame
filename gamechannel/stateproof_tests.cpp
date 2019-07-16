@@ -13,6 +13,7 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <glog/logging.h>

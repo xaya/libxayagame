@@ -163,9 +163,7 @@ ChannelManager::ProcessStateUpdate (bool broadcast)
   TryResolveDispute ();
 
   if (onChainSender != nullptr)
-    game.MaybeOnChainMove (boardStates.GetMetadata (),
-                           boardStates.GetLatestState (),
-                           *onChainSender);
+    game.MaybeOnChainMove (boardStates.GetLatestState (), *onChainSender);
 
   NotifyStateChange ();
 }

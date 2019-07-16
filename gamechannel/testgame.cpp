@@ -183,8 +183,7 @@ AdditionChannel::MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv)
 }
 
 void
-AdditionChannel::MaybeOnChainMove (const proto::ChannelMetadata& meta,
-                                   const ParsedBoardState& state,
+AdditionChannel::MaybeOnChainMove (const ParsedBoardState& state,
                                    MoveSender& sender)
 {
   const auto& addState = dynamic_cast<const AdditionState&> (state);

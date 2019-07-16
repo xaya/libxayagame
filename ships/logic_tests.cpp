@@ -9,6 +9,7 @@
 
 #include <gamechannel/database.hpp>
 #include <gamechannel/proto/stateproof.pb.h>
+#include <gamechannel/protoutils.hpp>
 #include <gamechannel/signatures.hpp>
 #include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
@@ -600,10 +601,7 @@ protected:
     Json::Value data(Json::objectValue);
     data["w"] = Json::Value (Json::objectValue);
     data["w"]["id"] = channelId.ToHex ();
-
-    std::string serialised;
-    CHECK (signedData.SerializeToString (&serialised));
-    data["w"]["stmt"] = xaya::EncodeBase64 (serialised);
+    data["w"]["stmt"] = xaya::ProtoToBase64 (signedData);
 
     return Move ("xyz", txid, data);
   }
@@ -817,10 +815,7 @@ protected:
     Json::Value data(Json::objectValue);
     data[key] = Json::Value (Json::objectValue);
     data[key]["id"] = channelId.ToHex ();
-
-    std::string serialised;
-    CHECK (proof.SerializeToString (&serialised));
-    data[key]["state"] = xaya::EncodeBase64 (serialised);
+    data[key]["state"] = xaya::ProtoToBase64 (proof);
 
     return Move ("xyz", txid, data);
   }
