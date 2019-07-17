@@ -99,6 +99,11 @@ public:
   bool IsPositionSet () const;
 
   /**
+   * Returns the player's position (must be set for this to be valid).
+   */
+  const Grid& GetPosition () const;
+
+  /**
    * Sets the player's position from the given Grid if it is valid.
    * Must not be called if IsPositionSet() is already true.
    */

@@ -44,12 +44,18 @@ private:
    * passing any updates to ChannelManager.  Thus we need our own lock
    * with a  "wider scope".
    */
-  std::mutex mut;
+  mutable std::mutex mut;
 
   /**
    * Processes a local move given as proto.
    */
   void ProcessLocalMove (const proto::BoardMove& mv);
+
+  /**
+   * Extends a given state JSON by extra data from the ShipsChannel directly
+   * (i.e. the player's own position if set).
+   */
+  Json::Value ExtendStateJson (Json::Value&& state) const;
 
 public:
 

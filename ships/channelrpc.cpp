@@ -20,14 +20,15 @@ Json::Value
 ShipsChannelRpcServer::getcurrentstate ()
 {
   LOG (INFO) << "RPC method called: getcurrentstate";
-  return daemon.GetChannelManager ().ToJson ();
+  return ExtendStateJson (daemon.GetChannelManager ().ToJson ());
 }
 
 Json::Value
 ShipsChannelRpcServer::waitforchange (const int knownVersion)
 {
   LOG (INFO) << "RPC method called: waitforchange " << knownVersion;
-  return daemon.GetChannelManager ().WaitForChange (knownVersion);
+  Json::Value state = daemon.GetChannelManager ().WaitForChange (knownVersion);
+  return ExtendStateJson (std::move (state));
 }
 
 void
@@ -93,6 +94,17 @@ ShipsChannelRpcServer::filedispute ()
 {
   LOG (INFO) << "RPC method called: filedispute";
   daemon.GetChannelManager ().FileDispute ();
+}
+
+Json::Value
+ShipsChannelRpcServer::ExtendStateJson (Json::Value&& state) const
+{
+  std::lock_guard<std::mutex> lock(mut);
+
+  if (channel.IsPositionSet ())
+    state["myships"] = channel.GetPosition ().ToString ();
+
+  return state;
 }
 
 void

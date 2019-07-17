@@ -91,6 +91,22 @@ TEST_F (GridTests, FromValidString)
   EXPECT_EQ (actual.GetBits (), expected.GetBits ());
 }
 
+TEST_F (GridTests, ToFromStringRoundtrip)
+{
+  Grid test;
+  test.Set (Coord (0, 0));
+  test.Set (Coord (0, 7));
+  test.Set (Coord (7, 7));
+  test.Set (Coord (5, 2));
+
+  const std::string str = test.ToString ();
+  LOG (INFO) << "Grid as string:\n" << str;
+
+  Grid recovered;
+  ASSERT_TRUE (recovered.FromString (str));
+  EXPECT_EQ (test.GetBits (), recovered.GetBits ());
+}
+
 TEST_F (GridTests, ExhaustiveSet)
 {
   for (int i = 0; i < Coord::CELLS; ++i)

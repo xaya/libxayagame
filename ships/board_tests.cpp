@@ -25,6 +25,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
 
 using google::protobuf::TextFormat;
@@ -205,6 +206,14 @@ TEST_F (SinglePlayerStateTests, WhoseTurn)
 TEST_F (SinglePlayerStateTests, TurnCount)
 {
   EXPECT_EQ (ParseTextState ("winner: 1")->TurnCount (), 0);
+}
+
+TEST_F (SinglePlayerStateTests, ToJson)
+{
+  const auto val = ParseTextState ("winner_statement: {}")->ToJson ();
+  const auto& phaseVal = val["phase"];
+  ASSERT_TRUE (phaseVal.isString ());
+  EXPECT_EQ (phaseVal.asString (), "single participant");
 }
 
 /* ************************************************************************** */
@@ -466,6 +475,157 @@ TEST_F (GetPhaseTests, EndOfGame)
     turn: 1
     winner: 0
   )")), Phase::WINNER_DETERMINED);
+}
+
+/* ************************************************************************** */
+
+using ToJsonTests = BoardTests;
+
+TEST_F (ToJsonTests, Phase)
+{
+  const auto val = ParseTextState (R"(
+    turn: 1
+    position_hashes: "foo"
+  )")->ToJson ();
+  const auto& phaseVal = val["phase"];
+  ASSERT_TRUE (phaseVal.isString ());
+  EXPECT_EQ (phaseVal.asString (), "second commitment");
+}
+
+TEST_F (ToJsonTests, NoWinner)
+{
+  const auto val = ParseTextState (R"(
+    turn: 0
+  )")->ToJson ();
+  EXPECT_FALSE (val.isMember ("winner"));
+}
+
+TEST_F (ToJsonTests, HasWinner)
+{
+  const auto val = ParseTextState (R"(
+    turn: 1
+    winner: 0
+  )")->ToJson ();
+  const auto& winnerVal = val["winner"];
+  ASSERT_TRUE (winnerVal.isUInt ());
+  EXPECT_EQ (winnerVal.asUInt (), 0);
+}
+
+TEST_F (ToJsonTests, NoPositionsRevealed)
+{
+  const auto val = ParseTextState (R"(
+    turn: 1
+    position_hashes: "foo"
+  )")->ToJson ();
+  EXPECT_FALSE (val.isMember ("ships"));
+}
+
+TEST_F (ToJsonTests, WithRevealedPositions)
+{
+  auto state = TextState (R"(
+    position_hashes: "foo"
+    position_hashes: "bar"
+    known_ships: {}
+    known_ships: {}
+  )");
+
+  Grid pos1;
+  ASSERT_TRUE (pos1.FromString (R"(
+    x...x...
+    ........
+    ..x.....
+    ........
+    .......x
+    ..x....x
+    ........
+    ....x...
+  )"));
+
+  Grid pos2(pos1.GetBits ());
+  pos2.Set (Coord (0, 7));
+  ASSERT_NE (pos1.GetBits (), pos2.GetBits ());
+
+  /* Just the first position revealed.  */
+  state.set_turn (1);
+  state.add_positions (pos1.GetBits ());
+  state.add_positions (0);
+
+  auto val = ParseState (state)->ToJson ();
+  auto positions = val["ships"];
+  ASSERT_TRUE (positions.isArray ());
+  ASSERT_EQ (positions.size (), 2);
+  EXPECT_EQ (positions[0].asString (), pos1.ToString ());
+  EXPECT_TRUE (positions[1].isNull ());
+
+  /* Just the second position revealed.  */
+  state.set_turn (0);
+  state.set_positions (0, 0);
+  state.set_positions (1, pos2.GetBits ());
+
+  val = ParseState (state)->ToJson ();
+  positions = val["ships"];
+  ASSERT_TRUE (positions.isArray ());
+  ASSERT_EQ (positions.size (), 2);
+  EXPECT_TRUE (positions[0].isNull ());
+  EXPECT_EQ (positions[1].asString (), pos2.ToString ());
+
+  /* Both positions revealed.  */
+  state.set_turn (1);
+  state.set_winner (0);
+  state.set_positions (0, pos1.GetBits ());
+  state.set_positions (1, pos2.GetBits ());
+
+  val = ParseState (state)->ToJson ();
+  positions = val["ships"];
+  ASSERT_TRUE (positions.isArray ());
+  ASSERT_EQ (positions.size (), 2);
+  EXPECT_EQ (positions[0].asString (), pos1.ToString ());
+  EXPECT_EQ (positions[1].asString (), pos2.ToString ());
+}
+
+TEST_F (ToJsonTests, NoKnownShips)
+{
+  const auto val = ParseTextState (R"(
+    turn: 1
+    position_hashes: "foo"
+  )")->ToJson ();
+  EXPECT_FALSE (val.isMember ("guesses"));
+}
+
+TEST_F (ToJsonTests, WithKnownShips)
+{
+  auto state = TextState (R"(
+    turn: 0
+    position_hashes: "foo"
+    position_hashes: "bar"
+  )");
+
+  Grid pos;
+  ASSERT_TRUE (pos.FromString (R"(
+    x...x...
+    ........
+    ..x.....
+    ........
+    .......x
+    ..x....x
+    ........
+    ....x...
+  )"));
+
+  auto* ks = state.add_known_ships ();
+  ks->set_guessed (pos.GetBits ());
+  ks->set_hits (pos.GetBits ());
+  ks = state.add_known_ships ();
+  ks->set_guessed (pos.GetBits ());
+  ks->set_hits (0);
+
+  Json::Value expected(Json::arrayValue);
+  std::string posStr = pos.ToString ();
+  expected.append (posStr);
+  std::replace (posStr.begin (), posStr.end (), 'x', 'm');
+  expected.append (posStr);
+
+  EXPECT_EQ (ParseState (state)->ToJson ()["guesses"], expected);
 }
 
 /* ************************************************************************** */

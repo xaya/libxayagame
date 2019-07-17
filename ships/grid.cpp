@@ -7,6 +7,7 @@
 #include <glog/logging.h>
 
 #include <map>
+#include <sstream>
 
 namespace ships
 {
@@ -32,6 +33,20 @@ constexpr AvailableShipType AVAILABLE_SHIPS[] =
   };
 
 } // anonymous namespace
+
+std::string
+Grid::ToString () const
+{
+  std::ostringstream res;
+  for (int r = 0; r < Coord::SIDE; ++r)
+    {
+      for (int c = 0; c < Coord::SIDE; ++c)
+        res << (Get (Coord (r, c)) ? 'x' : '.');
+      res << '\n';
+    }
+
+  return res.str ();
+}
 
 bool
 Grid::FromString (const std::string& str)
