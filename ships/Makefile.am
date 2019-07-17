@@ -53,7 +53,7 @@ shipsd_LDADD = \
   $(top_builddir)/xayagame/libxayagame.la \
   $(top_builddir)/gamechannel/libgamechannel.la \
   $(JSONCPP_LIBS) $(GLOG_LIBS) $(GFLAGS_LIBS) $(PROTOBUF_LIBS)
-shipsd_SOURCES = main.cpp
+shipsd_SOURCES = main-gsp.cpp
 
 noinst_PYTHON = proto/__init__.py $(PROTOPY)
 
