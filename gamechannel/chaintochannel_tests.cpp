@@ -192,6 +192,8 @@ private:
   jsonrpc::HttpServer httpServerGsp;
   jsonrpc::HttpClient httpClientGsp;
 
+  ChannelGspRpcClient rpcGsp;
+
 protected:
 
   ChainToChannelFeeder feeder;
@@ -200,7 +202,8 @@ protected:
   ChainToChannelFeederTests ()
     : httpServerGsp(32200),
       httpClientGsp("http://localhost:32200"),
-      feeder(httpClientGsp, cm),
+      rpcGsp(httpClientGsp),
+      feeder(rpcGsp, cm),
       gspServer(channelId, meta, game, httpServerGsp)
   {
     httpClientGsp.SetTimeout (RPC_TIMEOUT_MS);

@@ -19,9 +19,9 @@
 namespace xaya
 {
 
-ChainToChannelFeeder::ChainToChannelFeeder (jsonrpc::IClientConnector& conn,
+ChainToChannelFeeder::ChainToChannelFeeder (ChannelGspRpcClient& r,
                                             ChannelManager& cm)
-  : rpc(conn), manager(cm)
+  : rpc(r), manager(cm)
 {
   lastBlock.SetNull ();
 }
