@@ -4,8 +4,6 @@
 
 #include "grid.hpp"
 
-#include "testutils.hpp"
-
 #include <gtest/gtest.h>
 
 #include <glog/logging.h>
@@ -42,6 +40,55 @@ TEST_F (GridTests, BasicGetSet)
   EXPECT_FALSE (g.Get (Coord (6)));
   EXPECT_FALSE (g.Get (Coord (62)));
   EXPECT_TRUE (g.Get (Coord (63)));
+}
+
+TEST_F (GridTests, FromInvalidString)
+{
+  Grid g;
+  EXPECT_FALSE (g.FromString (" ...xx... "));
+  EXPECT_FALSE (g.FromString (R"(
+    ........
+    ........
+    ........
+    ........
+    ........
+    ........
+    ........
+    ........
+    .
+  )"));
+  EXPECT_FALSE (g.FromString (R"(
+    ........
+    ........
+    ........
+    ........
+    ........
+    ...o....
+    ........
+    ........
+  )"));
+}
+
+TEST_F (GridTests, FromValidString)
+{
+  Grid actual;
+  ASSERT_TRUE (actual.FromString (R"(
+    x......x
+    ........
+    ........
+    ........
+    ........
+    ........
+    ........
+    .......x
+  )"));
+
+  Grid expected;
+  expected.Set (Coord (0, 0));
+  expected.Set (Coord (0, 7));
+  expected.Set (Coord (7, 7));
+
+  EXPECT_EQ (actual.GetBits (), expected.GetBits ());
 }
 
 TEST_F (GridTests, ExhaustiveSet)
@@ -150,7 +197,9 @@ protected:
   static bool
   Verify (const std::string& str)
   {
-    return VerifyPositionOfShips (GridFromString (str));
+    Grid g;
+    CHECK (g.FromString (str));
+    return VerifyPositionOfShips (g);
   }
 
 };

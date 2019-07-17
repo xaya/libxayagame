@@ -34,6 +34,48 @@ constexpr AvailableShipType AVAILABLE_SHIPS[] =
 } // anonymous namespace
 
 bool
+Grid::FromString (const std::string& str)
+{
+  bits = 0;
+
+  int next = 0;
+  for (const char c : str)
+    {
+      if (c == ' ' || c == '\n')
+        continue;
+
+      if (next >= Coord::CELLS)
+        {
+          LOG (ERROR) << "Too much data in string for a grid:\n" << str;
+          return false;
+        }
+
+      switch (c)
+        {
+        case '.':
+          break;
+        case 'x':
+          Set (Coord (next));
+          break;
+        default:
+          LOG (ERROR) << "Invalid character in grid string: " << c;
+          return false;
+        }
+
+      ++next;
+    }
+
+  if (next < Coord::CELLS)
+    {
+      LOG (ERROR) << "Too few data in string for a grid:\n" << str;
+      return false;
+    }
+  CHECK_EQ (next, Coord::CELLS);
+
+  return true;
+}
+
+bool
 Grid::Get (const Coord& c) const
 {
   return (bits >> c.GetIndex ()) % 2 > 0;

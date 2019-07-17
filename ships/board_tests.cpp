@@ -7,7 +7,6 @@
 #include "grid.hpp"
 #include "proto/boardstate.pb.h"
 #include "proto/winnerstatement.pb.h"
-#include "testutils.hpp"
 
 #include <gamechannel/proto/metadata.pb.h>
 #include <gamechannel/signatures.hpp>
@@ -1066,16 +1065,18 @@ protected:
       known_ships: {}
     )");
 
-    const Grid validGrid = GridFromString (
-      "xxxx..xx"
-      "........"
-      "......xx"
-      "........"
-      "......xx"
-      "x.x....."
-      "x.x...xx"
-      "x.x....."
-    );
+    Grid validGrid;
+    CHECK (validGrid.FromString (R"(
+      xxxx..xx
+      ........
+      ......xx
+      ........
+      ......xx
+      x.x.....
+      x.x...xx
+      x.x.....
+    )"));
+
     CHECK (VerifyPositionOfShips (validGrid));
     validPosition = validGrid.GetBits ();
   }
