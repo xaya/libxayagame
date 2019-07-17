@@ -1,7 +1,7 @@
 SUBDIRS = gametest
 
 noinst_LTLIBRARIES = libships.la
-bin_PROGRAMS = shipsd
+bin_PROGRAMS = shipsd ships-channel
 
 PROTOS = \
   proto/boardmove.proto \
@@ -54,6 +54,19 @@ shipsd_LDADD = \
   $(top_builddir)/gamechannel/libgamechannel.la \
   $(JSONCPP_LIBS) $(GLOG_LIBS) $(GFLAGS_LIBS) $(PROTOBUF_LIBS)
 shipsd_SOURCES = main-gsp.cpp
+
+ships_channel_CXXFLAGS = \
+  -I$(top_srcdir) \
+  $(JSONCPP_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
+  $(GLOG_CFLAGS) $(GFLAGS_CFLAGS) $(PROTOBUF_CFLAGS)
+ships_channel_LDADD = \
+  $(builddir)/libships.la \
+  $(top_builddir)/xayautil/libxayautil.la \
+  $(top_builddir)/xayagame/libxayagame.la \
+  $(top_builddir)/gamechannel/libgamechannel.la \
+  $(JSONCPP_LIBS) $(JSONRPCSERVER_LIBS) \
+  $(GLOG_LIBS) $(GFLAGS_LIBS) $(PROTOBUF_LIBS)
+ships_channel_SOURCES = main-channel.cpp
 
 noinst_PYTHON = proto/__init__.py $(PROTOPY)
 
