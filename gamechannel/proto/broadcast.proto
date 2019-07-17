@@ -13,7 +13,7 @@ message BroadcastMessage
 {
 
   /** The channel reinit ID this corresponds to.  */
-  optional string reinit = 1;
+  optional bytes reinit = 1;
 
   /* There is no need to also store the channel ID, since that is part of the
      broadcast channel itself (and implementations of OffChainBroadcast need
