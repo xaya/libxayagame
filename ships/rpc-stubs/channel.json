@@ -1,0 +1,37 @@
+[
+  {
+    "name": "stop",
+    "params": {}
+  },
+  {
+    "name": "getcurrentstate",
+    "params": {},
+    "returns": {}
+  },
+  {
+    "name": "waitforchange",
+    "params": [42],
+    "returns": {}
+  },
+
+  {
+    "name": "setposition",
+    "params": ["position string"]
+  },
+  {
+    "name": "shoot",
+    "params":
+      {
+        "row": 1,
+        "column": 2
+      }
+  },
+  {
+    "name": "revealposition",
+    "params": {}
+  },
+  {
+    "name": "filedispute",
+    "params": {}
+  }
+]

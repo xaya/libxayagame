@@ -3,6 +3,9 @@ SUBDIRS = gametest
 noinst_LTLIBRARIES = libships.la
 bin_PROGRAMS = shipsd ships-channel
 
+RPC_STUBS = \
+  rpc-stubs/shipschannelrpcserverstub.h
+
 PROTOS = \
   proto/boardmove.proto \
   proto/boardstate.proto \
@@ -12,10 +15,11 @@ PROTOSOURCES = $(PROTOS:.proto=.pb.cc)
 PROTOPY = $(PROTOS:.proto=_pb2.py)
 
 EXTRA_DIST = $(PROTOS) \
+  rpc-stubs/channel.json \
   schema.sql schema_head.cpp schema_tail.cpp
 
-BUILT_SOURCES = $(PROTOHEADERS) $(PROTOPY)
-CLEANFILES = $(PROTOHEADERS) $(PROTOSOURCES) $(PROTOPY) schema.cpp
+BUILT_SOURCES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOPY)
+CLEANFILES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOSOURCES) $(PROTOPY) schema.cpp
 
 libships_la_CXXFLAGS = \
   -I$(top_srcdir) \
@@ -34,7 +38,7 @@ libships_la_SOURCES = \
   logic.cpp \
   schema.cpp \
   $(PROTOSOURCES)
-noinst_HEADERS = \
+LIBSHIPSHEADERS = \
   board.hpp \
   channel.hpp \
   coord.hpp \
@@ -42,6 +46,7 @@ noinst_HEADERS = \
   grid.hpp \
   logic.hpp \
   schema.hpp \
+  $(RPC_STUBS) \
   $(PROTOHEADERS)
 
 shipsd_CXXFLAGS = \
@@ -66,7 +71,12 @@ ships_channel_LDADD = \
   $(top_builddir)/gamechannel/libgamechannel.la \
   $(JSONCPP_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(GFLAGS_LIBS) $(PROTOBUF_LIBS)
-ships_channel_SOURCES = main-channel.cpp
+ships_channel_SOURCES = main-channel.cpp \
+  channelrpc.cpp
+CHANNELHEADERS = \
+  channelrpc.hpp
+
+noinst_HEADERS = $(LIBSHIPSHEADERS) $(CHANNELHEADERS)
 
 noinst_PYTHON = proto/__init__.py $(PROTOPY)
 
@@ -98,6 +108,11 @@ check_HEADERS = \
 
 schema.cpp: schema_head.cpp schema.sql schema_tail.cpp
 	cat $^ >$@
+
+rpc-stubs/shipschannelrpcserverstub.h: $(srcdir)/rpc-stubs/channel.json
+	jsonrpcstub "$<" \
+	  --cpp-server=ShipsChannelRpcServerStub \
+	  --cpp-server-file="$@"
 
 proto/%.pb.h proto/%.pb.cc: $(srcdir)/proto/%.proto
 	protoc -I$(top_srcdir) -I$(srcdir)/proto --cpp_out=proto "$<"

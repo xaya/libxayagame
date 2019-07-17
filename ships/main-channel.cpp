@@ -5,12 +5,15 @@
 #include "config.h"
 
 #include "channel.hpp"
+#include "channelrpc.hpp"
 
 #include <gamechannel/daemon.hpp>
 #include <gamechannel/rpcbroadcast.hpp>
 #include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
+#include <jsonrpccpp/server.h>
+#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -100,7 +103,24 @@ main (int argc, char** argv)
   xaya::RpcBroadcast bc(FLAGS_broadcast_rpc_url, daemon.GetChannelManager ());
   daemon.SetOffChainBroadcast (bc);
 
+  std::unique_ptr<jsonrpc::AbstractServerConnector> serverConnector;
+  if (FLAGS_rpc_port != 0)
+    serverConnector = std::make_unique<jsonrpc::HttpServer> (FLAGS_rpc_port);
+
+  std::unique_ptr<ships::ShipsChannelRpcServer> rpcServer;
+  if (serverConnector != nullptr)
+    {
+      rpcServer = std::make_unique<ships::ShipsChannelRpcServer> (
+                      channel, daemon, *serverConnector);
+      rpcServer->StartListening ();
+    }
+  else
+    LOG (WARNING) << "Channel daemon has no JSON-RPC interface";
+
   daemon.Run ();
+
+  if (rpcServer != nullptr)
+    rpcServer->StopListening ();
 
   google::protobuf::ShutdownProtobufLibrary ();
   return EXIT_SUCCESS;
