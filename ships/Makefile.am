@@ -1,4 +1,4 @@
-SUBDIRS = gametest
+SUBDIRS = gametest channeltest
 
 noinst_LTLIBRARIES = libships.la
 bin_PROGRAMS = shipsd ships-channel

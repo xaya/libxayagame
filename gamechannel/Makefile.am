@@ -84,6 +84,7 @@ PYTHONTESTS = \
 noinst_PYTHON = $(PYTHONTESTS)
 py_PYTHON = \
   __init__.py \
+  channeltest.py \
   rpcbroadcast.py \
   signatures.py
 pyproto_PYTHON = proto/__init__.py $(PROTOPY)

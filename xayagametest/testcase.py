@@ -115,6 +115,7 @@ class XayaGameTest (object):
     try:
       self.startGameDaemon ()
       try:
+        self.setup ()
         self.run ()
         self.mainLogger.info ("Test succeeded")
         success = True
@@ -126,6 +127,7 @@ class XayaGameTest (object):
         self.mainLogger.exception ("Test failed")
         self.log.info ("Not cleaning up base directory %s" % self.basedir)
       finally:
+        self.shutdown ()
         self.stopGameDaemon ()
     finally:
       self.stopXayaDaemon ()
@@ -136,6 +138,25 @@ class XayaGameTest (object):
 
     if not success:
       sys.exit ("Test failed")
+
+  def setup (self):
+    """
+    This method does nothing, but it can be overridden by subclasses to
+    provide custom setup functionality.  That is run after setting up the
+    base environment (e.g. Xaya Core RPC) but before the actual test
+    logic in each test's run() method.
+    """
+
+    pass
+
+  def shutdown (self):
+    """
+    This method does nothing, but it can be overridden by subclasses.
+    It gets called when the test run is done and can be used to clean
+    up resources.
+    """
+
+    pass
 
   def run (self):
     self.mainLogger.warning (

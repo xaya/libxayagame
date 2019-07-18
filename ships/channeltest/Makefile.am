@@ -1,0 +1,8 @@
+AM_TESTS_ENVIRONMENT = \
+  PYTHONPATH=$(top_srcdir):$(top_srcdir)/ships:$(top_srcdir)/ships/gametest
+
+REGTESTS = \
+  full_game.py
+
+EXTRA_DIST = $(REGTESTS)
+TESTS = $(REGTESTS)
