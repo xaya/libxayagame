@@ -40,9 +40,28 @@ using BoardMove = std::string;
 class ParsedBoardState
 {
 
+private:
+
+  /**
+   * A reference to the channel ID.  This is stored in the constructor and
+   * can be accessed by subclasses.
+   */
+  const uint256& channelId;
+
+  /**
+   * A reference to the channel's metadata.  This is stored in the constructor
+   * (from the BoardRules instance) and can be accessed by subclasses as
+   * they need it for the game logic.  The reference originally comes from
+   * BoardRules::ParseState, by which it is guaranteed to be valid as long
+   * as the instance of the parsed state is there.
+   */
+  const proto::ChannelMetadata& meta;
+
 protected:
 
-  ParsedBoardState () = default;
+  explicit ParsedBoardState (const uint256& id, const proto::ChannelMetadata& m)
+    : channelId(id), meta(m)
+  {}
 
 public:
 
@@ -54,6 +73,24 @@ public:
   static constexpr int NO_TURN = -1;
 
   virtual ~ParsedBoardState () = default;
+
+  /**
+   * Returns the channel ID.
+   */
+  const uint256&
+  GetChannelId () const
+  {
+    return channelId;
+  }
+
+  /**
+   * Returns the metadata associated with this channel state.
+   */
+  const proto::ChannelMetadata&
+  GetMetadata () const
+  {
+    return meta;
+  }
 
   /**
    * Compares the current state to the given other board state.  Returns true
@@ -130,8 +167,8 @@ public:
    * nullptr instead.
    *
    * The passed-in ID and metadata can be used to put the board state into
-   * context.  It is guaranteed that the reference stays valid at least as
-   * long as the returned ParsedBoardState instance will be alive.
+   * context.  It is guaranteed that the references stay valid at least as
+   * long as the returned ParsedBoardState instance will be kept alive.
    */
   virtual std::unique_ptr<ParsedBoardState> ParseState (
       const uint256& channelId, const proto::ChannelMetadata& meta,

@@ -43,8 +43,13 @@ private:
   struct ReinitData
   {
 
-    /** The metadata for this reinitialisation.  */
-    proto::ChannelMetadata meta;
+    /**
+     * The metadata for this reinitialisation.  We keep a pointer to it rather
+     * than the instance itself, because a reference to the proto is encoded
+     * in latestState and we need it to remain valid even if the instance
+     * gets moved around.
+     */
+    std::unique_ptr<proto::ChannelMetadata> meta;
 
     /** The initial state for that reinitialisation.  */
     BoardState reinitState;
