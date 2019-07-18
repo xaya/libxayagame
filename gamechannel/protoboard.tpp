@@ -16,7 +16,7 @@ namespace xaya
 template <typename State, typename Move>
   ProtoBoardState<State, Move>::ProtoBoardState (
       const uint256& id, const proto::ChannelMetadata& m, State&& s)
-  : channelId(id), meta(m)
+  : ParsedBoardState(id, m)
 {
   state.Swap (&s);
 }
