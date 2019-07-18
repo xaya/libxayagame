@@ -179,6 +179,9 @@ AdditionChannel::DisputeMove (const uint256& channelId,
 bool
 AdditionChannel::MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv)
 {
+  if (!automovesEnabled)
+    return false;
+
   const auto& addState = dynamic_cast<const AdditionState&> (state);
   return addState.MaybeAutoMove (mv);
 }

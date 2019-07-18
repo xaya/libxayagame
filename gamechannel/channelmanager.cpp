@@ -308,6 +308,32 @@ ChannelManager::ProcessLocalMove (const BoardMove& mv)
 }
 
 void
+ChannelManager::TriggerAutoMoves ()
+{
+  std::lock_guard<std::mutex> lock(mut);
+
+  if (stopped)
+    {
+      LOG (INFO) << "ChannelManager is stopped, not triggering automoves";
+      return;
+    }
+
+  if (!exists)
+    {
+      LOG (INFO) << "Channel does not exist on chain, not triggering automoves";
+      return;
+    }
+
+  if (!ProcessAutoMoves ())
+    {
+      LOG (INFO) << "Automoves triggered explicitly, but none found";
+      return;
+    }
+
+  ProcessStateUpdate (true);
+}
+
+void
 ChannelManager::FileDispute ()
 {
   LOG (INFO) << "Trying to file a dispute for channel " << channelId.ToHex ();
