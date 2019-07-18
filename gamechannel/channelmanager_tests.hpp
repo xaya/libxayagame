@@ -26,6 +26,9 @@ class ChannelManagerTestFixture : public TestGameFixture
 
 protected:
 
+  const uint256 blockHash = SHA256::Hash ("block hash");
+  const unsigned height = 42;
+
   const uint256 channelId = SHA256::Hash ("channel id");
   proto::ChannelMetadata meta;
 
@@ -33,6 +36,30 @@ protected:
 
   ChannelManagerTestFixture ();
   ~ChannelManagerTestFixture ();
+
+  /**
+   * Processes an on-chain update with fixed block hash and height, our
+   * metadata and for the given data state.
+   */
+  void ProcessOnChain (const BoardState& reinitState,
+                       const proto::StateProof& proof,
+                       unsigned dispHeight);
+
+  /**
+   * Processes an on-chain update without the channel for our fixed block height
+   * and hash.
+   */
+  void ProcessOnChainNonExistant ();
+
+  /**
+   * Returns the manager's current block hash and height.
+   */
+  const uint256&
+  GetOnChainBlock (unsigned& height) const
+  {
+    height = cm.onChainHeight;
+    return cm.blockHash;
+  }
 
   /**
    * Extracts the latest state from boardStates.

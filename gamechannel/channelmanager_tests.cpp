@@ -73,6 +73,20 @@ ChannelManagerTestFixture::~ChannelManagerTestFixture ()
   cm.StopUpdates ();
 }
 
+void
+ChannelManagerTestFixture::ProcessOnChain (const BoardState& reinitState,
+                                           const proto::StateProof& proof,
+                                           const unsigned dispHeight)
+{
+  cm.ProcessOnChain (blockHash, height, meta, reinitState, proof, dispHeight);
+}
+
+void
+ChannelManagerTestFixture::ProcessOnChainNonExistant ()
+{
+  cm.ProcessOnChainNonExistant (blockHash, height);
+}
+
 BoardState
 ChannelManagerTestFixture::GetLatestState () const
 {
@@ -199,10 +213,10 @@ protected:
 
 TEST_F (ChannelManagerTests, ProcessOnChainNonExistant)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   EXPECT_TRUE (GetExists ());
 
-  cm.ProcessOnChainNonExistant ();
+  ProcessOnChainNonExistant ();
   EXPECT_FALSE (GetExists ());
 }
 
@@ -212,7 +226,7 @@ using ProcessOnChainTests = ChannelManagerTests;
 
 TEST_F (ProcessOnChainTests, Basic)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   EXPECT_TRUE (GetExists ());
   EXPECT_EQ (GetLatestState (), "10 5");
   EXPECT_EQ (GetDispute (), nullptr);
@@ -220,23 +234,23 @@ TEST_F (ProcessOnChainTests, Basic)
 
 TEST_F (ProcessOnChainTests, Dispute)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("11 5"), 10);
+  ProcessOnChain ("0 0", ValidProof ("11 5"), 10);
   EXPECT_NE (GetDispute (), nullptr);
   EXPECT_EQ (GetDispute ()->height, 10);
   EXPECT_EQ (GetDispute ()->turn, 1);
   EXPECT_EQ (GetDispute ()->count, 5);
   EXPECT_EQ (GetDispute ()->pendingResolution, false);
 
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("12 6"), 0);
+  ProcessOnChain ("0 0", ValidProof ("12 6"), 0);
   EXPECT_EQ (GetDispute (), nullptr);
 }
 
 TEST_F (ProcessOnChainTests, TriggersResolutionn)
 {
   ExpectMoves (1, "resolution");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
 }
 
 /* ************************************************************************** */
@@ -245,7 +259,7 @@ using ProcessOffChainTests = ChannelManagerTests;
 
 TEST_F (ProcessOffChainTests, UpdatesState)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   EXPECT_EQ (GetLatestState (), "12 6");
 }
@@ -253,16 +267,16 @@ TEST_F (ProcessOffChainTests, UpdatesState)
 TEST_F (ProcessOffChainTests, TriggersResolutionn)
 {
   ExpectMoves (1, "resolution");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 }
 
 TEST_F (ProcessOffChainTests, WhenNotExists)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
-  cm.ProcessOnChainNonExistant ();
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  ProcessOnChainNonExistant ();
   cm.ProcessOffChain ("", ValidProof ("20 10"));
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("15 7"), 0);
+  ProcessOnChain ("0 0", ValidProof ("15 7"), 0);
   EXPECT_EQ (GetLatestState (), "20 10");
 }
 
@@ -272,21 +286,21 @@ using ProcessLocalMoveTests = ChannelManagerTests;
 
 TEST_F (ProcessLocalMoveTests, WhenNotExists)
 {
-  cm.ProcessOnChainNonExistant ();
+  ProcessOnChainNonExistant ();
   cm.ProcessLocalMove ("1");
   EXPECT_FALSE (GetExists ());
 }
 
 TEST_F (ProcessLocalMoveTests, InvalidUpdate)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.ProcessLocalMove ("invalid move");
   EXPECT_EQ (GetLatestState (), "10 5");
 }
 
 TEST_F (ProcessLocalMoveTests, NotMyTurn)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("11 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("11 5"), 0);
   cm.ProcessLocalMove ("1");
   EXPECT_EQ (GetLatestState (), "11 5");
 }
@@ -294,7 +308,7 @@ TEST_F (ProcessLocalMoveTests, NotMyTurn)
 TEST_F (ProcessLocalMoveTests, Valid)
 {
   ExpectOneBroadcast ("11 6");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.ProcessLocalMove ("1");
   EXPECT_EQ (GetLatestState (), "11 6");
 }
@@ -303,7 +317,7 @@ TEST_F (ProcessLocalMoveTests, TriggersResolution)
 {
   ExpectOneBroadcast ("11 6");
   ExpectMoves (1, "resolution");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessLocalMove ("1");
 }
 
@@ -314,32 +328,32 @@ using AutoMoveTests = ChannelManagerTests;
 TEST_F (AutoMoveTests, OneMove)
 {
   ExpectOneBroadcast ("20 6");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("18 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("18 5"), 0);
   EXPECT_EQ (GetLatestState (), "20 6");
 }
 
 TEST_F (AutoMoveTests, TwoMoves)
 {
   ExpectOneBroadcast ("30 7");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("26 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("26 5"), 0);
   EXPECT_EQ (GetLatestState (), "30 7");
 }
 
 TEST_F (AutoMoveTests, NoTurnState)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("108 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("108 5"), 0);
   EXPECT_EQ (GetLatestState (), "108 5");
 }
 
 TEST_F (AutoMoveTests, NotMyTurn)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("37 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("37 5"), 0);
   EXPECT_EQ (GetLatestState (), "37 5");
 }
 
 TEST_F (AutoMoveTests, NoAutoMove)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("44 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("44 5"), 0);
   EXPECT_EQ (GetLatestState (), "44 5");
 }
 
@@ -347,14 +361,14 @@ TEST_F (AutoMoveTests, WithDisputeResolution)
 {
   ExpectOneBroadcast ("50 6");
   ExpectMoves (1, "resolution");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("48 5"), 1);
+  ProcessOnChain ("0 0", ValidProof ("48 5"), 1);
   EXPECT_EQ (GetLatestState (), "50 6");
 }
 
 TEST_F (AutoMoveTests, ProcessOffChain)
 {
   ExpectOneBroadcast ("20 9");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.ProcessOffChain ("", ValidProof ("18 8"));
   EXPECT_EQ (GetLatestState (), "20 9");
 }
@@ -362,7 +376,7 @@ TEST_F (AutoMoveTests, ProcessOffChain)
 TEST_F (AutoMoveTests, ProcessLocalMove)
 {
   ExpectOneBroadcast ("20 8");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.ProcessLocalMove ("6");
   EXPECT_EQ (GetLatestState (), "20 8");
 }
@@ -373,7 +387,7 @@ using TriggerAutoMovesTests = ChannelManagerTests;
 
 TEST_F (TriggerAutoMovesTests, NotOnChain)
 {
-  cm.ProcessOnChainNonExistant ();
+  ProcessOnChainNonExistant ();
 
   /* This will just do nothing, but it also shouldn't CHECK-fail.  */
   cm.TriggerAutoMoves ();
@@ -381,7 +395,7 @@ TEST_F (TriggerAutoMovesTests, NotOnChain)
 
 TEST_F (TriggerAutoMovesTests, NoAutoMoves)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.TriggerAutoMoves ();
   EXPECT_EQ (GetLatestState (), "10 5");
 }
@@ -391,7 +405,7 @@ TEST_F (TriggerAutoMovesTests, SendsMoves)
   ExpectOneBroadcast ("10 6");
 
   game.channel.SetAutomovesEnabled (false);
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("8 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("8 5"), 0);
   EXPECT_EQ (GetLatestState (), "8 5");
 
   game.channel.SetAutomovesEnabled (true);
@@ -423,13 +437,13 @@ protected:
 TEST_F (MaybeOnChainMoveTests, OnChain)
 {
   ExpectOnChainMove ();
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("100 2"), 0);
+  ProcessOnChain ("0 0", ValidProof ("100 2"), 0);
 }
 
 TEST_F (MaybeOnChainMoveTests, OffChain)
 {
   ExpectOnChainMove ();
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("55 2"), 0);
+  ProcessOnChain ("0 0", ValidProof ("55 2"), 0);
   cm.ProcessOffChain ("", ValidProof ("100 3"));
 }
 
@@ -437,7 +451,7 @@ TEST_F (MaybeOnChainMoveTests, LocalMove)
 {
   ExpectOneBroadcast ("100 3");
   ExpectOnChainMove ();
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("50 2"), 0);
+  ProcessOnChain ("0 0", ValidProof ("50 2"), 0);
   cm.ProcessLocalMove ("50");
 }
 
@@ -445,12 +459,12 @@ TEST_F (MaybeOnChainMoveTests, AutoMoves)
 {
   ExpectOneBroadcast ("100 4");
   ExpectOnChainMove ();
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("96 2"), 0);
+  ProcessOnChain ("0 0", ValidProof ("96 2"), 0);
 }
 
 TEST_F (MaybeOnChainMoveTests, NoOnChainMove)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("110 2"), 0);
+  ProcessOnChain ("0 0", ValidProof ("110 2"), 0);
 }
 
 /* ************************************************************************** */
@@ -460,22 +474,22 @@ using ResolveDisputeTests = ChannelManagerTests;
 TEST_F (ResolveDisputeTests, SendsResolution)
 {
   ExpectMoves (1, "resolution");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 }
 
 TEST_F (ResolveDisputeTests, ChannelDoesNotExist)
 {
   ExpectMoves (0, "resolution");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
-  cm.ProcessOnChainNonExistant ();
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
+  ProcessOnChainNonExistant ();
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 }
 
 TEST_F (ResolveDisputeTests, AlreadyPending)
 {
   ExpectMoves (1, "resolution");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   cm.ProcessOffChain ("", ValidProof ("14 8"));
 }
@@ -483,14 +497,14 @@ TEST_F (ResolveDisputeTests, AlreadyPending)
 TEST_F (ResolveDisputeTests, OtherPlayer)
 {
   ExpectMoves (0, "resolution");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("11 5"), 1);
+  ProcessOnChain ("0 0", ValidProof ("11 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 }
 
 TEST_F (ResolveDisputeTests, NoBetterTurn)
 {
   ExpectMoves (0, "resolution");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 1);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 5"));
 }
 
@@ -501,28 +515,28 @@ using FileDisputeTests = ChannelManagerTests;
 TEST_F (FileDisputeTests, Successful)
 {
   ExpectMoves (1, "dispute");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.FileDispute ();
 }
 
 TEST_F (FileDisputeTests, ChannelDoesNotExist)
 {
   ExpectMoves (0, "dispute");
-  cm.ProcessOnChainNonExistant ();
+  ProcessOnChainNonExistant ();
   cm.FileDispute ();
 }
 
 TEST_F (FileDisputeTests, HasOtherDispute)
 {
   ExpectMoves (0, "dispute");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 10);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 10);
   cm.FileDispute ();
 }
 
 TEST_F (FileDisputeTests, AlreadyPending)
 {
   ExpectMoves (1, "dispute");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.FileDispute ();
   cm.FileDispute ();
 }
@@ -530,9 +544,9 @@ TEST_F (FileDisputeTests, AlreadyPending)
 TEST_F (FileDisputeTests, RetryAfterBlock)
 {
   ExpectMoves (2, "dispute");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.FileDispute ();
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.FileDispute ();
 }
 
@@ -540,23 +554,37 @@ TEST_F (FileDisputeTests, RetryAfterBlock)
 
 using ChannelToJsonTests = ChannelManagerTests;
 
+TEST_F (ChannelToJsonTests, Initial)
+{
+  auto expected = ParseJson (R"({
+    "playername": "player",
+    "existsonchain": false,
+    "version": 1
+  })");
+  expected["id"] = channelId.ToHex ();
+
+  EXPECT_EQ (cm.ToJson (), expected);
+}
+
 TEST_F (ChannelToJsonTests, NonExistant)
 {
   auto expected = ParseJson (R"({
     "playername": "player",
     "existsonchain": false,
+    "height": 42,
     "version": 2
   })");
   expected["id"] = channelId.ToHex ();
+  expected["blockhash"] = blockHash.ToHex ();
 
-  cm.ProcessOnChainNonExistant ();
+  ProcessOnChainNonExistant ();
   EXPECT_EQ (cm.ToJson (), expected);
 }
 
 TEST_F (ChannelToJsonTests, CurrentState)
 {
-  cm.ProcessOnChainNonExistant ();
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChainNonExistant ();
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
 
   auto actual = cm.ToJson ();
   EXPECT_EQ (actual["current"]["meta"]["participants"], ParseJson (R"([
@@ -572,15 +600,17 @@ TEST_F (ChannelToJsonTests, CurrentState)
   auto expected = ParseJson (R"({
     "playername": "player",
     "existsonchain": true,
+    "height": 42,
     "version": 3
   })");
   expected["id"] = channelId.ToHex ();
+  expected["blockhash"] = blockHash.ToHex ();
   EXPECT_EQ (actual, expected);
 }
 
 TEST_F (ChannelToJsonTests, Dispute)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("11 5"), 5);
+  ProcessOnChain ("0 0", ValidProof ("11 5"), 5);
   EXPECT_EQ (cm.ToJson ()["dispute"], ParseJson (R"({
     "height": 5,
     "whoseturn": 1,
@@ -674,14 +704,14 @@ protected:
 TEST_F (WaitForChangeTests, OnChain)
 {
   CallWaitForChange ();
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   JoinWaiter ();
 }
 
 TEST_F (WaitForChangeTests, OnChainNonExistant)
 {
   CallWaitForChange ();
-  cm.ProcessOnChainNonExistant ();
+  ProcessOnChainNonExistant ();
   JoinWaiter ();
 }
 
@@ -707,7 +737,7 @@ TEST_F (WaitForChangeTests, OffChainNoChange)
 TEST_F (WaitForChangeTests, LocalMove)
 {
   ExpectOneBroadcast ("11 6");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   CallWaitForChange ();
   cm.ProcessLocalMove ("1");
   JoinWaiter ();
@@ -730,7 +760,7 @@ TEST_F (WaitForChangeTests, StopNotifies)
 TEST_F (WaitForChangeTests, OutdatedKnownVersion)
 {
   const int known = cm.ToJson ()["version"].asInt ();
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   CallWaitForChange (known);
   JoinWaiter ();
 }
@@ -739,7 +769,7 @@ TEST_F (WaitForChangeTests, UpToDateKnownVersion)
 {
   const int known = cm.ToJson ()["version"].asInt ();
   CallWaitForChange (known);
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   JoinWaiter ();
 }
 
@@ -749,23 +779,23 @@ using StopUpdatesTests = ChannelManagerTests;
 
 TEST_F (StopUpdatesTests, OnChain)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.StopUpdates ();
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("20 6"), 0);
+  ProcessOnChain ("0 0", ValidProof ("20 6"), 0);
   EXPECT_EQ (GetLatestState (), "10 5");
 }
 
 TEST_F (StopUpdatesTests, OnChainNonExistant)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.StopUpdates ();
-  cm.ProcessOnChainNonExistant ();
+  ProcessOnChainNonExistant ();
   EXPECT_TRUE (GetExists ());
 }
 
 TEST_F (StopUpdatesTests, OffChain)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.StopUpdates ();
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   EXPECT_EQ (GetLatestState (), "10 5");
@@ -773,7 +803,7 @@ TEST_F (StopUpdatesTests, OffChain)
 
 TEST_F (StopUpdatesTests, LocalMove)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.StopUpdates ();
   cm.ProcessLocalMove ("1");
   EXPECT_EQ (GetLatestState (), "10 5");
@@ -782,7 +812,7 @@ TEST_F (StopUpdatesTests, LocalMove)
 TEST_F (StopUpdatesTests, TriggerAutoMoves)
 {
   game.channel.SetAutomovesEnabled (false);
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("8 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("8 5"), 0);
 
   cm.StopUpdates ();
   game.channel.SetAutomovesEnabled (true);

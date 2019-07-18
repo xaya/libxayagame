@@ -31,7 +31,9 @@ ChannelManager::ChannelManager (const BoardRules& r, OpenChannel& oc,
                                 const uint256& id, const std::string& name)
   : rules(r), game(oc), rpc(c), wallet(w), channelId(id), playerName(name),
     boardStates(rules, rpc, channelId)
-{}
+{
+  blockHash.SetNull ();
+}
 
 ChannelManager::~ChannelManager ()
 {
@@ -187,7 +189,7 @@ ChannelManager::ProcessOffChain (const std::string& reinitId,
 }
 
 void
-ChannelManager::ProcessOnChainNonExistant ()
+ChannelManager::ProcessOnChainNonExistant (const uint256& blk, const unsigned h)
 {
   LOG_IF (INFO, exists)
       << "Channel " << channelId.ToHex () << " no longer exists on-chain";
@@ -198,6 +200,9 @@ ChannelManager::ProcessOnChainNonExistant ()
       LOG (INFO) << "ChannelManager is stopped, ignoring update";
       return;
     }
+
+  blockHash = blk;
+  onChainHeight = h;
 
   exists = false;
 
@@ -210,7 +215,8 @@ ChannelManager::ProcessOnChainNonExistant ()
 }
 
 void
-ChannelManager::ProcessOnChain (const proto::ChannelMetadata& meta,
+ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
+                                const proto::ChannelMetadata& meta,
                                 const BoardState& reinitState,
                                 const proto::StateProof& proof,
                                 const unsigned disputeHeight)
@@ -224,6 +230,9 @@ ChannelManager::ProcessOnChain (const proto::ChannelMetadata& meta,
       LOG (INFO) << "ChannelManager is stopped, ignoring update";
       return;
     }
+
+  blockHash = blk;
+  onChainHeight = h;
 
   pendingDispute = false;
   exists = true;
@@ -376,6 +385,12 @@ ChannelManager::UnlockedToJson () const
   res["playername"] = playerName;
   res["existsonchain"] = exists;
   res["version"] = stateVersion;
+
+  if (!blockHash.IsNull ())
+    {
+      res["blockhash"] = blockHash.ToHex ();
+      res["height"] = static_cast<int> (onChainHeight);
+    }
 
   if (!exists)
     return res;

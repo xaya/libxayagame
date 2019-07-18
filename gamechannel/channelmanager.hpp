@@ -148,6 +148,11 @@ private:
    */
   bool exists = false;
 
+  /** The latest block hash for which we did an on-chain update.  */
+  uint256 blockHash;
+  /** The height of the latest on-chain update we know of.  */
+  unsigned onChainHeight;
+
   /** Data about an open dispute, if any.  */
   std::unique_ptr<DisputeData> dispute;
 
@@ -241,12 +246,13 @@ public:
   /**
    * Processes an on-chain update that did not contain any data for our channel.
    */
-  void ProcessOnChainNonExistant ();
+  void ProcessOnChainNonExistant (const uint256& blk, unsigned h);
 
   /**
    * Processes a (potentially) new on-chain state for the channel.
    */
-  void ProcessOnChain (const proto::ChannelMetadata& meta,
+  void ProcessOnChain (const uint256& blk, unsigned h,
+                       const proto::ChannelMetadata& meta,
                        const BoardState& reinitState,
                        const proto::StateProof& proof,
                        unsigned disputeHeight);

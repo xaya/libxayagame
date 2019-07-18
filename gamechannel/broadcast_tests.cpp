@@ -112,20 +112,20 @@ protected:
 
 TEST_F (BroadcastTests, Participants)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   ExpectParticipants ({"player", "other"});
 
-  cm.ProcessOnChainNonExistant ();
+  ProcessOnChainNonExistant ();
   ExpectParticipants ({});
 }
 
 TEST_F (BroadcastTests, FeedingMoves)
 {
   meta.set_reinit ("reinit");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("1 2"), 0);
+  ProcessOnChain ("0 0", ValidProof ("1 2"), 0);
 
   meta.clear_reinit ();
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("0 0"), 0);
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
 
   offChain.SendNewState ("", ValidProof ("10 5"));
   offChain.SendNewState ("reinit", ValidProof ("9 10"));
@@ -138,13 +138,13 @@ TEST_F (BroadcastTests, FeedingMoves)
   EXPECT_EQ (GetLatestState (), "10 5");
 
   meta.set_reinit ("reinit");
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("1 2"), 0);
+  ProcessOnChain ("0 0", ValidProof ("1 2"), 0);
   EXPECT_EQ (GetLatestState (), "9 10");
 }
 
 TEST_F (BroadcastTests, BeyondTimeout)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("0 0"), 0);
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
   offChain.SendNewState ("", ValidProof ("10 5"));
 
   /* Even without a notification, we will get the new state because the
