@@ -20,6 +20,13 @@ ShipsChannel::IsPositionSet () const
   return position.GetBits () != 0;
 }
 
+const Grid&
+ShipsChannel::GetPosition () const
+{
+  CHECK (IsPositionSet ());
+  return position;
+}
+
 void
 ShipsChannel::SetPosition (const Grid& g)
 {

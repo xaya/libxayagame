@@ -9,8 +9,6 @@
 
 #include "rpc-stubs/channelgsprpcclient.h"
 
-#include <jsonrpccpp/client/client.h>
-
 #include <memory>
 #include <atomic>
 #include <thread>
@@ -29,11 +27,8 @@ class ChainToChannelFeeder
 
 private:
 
-  /**
-   * The RPC connection to the GSP.  This is opened in the constructor based
-   * on a passed-in IClientConnector.
-   */
-  ChannelGspRpcClient rpc;
+  /** The RPC connection to the GSP.  */
+  ChannelGspRpcClient& rpc;
 
   /** The ChannelManager that is updated.  */
   ChannelManager& manager;
@@ -64,8 +59,13 @@ private:
 
 public:
 
-  explicit ChainToChannelFeeder (jsonrpc::IClientConnector& conn,
-                                 ChannelManager& cm);
+  /**
+   * Constructs a ChainToChannelFeeder instance based on the given GSP RPC
+   * client and ChannelManager to update.  Note that the GSP RPC client will
+   * be used from a separate thread and must thus not be used anywhere else
+   * at the same time.
+   */
+  explicit ChainToChannelFeeder (ChannelGspRpcClient& r, ChannelManager& cm);
 
   ~ChainToChannelFeeder ();
 

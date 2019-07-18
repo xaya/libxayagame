@@ -369,6 +369,38 @@ TEST_F (AutoMoveTests, ProcessLocalMove)
 
 /* ************************************************************************** */
 
+using TriggerAutoMovesTests = ChannelManagerTests;
+
+TEST_F (TriggerAutoMovesTests, NotOnChain)
+{
+  cm.ProcessOnChainNonExistant ();
+
+  /* This will just do nothing, but it also shouldn't CHECK-fail.  */
+  cm.TriggerAutoMoves ();
+}
+
+TEST_F (TriggerAutoMovesTests, NoAutoMoves)
+{
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  cm.TriggerAutoMoves ();
+  EXPECT_EQ (GetLatestState (), "10 5");
+}
+
+TEST_F (TriggerAutoMovesTests, SendsMoves)
+{
+  ExpectOneBroadcast ("10 6");
+
+  game.channel.SetAutomovesEnabled (false);
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("8 5"), 0);
+  EXPECT_EQ (GetLatestState (), "8 5");
+
+  game.channel.SetAutomovesEnabled (true);
+  cm.TriggerAutoMoves ();
+  EXPECT_EQ (GetLatestState (), "10 6");
+}
+
+/* ************************************************************************** */
+
 class MaybeOnChainMoveTests : public ChannelManagerTests
 {
 
@@ -745,6 +777,17 @@ TEST_F (StopUpdatesTests, LocalMove)
   cm.StopUpdates ();
   cm.ProcessLocalMove ("1");
   EXPECT_EQ (GetLatestState (), "10 5");
+}
+
+TEST_F (StopUpdatesTests, TriggerAutoMoves)
+{
+  game.channel.SetAutomovesEnabled (false);
+  cm.ProcessOnChain (meta, "0 0", ValidProof ("8 5"), 0);
+
+  cm.StopUpdates ();
+  game.channel.SetAutomovesEnabled (true);
+  cm.TriggerAutoMoves ();
+  EXPECT_EQ (GetLatestState (), "8 5");
 }
 
 /* ************************************************************************** */

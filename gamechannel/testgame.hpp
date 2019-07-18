@@ -62,6 +62,11 @@ public:
 class AdditionChannel : public OpenChannel
 {
 
+private:
+
+  /** If set, then automoves will be processed.  */
+  bool automovesEnabled = true;
+
 public:
 
   Json::Value ResolutionMove (const uint256& channelId,
@@ -84,6 +89,19 @@ public:
    */
   void MaybeOnChainMove (const ParsedBoardState& state,
                          MoveSender& sender) override;
+
+  /**
+   * Enables or disables processing of automoves.  When they are disabled,
+   * then MaybeAutoMove will always return false, independent of the current
+   * state.  This can be used to simulate situations in real games where
+   * automoves may become possible for some situation only after user input
+   * of some data (but not the move itself).
+   */
+  void
+  SetAutomovesEnabled (const bool val)
+  {
+    automovesEnabled = val;
+  }
 
 };
 

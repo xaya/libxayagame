@@ -44,6 +44,7 @@ libgamechannel_la_SOURCES = \
   channelgame.cpp \
   channelmanager.cpp \
   chaintochannel.cpp \
+  daemon.cpp \
   database.cpp \
   gamestatejson.cpp \
   gsprpc.cpp \
@@ -61,6 +62,7 @@ gamechannel_HEADERS = \
   channelgame.hpp \
   channelmanager.hpp \
   chaintochannel.hpp \
+  daemon.hpp \
   database.hpp \
   gamestatejson.hpp \
   gsprpc.hpp \

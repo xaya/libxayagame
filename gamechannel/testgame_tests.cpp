@@ -153,6 +153,9 @@ TEST_F (AdditionChannelTests, AutoMoves)
 
   ASSERT_TRUE (MaybeAutoMove ("108 5", mv));
   EXPECT_EQ (mv, "2");
+
+  game.channel.SetAutomovesEnabled (false);
+  EXPECT_FALSE (MaybeAutoMove ("8 0", mv));
 }
 
 } // anonymous namespace

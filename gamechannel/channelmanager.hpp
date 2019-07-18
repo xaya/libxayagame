@@ -259,6 +259,15 @@ public:
   void ProcessLocalMove (const BoardMove& mv);
 
   /**
+   * Tries to process auto moves if there are ones.  If moves can be found,
+   * then they are broadcasted and other updates are done.  This function should
+   * be called if some external change causes automoves to be potentially
+   * available (e.g. some user input was made that was not directly a move
+   * but affects the automoves logic).
+   */
+  void TriggerAutoMoves ();
+
+  /**
    * Requests to file a dispute with the current state.
    */
   void FileDispute ();

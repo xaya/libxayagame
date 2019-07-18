@@ -7,6 +7,7 @@
 #include <glog/logging.h>
 
 #include <map>
+#include <sstream>
 
 namespace ships
 {
@@ -32,6 +33,62 @@ constexpr AvailableShipType AVAILABLE_SHIPS[] =
   };
 
 } // anonymous namespace
+
+std::string
+Grid::ToString () const
+{
+  std::ostringstream res;
+  for (int r = 0; r < Coord::SIDE; ++r)
+    {
+      for (int c = 0; c < Coord::SIDE; ++c)
+        res << (Get (Coord (r, c)) ? 'x' : '.');
+      res << '\n';
+    }
+
+  return res.str ();
+}
+
+bool
+Grid::FromString (const std::string& str)
+{
+  bits = 0;
+
+  int next = 0;
+  for (const char c : str)
+    {
+      if (c == ' ' || c == '\n')
+        continue;
+
+      if (next >= Coord::CELLS)
+        {
+          LOG (ERROR) << "Too much data in string for a grid:\n" << str;
+          return false;
+        }
+
+      switch (c)
+        {
+        case '.':
+          break;
+        case 'x':
+          Set (Coord (next));
+          break;
+        default:
+          LOG (ERROR) << "Invalid character in grid string: " << c;
+          return false;
+        }
+
+      ++next;
+    }
+
+  if (next < Coord::CELLS)
+    {
+      LOG (ERROR) << "Too few data in string for a grid:\n" << str;
+      return false;
+    }
+  CHECK_EQ (next, Coord::CELLS);
+
+  return true;
+}
 
 bool
 Grid::Get (const Coord& c) const

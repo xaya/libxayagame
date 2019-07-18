@@ -25,13 +25,6 @@ namespace ships
 {
 
 /**
- * Parses a ship position given as string and returns it.  The string must be
- * 64 characters long (and may be split into 8 lines in code), consisting only
- * of the characters "." for zeros and "x" for ones.
- */
-Grid GridFromString (const std::string& str);
-
-/**
  * Parses a string into JSON.
  */
 Json::Value ParseJson (const std::string& str);

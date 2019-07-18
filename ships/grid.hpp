@@ -43,6 +43,23 @@ public:
   Grid& operator= (const Grid&) = default;
 
   /**
+   * Converts the grid to a string representation.  This holds the entries
+   * row-by-row, with each row ending in a newline.  The data of the row
+   * consists of eight characters, either '.' for zeros or 'x' for ones.
+   */
+  std::string ToString () const;
+
+  /**
+   * Tries to parse a grid given as string.  The string should contain data
+   * about the grid row-by-row.  Whitespace (space and newlines) is ignored,
+   * otherwise the characters should be '.' for zeros and 'x' for ones.
+   *
+   * Returns true if the string was valid to parse.  If the string is invalid
+   * and false returned, the data in this instance will be invalidated.
+   */
+  bool FromString (const std::string& str);
+
+  /**
    * Returns the raw bit vector value.  This is used for encoding it into
    * a protocol buffer.
    */

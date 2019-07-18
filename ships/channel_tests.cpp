@@ -295,31 +295,38 @@ using PositionStoringTests = ChannelTests;
 TEST_F (PositionStoringTests, SetPosition)
 {
   ASSERT_FALSE (channel.IsPositionSet ());
-  channel.SetPosition (GridFromString (
-    "xxxx...."
-    "........"
-    "xxx....."
-    "........"
-    "xxx....."
-    "........"
-    ".x.x.x.x"
-    ".x.x.x.x"
-  ));
+
+  Grid pos;
+  ASSERT_TRUE (pos.FromString (R"(
+    xxxx....
+    ........
+    xxx.....
+    ........
+    xxx.....
+    ........
+    .x.x.x.x
+    .x.x.x.x
+  )"));
+
+  channel.SetPosition (pos);
   EXPECT_TRUE (channel.IsPositionSet ());
 }
 
 TEST_F (PositionStoringTests, InvalidPosition)
 {
-  channel.SetPosition (GridFromString (
-    "xxxx...."
-    "........"
-    "xxx....."
-    "........"
-    "xxx....."
-    "........"
-    "........"
-    "........"
-  ));
+  Grid pos;
+  ASSERT_TRUE (pos.FromString (R"(
+    xxxx....
+    ........
+    xxx.....
+    ........
+    xxx.....
+    ........
+    ........
+    ........
+  )"));
+
+  channel.SetPosition (pos);
   EXPECT_FALSE (channel.IsPositionSet ());
 }
 
@@ -341,16 +348,16 @@ protected:
 
   AutoMoveTests ()
   {
-    validPosition = GridFromString (
-      "xxxx...."
-      "........"
-      "xxx....."
-      "........"
-      "xxx....."
-      "........"
-      ".x.x.x.x"
-      ".x.x.x.x"
-    );
+    CHECK (validPosition.FromString (R"(
+      xxxx....
+      ........
+      xxx.....
+      ........
+      xxx.....
+      ........
+      .x.x.x.x
+      .x.x.x.x
+    )"));
   }
 
   /**
@@ -455,16 +462,17 @@ TEST_F (AutoMoveTests, ShootAllShipsHit)
 {
   channel.SetPosition (validPosition);
 
-  const Grid allAndMore = GridFromString (
-      "xxxx...x"
-      ".......x"
-      "xxx....x"
-      ".......x"
-      "xxx....x"
-      "........"
-      ".x.x.x.x"
-      ".x.x.x.x"
-  );
+  Grid allAndMore;
+  CHECK (allAndMore.FromString (R"(
+      xxxx...x
+      .......x
+      xxx....x
+      .......x
+      xxx....x
+      ........
+      .x.x.x.x
+      .x.x.x.x
+  )"));
 
   auto statePb = TextState (R"(
     turn: 0
@@ -624,26 +632,30 @@ protected:
   void
   SetupPositions ()
   {
-    channel.SetPosition (GridFromString (
-      "........"
-      "........"
-      "........"
-      "xx.xx.xx"
-      "........"
-      "..xx.xxx"
-      "........"
-      "xxx.xxxx"
-    ));
-    otherChannel.SetPosition (GridFromString (
-      "xx.xx.xx"
-      "........"
-      "..xx.xxx"
-      "........"
-      "xxx.xxxx"
-      "........"
-      "........"
-      "........"
-    ));
+    Grid p;
+    CHECK (p.FromString (R"(
+      ........
+      ........
+      ........
+      xx.xx.xx
+      ........
+      ..xx.xxx
+      ........
+      xxx.xxxx
+    )"));
+    channel.SetPosition (p);
+
+    CHECK (p.FromString (R"(
+      xx.xx.xx
+      ........
+      ..xx.xxx
+      ........
+      xxx.xxxx
+      ........
+      ........
+      ........
+    )"));
+    otherChannel.SetPosition (p);
 
     CHECK (channel.IsPositionSet ());
     CHECK (otherChannel.IsPositionSet ());

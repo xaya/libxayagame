@@ -165,48 +165,101 @@ ShipsBoardState::ToJson () const
   auto res = BaseProtoBoardState::ToJson ();
 
   if (GetMetadata ().participants_size () == 1)
-    res["phase"] = "single participant";
-  else
     {
-      const auto phase = GetPhase ();
-      switch (phase)
+      res["phase"] = "single participant";
+      return res;
+    }
+
+  const auto phase = GetPhase ();
+  switch (phase)
+    {
+    case Phase::FIRST_COMMITMENT:
+      res["phase"] = "first commitment";
+      break;
+
+    case Phase::SECOND_COMMITMENT:
+      res["phase"] = "second commitment";
+      break;
+
+    case Phase::FIRST_REVEAL_SEED:
+      res["phase"] = "first reveal seed";
+      break;
+
+    case Phase::SHOOT:
+      res["phase"] = "shoot";
+      break;
+
+    case Phase::ANSWER:
+      res["phase"] = "answer";
+      break;
+
+    case Phase::SECOND_REVEAL_POSITION:
+      res["phase"] = "second reveal position";
+      break;
+
+    case Phase::WINNER_DETERMINED:
+      res["phase"] = "winner determined";
+      break;
+
+    case Phase::FINISHED:
+      res["phase"] = "finished";
+      break;
+
+    default:
+      LOG (FATAL) << "Invalid phase: " << static_cast<int> (phase);
+      break;
+    }
+
+  const auto& pb = GetState ();
+  if (pb.has_winner ())
+    res["winner"] = pb.winner ();
+
+  if (pb.positions_size () > 0)
+    {
+      CHECK_EQ (pb.positions_size (), 2);
+      Json::Value positions(Json::arrayValue);
+
+      for (const auto p : pb.positions ())
+        if (p == 0)
+          positions.append (Json::Value ());
+        else
+          positions.append (Grid(p).ToString ());
+
+      res["ships"] = positions;
+    }
+
+  if (pb.known_ships_size () > 0)
+    {
+      CHECK_EQ (pb.known_ships_size (), 2);
+      Json::Value knownShips(Json::arrayValue);
+      for (const auto& ks : pb.known_ships ())
         {
-        case Phase::FIRST_COMMITMENT:
-          res["phase"] = "first commitment";
-          break;
+          const Grid guessed(ks.guessed ());
+          const Grid hits(ks.hits ());
 
-        case Phase::SECOND_COMMITMENT:
-          res["phase"] = "second commitment";
-          break;
+          std::ostringstream str;
+          for (int r = 0; r < Coord::SIDE; ++r)
+            {
+              for (int c = 0; c < Coord::SIDE; ++c)
+                {
+                  const Coord cell(r, c);
+                  if (hits.Get (cell))
+                    {
+                      CHECK (guessed.Get (cell));
+                      str << 'x';
+                    }
+                  else if (guessed.Get (cell))
+                    str << 'm';
+                  else
+                    str << '.';
+                }
+              str << '\n';
+            }
 
-        case Phase::FIRST_REVEAL_SEED:
-          res["phase"] = "first reveal seed";
-          break;
-
-        case Phase::SHOOT:
-          res["phase"] = "shoot";
-          break;
-
-        case Phase::ANSWER:
-          res["phase"] = "answer";
-          break;
-
-        case Phase::SECOND_REVEAL_POSITION:
-          res["phase"] = "second reveal position";
-          break;
-
-        case Phase::WINNER_DETERMINED:
-          res["phase"] = "winner determined";
-          break;
-
-        case Phase::FINISHED:
-          res["phase"] = "finished";
-          break;
-
-        default:
-          LOG (FATAL) << "Invalid phase: " << static_cast<int> (phase);
-          break;
+          knownShips.append (str.str ());
         }
+
+      res["guesses"] = knownShips;
     }
 
   return res;
