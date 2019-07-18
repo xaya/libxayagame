@@ -23,6 +23,14 @@ RollingState::GetLatestState () const
   CHECK (!reinits.empty ()) << "RollingState has not been initialised yet";
   const auto mit = reinits.find (reinitId);
   CHECK (mit != reinits.end ());
+
+  /* The parsed state contains a reference to ChannelMetadata.  It should
+     be exactly the one stored in the reinit entry, because otherwise we
+     run the risk of having a bad reference there.  This may catch bugs
+     in the code that sets latestState, and ensures there is nothing really
+     strange going on.  */
+  CHECK_EQ (&mit->second.latestState->GetMetadata (), mit->second.meta.get ());
+
   return *mit->second.latestState;
 }
 
@@ -48,7 +56,7 @@ RollingState::GetMetadata () const
   CHECK (!reinits.empty ()) << "RollingState has not been initialised yet";
   const auto mit = reinits.find (reinitId);
   CHECK (mit != reinits.end ());
-  return mit->second.meta;
+  return *mit->second.meta;
 }
 
 bool
@@ -60,9 +68,6 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
   CHECK (VerifyStateProof (rpc, rules, channelId, meta,
                            reinitState, proof, provenState))
       << "State proof provided on-chain is not valid";
-  auto parsed = rules.ParseState (channelId, meta, provenState);
-  CHECK (parsed != nullptr);
-  const unsigned parsedCnt = parsed->TurnCount ();
 
   /* First of all, store the current on-chain update's reinit ID as the
      "latest known".  We also keep track of whether or not the ID changed,
@@ -73,29 +78,37 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
   LOG (INFO)
       << "Performing on-chain update for channel " << channelId.ToHex ()
       << " and reinitialisation " << EncodeBase64 (reinitId);
-  LOG (INFO) << "Turn count provided in the update: " << parsedCnt;
 
   /* Add a new entry for the reinit map if we don't have the ID yet.  */
   const auto mit = reinits.find (reinitId);
   if (mit == reinits.end ())
     {
       ReinitData entry;
-      entry.meta = meta;
+      entry.meta = std::make_unique<proto::ChannelMetadata> (meta);
       entry.reinitState = reinitState;
       entry.proof = proof;
-      entry.latestState = std::move (parsed);
+      entry.latestState = rules.ParseState (channelId, *entry.meta,
+                                            provenState);
       CHECK (entry.latestState != nullptr);
-      reinits.emplace (reinitId, std::move (entry));
 
-      LOG (INFO) << "Added previously unknown reinitialisation";
+      LOG (INFO)
+          << "Added previously unknown reinitialisation.  Turn count: "
+          << entry.latestState->TurnCount ();
+
+      reinits.emplace (reinitId, std::move (entry));
       return true;
     }
 
   /* Update the entry to the new state, in case it is actually fresher
      than the state that we already have.  */
   ReinitData& entry = mit->second;
-  CHECK (MessageDifferencer::Equals (meta, entry.meta));
+  CHECK (MessageDifferencer::Equals (meta, *entry.meta));
   CHECK_EQ (reinitState, entry.reinitState);
+
+  auto parsed = rules.ParseState (channelId, *entry.meta, provenState);
+  CHECK (parsed != nullptr);
+  const unsigned parsedCnt = parsed->TurnCount ();
+  LOG (INFO) << "Turn count provided in the update: " << parsedCnt;
 
   const unsigned currentCnt = entry.latestState->TurnCount ();
   if (currentCnt >= parsedCnt)
@@ -137,7 +150,7 @@ RollingState::UpdateWithMove (const std::string& updReinit,
      on-chain updates (which are filtered through the GSP), the data we get
      here comes straight from the other players and may be complete garbage.  */
   BoardState provenState;
-  if (!VerifyStateProof (rpc, rules, channelId, entry.meta,
+  if (!VerifyStateProof (rpc, rules, channelId, *entry.meta,
                          entry.reinitState, proof, provenState))
     {
       LOG (WARNING)
@@ -145,7 +158,7 @@ RollingState::UpdateWithMove (const std::string& updReinit,
           << " has an invalid state proof";
       return false;
     }
-  auto parsed = rules.ParseState (channelId, entry.meta, provenState);
+  auto parsed = rules.ParseState (channelId, *entry.meta, provenState);
   CHECK (parsed != nullptr);
 
   /* The state proof is valid.  Update our state if the provided one is actually
