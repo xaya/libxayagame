@@ -3,7 +3,8 @@ AM_TESTS_ENVIRONMENT = \
 
 REGTESTS = \
   disputes.py \
-  full_game.py
+  full_game.py \
+  tx_fail.py
 
 EXTRA_DIST = $(REGTESTS)
 TESTS = $(REGTESTS)
