@@ -5,7 +5,8 @@ REGTESTS = \
   disputes.py \
   full_game.py \
   reorg.py \
-  tx_fail.py
+  tx_fail.py \
+  waitforchange.py
 
 EXTRA_DIST = $(REGTESTS)
 TESTS = $(REGTESTS)
