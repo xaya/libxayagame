@@ -92,7 +92,14 @@ class Server (object):
     self.channels = {}
     self.mutex = threading.Lock ()
 
+    # For testing purposes the server can be "muted".  If that's the case,
+    # then sent messages are just dropped rather than broadcasted.
+    self.muted = False
+
     def sendMsg (channel, message):
+      with self.mutex:
+        if self.muted:
+          return
       self.getChannel (channel).send (message)
     self.server.register_function (sendMsg, "send")
 
@@ -108,6 +115,10 @@ class Server (object):
         "seq": seq,
       }
     self.server.register_function (receiveMsg, "receive")
+
+  def setMuted (self, value):
+    with self.mutex:
+      self.muted = value
 
   def getChannel (self, channel):
     """

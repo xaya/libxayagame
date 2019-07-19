@@ -2,11 +2,12 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-from xayagametest.testcase import XayaGameTest
-
+import json
 import os
 import os.path
+import time
 
+from gamechannel import channeltest
 from gamechannel import signatures
 from gamechannel.proto import stateproof_pb2
 
@@ -18,9 +19,10 @@ from google.protobuf import text_format
 import base64
 
 
-class ShipsTest (XayaGameTest):
+class ShipsTest (channeltest.TestCase):
   """
-  An integration test for the ships on-chain GSP.
+  An integration test for the ships on-chain GSP and (potentially)
+  the channel daemon in addition.
   """
 
   def __init__ (self):
@@ -28,15 +30,19 @@ class ShipsTest (XayaGameTest):
     if top_builddir is None:
       top_builddir = "../.."
     shipsd = os.path.join (top_builddir, "ships", "shipsd")
-    super (ShipsTest, self).__init__ ("xs", shipsd)
+    channeld = os.path.join (top_builddir, "ships", "ships-channel")
+    super (ShipsTest, self).__init__ ("xs", shipsd, channeld)
 
-  def openChannel (self, names, addresses):
+  def openChannel (self, names, addresses=None):
     """
     Creates a channel and joins it, so that we end up with a fully set-up
     channel and two participants.  names and addresses should be arrays of
     length two each, giving the names / addresses for the participants.
     Returns the ID of the created channel.
     """
+
+    if addresses is None:
+      addresses = [self.newSigningAddress () for _ in range (2)]
 
     self.assertEqual (len (names), 2)
     self.assertEqual (len (addresses), 2)
@@ -106,3 +112,39 @@ class ShipsTest (XayaGameTest):
       self.assertEqual (channel["disputeheight"], disputeHeight)
 
     self.assertEqual (channel["state"]["parsed"]["phase"], phase)
+
+  def expectPendingMoves (self, name, types):
+    """
+    Expects that the given player has exactly a certain number
+    and type (as per the top-level move value field) of moves
+    pending in the mempool.
+    """
+
+    self.log.info ("Expecting pending moves for %s: %s" % (name, types))
+
+    pending = self.rpc.xaya.name_pending ("p/" + name)
+    actualTypes = []
+    for p in pending:
+      val = json.loads (p["value"])
+      mvKeys = val["g"]["xs"].keys ()
+      self.assertEqual (len (mvKeys), 1)
+      actualTypes.append (mvKeys[0])
+
+    self.assertEqual (actualTypes, types)
+
+  def waitForPhase (self, daemons, phases):
+    """
+    Waits for the channel daemons to be in one of the passed in phases.
+    Returns the actual phase reached and the corresponding state.
+    """
+
+    self.log.info ("Waiting for phase in: %s" % phases)
+    while True:
+      state = self.getSyncedChannelState (daemons)
+      phase = state["current"]["state"]["parsed"]["phase"]
+      if phase in phases:
+        self.log.info ("Reached phase %s" % phase)
+        return phase, state
+
+      self.log.warning ("Phase is %s, waiting to catch up..." % phase)
+      time.sleep (0.01)

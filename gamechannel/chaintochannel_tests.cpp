@@ -152,6 +152,7 @@ public:
     if (bestBlockHash.IsNull ())
       return res;
     res["blockhash"] = bestBlockHash.ToHex ();
+    res["height"] = 42;
 
     uint256 reqId;
     CHECK (reqId.FromHex (channelIdHex));
@@ -241,7 +242,7 @@ using UpdateDataTests = ChainToChannelFeederTests;
 
 TEST_F (UpdateDataTests, NotUpToDate)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   gspServer.SetState ("blk", "catching-up", "0 0", ValidProof ("20 6"), 0);
   feeder.Start ();
 
@@ -251,7 +252,7 @@ TEST_F (UpdateDataTests, NotUpToDate)
 
 TEST_F (UpdateDataTests, NoGspState)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   gspServer.SetNoState ("up-to-date");
   feeder.Start ();
 
@@ -261,7 +262,7 @@ TEST_F (UpdateDataTests, NoGspState)
 
 TEST_F (UpdateDataTests, ChannelNotOnChain)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   gspServer.SetChannelNotOnChain ("blk", "up-to-date");
   feeder.Start ();
 
@@ -269,9 +270,29 @@ TEST_F (UpdateDataTests, ChannelNotOnChain)
   EXPECT_FALSE (GetExists ());
 }
 
+TEST_F (UpdateDataTests, BlockHashAndHeight)
+{
+  gspServer.SetChannelNotOnChain ("blk 1", "up-to-date");
+  feeder.Start ();
+
+  SleepSome ();
+  unsigned height;
+  uint256 hash = GetOnChainBlock (height);
+  EXPECT_EQ (height, 42);
+  EXPECT_EQ (hash, SHA256::Hash ("blk 1"));
+
+  gspServer.SetState ("blk 2", "up-to-date", "0 0", ValidProof ("10 5"), 0);
+  gspServer.NotifyChange ();
+
+  SleepSome ();
+  hash = GetOnChainBlock (height);
+  EXPECT_EQ (height, 42);
+  EXPECT_EQ (hash, SHA256::Hash ("blk 2"));
+}
+
 TEST_F (UpdateDataTests, UpdatesProof)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   gspServer.SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
   feeder.Start ();
 
@@ -281,7 +302,7 @@ TEST_F (UpdateDataTests, UpdatesProof)
 
 TEST_F (UpdateDataTests, Reinitialisation)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
 
   meta.set_reinit ("other reinit");
   proto::StateProof reinitBasedProof;
@@ -308,7 +329,7 @@ TEST_F (UpdateDataTests, Reinitialisation)
 
 TEST_F (UpdateDataTests, NoDispute)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   gspServer.SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
   feeder.Start ();
 
@@ -318,7 +339,7 @@ TEST_F (UpdateDataTests, NoDispute)
 
 TEST_F (UpdateDataTests, WithDispute)
 {
-  cm.ProcessOnChain (meta, "0 0", ValidProof ("10 5"), 0);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   gspServer.SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 42);
   feeder.Start ();
 

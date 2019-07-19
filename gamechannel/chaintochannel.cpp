@@ -78,16 +78,22 @@ ChainToChannelFeeder::UpdateOnce ()
       LOG (WARNING) << "GSP has no current state yet";
       return;
     }
-
   CHECK (newBlockVal.isString ());
   CHECK (lastBlock.FromHex (newBlockVal.asString ()));
-  LOG (INFO) << "New on-chain best block: " << lastBlock.ToHex ();
+
+  const auto& heightVal = data["height"];
+  CHECK (heightVal.isUInt ());
+  const unsigned height = heightVal.asUInt ();
+
+  LOG (INFO)
+      << "New on-chain best block: " << lastBlock.ToHex ()
+      << " at height " << height;
 
   const auto& channel = data["channel"];
   if (channel.isNull ())
     {
       LOG (INFO) << "Channel " << channelIdHex << " is not known on-chain";
-      manager.ProcessOnChainNonExistant ();
+      manager.ProcessOnChainNonExistant (lastBlock, height);
       return;
     }
   CHECK (channel.isObject ());
@@ -108,7 +114,8 @@ ChainToChannelFeeder::UpdateOnce ()
       disputeHeight = disputeVal.asUInt ();
     }
 
-  manager.ProcessOnChain (meta, reinitState, proof, disputeHeight);
+  manager.ProcessOnChain (lastBlock, height, meta, reinitState,
+                          proof, disputeHeight);
   LOG (INFO) << "Updated channel from on-chain state: " << channelIdHex;
 }
 

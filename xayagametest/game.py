@@ -33,6 +33,7 @@ class Node ():
     self.log = logging.getLogger ("xayagametest.gamenode")
     self.datadir = os.path.join (basedir, "gamenode")
     self.port = port
+    self.rpcurl = "http://localhost:%d" % self.port
     self.binary = binary
 
     self.log.info ("Creating fresh data directory for the game node in %s"
@@ -86,8 +87,7 @@ class Node ():
     be used if multiple threads need to send RPCs in parallel.
     """
 
-    return jsonrpclib.Server ("http://localhost:%d" % self.port)
-
+    return jsonrpclib.Server (self.rpcurl)
 
   def logMatches (self, expr, times=None):
     """
