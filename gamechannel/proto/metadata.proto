@@ -45,4 +45,12 @@ message ChannelMetadata
    */
   optional bytes reinit = 2;
 
+  /**
+   * Custom data that can be used in a game-specific way.  For instance,
+   * this can hold e.g. the amount of money a game is played for, or
+   * some "parameters" that participants agreed upon when they started
+   * the channel.
+   */
+  optional bytes custom = 3;
+
 }
