@@ -67,7 +67,7 @@ public:
    * the provided state proto.  This is mostly intended to be called from
    * ProtoBoardRules.
    */
-  explicit ProtoBoardState (const uint256& channelId,
+  explicit ProtoBoardState (const BoardRules& r, const uint256& channelId,
                             const proto::ChannelMetadata& m, State&& s);
 
   ProtoBoardState () = delete;

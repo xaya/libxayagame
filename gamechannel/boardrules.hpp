@@ -19,6 +19,8 @@
 namespace xaya
 {
 
+class BoardRules;
+
 /**
  * The state of the current game board, encoded in a game-specific format.
  * We use std::string simply as convenient wrapper for arbitrary data.
@@ -43,6 +45,9 @@ class ParsedBoardState
 
 private:
 
+  /** A reference to the associated BoardRules instance.  */
+  const BoardRules& rules;
+
   /**
    * A reference to the channel ID.  This is stored in the constructor and
    * can be accessed by subclasses.
@@ -60,8 +65,9 @@ private:
 
 protected:
 
-  explicit ParsedBoardState (const uint256& id, const proto::ChannelMetadata& m)
-    : channelId(id), meta(m)
+  explicit ParsedBoardState (const BoardRules& r,
+                             const uint256& id, const proto::ChannelMetadata& m)
+    : rules(r), channelId(id), meta(m)
   {}
 
 public:
@@ -74,6 +80,15 @@ public:
   static constexpr int NO_TURN = -1;
 
   virtual ~ParsedBoardState () = default;
+
+  /**
+   * Returns the associated BoardRules instance.
+   */
+  const BoardRules&
+  GetBoardRules () const
+  {
+    return rules;
+  }
 
   /**
    * Returns the channel ID.
