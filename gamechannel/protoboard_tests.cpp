@@ -6,7 +6,7 @@
 
 #include "boardrules.hpp"
 #include "proto/metadata.pb.h"
-#include "proto/protoboardtest.pb.h"
+#include "proto/testprotos.pb.h"
 
 #include <xayautil/hash.hpp>
 

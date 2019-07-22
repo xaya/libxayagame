@@ -14,7 +14,7 @@ RPC_STUBS = \
 PROTOS = \
   proto/broadcast.proto \
   proto/metadata.proto \
-  proto/protoboardtest.proto \
+  proto/testprotos.proto \
   proto/signatures.proto \
   proto/stateproof.proto
 PROTOHEADERS = $(PROTOS:.proto=.pb.h)
