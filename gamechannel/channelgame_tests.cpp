@@ -89,6 +89,24 @@ TEST_F (DisputeTests, InvalidStateProof)
   EXPECT_FALSE (ch->HasDispute ());
 }
 
+TEST_F (DisputeTests, InvalidProtoVersion)
+{
+  auto ch = CreateChannel ("test", "0 1");
+
+  ASSERT_FALSE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+        for_testing_version: "foo"
+      }
+  )")));
+
+  EXPECT_EQ (ch->GetLatestState (), "0 1");
+  EXPECT_FALSE (ch->HasDispute ());
+}
+
 TEST_F (DisputeTests, InvalidStateClaimed)
 {
   auto ch = CreateChannel ("test", "0 1");
@@ -265,6 +283,26 @@ TEST_F (ResolutionTests, InvalidStateProof)
     initial_state:
       {
         data: "42 5"
+      }
+  )")));
+
+  EXPECT_EQ (ch->GetLatestState (), "0 1");
+  ASSERT_TRUE (ch->HasDispute ());
+  EXPECT_EQ (ch->GetDisputeHeight (), 100);
+}
+
+TEST_F (ResolutionTests, InvalidProtoVersion)
+{
+  auto ch = CreateChannel ("test", "0 1");
+  ch->SetDisputeHeight (100);
+
+  ASSERT_FALSE (game.ProcessResolution (*ch, ParseStateProof (R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+        for_testing_version: "foo"
       }
   )")));
 

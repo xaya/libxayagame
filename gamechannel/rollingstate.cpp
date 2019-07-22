@@ -4,6 +4,7 @@
 
 #include "rollingstate.hpp"
 
+#include "protoversion.hpp"
 #include "stateproof.hpp"
 
 #include <xayautil/base64.hpp>
@@ -64,6 +65,9 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
                              const BoardState& reinitState,
                              const proto::StateProof& proof)
 {
+  /* Since this comes from on-chain, it "should" be valid!  */
+  CHECK (CheckVersionedProto (rules, meta, proof));
+
   BoardState provenState;
   CHECK (VerifyStateProof (rpc, rules, channelId, meta,
                            reinitState, proof, provenState))
@@ -145,6 +149,15 @@ RollingState::UpdateWithMove (const std::string& updReinit,
       return false;
     }
   ReinitData& entry = mit->second;
+
+  /* Verify that the StateProof proto is valid with the expected version
+     and has no unknown fields.  We do not want to accept a current state
+     proof that would then be invalid when put on chain!  */
+  if (!CheckVersionedProto (rules, *entry.meta, proof))
+    {
+      LOG (WARNING) << "Off-chain update has invalid versioned state proof";
+      return false;
+    }
 
   /* Make sure that the state proof is actually valid.  In contrast to
      on-chain updates (which are filtered through the GSP), the data we get

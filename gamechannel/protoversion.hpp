@@ -5,10 +5,15 @@
 #ifndef GAMECHANNEL_PROTOVERSION_HPP
 #define GAMECHANNEL_PROTOVERSION_HPP
 
+#include "proto/metadata.pb.h"
+#include "proto/stateproof.pb.h"
+
 #include <google/protobuf/message.h>
 
 namespace xaya
 {
+
+class BoardRules;
 
 /**
  * Protocol buffers have the property that they remain compatible in binary
@@ -43,8 +48,11 @@ enum class ChannelProtoVersion
 /**
  * Checks that the passed-in protocol buffer is valid for the fixed protocol
  * version given.  This e.g. checks that no newer fields are present.
- *
  * The template is implemented for SignedData and StateProof.
+ *
+ * This function is used mainly internally.  External callers should likely
+ * use CheckVersionedProto instead, which also enforces that there must not
+ * be any unknown fields.
  */
 template <typename Proto>
   bool CheckProtoVersion (ChannelProtoVersion version, const Proto& msg);
@@ -54,6 +62,15 @@ template <typename Proto>
  * fields set.
  */
 bool HasAnyUnknownFields (const google::protobuf::Message& msg);
+
+/**
+ * Checks if a given proto (StateProof or SignedData) is valid with respect
+ * to the version expected.  It also must not have any unknown fields.
+ */
+template <typename Proto>
+  bool CheckVersionedProto (const BoardRules& rules,
+                            const proto::ChannelMetadata& meta,
+                            const Proto& msg);
 
 } // namespace xaya
 

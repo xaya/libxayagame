@@ -169,6 +169,25 @@ TEST_F (RollingStateTests, UpdateWithMoveInvalidProof)
   ExpectState ("13 5", "reinit 1");
 }
 
+TEST_F (RollingStateTests, UpdateWithMoveInvalidProtoVersion)
+{
+  state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
+    initial_state: { data: "13 5" }
+  )"));
+
+  EXPECT_FALSE (state.UpdateWithMove ("reinit 1", ParseStateProof (R"(
+    initial_state:
+      {
+        data: "50 6"
+        signatures: "sgn 0"
+        signatures: "sgn 1"
+        for_testing_version: "foo"
+      }
+  )")));
+
+  ExpectState ("13 5", "reinit 1");
+}
+
 TEST_F (RollingStateTests, UpdateWithMoveNotFresher)
 {
   state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(

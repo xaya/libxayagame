@@ -7,6 +7,7 @@
 #include "proto/signatures.pb.h"
 #include "proto/stateproof.pb.h"
 #include "proto/testprotos.pb.h"
+#include "testgame.hpp"
 
 #include <google/protobuf/text_format.h>
 
@@ -194,6 +195,52 @@ TEST_F (HasAnyUnknownFieldsTests, InNestedMessage)
           }
       }
   )"));
+}
+
+/* ************************************************************************** */
+
+class CheckVersionedProtoTests : public TestGameFixture
+{
+
+protected:
+
+  proto::ChannelMetadata meta;
+  proto::StateProof proof;
+
+  CheckVersionedProtoTests ()
+  {
+    CHECK (TextFormat::ParseFromString (R"(
+      initial_state:
+        {
+          data: "1 2"
+          signatures: "signature"
+        }
+    )", &proof));
+  }
+
+};
+
+TEST_F (CheckVersionedProtoTests, Valid)
+{
+  EXPECT_TRUE (CheckVersionedProto (game.rules, meta, proof));
+  EXPECT_TRUE (CheckVersionedProto (game.rules, meta, proof.initial_state ()));
+}
+
+TEST_F (CheckVersionedProtoTests, InvalidVersion)
+{
+  proof.mutable_initial_state ()->set_for_testing_version ("foo");
+  EXPECT_FALSE (CheckVersionedProto (game.rules, meta, proof));
+  EXPECT_FALSE (CheckVersionedProto (game.rules, meta, proof.initial_state ()));
+}
+
+TEST_F (CheckVersionedProtoTests, UnknownField)
+{
+  auto state = proof.initial_state ();
+  state.GetReflection ()->MutableUnknownFields (&state)->AddVarint (123456, 42);
+  EXPECT_FALSE (CheckVersionedProto (game.rules, meta, state));
+
+  proof.GetReflection ()->MutableUnknownFields (&proof)->AddVarint (123456, 42);
+  EXPECT_FALSE (CheckVersionedProto (game.rules, meta, proof));
 }
 
 /* ************************************************************************** */

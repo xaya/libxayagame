@@ -4,6 +4,7 @@
 
 #include "channelgame.hpp"
 
+#include "protoversion.hpp"
 #include "schema.hpp"
 #include "stateproof.hpp"
 
@@ -33,6 +34,9 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
   const auto& id = ch.GetId ();
   const auto& meta = ch.GetMetadata ();
   const auto& rules = GetBoardRules ();
+
+  if (!CheckVersionedProto (rules, meta, proof))
+    return false;
 
   BoardState provenState;
   if (!VerifyStateProof (GetXayaRpc (), rules, id, meta, ch.GetReinitState (),
@@ -104,6 +108,9 @@ ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
   const auto& id = ch.GetId ();
   const auto& meta = ch.GetMetadata ();
   const auto& rules = GetBoardRules ();
+
+  if (!CheckVersionedProto (rules, meta, proof))
+    return false;
 
   BoardState provenState;
   if (!VerifyStateProof (GetXayaRpc (), rules, id, meta, ch.GetReinitState (),

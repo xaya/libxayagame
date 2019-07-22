@@ -4,8 +4,8 @@
 
 #include "protoversion.hpp"
 
+#include "boardrules.hpp"
 #include "proto/signatures.pb.h"
-#include "proto/stateproof.pb.h"
 
 #include <glog/logging.h>
 
@@ -85,6 +85,59 @@ HasAnyUnknownFields (const Message& msg)
       }
 
   return false;
+}
+
+namespace
+{
+
+template <typename Proto>
+  bool
+  InternalCheckVersionedProto (const BoardRules& rules,
+                               const proto::ChannelMetadata& meta,
+                               const Proto& msg)
+{
+  if (HasAnyUnknownFields (msg))
+    {
+      LOG (WARNING)
+          << "Provided proto has unknown fields:\n" << msg.DebugString ();
+      return false;
+    }
+
+  const auto expectedVersion = rules.GetProtoVersion (meta);
+  if (!CheckProtoVersion (expectedVersion, msg))
+    {
+      LOG (WARNING)
+          << "Message does not match expected version "
+          << static_cast<int> (expectedVersion) << ":\n" << msg.DebugString ();
+      return false;
+    }
+
+  return true;
+}
+
+} // anonymous namespace
+
+/* We have to use full explicit specialisations, since defining a general
+   template in the header file would not work due to the cyclic dependency
+   with boardrules.hpp.  But since we only need the function for two concrete
+   protos anyway, that is fine and does not involve any code duplication.  */
+
+template <>
+  bool
+  CheckVersionedProto (const BoardRules& rules,
+                       const proto::ChannelMetadata& meta,
+                       const proto::StateProof& msg)
+{
+  return InternalCheckVersionedProto (rules, meta, msg);
+}
+
+template <>
+  bool
+  CheckVersionedProto (const BoardRules& rules,
+                       const proto::ChannelMetadata& meta,
+                       const proto::SignedData& msg)
+{
+  return InternalCheckVersionedProto (rules, meta, msg);
 }
 
 } // namespace xaya
