@@ -152,6 +152,12 @@ AdditionRules::ParseState (const uint256& channelId,
   return std::make_unique<AdditionState> (channelId, meta, p);
 }
 
+ChannelProtoVersion
+AdditionRules::GetProtoVersion (const proto::ChannelMetadata& meta) const
+{
+  return ChannelProtoVersion::ORIGINAL;
+}
+
 Json::Value
 AdditionChannel::ResolutionMove (const uint256& channelId,
                                  const proto::StateProof& proof) const

@@ -133,8 +133,18 @@ public:
 
 };
 
-/** The BoardRules instance we use for the ships game.  */
-using ShipsBoardRules = xaya::ProtoBoardRules<ShipsBoardState>;
+/**
+ * The BoardRules instance we use for the ships game.
+ */
+class ShipsBoardRules : public xaya::ProtoBoardRules<ShipsBoardState>
+{
+
+public:
+
+  xaya::ChannelProtoVersion GetProtoVersion (
+      const xaya::proto::ChannelMetadata& meta) const override;
+
+};
 
 /**
  * Returns the initial board state of a game (i.e. just after the second

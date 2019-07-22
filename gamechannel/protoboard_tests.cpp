@@ -109,7 +109,18 @@ public:
 
 };
 
-using TestRules = ProtoBoardRules<TestState>;
+class TestRules : public ProtoBoardRules<TestState>
+{
+
+public:
+
+  ChannelProtoVersion
+  GetProtoVersion (const proto::ChannelMetadata& meta) const override
+  {
+    return ChannelProtoVersion::ORIGINAL;
+  }
+
+};
 
 class ProtoBoardTests : public testing::Test
 {

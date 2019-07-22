@@ -769,6 +769,12 @@ ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
   return false;
 }
 
+xaya::ChannelProtoVersion
+ShipsBoardRules::GetProtoVersion (const xaya::proto::ChannelMetadata& m) const
+{
+  return xaya::ChannelProtoVersion::ORIGINAL;
+}
+
 proto::BoardState
 InitialBoardState ()
 {

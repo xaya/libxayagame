@@ -6,6 +6,7 @@
 #define GAMECHANNEL_BOARDRULES_HPP
 
 #include "proto/metadata.pb.h"
+#include "protoversion.hpp"
 
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayautil/uint256.hpp>
@@ -173,6 +174,13 @@ public:
   virtual std::unique_ptr<ParsedBoardState> ParseState (
       const uint256& channelId, const proto::ChannelMetadata& meta,
       const BoardState& s) const = 0;
+
+  /**
+   * Returns the version to apply for StateProof protos when a channel has
+   * the given metadata.
+   */
+  virtual ChannelProtoVersion GetProtoVersion (
+      const proto::ChannelMetadata& meta) const = 0;
 
 };
 
