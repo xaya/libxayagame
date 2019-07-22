@@ -346,7 +346,8 @@ ShipsLogic::HandleCloseChannel (const Json::Value& obj)
     }
 
   proto::WinnerStatement stmt;
-  if (!VerifySignedWinnerStatement (GetXayaRpc (), id, meta, data, stmt))
+  if (!VerifySignedWinnerStatement (boardRules, GetXayaRpc (),
+                                    id, meta, data, stmt))
     {
       LOG (WARNING)
           << "Winner statement for closing channel " << id.ToHex ()

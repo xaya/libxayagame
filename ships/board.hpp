@@ -97,6 +97,7 @@ private:
                                    Phase phase,
                                    proto::BoardState& newState);
   static bool ApplyWinnerStatement (const proto::WinnerStatementMove& mv,
+                                    const xaya::BoardRules& rules,
                                     XayaRpcClient& rpc,
                                     const xaya::uint256& channelId,
                                     const xaya::proto::ChannelMetadata& meta,
@@ -158,7 +159,8 @@ proto::BoardState InitialBoardState ();
  * is indeed signed by the loser.  If it is valid, then the WinnerStatement
  * itself is returned as well for further use.
  */
-bool VerifySignedWinnerStatement (XayaRpcClient& rpc,
+bool VerifySignedWinnerStatement (const xaya::BoardRules& rules,
+                                  XayaRpcClient& rpc,
                                   const xaya::uint256& channelId,
                                   const xaya::proto::ChannelMetadata& meta,
                                   const xaya::proto::SignedData& data,
