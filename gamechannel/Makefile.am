@@ -50,6 +50,7 @@ libgamechannel_la_SOURCES = \
   gsprpc.cpp \
   movesender.cpp \
   openchannel.cpp \
+  protoversion.cpp \
   rollingstate.cpp \
   rpcbroadcast.cpp \
   schema.cpp \
@@ -70,6 +71,7 @@ gamechannel_HEADERS = \
   openchannel.hpp \
   protoboard.hpp protoboard.tpp \
   protoutils.hpp protoutils.tpp \
+  protoversion.hpp \
   rollingstate.hpp \
   rpcbroadcast.hpp \
   schema.hpp \
@@ -116,6 +118,7 @@ tests_SOURCES = \
   movesender_tests.cpp \
   protoboard_tests.cpp \
   protoutils_tests.cpp \
+  protoversion_tests.cpp \
   rollingstate_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \

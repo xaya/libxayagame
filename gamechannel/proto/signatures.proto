@@ -29,4 +29,11 @@ message SignedData
    */
   repeated bytes signatures = 2;
 
+  /**
+   * This field is not used in production.  It is a field that should never be
+   * set.  We use it to test that function, and that it is called correctly as
+   * we need it.
+   */
+  optional string for_testing_version = 1000;
+
 }
