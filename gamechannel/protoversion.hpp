@@ -5,6 +5,8 @@
 #ifndef GAMECHANNEL_PROTOVERSION_HPP
 #define GAMECHANNEL_PROTOVERSION_HPP
 
+#include <google/protobuf/message.h>
+
 namespace xaya
 {
 
@@ -46,6 +48,12 @@ enum class ChannelProtoVersion
  */
 template <typename Proto>
   bool CheckProtoVersion (ChannelProtoVersion version, const Proto& msg);
+
+/**
+ * Checks whether this message or any contained submessages have any unknown
+ * fields set.
+ */
+bool HasAnyUnknownFields (const google::protobuf::Message& msg);
 
 } // namespace xaya
 

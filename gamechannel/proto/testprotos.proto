@@ -33,3 +33,49 @@ message TestBoardMove
   optional string msg = 1;
 
 }
+
+/**
+ * A message to test HasAnyUnknownFields.  This message contains various
+ * fields, including repeated and non-repeated submessages.  We also define
+ * another message below (ExtendedUnknownFieldTest), which has the same
+ * structure but additional fields.  Those fields, when set, will become
+ * unknown fields in this message.
+ */
+message UnknownFieldTest
+{
+
+  optional int32 single_int = 1;
+  optional string single_str = 2;
+  optional UnknownFieldTest single_msg = 3;
+
+  repeated int32 repeated_int = 4;
+  repeated string repeated_str = 5;
+  repeated UnknownFieldTest repeated_msg = 6;
+
+}
+
+/**
+ * A message with similar structure to UnknownFieldTest, except that it has
+ * some more fields that will show up as unknown if a message of this type is
+ * parsed as UnknownFieldTest.
+ */
+message ExtendedUnknownFieldTest
+{
+
+  /* These fields match UnknownFieldTest.  */
+  optional int32 single_int = 1;
+  optional string single_str = 2;
+  optional ExtendedUnknownFieldTest single_msg = 3;
+
+  repeated int32 repeated_int = 4;
+  repeated string repeated_str = 5;
+  repeated ExtendedUnknownFieldTest repeated_msg = 6;
+
+  /* These fields are in addition to what UnknownFieldTest has.  */
+  optional int32 unknown_int = 100;
+  optional ExtendedUnknownFieldTest unknown_msg = 101;
+
+  repeated int32 unknown_repeated_int = 102;
+  repeated ExtendedUnknownFieldTest unknown_repeated_msg = 103;
+
+}

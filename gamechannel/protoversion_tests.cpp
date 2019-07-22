@@ -6,6 +6,7 @@
 
 #include "proto/signatures.pb.h"
 #include "proto/stateproof.pb.h"
+#include "proto/testprotos.pb.h"
 
 #include <google/protobuf/text_format.h>
 
@@ -21,7 +22,9 @@ namespace
 
 using google::protobuf::TextFormat;
 
-class ProtoVersionTests : public testing::Test
+/* ************************************************************************** */
+
+class CheckProtoVersionTests : public testing::Test
 {
 
 protected:
@@ -30,8 +33,8 @@ protected:
    * Parses a text proto and checks whether it matches the given version.
    */
   template <typename Proto>
-    bool
-    CheckText (const ChannelProtoVersion version, const std::string& str) const
+    static bool
+    CheckText (const ChannelProtoVersion version, const std::string& str)
   {
     Proto msg;
     CHECK (TextFormat::ParseFromString (str, &msg));
@@ -41,7 +44,7 @@ protected:
 
 };
 
-TEST_F (ProtoVersionTests, SignedData)
+TEST_F (CheckProtoVersionTests, SignedData)
 {
   EXPECT_TRUE (CheckText<proto::SignedData> (ChannelProtoVersion::ORIGINAL,
       R"(
@@ -56,7 +59,7 @@ TEST_F (ProtoVersionTests, SignedData)
       )"));
 }
 
-TEST_F (ProtoVersionTests, StateProof)
+TEST_F (CheckProtoVersionTests, StateProof)
 {
   EXPECT_TRUE (CheckText<proto::StateProof> (ChannelProtoVersion::ORIGINAL,
       R"(
@@ -100,6 +103,100 @@ TEST_F (ProtoVersionTests, StateProof)
           }
       )"));
 }
+
+/* ************************************************************************** */
+
+class HasAnyUnknownFieldsTests : public testing::Test
+{
+
+protected:
+
+  /**
+   * Parses a text format ExtendedUnknownFieldTest proto and "converts" it
+   * to UnknownFieldTest.  Thereby, the extra fields that have been set will
+   * become unknown fields.  Then, returns the result of HasAnyUnknownFields
+   * on the resulting message.
+   */
+  static bool
+  HasUnknownFields (const std::string& str)
+  {
+    proto::ExtendedUnknownFieldTest extended;
+    CHECK (TextFormat::ParseFromString (str, &extended));
+
+    std::string serialised;
+    CHECK (extended.SerializeToString (&serialised));
+
+    proto::UnknownFieldTest basic;
+    CHECK (basic.ParseFromString (serialised));
+
+    return HasAnyUnknownFields (basic);
+  }
+
+};
+
+TEST_F (HasAnyUnknownFieldsTests, NoUnknownFields)
+{
+  EXPECT_FALSE (HasUnknownFields (R"(
+    single_int: 42
+    single_str: "foo"
+    single_msg:
+      {
+        repeated_int: 5
+        repeated_int: 7
+        repeated_str: "bar"
+        repeated_str: "baz"
+        repeated_msg: {}
+        repeated_msg:
+          {
+            single_msg: {}
+          }
+      }
+  )"));
+}
+
+TEST_F (HasAnyUnknownFieldsTests, TopLevelFields)
+{
+  EXPECT_TRUE (HasUnknownFields (R"(
+    unknown_int: 5
+  )"));
+  EXPECT_TRUE (HasUnknownFields (R"(
+    unknown_msg: {}
+  )"));
+
+  EXPECT_TRUE (HasUnknownFields (R"(
+    unknown_repeated_int: 0
+  )"));
+  EXPECT_TRUE (HasUnknownFields (R"(
+    unknown_repeated_msg: {}
+  )"));
+}
+
+TEST_F (HasAnyUnknownFieldsTests, InNestedMessage)
+{
+  EXPECT_TRUE (HasUnknownFields (R"(
+    single_msg:
+      {
+        repeated_msg: {}
+        repeated_msg:
+          {
+            unknown_int: 0
+          }
+      }
+  )"));
+
+  EXPECT_TRUE (HasUnknownFields (R"(
+    repeated_msg: {}
+    repeated_msg:
+      {
+        single_msg:
+          {
+            unknown_msg: {}
+          }
+      }
+  )"));
+}
+
+/* ************************************************************************** */
 
 } // anonymous namespace
 } // namespace xaya

@@ -9,8 +9,13 @@
 
 #include <glog/logging.h>
 
+#include <vector>
+
 namespace xaya
 {
+
+using google::protobuf::FieldDescriptor;
+using google::protobuf::Message;
 
 template <>
   bool
@@ -40,6 +45,46 @@ template <>
       return false;
 
   return true;
+}
+
+bool
+HasAnyUnknownFields (const Message& msg)
+{
+  const auto& reflection = *msg.GetReflection ();
+  if (!reflection.GetUnknownFields (msg).empty ())
+    return true;
+
+  std::vector<const FieldDescriptor*> fields;
+  reflection.ListFields (msg, &fields);
+
+  for (const auto* f : fields)
+    switch (f->type ())
+      {
+      case FieldDescriptor::TYPE_GROUP:
+        LOG (FATAL) << "group is not allowed in game-channel protocol buffers";
+
+      case FieldDescriptor::TYPE_MESSAGE:
+        if (f->is_repeated ())
+          for (int i = 0; i < reflection.FieldSize (msg, f); ++i)
+            {
+              const auto& nested = reflection.GetRepeatedMessage (msg, f, i);
+              if (HasAnyUnknownFields (nested))
+                return true;
+            }
+        else
+          {
+            const auto& nested = reflection.GetMessage (msg, f);
+            if (HasAnyUnknownFields (nested))
+              return true;
+          }
+
+      default:
+        /* Just ignore any other types, as non-message fields cannot contain
+           any nested unknown fields.  */
+        break;
+      }
+
+  return false;
 }
 
 } // namespace xaya
