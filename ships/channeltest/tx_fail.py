@@ -62,6 +62,7 @@ class TxFailTest (ShipsTest):
       self.lock ()
       bar.rpc._notify.filedispute ()
       self.expectPendingMoves ("bar", [])
+      self.assertEqual (bar.getCurrentState ()["pending"], {})
       self.generate (1)
       state = bar.getCurrentState ()
       assert "dispute" not in state
@@ -88,6 +89,7 @@ class TxFailTest (ShipsTest):
       self.mainLogger.info ("Resolving it with unlocked wallet...")
       self.unlock ()
       self.expectPendingMoves ("foo", [])
+      self.assertEqual (foo.getCurrentState ()["pending"], {})
       self.generate (1)
       state = foo.getCurrentState ()
       self.assertEqual (state["dispute"], {

@@ -26,6 +26,11 @@ constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
 
 } // anonymous namespace
 
+ChannelManager::DisputeData::DisputeData ()
+{
+  pendingResolution.SetNull ();
+}
+
 ChannelManager::ChannelManager (const BoardRules& r, OpenChannel& oc,
                                 XayaRpcClient& c, XayaWalletRpcClient& w,
                                 const uint256& id, const std::string& name)
@@ -33,6 +38,7 @@ ChannelManager::ChannelManager (const BoardRules& r, OpenChannel& oc,
     boardStates(rules, rpc, channelId)
 {
   blockHash.SetNull ();
+  pendingDispute.SetNull ();
 }
 
 ChannelManager::~ChannelManager ()
@@ -72,7 +78,7 @@ ChannelManager::TryResolveDispute ()
       VLOG (1) << "There is no dispute for the channel";
       return;
     }
-  if (dispute->pendingResolution)
+  if (!dispute->pendingResolution.IsNull ())
     {
       VLOG (1) << "There may be a pending resolution already";
       return;
@@ -106,8 +112,8 @@ ChannelManager::TryResolveDispute ()
       << " at turn count " << latestCnt
       << " (dispute: " << dispute->count << ")";
   CHECK (onChainSender != nullptr);
-  onChainSender->SendResolution (boardStates.GetStateProof ());
-  dispute->pendingResolution = true;
+  dispute->pendingResolution
+      = onChainSender->SendResolution (boardStates.GetStateProof ());
 }
 
 bool
@@ -234,7 +240,7 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
   blockHash = blk;
   onChainHeight = h;
 
-  pendingDispute = false;
+  pendingDispute.SetNull ();
   exists = true;
   boardStates.UpdateOnChain (meta, reinitState, proof);
 
@@ -255,7 +261,7 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
         }
 
       dispute->height = disputeHeight;
-      dispute->pendingResolution = false;
+      dispute->pendingResolution.SetNull ();
 
       auto p = rules.ParseState (channelId, meta,
                                  UnverifiedProofEndState (proof));
@@ -358,15 +364,14 @@ ChannelManager::FileDispute ()
       LOG (WARNING) << "There is already a dispute for the channel";
       return;
     }
-  if (pendingDispute)
+  if (!pendingDispute.IsNull ())
     {
       LOG (WARNING) << "There may already be a pending dispute";
       return;
     }
 
   CHECK (onChainSender != nullptr);
-  onChainSender->SendDispute (boardStates.GetStateProof ());
-  pendingDispute = true;
+  pendingDispute = onChainSender->SendDispute (boardStates.GetStateProof ());
 }
 
 void
@@ -414,6 +419,13 @@ ChannelManager::UnlockedToJson () const
 
       res["dispute"] = disp;
     }
+
+  Json::Value pending(Json::objectValue);
+  if (!pendingDispute.IsNull ())
+    pending["dispute"] = pendingDispute.ToHex ();
+  if (dispute != nullptr && !dispute->pendingResolution.IsNull ())
+    pending["resolution"] = dispute->pendingResolution.ToHex ();
+  res["pending"] = pending;
 
   return res;
 }

@@ -61,12 +61,13 @@ private:
     unsigned count;
 
     /**
-     * True if we already tried to send a resolution for the last known
-     * on-chain block.
+     * The transaction ID of a sent resolution.  When there is no pending
+     * resolution transaction, this is null.
      */
-    bool pendingResolution;
+    uint256 pendingResolution;
 
-    DisputeData () = default;
+    DisputeData ();
+
     DisputeData (const DisputeData&) = default;
     DisputeData& operator= (const DisputeData&) = default;
 
@@ -157,10 +158,10 @@ private:
   std::unique_ptr<DisputeData> dispute;
 
   /**
-   * Set to true if we already tried to file a pending dispute for the last
-   * known block height.
+   * The transaction ID of a dispute move we sent (if any).  Set to null
+   * if there is none.
    */
-  bool pendingDispute = false;
+  uint256 pendingDispute;
 
   /**
    * Tries to apply a local move to the current state.  Returns true if
