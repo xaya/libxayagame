@@ -8,6 +8,7 @@
 #include "openchannel.hpp"
 #include "proto/stateproof.pb.h"
 
+#include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
@@ -33,8 +34,11 @@ class MoveSender
 
 private:
 
+  /** Xaya RPC connection to use.  */
+  XayaRpcClient& rpc;
+
   /** Xaya wallet RPC that we use.  */
-  XayaWalletRpcClient& rpc;
+  XayaWalletRpcClient& wallet;
 
   /** OpenChannel instance for building moves.  */
   OpenChannel& game;
@@ -58,7 +62,8 @@ public:
 
   explicit MoveSender (const std::string& gId,
                        const uint256& chId, const std::string& nm,
-                       XayaWalletRpcClient& w, OpenChannel& oc);
+                       XayaRpcClient& r, XayaWalletRpcClient& w,
+                       OpenChannel& oc);
 
   MoveSender () = delete;
   MoveSender (const MoveSender&) = delete;
@@ -85,6 +90,14 @@ public:
    * transaction ID (or null if the transaction failed).
    */
   uint256 SendResolution (const proto::StateProof& proof);
+
+  /**
+   * Checks if a name_update transaction from this MoveSender with the
+   * given txid is in the node's mempool.  This can be used to check if
+   * an equivalent move is still pending before requesting to send
+   * another one.
+   */
+  bool IsPending (const uint256& txid) const;
 
 };
 

@@ -86,6 +86,8 @@ public:
                                             const std::string& message,
                                             const std::string& signature));
 
+  MOCK_METHOD0 (name_pending, Json::Value ());
+
 };
 
 /**

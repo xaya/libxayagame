@@ -56,5 +56,10 @@
         "message": "message"
       },
     "returns": {}
+  },
+  {
+    "name": "name_pending",
+    "params": {},
+    "returns": []
   }
 ]

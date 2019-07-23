@@ -121,7 +121,8 @@ protected:
   MockOffChainBroadcast offChain;
 
   ChannelManagerTests ()
-    : onChain("game id", channelId, "player", rpcWallet, game.channel),
+    : onChain("game id", channelId, "player",
+              rpcClient, rpcWallet, game.channel),
       offChain(cm)
   {
     cm.SetMoveSender (onChain);
