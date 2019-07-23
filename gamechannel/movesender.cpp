@@ -49,16 +49,16 @@ MoveSender::SendMove (const Json::Value& mv)
   return res;
 }
 
-void
+uint256
 MoveSender::SendDispute (const proto::StateProof& proof)
 {
-  SendMove (game.DisputeMove (channelId, proof));
+  return SendMove (game.DisputeMove (channelId, proof));
 }
 
-void
+uint256
 MoveSender::SendResolution (const proto::StateProof& proof)
 {
-  SendMove (game.ResolutionMove (channelId, proof));
+  return SendMove (game.ResolutionMove (channelId, proof));
 }
 
 } // namespace xaya

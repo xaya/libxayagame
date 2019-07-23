@@ -60,8 +60,6 @@ public:
                        const uint256& chId, const std::string& nm,
                        XayaWalletRpcClient& w, OpenChannel& oc);
 
-  virtual ~MoveSender () = default;
-
   MoveSender () = delete;
   MoveSender (const MoveSender&) = delete;
   void operator= (const MoveSender&) = delete;
@@ -77,14 +75,16 @@ public:
   uint256 SendMove (const Json::Value& mv);
 
   /**
-   * Sends a dispute based on the given state proof.
+   * Sends a dispute based on the given state proof.  Returns the transaction
+   * ID (or null if the transaction failed).
    */
-  virtual void SendDispute (const proto::StateProof& proof);
+  uint256 SendDispute (const proto::StateProof& proof);
 
   /**
-   * Sends a resolution based on the given state proof.
+   * Sends a resolution based on the given state proof.  Returns the
+   * transaction ID (or null if the transaction failed).
    */
-  virtual void SendResolution (const proto::StateProof& proof);
+  uint256 SendResolution (const proto::StateProof& proof);
 
 };
 
