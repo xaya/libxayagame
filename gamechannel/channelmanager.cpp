@@ -26,6 +26,11 @@ constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
 
 } // anonymous namespace
 
+ChannelManager::DisputeData::DisputeData ()
+{
+  pendingResolution.SetNull ();
+}
+
 ChannelManager::ChannelManager (const BoardRules& r, OpenChannel& oc,
                                 XayaRpcClient& c, XayaWalletRpcClient& w,
                                 const uint256& id, const std::string& name)
@@ -33,6 +38,7 @@ ChannelManager::ChannelManager (const BoardRules& r, OpenChannel& oc,
     boardStates(rules, rpc, channelId)
 {
   blockHash.SetNull ();
+  pendingDispute.SetNull ();
 }
 
 ChannelManager::~ChannelManager ()
@@ -72,7 +78,7 @@ ChannelManager::TryResolveDispute ()
       VLOG (1) << "There is no dispute for the channel";
       return;
     }
-  if (dispute->pendingResolution)
+  if (!dispute->pendingResolution.IsNull ())
     {
       VLOG (1) << "There may be a pending resolution already";
       return;
@@ -106,8 +112,8 @@ ChannelManager::TryResolveDispute ()
       << " at turn count " << latestCnt
       << " (dispute: " << dispute->count << ")";
   CHECK (onChainSender != nullptr);
-  onChainSender->SendResolution (boardStates.GetStateProof ());
-  dispute->pendingResolution = true;
+  dispute->pendingResolution
+      = onChainSender->SendResolution (boardStates.GetStateProof ());
 }
 
 bool
@@ -214,6 +220,35 @@ ChannelManager::ProcessOnChainNonExistant (const uint256& blk, const unsigned h)
   NotifyStateChange ();
 }
 
+namespace
+{
+
+/**
+ * If a txid is non-null, check if it is pending.  If it is not,
+ * reset it to null.  This is the common logic we apply for disputes and
+ * resolutions when a new block comes in.
+ */
+void
+ResetMinedTxid (MoveSender* sender, uint256& txid)
+{
+  if (txid.IsNull ())
+    return;
+
+  /* Somehow we must have sent the previous tx!  */
+  CHECK (sender != nullptr);
+
+  if (sender->IsPending (txid))
+    {
+      LOG (INFO) << "Transaction " << txid.ToHex () << " is still pending";
+      return;
+    }
+
+  LOG (INFO) << "Transaction " << txid.ToHex () << " is no longer pending";
+  txid.SetNull ();
+}
+
+} // anonymous namespace
+
 void
 ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
                                 const proto::ChannelMetadata& meta,
@@ -234,7 +269,7 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
   blockHash = blk;
   onChainHeight = h;
 
-  pendingDispute = false;
+  ResetMinedTxid (onChainSender, pendingDispute);
   exists = true;
   boardStates.UpdateOnChain (meta, reinitState, proof);
 
@@ -255,7 +290,7 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
         }
 
       dispute->height = disputeHeight;
-      dispute->pendingResolution = false;
+      ResetMinedTxid (onChainSender, dispute->pendingResolution);
 
       auto p = rules.ParseState (channelId, meta,
                                  UnverifiedProofEndState (proof));
@@ -342,31 +377,34 @@ ChannelManager::TriggerAutoMoves ()
   ProcessStateUpdate (true);
 }
 
-void
+uint256
 ChannelManager::FileDispute ()
 {
   LOG (INFO) << "Trying to file a dispute for channel " << channelId.ToHex ();
   std::lock_guard<std::mutex> lock(mut);
 
+  uint256 txidNull;
+  txidNull.SetNull ();
+
   if (!exists)
     {
       LOG (WARNING) << "The channel does not exist on chain";
-      return;
+      return txidNull;
     }
   if (dispute != nullptr)
     {
       LOG (WARNING) << "There is already a dispute for the channel";
-      return;
+      return txidNull;
     }
-  if (pendingDispute)
+  if (!pendingDispute.IsNull ())
     {
       LOG (WARNING) << "There may already be a pending dispute";
-      return;
+      return txidNull;
     }
 
   CHECK (onChainSender != nullptr);
-  onChainSender->SendDispute (boardStates.GetStateProof ());
-  pendingDispute = true;
+  pendingDispute = onChainSender->SendDispute (boardStates.GetStateProof ());
+  return pendingDispute;
 }
 
 void
@@ -414,6 +452,13 @@ ChannelManager::UnlockedToJson () const
 
       res["dispute"] = disp;
     }
+
+  Json::Value pending(Json::objectValue);
+  if (!pendingDispute.IsNull ())
+    pending["dispute"] = pendingDispute.ToHex ();
+  if (dispute != nullptr && !dispute->pendingResolution.IsNull ())
+    pending["resolution"] = dispute->pendingResolution.ToHex ();
+  res["pending"] = pending;
 
   return res;
 }

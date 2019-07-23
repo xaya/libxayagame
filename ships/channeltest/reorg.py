@@ -128,7 +128,7 @@ class ReogTest (ShipsTest):
       # player who resolved should still make sure it gets into the chain
       # again (since they obviously still know a better state).
       self.mainLogger.info ("Reorg of a resolution move...")
-      bar.rpc._notify.filedispute ()
+      bar.rpc.filedispute ()
       self.expectPendingMoves ("bar", ["d"])
       self.generate (1)
       state = foo.getCurrentState ()
@@ -152,20 +152,21 @@ class ReogTest (ShipsTest):
         "height": self.rpc.xaya.getblockcount (),
       })
 
-      # Currently, the channel daemon always resends, even if the
-      # previous move is still in the mempool.  For fixing this, see
-      # https://github.com/xaya/libxayagame/issues/65.  Hence, we should
-      # get *two* resolution moves.  If this issue gets fixed at some point,
-      # we should do two tests:  When the original move remains in the
-      # mempool, then no additional one should be sent.  If it is not anymore
-      # (e.g. because of a long reorg), then a *new* one should be sent.
+      # A resolution is not resent if the previous transaction remained in
+      # the mempool.  But in our case here, we actually resolved the dispute
+      # and thus cleared the pending flag, and only then "reopened" it due
+      # to the reorg.  For this case, at least the current implementation
+      # sends a second resolution.  (To fix this, we would have to keep
+      # track of previous resolutions even if their corresponding disputes
+      # have been cleared already, which seems not worth the trouble for
+      # the little extra potential benefit in some edge cases.)
       self.expectPendingMoves ("foo", ["r", "r"])
       self.generate (1)
       state = foo.getCurrentState ()
       assert "dispute" not in state
 
       self.mainLogger.info ("Letting the game end with a dispute...")
-      bar.rpc._notify.filedispute ()
+      bar.rpc.filedispute ()
       self.expectPendingMoves ("bar", ["d"])
       self.generate (11)
       self.expectGameState ({
@@ -191,7 +192,7 @@ class ReogTest (ShipsTest):
       bar.rpc._notify.revealposition ()
       _, state = self.waitForPhase (daemons, ["finished"])
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
-      self.expectPendingMoves ("foo", ["w"])
+      txids = self.expectPendingMoves ("foo", ["w"])
       self.generate (1)
       self.expectGameState ({
         "channels": {},
@@ -208,8 +209,31 @@ class ReogTest (ShipsTest):
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
                         "finished")
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
-      # As above, we also resend the winner statement move at the moment.
-      self.expectPendingMoves ("foo", ["w", "w"])
+      # The old transaction should have been restored to the mempool, and
+      # we should not resend another one (but detect that it is still there
+      # and just wait).
+      newTxids = self.expectPendingMoves ("foo", ["w"])
+      self.assertEqual (newTxids, txids)
+      self.generate (1)
+      self.expectGameState ({
+        "channels": {},
+        "gamestats": {
+          "foo": {"won": 1, "lost": 0},
+          "bar": {"won": 0, "lost": 1},
+        },
+      })
+
+      # Do a longer reorg, so that the original move will not be restored
+      # to the mempool.  Verify that we send a new one.
+      winnerStmtBlk = self.rpc.xaya.getbestblockhash ()
+      self.generate (10)
+      self.rpc.xaya.invalidateblock (winnerStmtBlk)
+      state = foo.getCurrentState ()
+      self.assertEqual (state["current"]["state"]["parsed"]["phase"],
+                        "finished")
+      self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
+      newTxids = self.expectPendingMoves ("foo", ["w"])
+      assert txids != newTxids
       self.generate (1)
       self.expectGameState ({
         "channels": {},

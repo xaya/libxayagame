@@ -71,7 +71,7 @@ public:
   void setposition (const std::string& str) override;
   void shoot (int column, int row) override;
   void revealposition () override;
-  void filedispute () override;
+  std::string filedispute () override;
 
 };
 

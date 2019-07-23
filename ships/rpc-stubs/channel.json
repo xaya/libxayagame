@@ -32,6 +32,7 @@
   },
   {
     "name": "filedispute",
-    "params": {}
+    "params": {},
+    "returns": "txid"
   }
 ]

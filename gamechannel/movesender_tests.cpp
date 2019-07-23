@@ -34,7 +34,7 @@ protected:
   MoveSender onChain;
 
   MoveSenderTests ()
-    : onChain(gameId, channelId, "player", rpcWallet, game.channel)
+    : onChain(gameId, channelId, "player", rpcClient, rpcWallet, game.channel)
   {}
 
 };
@@ -58,6 +58,29 @@ TEST_F (MoveSenderTests, SendMoveError)
       .WillOnce (Throw (jsonrpc::JsonRpcException ("error")));
 
   EXPECT_TRUE (onChain.SendMove (ParseJson ("{}")).IsNull ());
+}
+
+TEST_F (MoveSenderTests, IsPending)
+{
+  const auto txidPending = SHA256::Hash ("txid 1");
+  const auto txidOther = SHA256::Hash ("txid 2");
+  const auto txidNotPending = SHA256::Hash ("txid 3");
+
+  Json::Value pendings(Json::arrayValue);
+  Json::Value p(Json::objectValue);
+  p["name"] = "p/player";
+  p["txid"] = txidPending.ToHex ();
+  pendings.append (p);
+  p = Json::Value (Json::objectValue);
+  p["name"] = "p/other";
+  p["txid"] = txidOther.ToHex ();
+  pendings.append (p);
+
+  EXPECT_CALL (mockXayaServer, name_pending ())
+      .WillRepeatedly (Return (pendings));
+
+  EXPECT_TRUE (onChain.IsPending (txidPending));
+  EXPECT_FALSE (onChain.IsPending (txidNotPending));
 }
 
 } // anonymous namespace

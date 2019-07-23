@@ -59,8 +59,15 @@ class DisputesTest (ShipsTest):
 
       # Let bar file a dispute against foo.
       self.mainLogger.info ("Filing and resolving a dispute...")
-      bar.rpc._notify.filedispute ()
+      txid = bar.rpc.filedispute ()
+      self.assertEqual (bar.rpc.filedispute (), "")
+      pendingTxids = self.expectPendingMoves ("bar", ["d"])
+      self.assertEqual (pendingTxids, [txid])
+      self.assertEqual (bar.getCurrentState ()["pending"], {
+        "dispute": txid,
+      })
       self.generate (2)
+      self.assertEqual (bar.getCurrentState ()["pending"], {})
       state = foo.getCurrentState ()
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
@@ -77,9 +84,15 @@ class DisputesTest (ShipsTest):
         "height": self.rpc.xaya.getblockcount () - 1,
       })
       self.expectPendingMoves ("foo", ["r"])
+      pending = self.rpc.xaya.name_pending ("p/foo")
+      self.assertEqual (len (pending), 1)
+      self.assertEqual (state["pending"], {
+        "resolution": pending[0]["txid"],
+      })
       self.generate (1)
       _, state = self.waitForPhase (daemons, ["shoot"])
       assert "dispute" not in state
+      self.assertEqual (foo.getCurrentState ()["pending"], {})
 
       # Simulate a dispute based on a "lost" broadcast message.  It will be
       # resolved immediately (without user interaction) when the dispute
@@ -87,7 +100,7 @@ class DisputesTest (ShipsTest):
       self.mainLogger.info ("Resolving dispute from missed broadcast...")
       self.broadcast.setMuted (True)
       foo.rpc._notify.shoot (row=7, column=1)
-      bar.rpc._notify.filedispute ()
+      bar.rpc.filedispute ()
 
       self.broadcast.setMuted (False)
       self.generate (1)
@@ -104,7 +117,7 @@ class DisputesTest (ShipsTest):
       assert "dispute" not in state
 
       self.mainLogger.info ("Closing channel due to dispute...")
-      bar.rpc._notify.filedispute ()
+      bar.rpc.filedispute ()
       self.generate (10)
       state = foo.getCurrentState ()
       self.assertEqual (state["dispute"], {

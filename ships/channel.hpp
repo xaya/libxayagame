@@ -58,6 +58,12 @@ private:
   xaya::uint256 seed0;
 
   /**
+   * Set to the txid of the submitted "close by winner statement" move,
+   * if we sent one already.  Otherwise null.
+   */
+  xaya::uint256 txidClose;
+
+  /**
    * Returns the index that the current player has for the given state.
    */
   int GetPlayerIndex (const ShipsBoardState& state) const;
@@ -76,9 +82,7 @@ private:
 
 public:
 
-  explicit ShipsChannel (XayaWalletRpcClient& w, const std::string& nm)
-    : wallet(w), playerName(nm)
-  {}
+  explicit ShipsChannel (XayaWalletRpcClient& w, const std::string& nm);
 
   ShipsChannel (const ShipsChannel&) = delete;
   void operator= (const ShipsChannel&) = delete;

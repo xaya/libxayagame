@@ -31,7 +31,7 @@ ChannelDaemon::XayaBasedInstances::XayaBasedInstances (ChannelDaemon& d,
     xayaRpc(xayaClient, jsonrpc::JSONRPC_CLIENT_V1),
     xayaWallet(xayaClient, jsonrpc::JSONRPC_CLIENT_V1),
     cm(d.rules, d.channel, xayaRpc, xayaWallet, d.channelId, d.playerName),
-    sender(d.gameId, d.channelId, d.playerName, xayaWallet, d.channel)
+    sender(d.gameId, d.channelId, d.playerName, xayaRpc, xayaWallet, d.channel)
 {
   cm.SetMoveSender (sender);
 }

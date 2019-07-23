@@ -14,6 +14,12 @@
 namespace ships
 {
 
+ShipsChannel::ShipsChannel (XayaWalletRpcClient& w, const std::string& nm)
+  : wallet(w), playerName(nm)
+{
+  txidClose.SetNull ();
+}
+
 bool
 ShipsChannel::IsPositionSet () const
 {
@@ -296,7 +302,23 @@ ShipsChannel::MaybeOnChainMove (const xaya::ParsedBoardState& state,
   if (meta.participants (stmt.winner ()).name () != playerName)
     return;
 
-  LOG (INFO) << "Channel has a winner statement and we won, closing on-chain";
+  if (!txidClose.IsNull () && sender.IsPending (txidClose))
+    {
+      /* If we already have a pending close move, then we are not sending
+         another.  Note that there is a slight chance that this has weird
+         behaviour with reorgs:  Namely if the original join gets reorged
+         and another second player joins, it could happen that our pending
+         close is invalid (because it was signed by the previous opponent).
+
+         But this is very unlikely to happen.  And even if it does, there
+         is not much harm.  The worst that can happen is that we wait for
+         the current move to be confirmed, and then send a correct new one.  */
+
+      LOG (INFO)
+          << "We already have a pending channel close: "
+          << txidClose.ToHex ();
+      return;
+    }
 
   Json::Value data(Json::objectValue);
   data["id"] = id.ToHex ();
@@ -304,7 +326,10 @@ ShipsChannel::MaybeOnChainMove (const xaya::ParsedBoardState& state,
 
   Json::Value mv(Json::objectValue);
   mv["w"] = data;
-  sender.SendMove (mv);
+  txidClose = sender.SendMove (mv);
+  LOG (INFO)
+      << "Channel has a winner statement and we won, closing on-chain: "
+      << txidClose.ToHex ();
 }
 
 } // namespace ships

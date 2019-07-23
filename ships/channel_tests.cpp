@@ -83,6 +83,9 @@ class ChannelTests : public testing::Test
 
 private:
 
+  jsonrpc::HttpServer httpServerRpc;
+  jsonrpc::HttpClient httpClientRpc;
+
   jsonrpc::HttpServer httpServerWallet;
   jsonrpc::HttpClient httpClientWallet;
 
@@ -95,6 +98,9 @@ protected:
    */
   xaya::proto::ChannelMetadata meta[2];
 
+  xaya::MockXayaRpcServer mockXayaServer;
+  XayaRpcClient rpcClient;
+
   xaya::MockXayaWalletRpcServer mockXayaWallet;
   XayaWalletRpcClient rpcWallet;
 
@@ -102,8 +108,12 @@ protected:
   ShipsChannel channel;
 
   ChannelTests ()
-    : httpServerWallet(xaya::MockXayaWalletRpcServer::HTTP_PORT),
+    : httpServerRpc(xaya::MockXayaRpcServer::HTTP_PORT),
+      httpClientRpc(xaya::MockXayaRpcServer::HTTP_URL),
+      httpServerWallet(xaya::MockXayaWalletRpcServer::HTTP_PORT),
       httpClientWallet(xaya::MockXayaWalletRpcServer::HTTP_URL),
+      mockXayaServer(httpServerRpc),
+      rpcClient(httpClientRpc),
       mockXayaWallet(httpServerWallet),
       rpcWallet(httpClientWallet),
       channel(rpcWallet, "player")
@@ -134,11 +144,13 @@ protected:
         }
     )", &meta[1]));
 
+    mockXayaServer.StartListening ();
     mockXayaWallet.StartListening ();
   }
 
   ~ChannelTests ()
   {
+    mockXayaServer.StopListening ();
     mockXayaWallet.StopListening ();
   }
 
@@ -185,7 +197,7 @@ protected:
   xaya::MoveSender sender;
 
   OnChainMoveTests ()
-    : sender("xs", channelId, "player", rpcWallet, channel)
+    : sender("xs", channelId, "player", rpcClient, rpcWallet, channel)
   {}
 
   /**
@@ -285,6 +297,61 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveSending)
   proto::BoardState state;
   *state.mutable_winner_statement () = stmt;
 
+  channel.MaybeOnChainMove (*ParseState (state), sender);
+}
+
+TEST_F (OnChainMoveTests, MaybeOnChainMoveAlreadyPending)
+{
+  const auto stmt = FakeWinnerStatement (0);
+  const auto txid = xaya::SHA256::Hash ("txid");
+
+  const auto isOk = [this, stmt] (const std::string& str)
+    {
+      const auto val = ParseJson (str);
+      const auto& mv = val["g"]["xs"];
+      return IsExpectedMove (mv, "w", "stmt", channelId, stmt);
+    };
+  EXPECT_CALL (mockXayaWallet, name_update ("p/player", Truly (isOk)))
+      .WillOnce (Return (txid.ToHex ()));
+
+  Json::Value pendings(Json::arrayValue);
+  Json::Value p(Json::objectValue);
+  p["name"] = "p/player";
+  p["txid"] = txid.ToHex ();
+  pendings.append (p);
+  EXPECT_CALL (mockXayaServer, name_pending ())
+      .WillOnce (Return (pendings));
+
+  proto::BoardState state;
+  *state.mutable_winner_statement () = stmt;
+
+  channel.MaybeOnChainMove (*ParseState (state), sender);
+  channel.MaybeOnChainMove (*ParseState (state), sender);
+}
+
+TEST_F (OnChainMoveTests, MaybeOnChainMoveNoLongerPending)
+{
+  const auto stmt = FakeWinnerStatement (0);
+  const auto txid1 = xaya::SHA256::Hash ("txid 1");
+  const auto txid2 = xaya::SHA256::Hash ("txid 2");
+
+  const auto isOk = [this, stmt] (const std::string& str)
+    {
+      const auto val = ParseJson (str);
+      const auto& mv = val["g"]["xs"];
+      return IsExpectedMove (mv, "w", "stmt", channelId, stmt);
+    };
+  EXPECT_CALL (mockXayaWallet, name_update ("p/player", Truly (isOk)))
+      .WillOnce (Return (txid1.ToHex ()))
+      .WillOnce (Return (txid2.ToHex ()));
+
+  EXPECT_CALL (mockXayaServer, name_pending ())
+      .WillOnce (Return (ParseJson ("[]")));
+
+  proto::BoardState state;
+  *state.mutable_winner_statement () = stmt;
+
+  channel.MaybeOnChainMove (*ParseState (state), sender);
   channel.MaybeOnChainMove (*ParseState (state), sender);
 }
 
@@ -569,12 +636,6 @@ class FullGameTests : public ChannelTests
 
 private:
 
-  jsonrpc::HttpServer httpServer;
-  jsonrpc::HttpClient httpClient;
-
-  xaya::MockXayaRpcServer mockXayaServer;
-  XayaRpcClient rpcClient;
-
   /** Indexable array of the channels.  */
   ShipsChannel* channels[2];
 
@@ -586,18 +647,12 @@ protected:
   std::unique_ptr<xaya::ParsedBoardState> state;
 
   FullGameTests ()
-    : httpServer(xaya::MockXayaRpcServer::HTTP_PORT),
-      httpClient(xaya::MockXayaRpcServer::HTTP_URL),
-      mockXayaServer(httpServer),
-      rpcClient(httpClient),
-      otherChannel(rpcWallet, "other player")
+    : otherChannel(rpcWallet, "other player")
   {
     channels[0] = &channel;
     channels[1] = &otherChannel;
 
     state = ParseState (InitialBoardState (), meta[0]);
-
-    mockXayaServer.StartListening ();
 
     /* Set up the mock RPC servers so that we can "validate" signatures
        and "sign" messages.  */
@@ -617,11 +672,6 @@ protected:
     EXPECT_CALL (mockXayaServer,
                  verifymessage ("", _, xaya::EncodeBase64 ("other sgn")))
         .WillRepeatedly (Return (res));
-  }
-
-  ~FullGameTests ()
-  {
-    mockXayaServer.StopListening ();
   }
 
   /**

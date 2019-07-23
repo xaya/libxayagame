@@ -121,7 +121,8 @@ protected:
   MockOffChainBroadcast offChain;
 
   ChannelManagerTests ()
-    : onChain("game id", channelId, "player", rpcWallet, game.channel),
+    : onChain("game id", channelId, "player",
+              rpcClient, rpcWallet, game.channel),
       offChain(cm)
   {
     cm.SetMoveSender (onChain);
@@ -132,8 +133,10 @@ protected:
    * Expects exactly n disputes or resolutions to be sent through the
    * wallet with name_update's, and checks that the associated state proof
    * matches that from GetBoardStates().
+   *
+   * Returns the txid that moves will return.
    */
-  void
+  uint256
   ExpectMoves (const int n, const std::string& type)
   {
     auto isOk = [this, type] (const std::string& val)
@@ -180,9 +183,12 @@ protected:
         return true;
       };
 
+    const uint256 txid = SHA256::Hash ("txid");
     EXPECT_CALL (mockXayaWallet, name_update ("p/player", Truly (isOk)))
         .Times (n)
-        .WillRepeatedly (Return (SHA256::Hash ("txid").ToHex ()));
+        .WillRepeatedly (Return (txid.ToHex ()));
+
+    return txid;
   }
 
   /**
@@ -239,7 +245,7 @@ TEST_F (ProcessOnChainTests, Dispute)
   EXPECT_EQ (GetDispute ()->height, 10);
   EXPECT_EQ (GetDispute ()->turn, 1);
   EXPECT_EQ (GetDispute ()->count, 5);
-  EXPECT_EQ (GetDispute ()->pendingResolution, false);
+  EXPECT_TRUE (GetDispute ()->pendingResolution.IsNull ());
 
   ProcessOnChain ("0 0", ValidProof ("12 6"), 0);
   EXPECT_EQ (GetDispute (), nullptr);
@@ -508,46 +514,81 @@ TEST_F (ResolveDisputeTests, NoBetterTurn)
   cm.ProcessOffChain ("", ValidProof ("12 5"));
 }
 
+TEST_F (ResolveDisputeTests, RetryAfterBlock)
+{
+  const auto txid = ExpectMoves (2, "resolution");
+
+  Json::Value pendings(Json::arrayValue);
+  Json::Value p(Json::objectValue);
+  p["name"] = "p/player";
+  p["txid"] = txid.ToHex ();
+  pendings.append (p);
+
+  EXPECT_CALL (mockXayaServer, name_pending ())
+      .WillOnce (Return (pendings))
+      .WillOnce (Return (ParseJson ("[]")));
+
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
+  cm.ProcessOffChain ("", ValidProof ("12 6"));
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
+  cm.ProcessOffChain ("", ValidProof ("14 8"));
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
+  cm.ProcessOffChain ("", ValidProof ("14 8"));
+}
+
 /* ************************************************************************** */
 
 using FileDisputeTests = ChannelManagerTests;
 
 TEST_F (FileDisputeTests, Successful)
 {
-  ExpectMoves (1, "dispute");
+  const auto txid = ExpectMoves (1, "dispute");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.FileDispute ();
+  EXPECT_EQ (cm.FileDispute (), txid);
 }
 
 TEST_F (FileDisputeTests, ChannelDoesNotExist)
 {
   ExpectMoves (0, "dispute");
   ProcessOnChainNonExistant ();
-  cm.FileDispute ();
+  EXPECT_TRUE (cm.FileDispute ().IsNull ());
 }
 
 TEST_F (FileDisputeTests, HasOtherDispute)
 {
   ExpectMoves (0, "dispute");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 10);
-  cm.FileDispute ();
+  EXPECT_TRUE (cm.FileDispute ().IsNull ());
 }
 
 TEST_F (FileDisputeTests, AlreadyPending)
 {
-  ExpectMoves (1, "dispute");
+  const auto txid = ExpectMoves (1, "dispute");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.FileDispute ();
-  cm.FileDispute ();
+  EXPECT_EQ (cm.FileDispute (), txid);
+  EXPECT_TRUE (cm.FileDispute ().IsNull ());
 }
 
 TEST_F (FileDisputeTests, RetryAfterBlock)
 {
-  ExpectMoves (2, "dispute");
+  const auto txid = ExpectMoves (2, "dispute");
+
+  Json::Value pendings(Json::arrayValue);
+  Json::Value p(Json::objectValue);
+  p["name"] = "p/player";
+  p["txid"] = txid.ToHex ();
+  pendings.append (p);
+
+  EXPECT_CALL (mockXayaServer, name_pending ())
+      .WillOnce (Return (pendings))
+      .WillOnce (Return (ParseJson ("[]")));
+
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.FileDispute ();
+  EXPECT_EQ (cm.FileDispute (), txid);
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.FileDispute ();
+  EXPECT_TRUE (cm.FileDispute ().IsNull ());
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  EXPECT_EQ (cm.FileDispute (), txid);
 }
 
 /* ************************************************************************** */
@@ -601,6 +642,7 @@ TEST_F (ChannelToJsonTests, CurrentState)
     "playername": "player",
     "existsonchain": true,
     "height": 42,
+    "pending": {},
     "version": 3
   })");
   expected["id"] = channelId.ToHex ();
@@ -623,6 +665,28 @@ TEST_F (ChannelToJsonTests, Dispute)
     "whoseturn": 1,
     "canresolve": true
   })"));
+}
+
+TEST_F (ChannelToJsonTests, PendingDispute)
+{
+  const auto txid = ExpectMoves (1, "dispute");
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  cm.FileDispute ();
+
+  auto expected = Json::Value (Json::objectValue);
+  expected["dispute"] = txid.ToHex ();
+  EXPECT_EQ (cm.ToJson ()["pending"], expected);
+}
+
+TEST_F (ChannelToJsonTests, PendingResolution)
+{
+  const auto txid = ExpectMoves (1, "resolution");
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
+  cm.ProcessOffChain ("", ValidProof ("12 6"));
+
+  auto expected = Json::Value (Json::objectValue);
+  expected["resolution"] = txid.ToHex ();
+  EXPECT_EQ (cm.ToJson ()["pending"], expected);
 }
 
 /* ************************************************************************** */
