@@ -191,7 +191,7 @@ class ReogTest (ShipsTest):
       bar.rpc._notify.revealposition ()
       _, state = self.waitForPhase (daemons, ["finished"])
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
-      self.expectPendingMoves ("foo", ["w"])
+      txids = self.expectPendingMoves ("foo", ["w"])
       self.generate (1)
       self.expectGameState ({
         "channels": {},
@@ -208,8 +208,31 @@ class ReogTest (ShipsTest):
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
                         "finished")
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
-      # As above, we also resend the winner statement move at the moment.
-      self.expectPendingMoves ("foo", ["w", "w"])
+      # The old transaction should have been restored to the mempool, and
+      # we should not resend another one (but detect that it is still there
+      # and just wait).
+      newTxids = self.expectPendingMoves ("foo", ["w"])
+      self.assertEqual (newTxids, txids)
+      self.generate (1)
+      self.expectGameState ({
+        "channels": {},
+        "gamestats": {
+          "foo": {"won": 1, "lost": 0},
+          "bar": {"won": 0, "lost": 1},
+        },
+      })
+
+      # Do a longer reorg, so that the original move will not be restored
+      # to the mempool.  Verify that we send a new one.
+      winnerStmtBlk = self.rpc.xaya.getbestblockhash ()
+      self.generate (10)
+      self.rpc.xaya.invalidateblock (winnerStmtBlk)
+      state = foo.getCurrentState ()
+      self.assertEqual (state["current"]["state"]["parsed"]["phase"],
+                        "finished")
+      self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
+      newTxids = self.expectPendingMoves ("foo", ["w"])
+      assert txids != newTxids
       self.generate (1)
       self.expectGameState ({
         "channels": {},

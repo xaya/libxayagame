@@ -118,6 +118,8 @@ class ShipsTest (channeltest.TestCase):
     Expects that the given player has exactly a certain number
     and type (as per the top-level move value field) of moves
     pending in the mempool.
+
+    Returns the txids of the pending moves.
     """
 
     self.log.info ("Expecting pending moves for %s: %s" % (name, types))
@@ -131,6 +133,8 @@ class ShipsTest (channeltest.TestCase):
       actualTypes.append (mvKeys[0])
 
     self.assertEqual (actualTypes, types)
+
+    return [p["txid"] for p in pending]
 
   def waitForPhase (self, daemons, phases):
     """

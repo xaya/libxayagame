@@ -300,6 +300,61 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveSending)
   channel.MaybeOnChainMove (*ParseState (state), sender);
 }
 
+TEST_F (OnChainMoveTests, MaybeOnChainMoveAlreadyPending)
+{
+  const auto stmt = FakeWinnerStatement (0);
+  const auto txid = xaya::SHA256::Hash ("txid");
+
+  const auto isOk = [this, stmt] (const std::string& str)
+    {
+      const auto val = ParseJson (str);
+      const auto& mv = val["g"]["xs"];
+      return IsExpectedMove (mv, "w", "stmt", channelId, stmt);
+    };
+  EXPECT_CALL (mockXayaWallet, name_update ("p/player", Truly (isOk)))
+      .WillOnce (Return (txid.ToHex ()));
+
+  Json::Value pendings(Json::arrayValue);
+  Json::Value p(Json::objectValue);
+  p["name"] = "p/player";
+  p["txid"] = txid.ToHex ();
+  pendings.append (p);
+  EXPECT_CALL (mockXayaServer, name_pending ())
+      .WillOnce (Return (pendings));
+
+  proto::BoardState state;
+  *state.mutable_winner_statement () = stmt;
+
+  channel.MaybeOnChainMove (*ParseState (state), sender);
+  channel.MaybeOnChainMove (*ParseState (state), sender);
+}
+
+TEST_F (OnChainMoveTests, MaybeOnChainMoveNoLongerPending)
+{
+  const auto stmt = FakeWinnerStatement (0);
+  const auto txid1 = xaya::SHA256::Hash ("txid 1");
+  const auto txid2 = xaya::SHA256::Hash ("txid 2");
+
+  const auto isOk = [this, stmt] (const std::string& str)
+    {
+      const auto val = ParseJson (str);
+      const auto& mv = val["g"]["xs"];
+      return IsExpectedMove (mv, "w", "stmt", channelId, stmt);
+    };
+  EXPECT_CALL (mockXayaWallet, name_update ("p/player", Truly (isOk)))
+      .WillOnce (Return (txid1.ToHex ()))
+      .WillOnce (Return (txid2.ToHex ()));
+
+  EXPECT_CALL (mockXayaServer, name_pending ())
+      .WillOnce (Return (ParseJson ("[]")));
+
+  proto::BoardState state;
+  *state.mutable_winner_statement () = stmt;
+
+  channel.MaybeOnChainMove (*ParseState (state), sender);
+  channel.MaybeOnChainMove (*ParseState (state), sender);
+}
+
 /* ************************************************************************** */
 
 using PositionStoringTests = ChannelTests;
