@@ -152,13 +152,14 @@ class ReogTest (ShipsTest):
         "height": self.rpc.xaya.getblockcount (),
       })
 
-      # Currently, the channel daemon always resends, even if the
-      # previous move is still in the mempool.  For fixing this, see
-      # https://github.com/xaya/libxayagame/issues/65.  Hence, we should
-      # get *two* resolution moves.  If this issue gets fixed at some point,
-      # we should do two tests:  When the original move remains in the
-      # mempool, then no additional one should be sent.  If it is not anymore
-      # (e.g. because of a long reorg), then a *new* one should be sent.
+      # A resolution is not resent if the previous transaction remained in
+      # the mempool.  But in our case here, we actually resolved the dispute
+      # and thus cleared the pending flag, and only then "reopened" it due
+      # to the reorg.  For this case, at least the current implementation
+      # sends a second resolution.  (To fix this, we would have to keep
+      # track of previous resolutions even if their corresponding disputes
+      # have been cleared already, which seems not worth the trouble for
+      # the little extra potential benefit in some edge cases.)
       self.expectPendingMoves ("foo", ["r", "r"])
       self.generate (1)
       state = foo.getCurrentState ()

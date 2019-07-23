@@ -220,6 +220,35 @@ ChannelManager::ProcessOnChainNonExistant (const uint256& blk, const unsigned h)
   NotifyStateChange ();
 }
 
+namespace
+{
+
+/**
+ * If a txid is non-null, check if it is pending.  If it is not,
+ * reset it to null.  This is the common logic we apply for disputes and
+ * resolutions when a new block comes in.
+ */
+void
+ResetMinedTxid (MoveSender* sender, uint256& txid)
+{
+  if (txid.IsNull ())
+    return;
+
+  /* Somehow we must have sent the previous tx!  */
+  CHECK (sender != nullptr);
+
+  if (sender->IsPending (txid))
+    {
+      LOG (INFO) << "Transaction " << txid.ToHex () << " is still pending";
+      return;
+    }
+
+  LOG (INFO) << "Transaction " << txid.ToHex () << " is no longer pending";
+  txid.SetNull ();
+}
+
+} // anonymous namespace
+
 void
 ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
                                 const proto::ChannelMetadata& meta,
@@ -240,7 +269,7 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
   blockHash = blk;
   onChainHeight = h;
 
-  pendingDispute.SetNull ();
+  ResetMinedTxid (onChainSender, pendingDispute);
   exists = true;
   boardStates.UpdateOnChain (meta, reinitState, proof);
 
@@ -261,7 +290,7 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
         }
 
       dispute->height = disputeHeight;
-      dispute->pendingResolution.SetNull ();
+      ResetMinedTxid (onChainSender, dispute->pendingResolution);
 
       auto p = rules.ParseState (channelId, meta,
                                  UnverifiedProofEndState (proof));

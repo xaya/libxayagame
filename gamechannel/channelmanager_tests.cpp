@@ -514,6 +514,28 @@ TEST_F (ResolveDisputeTests, NoBetterTurn)
   cm.ProcessOffChain ("", ValidProof ("12 5"));
 }
 
+TEST_F (ResolveDisputeTests, RetryAfterBlock)
+{
+  const auto txid = ExpectMoves (2, "resolution");
+
+  Json::Value pendings(Json::arrayValue);
+  Json::Value p(Json::objectValue);
+  p["name"] = "p/player";
+  p["txid"] = txid.ToHex ();
+  pendings.append (p);
+
+  EXPECT_CALL (mockXayaServer, name_pending ())
+      .WillOnce (Return (pendings))
+      .WillOnce (Return (ParseJson ("[]")));
+
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
+  cm.ProcessOffChain ("", ValidProof ("12 6"));
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
+  cm.ProcessOffChain ("", ValidProof ("14 8"));
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
+  cm.ProcessOffChain ("", ValidProof ("14 8"));
+}
+
 /* ************************************************************************** */
 
 using FileDisputeTests = ChannelManagerTests;
@@ -550,8 +572,21 @@ TEST_F (FileDisputeTests, AlreadyPending)
 TEST_F (FileDisputeTests, RetryAfterBlock)
 {
   const auto txid = ExpectMoves (2, "dispute");
+
+  Json::Value pendings(Json::arrayValue);
+  Json::Value p(Json::objectValue);
+  p["name"] = "p/player";
+  p["txid"] = txid.ToHex ();
+  pendings.append (p);
+
+  EXPECT_CALL (mockXayaServer, name_pending ())
+      .WillOnce (Return (pendings))
+      .WillOnce (Return (ParseJson ("[]")));
+
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   EXPECT_EQ (cm.FileDispute (), txid);
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  EXPECT_TRUE (cm.FileDispute ().IsNull ());
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   EXPECT_EQ (cm.FileDispute (), txid);
 }
