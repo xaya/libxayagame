@@ -275,9 +275,10 @@ public:
   void TriggerAutoMoves ();
 
   /**
-   * Requests to file a dispute with the current state.
+   * Requests to file a dispute with the current state.  Returns the txid
+   * of the sent move (or null if sending failed).
    */
-  void FileDispute ();
+  uint256 FileDispute ();
 
   /**
    * Disables processing of updates in the future.  This should be called

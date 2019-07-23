@@ -128,7 +128,7 @@ class ReogTest (ShipsTest):
       # player who resolved should still make sure it gets into the chain
       # again (since they obviously still know a better state).
       self.mainLogger.info ("Reorg of a resolution move...")
-      bar.rpc._notify.filedispute ()
+      bar.rpc.filedispute ()
       self.expectPendingMoves ("bar", ["d"])
       self.generate (1)
       state = foo.getCurrentState ()
@@ -165,7 +165,7 @@ class ReogTest (ShipsTest):
       assert "dispute" not in state
 
       self.mainLogger.info ("Letting the game end with a dispute...")
-      bar.rpc._notify.filedispute ()
+      bar.rpc.filedispute ()
       self.expectPendingMoves ("bar", ["d"])
       self.generate (11)
       self.expectGameState ({

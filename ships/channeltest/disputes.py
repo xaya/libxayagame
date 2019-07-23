@@ -59,11 +59,12 @@ class DisputesTest (ShipsTest):
 
       # Let bar file a dispute against foo.
       self.mainLogger.info ("Filing and resolving a dispute...")
-      bar.rpc._notify.filedispute ()
-      pending = self.rpc.xaya.name_pending ("p/bar")
-      self.assertEqual (len (pending), 1)
+      txid = bar.rpc.filedispute ()
+      self.assertEqual (bar.rpc.filedispute (), "")
+      pendingTxids = self.expectPendingMoves ("bar", ["d"])
+      self.assertEqual (pendingTxids, [txid])
       self.assertEqual (bar.getCurrentState ()["pending"], {
-        "dispute": pending[0]["txid"],
+        "dispute": txid,
       })
       self.generate (2)
       self.assertEqual (bar.getCurrentState ()["pending"], {})
@@ -99,7 +100,7 @@ class DisputesTest (ShipsTest):
       self.mainLogger.info ("Resolving dispute from missed broadcast...")
       self.broadcast.setMuted (True)
       foo.rpc._notify.shoot (row=7, column=1)
-      bar.rpc._notify.filedispute ()
+      bar.rpc.filedispute ()
 
       self.broadcast.setMuted (False)
       self.generate (1)
@@ -116,7 +117,7 @@ class DisputesTest (ShipsTest):
       assert "dispute" not in state
 
       self.mainLogger.info ("Closing channel due to dispute...")
-      bar.rpc._notify.filedispute ()
+      bar.rpc.filedispute ()
       self.generate (10)
       state = foo.getCurrentState ()
       self.assertEqual (state["dispute"], {

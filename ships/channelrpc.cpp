@@ -89,11 +89,16 @@ ShipsChannelRpcServer::revealposition ()
     LOG (ERROR) << "Cannot reveal position if it is not set yet";
 }
 
-void
+std::string
 ShipsChannelRpcServer::filedispute ()
 {
   LOG (INFO) << "RPC method called: filedispute";
-  daemon.GetChannelManager ().FileDispute ();
+  const xaya::uint256 txid = daemon.GetChannelManager ().FileDispute ();
+
+  if (txid.IsNull ())
+    return "";
+
+  return txid.ToHex ();
 }
 
 Json::Value

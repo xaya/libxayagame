@@ -348,30 +348,34 @@ ChannelManager::TriggerAutoMoves ()
   ProcessStateUpdate (true);
 }
 
-void
+uint256
 ChannelManager::FileDispute ()
 {
   LOG (INFO) << "Trying to file a dispute for channel " << channelId.ToHex ();
   std::lock_guard<std::mutex> lock(mut);
 
+  uint256 txidNull;
+  txidNull.SetNull ();
+
   if (!exists)
     {
       LOG (WARNING) << "The channel does not exist on chain";
-      return;
+      return txidNull;
     }
   if (dispute != nullptr)
     {
       LOG (WARNING) << "There is already a dispute for the channel";
-      return;
+      return txidNull;
     }
   if (!pendingDispute.IsNull ())
     {
       LOG (WARNING) << "There may already be a pending dispute";
-      return;
+      return txidNull;
     }
 
   CHECK (onChainSender != nullptr);
   pendingDispute = onChainSender->SendDispute (boardStates.GetStateProof ());
+  return pendingDispute;
 }
 
 void

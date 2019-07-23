@@ -144,7 +144,7 @@ class WaitForChangeTest (ShipsTest):
       # (because blocks trigger updates in general).
       self.mainLogger.info ("On-chain updates...")
       cnt = waiter.getNumCalls ()
-      bar.rpc._notify.filedispute ()
+      bar.rpc.filedispute ()
       time.sleep (0.1)
       self.assertEqual (waiter.getNumCalls (), cnt)
       self.generate (1)

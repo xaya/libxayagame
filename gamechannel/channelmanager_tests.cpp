@@ -520,40 +520,40 @@ using FileDisputeTests = ChannelManagerTests;
 
 TEST_F (FileDisputeTests, Successful)
 {
-  ExpectMoves (1, "dispute");
+  const auto txid = ExpectMoves (1, "dispute");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.FileDispute ();
+  EXPECT_EQ (cm.FileDispute (), txid);
 }
 
 TEST_F (FileDisputeTests, ChannelDoesNotExist)
 {
   ExpectMoves (0, "dispute");
   ProcessOnChainNonExistant ();
-  cm.FileDispute ();
+  EXPECT_TRUE (cm.FileDispute ().IsNull ());
 }
 
 TEST_F (FileDisputeTests, HasOtherDispute)
 {
   ExpectMoves (0, "dispute");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 10);
-  cm.FileDispute ();
+  EXPECT_TRUE (cm.FileDispute ().IsNull ());
 }
 
 TEST_F (FileDisputeTests, AlreadyPending)
 {
-  ExpectMoves (1, "dispute");
+  const auto txid = ExpectMoves (1, "dispute");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.FileDispute ();
-  cm.FileDispute ();
+  EXPECT_EQ (cm.FileDispute (), txid);
+  EXPECT_TRUE (cm.FileDispute ().IsNull ());
 }
 
 TEST_F (FileDisputeTests, RetryAfterBlock)
 {
-  ExpectMoves (2, "dispute");
+  const auto txid = ExpectMoves (2, "dispute");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.FileDispute ();
+  EXPECT_EQ (cm.FileDispute (), txid);
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.FileDispute ();
+  EXPECT_EQ (cm.FileDispute (), txid);
 }
 
 /* ************************************************************************** */
