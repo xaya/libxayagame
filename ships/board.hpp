@@ -97,6 +97,7 @@ private:
                                    Phase phase,
                                    proto::BoardState& newState);
   static bool ApplyWinnerStatement (const proto::WinnerStatementMove& mv,
+                                    const xaya::BoardRules& rules,
                                     XayaRpcClient& rpc,
                                     const xaya::uint256& channelId,
                                     const xaya::proto::ChannelMetadata& meta,
@@ -133,8 +134,18 @@ public:
 
 };
 
-/** The BoardRules instance we use for the ships game.  */
-using ShipsBoardRules = xaya::ProtoBoardRules<ShipsBoardState>;
+/**
+ * The BoardRules instance we use for the ships game.
+ */
+class ShipsBoardRules : public xaya::ProtoBoardRules<ShipsBoardState>
+{
+
+public:
+
+  xaya::ChannelProtoVersion GetProtoVersion (
+      const xaya::proto::ChannelMetadata& meta) const override;
+
+};
 
 /**
  * Returns the initial board state of a game (i.e. just after the second
@@ -148,7 +159,8 @@ proto::BoardState InitialBoardState ();
  * is indeed signed by the loser.  If it is valid, then the WinnerStatement
  * itself is returned as well for further use.
  */
-bool VerifySignedWinnerStatement (XayaRpcClient& rpc,
+bool VerifySignedWinnerStatement (const xaya::BoardRules& rules,
+                                  XayaRpcClient& rpc,
                                   const xaya::uint256& channelId,
                                   const xaya::proto::ChannelMetadata& meta,
                                   const xaya::proto::SignedData& data,

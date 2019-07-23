@@ -54,6 +54,9 @@ public:
       const uint256& channelId, const proto::ChannelMetadata& meta,
       const BoardState& s) const override;
 
+  ChannelProtoVersion GetProtoVersion (
+      const proto::ChannelMetadata& meta) const override;
+
 };
 
 /**

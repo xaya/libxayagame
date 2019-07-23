@@ -55,9 +55,10 @@ private:
 
 public:
 
-  explicit AdditionState (const uint256& id, const proto::ChannelMetadata& m,
+  explicit AdditionState (const BoardRules& r, const uint256& id,
+                          const proto::ChannelMetadata& m,
                           const ParsedState& d)
-    : ParsedBoardState(id, m), data(d)
+    : ParsedBoardState(r, id, m), data(d)
   {}
 
   AdditionState () = delete;
@@ -149,7 +150,13 @@ AdditionRules::ParseState (const uint256& channelId,
   if (!ParsePair (state, p))
     return nullptr;
 
-  return std::make_unique<AdditionState> (channelId, meta, p);
+  return std::make_unique<AdditionState> (*this, channelId, meta, p);
+}
+
+ChannelProtoVersion
+AdditionRules::GetProtoVersion (const proto::ChannelMetadata& meta) const
+{
+  return ChannelProtoVersion::ORIGINAL;
 }
 
 Json::Value

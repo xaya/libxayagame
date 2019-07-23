@@ -42,7 +42,8 @@ protected:
    * if they need custom comparison criteria.
    *
    * Note that other may be an arbitrary proto message, it is not guaranteed
-   * to be "valid" (as per IsValid).
+   * to be "valid" (as per IsValid).  It is guaranteed to not have any
+   * unknown fields set.
    */
   virtual bool EqualsProto (const State& other) const;
 
@@ -50,6 +51,10 @@ protected:
    * Applies the given move to compute the resulting new state.  Both move
    * and newState are protocol buffers for this method.  This must be
    * implemented by subclasses instead of ApplyMove.
+   *
+   * The move proto is guaranteed to not have unknown fields set (otherwise
+   * it is already considered invalid before).  Any more potential
+   * versioning checks need to be done by this function.
    */
   virtual bool ApplyMoveProto (XayaRpcClient& rpc, const Move& mv,
                                State& newState) const = 0;
@@ -67,7 +72,7 @@ public:
    * the provided state proto.  This is mostly intended to be called from
    * ProtoBoardRules.
    */
-  explicit ProtoBoardState (const uint256& channelId,
+  explicit ProtoBoardState (const BoardRules& r, const uint256& channelId,
                             const proto::ChannelMetadata& m, State&& s);
 
   ProtoBoardState () = delete;
@@ -88,6 +93,10 @@ public:
    * valid board state.  By default, this function just returns true.  It can
    * be overwritten by subclasses if they need to perform more consistency
    * checks.
+   *
+   * The parsed proto is already guaranteed to not contain any unknown fields.
+   * Any more game-specific versioning checks must be done by this function
+   * itself, though.
    */
   virtual bool IsValid () const;
 

@@ -7,6 +7,7 @@
 #include "coord.hpp"
 #include "grid.hpp"
 
+#include <gamechannel/protoversion.hpp>
 #include <gamechannel/signatures.hpp>
 #include <xayautil/hash.hpp>
 #include <xayautil/random.hpp>
@@ -686,6 +687,7 @@ ShipsBoardState::ApplyPositionReveal (const proto::PositionRevealMove& mv,
 
 bool
 ShipsBoardState::ApplyWinnerStatement (const proto::WinnerStatementMove& mv,
+                                       const xaya::BoardRules& rules,
                                        XayaRpcClient& rpc,
                                        const xaya::uint256& channelId,
                                        const xaya::proto::ChannelMetadata& meta,
@@ -707,7 +709,7 @@ ShipsBoardState::ApplyWinnerStatement (const proto::WinnerStatementMove& mv,
     }
 
   proto::WinnerStatement stmt;
-  if (!VerifySignedWinnerStatement (rpc, channelId, meta,
+  if (!VerifySignedWinnerStatement (rules, rpc, channelId, meta,
                                     mv.statement (), stmt))
     return false;
 
@@ -756,7 +758,8 @@ ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
 
     case proto::BoardMove::kWinnerStatement:
       return ApplyWinnerStatement (mv.winner_statement (),
-                                   rpc, GetChannelId (), GetMetadata (),
+                                   GetBoardRules (), rpc,
+                                   GetChannelId (), GetMetadata (),
                                    phase, newState);
 
     default:
@@ -769,6 +772,12 @@ ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
   return false;
 }
 
+xaya::ChannelProtoVersion
+ShipsBoardRules::GetProtoVersion (const xaya::proto::ChannelMetadata& m) const
+{
+  return xaya::ChannelProtoVersion::ORIGINAL;
+}
+
 proto::BoardState
 InitialBoardState ()
 {
@@ -778,17 +787,33 @@ InitialBoardState ()
 }
 
 bool
-VerifySignedWinnerStatement (XayaRpcClient& rpc,
+VerifySignedWinnerStatement (const xaya::BoardRules& rules, XayaRpcClient& rpc,
                              const xaya::uint256& channelId,
                              const xaya::proto::ChannelMetadata& meta,
                              const xaya::proto::SignedData& data,
                              proto::WinnerStatement& stmt)
 {
+  if (!xaya::CheckVersionedProto (rules, meta, data))
+    {
+      LOG (WARNING)
+          << "Signed winner statement has invalid versioning:\n"
+          << data.DebugString ();
+      return false;
+    }
+
   if (!stmt.ParseFromString (data.data ()))
     {
       LOG (WARNING) << "Failed to parse WinnerStatement proto";
       return false;
     }
+  if (xaya::HasAnyUnknownFields (stmt))
+    {
+      LOG (WARNING)
+          << "Embedded winner statement has unknown fields:\n"
+          << stmt.DebugString ();
+      return false;
+    }
+
   if (!stmt.has_winner ())
     {
       LOG (WARNING) << "WinnerStatement does not specify a winner";

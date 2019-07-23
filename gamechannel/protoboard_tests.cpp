@@ -6,10 +6,11 @@
 
 #include "boardrules.hpp"
 #include "proto/metadata.pb.h"
-#include "proto/protoboardtest.pb.h"
+#include "proto/testprotos.pb.h"
 
 #include <xayautil/hash.hpp>
 
+#include <google/protobuf/message.h>
 #include <google/protobuf/text_format.h>
 
 #include <gtest/gtest.h>
@@ -51,6 +52,15 @@ TextMove (const std::string& str)
   CHECK (pb.SerializeToString (&res));
 
   return res;
+}
+
+/**
+ * Sets an unknown field on the given proto.
+ */
+void
+AddUnknownField (google::protobuf::Message& msg)
+{
+  msg.GetReflection ()->MutableUnknownFields (&msg)->AddVarint (123456, 42);
 }
 
 using SuperState = ProtoBoardState<proto::TestBoardState, proto::TestBoardMove>;
@@ -109,7 +119,18 @@ public:
 
 };
 
-using TestRules = ProtoBoardRules<TestState>;
+class TestRules : public ProtoBoardRules<TestState>
+{
+
+public:
+
+  ChannelProtoVersion
+  GetProtoVersion (const proto::ChannelMetadata& meta) const override
+  {
+    return ChannelProtoVersion::ORIGINAL;
+  }
+
+};
 
 class ProtoBoardTests : public testing::Test
 {
@@ -202,6 +223,34 @@ TEST_F (ProtoBoardTests, ApplyMove)
   proto::TestBoardState newPb;
   ASSERT_TRUE (newPb.ParseFromString (newState));
   EXPECT_EQ (newPb.msg (), "bar");
+}
+
+TEST_F (ProtoBoardTests, UnknownFields)
+{
+  auto p = ParseState (TextState ("msg: \"foo\""));
+
+  proto::TestBoardState pbState;
+  CHECK (TextFormat::ParseFromString ("msg: \"foo\"", &pbState));
+  proto::TestBoardMove pbMove;
+  CHECK (TextFormat::ParseFromString ("msg: \"bar\"", &pbMove));
+
+  std::string serialised;
+  CHECK (pbState.SerializeToString (&serialised));
+  EXPECT_TRUE (p->Equals (serialised));
+  EXPECT_NE (ParseState (serialised), nullptr);
+
+  AddUnknownField (pbState);
+  CHECK (pbState.SerializeToString (&serialised));
+  EXPECT_FALSE (p->Equals (serialised));
+  EXPECT_EQ (ParseState (serialised), nullptr);
+
+  BoardState newState;
+  CHECK (pbMove.SerializeToString (&serialised));
+  EXPECT_TRUE (p->ApplyMove (rpc, serialised, newState));
+
+  AddUnknownField (pbMove);
+  CHECK (pbMove.SerializeToString (&serialised));
+  EXPECT_FALSE (p->ApplyMove (rpc, serialised, newState));
 }
 
 } // anonymous namespace

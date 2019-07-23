@@ -6,6 +6,7 @@
 #define GAMECHANNEL_BOARDRULES_HPP
 
 #include "proto/metadata.pb.h"
+#include "protoversion.hpp"
 
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayautil/uint256.hpp>
@@ -17,6 +18,8 @@
 
 namespace xaya
 {
+
+class BoardRules;
 
 /**
  * The state of the current game board, encoded in a game-specific format.
@@ -42,6 +45,9 @@ class ParsedBoardState
 
 private:
 
+  /** A reference to the associated BoardRules instance.  */
+  const BoardRules& rules;
+
   /**
    * A reference to the channel ID.  This is stored in the constructor and
    * can be accessed by subclasses.
@@ -59,8 +65,9 @@ private:
 
 protected:
 
-  explicit ParsedBoardState (const uint256& id, const proto::ChannelMetadata& m)
-    : channelId(id), meta(m)
+  explicit ParsedBoardState (const BoardRules& r,
+                             const uint256& id, const proto::ChannelMetadata& m)
+    : rules(r), channelId(id), meta(m)
   {}
 
 public:
@@ -73,6 +80,15 @@ public:
   static constexpr int NO_TURN = -1;
 
   virtual ~ParsedBoardState () = default;
+
+  /**
+   * Returns the associated BoardRules instance.
+   */
+  const BoardRules&
+  GetBoardRules () const
+  {
+    return rules;
+  }
 
   /**
    * Returns the channel ID.
@@ -173,6 +189,13 @@ public:
   virtual std::unique_ptr<ParsedBoardState> ParseState (
       const uint256& channelId, const proto::ChannelMetadata& meta,
       const BoardState& s) const = 0;
+
+  /**
+   * Returns the version to apply for StateProof protos when a channel has
+   * the given metadata.
+   */
+  virtual ChannelProtoVersion GetProtoVersion (
+      const proto::ChannelMetadata& meta) const = 0;
 
 };
 

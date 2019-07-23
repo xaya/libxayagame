@@ -1489,6 +1489,17 @@ protected:
     proto::WinnerStatement stmt;
     CHECK (TextFormat::ParseFromString (stmtStr, &stmt));
 
+    return SignedWinnerStatement (stmt, signatures);
+  }
+
+  /**
+   * Returns a SignedData proto holding a given winner-statement
+   * with the given signatures.
+   */
+  static xaya::proto::SignedData
+  SignedWinnerStatement (const proto::WinnerStatement& stmt,
+                         const std::vector<std::string>& signatures = {})
+  {
     xaya::proto::SignedData res;
     CHECK (stmt.SerializeToString (res.mutable_data ()));
 
@@ -1515,15 +1526,31 @@ protected:
 
 };
 
-using VerifySignedWinnerStatementTests = WinnerStatementTests;
+class VerifySignedWinnerStatementTests : public WinnerStatementTests
+{
+
+protected:
+
+  /**
+   * Utility method to call VerifySignedWinnerStatement with all the arguments
+   * passed in from the test fixture.
+   */
+  bool
+  Verify (const xaya::proto::SignedData& data, proto::WinnerStatement& stmt)
+  {
+    return VerifySignedWinnerStatement (rules, rpcClient, channelId, meta,
+                                        data, stmt);
+  }
+
+};
+
 
 TEST_F (VerifySignedWinnerStatementTests, MissingData)
 {
   const auto data = SignedWinnerStatement ("");
 
   proto::WinnerStatement stmt;
-  EXPECT_FALSE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
-                                             data, stmt));
+  EXPECT_FALSE (Verify (data, stmt));
 }
 
 TEST_F (VerifySignedWinnerStatementTests, MalformedData)
@@ -1532,8 +1559,7 @@ TEST_F (VerifySignedWinnerStatementTests, MalformedData)
   data.set_data ("invalid proto");
 
   proto::WinnerStatement stmt;
-  EXPECT_FALSE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
-                                             data, stmt));
+  EXPECT_FALSE (Verify (data, stmt));
 }
 
 TEST_F (VerifySignedWinnerStatementTests, NoWinnerGiven)
@@ -1541,8 +1567,7 @@ TEST_F (VerifySignedWinnerStatementTests, NoWinnerGiven)
   const auto data = SignedWinnerStatement ("");
 
   proto::WinnerStatement stmt;
-  EXPECT_FALSE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
-                                             data, stmt));
+  EXPECT_FALSE (Verify (data, stmt));
 }
 
 TEST_F (VerifySignedWinnerStatementTests, InvalidWinnerGiven)
@@ -1550,8 +1575,31 @@ TEST_F (VerifySignedWinnerStatementTests, InvalidWinnerGiven)
   const auto data = SignedWinnerStatement ("winner: 2");
 
   proto::WinnerStatement stmt;
-  EXPECT_FALSE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
-                                             data, stmt));
+  EXPECT_FALSE (Verify (data, stmt));
+}
+
+TEST_F (VerifySignedWinnerStatementTests, OuterInvalidVersion)
+{
+  auto data = SignedWinnerStatement (R"(
+    winner: 1
+  )", {"sgn 0"});
+  data.set_for_testing_version ("foo");
+
+  proto::WinnerStatement stmt;
+  EXPECT_FALSE (Verify (data, stmt));
+}
+
+TEST_F (VerifySignedWinnerStatementTests, InnerUnknownField)
+{
+  proto::WinnerStatement originalStmt;
+  originalStmt.set_winner (1);
+  originalStmt.GetReflection ()
+      ->MutableUnknownFields (&originalStmt)->AddVarint (13456, 42);
+
+  const auto data = SignedWinnerStatement (originalStmt, {"sgn 0"});
+
+  proto::WinnerStatement stmt;
+  EXPECT_FALSE (Verify (data, stmt));
 }
 
 TEST_F (VerifySignedWinnerStatementTests, InvalidSignature)
@@ -1560,8 +1608,7 @@ TEST_F (VerifySignedWinnerStatementTests, InvalidSignature)
   ExpectSignature (data.data (), "sgn 0",  "addr 0");
 
   proto::WinnerStatement stmt;
-  EXPECT_FALSE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
-                                             data, stmt));
+  EXPECT_FALSE (Verify (data, stmt));
 }
 
 TEST_F (VerifySignedWinnerStatementTests, Valid)
@@ -1570,8 +1617,7 @@ TEST_F (VerifySignedWinnerStatementTests, Valid)
   ExpectSignature (data.data (), "sgn 0",  "addr 0");
 
   proto::WinnerStatement stmt;
-  ASSERT_TRUE (VerifySignedWinnerStatement (rpcClient, channelId, meta,
-                                            data, stmt));
+  ASSERT_TRUE (Verify (data, stmt));
   EXPECT_EQ (stmt.winner (), 1);
 }
 
