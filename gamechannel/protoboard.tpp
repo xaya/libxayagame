@@ -4,6 +4,8 @@
 
 /* Template implementation code for protoboard.hpp.  */
 
+#include "protoversion.hpp"
+
 #include <google/protobuf/util/message_differencer.h>
 
 #include <glog/logging.h>
@@ -46,6 +48,12 @@ template <typename State, typename Move>
       LOG (WARNING) << "Other BoardState failed to parse, returning not equal";
       return false;
     }
+  if (HasAnyUnknownFields (po))
+    {
+      LOG (WARNING)
+          << "Other BoardState has unknown fields:\n" << po.DebugString ();
+      return false;
+    }
 
   return EqualsProto (po);
 }
@@ -60,6 +68,11 @@ template <typename State, typename Move>
   if (!pm.ParseFromString (mv))
     {
       LOG (WARNING) << "Failed to parse BoardMove into protocol buffer";
+      return false;
+    }
+  if (HasAnyUnknownFields (pm))
+    {
+      LOG (WARNING) << "Parsed move has unknown fields:\n" << pm.DebugString ();
       return false;
     }
 
@@ -81,6 +94,13 @@ template <typename StateClass>
   if (!p.ParseFromString (s))
     {
       LOG (WARNING) << "Failed to parse BoardState into protocol buffer";
+      return nullptr;
+    }
+  if (HasAnyUnknownFields (p))
+    {
+      LOG (WARNING)
+          << "Parsed BoardState proto has unknown fields:\n"
+          << p.DebugString ();
       return nullptr;
     }
 
