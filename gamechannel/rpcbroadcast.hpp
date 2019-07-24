@@ -15,6 +15,13 @@
 #include <string>
 #include <vector>
 
+/* It seems that Windows systems define SendMessage as a macro, which will
+   clash with our usage as member function.  The corresponding header is
+   included by libjson-rpc-cpp (thus this is not an issue with the general
+   broadcast interface).  It is obviously a bit of a hack to just #undef the
+   macro here, but it works and is for now the simplest solution.  */
+#undef SendMessage
+
 namespace xaya
 {
 
