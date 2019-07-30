@@ -105,7 +105,13 @@ main (int argc, char** argv)
 
   std::unique_ptr<jsonrpc::AbstractServerConnector> serverConnector;
   if (FLAGS_rpc_port != 0)
-    serverConnector = std::make_unique<jsonrpc::HttpServer> (FLAGS_rpc_port);
+    {
+      auto srv = std::make_unique<jsonrpc::HttpServer> (FLAGS_rpc_port);
+      if (FLAGS_rpc_listen_locally)
+        srv->BindLocalhost ();
+      serverConnector = std::move (srv);
+      LOG (INFO) << "Starting JSON-RPC HTTP server at port " << FLAGS_rpc_port;
+    }
 
   std::unique_ptr<ships::ShipsChannelRpcServer> rpcServer;
   if (serverConnector != nullptr)
