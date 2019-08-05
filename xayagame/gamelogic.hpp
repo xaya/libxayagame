@@ -40,6 +40,74 @@ enum class Chain
 std::string ChainToString (Chain c);
 
 /**
+ * Generic class for a processor game state, which mainly holds some contextual
+ * information (like the chain and game ID).  This is used as a common
+ * superclass for the block update logic (GameLogic) and the logic
+ * for processing pending moves (PendingMoveProcessor).
+ */
+class GameProcessorWithContext
+{
+
+private:
+
+  /**
+   * The chain that the game is running on.  This may influence the rules
+   * and is provided via the Context.
+   */
+  Chain chain = Chain::UNKNOWN;
+
+  /**
+   * The game id of the connected game.  This is used to seed the random
+   * number generator.
+   */
+  std::string gameId;
+
+  /**
+   * Xaya Core RPC connection, if it has been initialised already from the
+   * Game instance.
+   */
+  XayaRpcClient* rpcClient = nullptr;
+
+protected:
+
+  GameProcessorWithContext () = default;
+
+  /**
+   * Returns the chain the game is running on.
+   */
+  Chain GetChain () const;
+
+  /**
+   * Returns the current game ID.
+   */
+  const std::string& GetGameId () const;
+
+  /**
+   * Returns the configured RPC connection to Xaya Core.  Must only be called
+   * after InitialiseGameContext was invoked with a non-null RPC client.
+   */
+  XayaRpcClient& GetXayaRpc ();
+
+public:
+
+  virtual ~GameProcessorWithContext () = default;
+
+  /**
+   * Initialises the instance with some data that is obtained by a Game
+   * instance after the RPC connection to Xaya Core is up.
+   *
+   * The RPC client instance may be null, but then certain features
+   * (depending on GetXayaRpc) will be disabled.
+   *
+   * This must only be called once.  It is typically done by the Game
+   * instance, but may also be used for testing.
+   */
+  void InitialiseGameContext (Chain c, const std::string& id,
+                              XayaRpcClient* rpc);
+
+};
+
+/**
  * Context for a call to the callbacks of the GameLogic class.  This is
  * provided by GameLogic itself so that the implementing subclasses can
  * access certain additional information.
@@ -116,30 +184,12 @@ public:
  * and the libxayagame-stored data, and allows atomic transactions spanning
  * both of them.
  */
-class GameLogic
+class GameLogic : public GameProcessorWithContext
 {
 
 private:
 
   class ContextSetter;
-
-  /**
-   * The chain that the game is running on.  This may influence the rules
-   * and is provided via the Context.
-   */
-  Chain chain = Chain::UNKNOWN;
-
-  /**
-   * The game id of the connected game.  This is used to seed the random
-   * number generator.
-   */
-  std::string gameId;
-
-  /**
-   * Xaya Core RPC connection, if it has been initialised already from the
-   * Game instance.
-   */
-  XayaRpcClient* rpcClient = nullptr;
 
   /** Current Context instance if any.  */
   Context* ctx = nullptr;
@@ -147,11 +197,6 @@ private:
   friend class Context;
 
 protected:
-
-  /**
-   * Returns the chain the game is running on.
-   */
-  Chain GetChain () const;
 
   /**
    * Returns the current Context instance.  This function must only be
@@ -164,12 +209,6 @@ protected:
    * some callback functions are marked as const.
    */
   const Context& GetContext () const;
-
-  /**
-   * Returns the configured RPC connection to Xaya Core.  Must only be called
-   * after InitialiseGameContext was invoked with a non-null RPC client.
-   */
-  XayaRpcClient& GetXayaRpc ();
 
   /**
    * Returns the initial state (as well as the associated block height
@@ -206,20 +245,6 @@ protected:
 public:
 
   GameLogic () = default;
-  virtual ~GameLogic () = default;
-
-  /**
-   * Initialises the instance with some data that is obtained by a Game
-   * instance after the RPC connection to Xaya Core is up.
-   *
-   * The RPC client instance may be null, but then certain features
-   * (depending on GetXayaRpc) will be disabled.
-   *
-   * This must only be called once.  It is typically done by the Game
-   * instance, but may also be used for testing.
-   */
-  void InitialiseGameContext (Chain c, const std::string& id,
-                              XayaRpcClient* rpc);
 
   /**
    * Returns the initial state for the game.  This is the function that is

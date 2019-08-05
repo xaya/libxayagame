@@ -42,15 +42,55 @@ Context::Context (const GameLogic& l, const uint256& rndSeed)
 Chain
 Context::GetChain () const
 {
-  CHECK (logic.chain != Chain::UNKNOWN);
-  return logic.chain;
+  return logic.GetChain ();
 }
 
 const std::string&
 Context::GetGameId () const
 {
-  CHECK (!logic.gameId.empty ());
-  return logic.gameId;
+  return logic.GetGameId ();
+}
+
+/* ************************************************************************** */
+
+Chain
+GameProcessorWithContext::GetChain () const
+{
+  CHECK (chain != Chain::UNKNOWN);
+  return chain;
+}
+
+const std::string&
+GameProcessorWithContext::GetGameId () const
+{
+  CHECK (chain != Chain::UNKNOWN);
+  return gameId;
+}
+
+XayaRpcClient&
+GameProcessorWithContext::GetXayaRpc ()
+{
+  CHECK (rpcClient != nullptr);
+  return *rpcClient;
+}
+
+void
+GameProcessorWithContext::InitialiseGameContext (const Chain c,
+                                                 const std::string& id,
+                                                 XayaRpcClient* rpc)
+{
+  CHECK (c != Chain::UNKNOWN);
+  CHECK (!id.empty ());
+
+  CHECK (chain == Chain::UNKNOWN) << "Game context is already initialised";
+  chain = c;
+  gameId = id;
+  rpcClient = rpc;
+
+  if (rpcClient == nullptr)
+    LOG (WARNING)
+        << "Game context has been initialised without an RPC connection;"
+           " some features will be missing";
 }
 
 /* ************************************************************************** */
@@ -96,31 +136,6 @@ public:
 
 };
 
-void
-GameLogic::InitialiseGameContext (const Chain c, const std::string& id,
-                                  XayaRpcClient* rpc)
-{
-  CHECK (c != Chain::UNKNOWN);
-  CHECK (!id.empty ());
-
-  CHECK (chain == Chain::UNKNOWN) << "GameLogic is already initialised";
-  chain = c;
-  gameId = id;
-  rpcClient = rpc;
-
-  if (rpcClient == nullptr)
-    LOG (WARNING)
-        << "GameLogic has been initialised without an RPC connection;"
-           " some features will be missing";
-}
-
-Chain
-GameLogic::GetChain () const
-{
-  CHECK (chain != Chain::UNKNOWN);
-  return chain;
-}
-
 Context&
 GameLogic::GetContext ()
 {
@@ -135,20 +150,11 @@ GameLogic::GetContext () const
   return *ctx;
 }
 
-XayaRpcClient&
-GameLogic::GetXayaRpc ()
-{
-  CHECK (rpcClient != nullptr);
-  return *rpcClient;
-}
-
 GameStateData
 GameLogic::GetInitialState (unsigned& height, std::string& hashHex)
 {
-  CHECK (!gameId.empty ());
-
   SHA256 rndSeed;
-  rndSeed << "initial state" << gameId;
+  rndSeed << "initial state" << GetGameId ();
 
   Context context(*this, rndSeed.Finalise ());
   ContextSetter setter(*this, context);
@@ -188,7 +194,7 @@ GameLogic::ProcessForward (const GameStateData& oldState,
                            const Json::Value& blockData,
                            UndoData& undoData)
 {
-  Context context(*this, BlockRngSeed (gameId, blockData));
+  Context context(*this, BlockRngSeed (GetGameId (), blockData));
   ContextSetter setter(*this, context);
 
   return ProcessForwardInternal (oldState, blockData, undoData);
@@ -199,7 +205,7 @@ GameLogic::ProcessBackwards (const GameStateData& newState,
                              const Json::Value& blockData,
                              const UndoData& undoData)
 {
-  Context context(*this, BlockRngSeed (gameId, blockData));
+  Context context(*this, BlockRngSeed (GetGameId (), blockData));
   ContextSetter setter(*this, context);
 
   return ProcessBackwardsInternal (newState, blockData, undoData);
