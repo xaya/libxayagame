@@ -123,7 +123,7 @@ protected:
     zmq.shouldStop = true;
 
     threadToWaitFor.join ();
-    zmq.socket.reset ();
+    zmq.sockets.clear ();
   }
 
 };

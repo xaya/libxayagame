@@ -17,6 +17,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 namespace xaya
 {
@@ -66,8 +67,13 @@ private:
   std::string addr;
   /** The ZMQ context that is used by the this instance.  */
   zmq::context_t ctx;
-  /** The ZMQ socket used to subscribe to the Xaya daemon, if connected.  */
-  std::unique_ptr<zmq::socket_t> socket;
+  /**
+   * The ZMQ sockets used to subscribe to the Xaya daemon, if connected.
+   * If we have multiple addresses we listen to (e.g. different ones for
+   * blocks and pending moves), then this contains multiple sockets that
+   * are read in a multiplexed fashion using zmq::poll.
+   */
+  std::vector<std::unique_ptr<zmq::socket_t>> sockets;
 
   /** Game IDs and associated listeners.  */
   std::unordered_multimap<std::string, ZmqListener*> listeners;
