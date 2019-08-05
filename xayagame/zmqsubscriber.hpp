@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,8 +12,8 @@
 
 #include <json/json.h>
 
+#include <atomic>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -79,9 +79,7 @@ private:
   std::unique_ptr<std::thread> worker;
 
   /** Signals the listener to stop.  */
-  bool shouldStop;
-  /** Mutex guarding shouldStop.  */
-  std::mutex mut;
+  std::atomic<bool> shouldStop;
 
   /**
    * Special flag for testing:  If true, then the listening thread stops

@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,7 +10,6 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
-#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -121,10 +120,7 @@ protected:
   static void
   StopWithCustomThread (ZmqSubscriber& zmq, std::thread& threadToWaitFor)
   {
-    {
-      std::lock_guard<std::mutex> lock(zmq.mut);
-      zmq.shouldStop = true;
-    }
+    zmq.shouldStop = true;
 
     threadToWaitFor.join ();
     zmq.socket.reset ();

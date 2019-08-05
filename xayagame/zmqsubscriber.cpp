@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -49,7 +49,6 @@ ZmqSubscriber::ReceiveMultiparts (std::string& topic, std::string& payload,
               gotMessage = socket->recv (&msg);
 
               /* Check if a shutdown is requested.  */
-              std::lock_guard<std::mutex> lock(mut);
               if (shouldStop)
                 return false;
             }
@@ -205,8 +204,8 @@ ZmqSubscriber::Start ()
         const std::string topic = cmd + " json " + entry.first;
         socket->setsockopt (ZMQ_SUBSCRIBE, topic.data (), topic.size ());
       }
-  const int timeout = 100;
-  socket->setsockopt (ZMQ_RCVTIMEO, &timeout, sizeof (timeout));
+  constexpr int TIMEOUT_MS = 100;
+  socket->setsockopt (ZMQ_RCVTIMEO, &TIMEOUT_MS, sizeof (TIMEOUT_MS));
   socket->connect (addr.c_str ());
 
   /* Reset last-seen sequence numbers for a fresh start.  */
@@ -222,10 +221,7 @@ ZmqSubscriber::Stop ()
   CHECK (IsRunning ());
   LOG (INFO) << "Stopping ZMQ subscriber at address " << addr;
 
-  {
-    std::lock_guard<std::mutex> lock(mut);
-    shouldStop = true;
-  }
+  shouldStop = true;
 
   worker->join ();
   worker.reset ();
