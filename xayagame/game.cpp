@@ -4,6 +4,9 @@
 
 #include "game.hpp"
 
+#include <jsonrpccpp/common/errors.h>
+#include <jsonrpccpp/common/exception.h>
+
 #include <glog/logging.h>
 
 #include <chrono>
@@ -561,6 +564,34 @@ Game::GetCurrentJsonState () const
         {
           return rules->GameStateToJson (state);
         });
+}
+
+Json::Value
+Game::GetPendingJsonState () const
+{
+  std::unique_lock<std::mutex> lock(mut);
+
+  if (!zmq.IsPendingEnabled ())
+    throw jsonrpc::JsonRpcException (jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR,
+                                     "pending moves are not tracked");
+  CHECK (pending != nullptr);
+
+  Json::Value res(Json::objectValue);
+  res["gameid"] = gameId;
+  res["chain"] = ChainToString (chain);
+  res["state"] = StateToString (state);
+
+  uint256 hash;
+  unsigned height;
+  if (storage->GetCurrentBlockHashWithHeight (hash, height))
+    {
+      res["blockhash"] = hash.ToHex ();
+      res["height"] = height;
+    }
+
+  res["pending"] = pending->ToJson ();
+
+  return res;
 }
 
 void

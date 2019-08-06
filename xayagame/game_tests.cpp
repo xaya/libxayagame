@@ -14,6 +14,7 @@
 #include <xayautil/uint256.hpp>
 
 #include <json/json.h>
+#include <jsonrpccpp/common/exception.h>
 #include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
@@ -741,6 +742,90 @@ TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
   EXPECT_EQ (state["blockhash"], GAME_GENESIS_HASH);
   EXPECT_EQ (state["height"].asInt (), 42);
   EXPECT_EQ (state["gamestate"]["state"], "");
+}
+
+/* ************************************************************************** */
+
+class GetPendingJsonState : public InitialStateTests
+{
+
+protected:
+
+  GetPendingJsonState ()
+  {
+    EXPECT_CALL (mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
+  }
+
+  /**
+   * Sets up the ZMQ endpoints (by mocking getzmqnotifications in the RPC
+   * server and detecting them).  This can either make the server expose
+   * a notification for pending moves or not.
+   */
+  void
+  SetupZmqEndpoints (const bool withPending)
+  {
+    Json::Value notifications = ParseJson (R"(
+      [
+        {"type": "pubgameblocks", "address": "tcp://127.0.0.1:32101"}
+      ]
+    )");
+
+    if (withPending)
+      notifications.append (ParseJson (R"(
+        {"type": "pubgamepending", "address": "tcp://127.0.0.1:32102"}
+      )"));
+
+    EXPECT_CALL (mockXayaServer, getzmqnotifications ())
+        .WillOnce (Return (notifications));
+    CHECK (g.DetectZmqEndpoint ());
+  }
+
+};
+
+TEST_F (GetPendingJsonState, NoAttachedProcessor)
+{
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  EXPECT_THROW (g.GetPendingJsonState (), jsonrpc::JsonRpcException);
+}
+
+TEST_F (GetPendingJsonState, PendingNotificationDisabled)
+{
+  TestPendingMoves proc;
+  g.SetPendingMoveProcessor (proc);
+
+  SetupZmqEndpoints (false);
+  g.Start ();
+
+  EXPECT_THROW (g.GetPendingJsonState (), jsonrpc::JsonRpcException);
+}
+
+TEST_F (GetPendingJsonState, PendingState)
+{
+  TestPendingMoves proc;
+  g.SetPendingMoveProcessor (proc);
+
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
+                               TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+
+  CallPendingMove (g, Moves ("ax")[0]);
+
+  const auto state = g.GetPendingJsonState ();
+  EXPECT_EQ (state["gameid"], GAME_ID);
+  EXPECT_EQ (state["chain"], "main");
+  EXPECT_EQ (state["state"], "up-to-date");
+  EXPECT_EQ (state["blockhash"], GAME_GENESIS_HASH);
+  EXPECT_EQ (state["pending"], ParseJson (R"(
+    {
+      "state": "",
+      "a": "x"
+    }
+  )"));
 }
 
 /* ************************************************************************** */

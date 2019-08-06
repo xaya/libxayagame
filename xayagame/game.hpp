@@ -340,6 +340,15 @@ public:
   Json::Value GetCurrentJsonState () const;
 
   /**
+   * Returns a JSON object that contains data about the current state
+   * of pending moves as JSON.
+   *
+   * If no PendingMoveProcessor is attached or if pending moves are disabled
+   * in the Xaya Core notifications, then this raises a JSON-RPC error.
+   */
+  Json::Value GetPendingJsonState () const;
+
+  /**
    * Blocks the calling thread until a change to the game state has
    * (potentially) been made.  This can be used to implement long-polling
    * RPC methods, e.g. for front-ends.  Note that this function may return

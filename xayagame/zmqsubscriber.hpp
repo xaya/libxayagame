@@ -158,6 +158,15 @@ public:
   }
 
   /**
+   * Returns true if notifications for pending moves are enabled.
+   */
+  bool
+  IsPendingEnabled () const
+  {
+    return !addrPending.empty ();
+  }
+
+  /**
    * Starts the ZMQ subscriber in a new thread.  Must only be called after
    * the ZMQ endpoint has been configured, and must not be called when
    * ZMQ is already running.
