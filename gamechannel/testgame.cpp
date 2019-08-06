@@ -249,7 +249,7 @@ TestGameFixture::TestGameFixture ()
 {
   game.Initialise (":memory:");
   game.InitialiseGameContext (Chain::MAIN, "add", &rpcClient);
-  game.GetStorage ()->Initialise ();
+  game.GetStorage ().Initialise ();
   /* The initialisation above already sets up the database schema.  */
 
   mockXayaServer.StartListening ();

@@ -294,9 +294,9 @@ InitialiseState (Game& game, SQLiteGame& rules)
   uint256 hash;
   ASSERT_TRUE (hash.FromHex (hashHex));
 
-  rules.GetStorage ()->BeginTransaction ();
-  rules.GetStorage ()->SetCurrentGameState (hash, state);
-  rules.GetStorage ()->CommitTransaction ();
+  rules.GetStorage ().BeginTransaction ();
+  rules.GetStorage ().SetCurrentGameState (hash, state);
+  rules.GetStorage ().CommitTransaction ();
 }
 
 template <typename G>
@@ -318,7 +318,7 @@ protected:
     SetStartingBlock (GenesisHash ());
 
     game.SetStorage (rules.GetStorage ());
-    game.SetGameLogic (&rules);
+    game.SetGameLogic (rules);
 
     InitialiseState (game, rules);
 
@@ -335,7 +335,7 @@ protected:
   void
   ExpectState (const typename G::State& s)
   {
-    const GameStateData state = rules.GetStorage ()->GetCurrentGameState ();
+    const GameStateData state = rules.GetStorage ().GetCurrentGameState ();
     rules.ExpectState (state, s);
   }
 
@@ -401,9 +401,9 @@ TEST_F (GameStateStringTests, BlockHash)
 
 TEST_F (GameStateStringTests, InitialWrongHash)
 {
-  rules.GetStorage ()->BeginTransaction ();
-  rules.GetStorage ()->SetCurrentGameState (BlockHash (42), "");
-  rules.GetStorage ()->CommitTransaction ();
+  rules.GetStorage ().BeginTransaction ();
+  rules.GetStorage ().SetCurrentGameState (BlockHash (42), "");
+  rules.GetStorage ().CommitTransaction ();
   EXPECT_DEATH (
       rules.GameStateToJson ("initial"),
       "does not match the game's initial block");
@@ -543,13 +543,13 @@ protected:
     rules->InitialiseGameContext (Chain::MAIN, GAME_ID, nullptr);
 
     game.SetStorage (rules->GetStorage ());
-    game.SetGameLogic (rules.get ());
+    game.SetGameLogic (*rules);
   }
 
   void
   ExpectState (const ChatGame::State& s)
   {
-    const GameStateData state = rules->GetStorage ()->GetCurrentGameState ();
+    const GameStateData state = rules->GetStorage ().GetCurrentGameState ();
     rules->ExpectState (state, s);
   }
 

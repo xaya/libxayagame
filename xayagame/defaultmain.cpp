@@ -161,9 +161,9 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
 
       std::unique_ptr<StorageInterface> storage
           = CreateStorage (config, gameId, game->GetChain ());
-      game->SetStorage (storage.get ());
+      game->SetStorage (*storage);
 
-      game->SetGameLogic (&rules);
+      game->SetGameLogic (rules);
 
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);
@@ -231,7 +231,7 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
       rules.Initialise (dbFile.string ());
       game->SetStorage (rules.GetStorage ());
 
-      game->SetGameLogic (&rules);
+      game->SetGameLogic (rules);
 
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);

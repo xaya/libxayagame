@@ -481,8 +481,8 @@ protected:
     mockXayaServer.SetBestBlock (0, BlockHash (0));
     g.ConnectRpcClient (httpClient);
 
-    g.SetStorage (&storage);
-    g.SetGameLogic (&rules);
+    g.SetStorage (storage);
+    g.SetGameLogic (rules);
   }
 
   void
@@ -655,8 +655,8 @@ TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
   Game freshGame(GAME_ID);
   TestGame freshRules;
   freshGame.ConnectRpcClient (httpClient);
-  freshGame.SetStorage (&storage);
-  freshGame.SetGameLogic (&freshRules);
+  freshGame.SetStorage (storage);
+  freshGame.SetGameLogic (freshRules);
   ReinitialiseState (freshGame);
 
   const Json::Value state = freshGame.GetCurrentJsonState ();
@@ -1263,7 +1263,7 @@ protected:
   GameLogicTransactionsTests ()
   {
     LOG (INFO) << "Changing game to fallible storage";
-    g.SetStorage (&fallibleStorage);
+    g.SetStorage (fallibleStorage);
 
     ReinitialiseState (g);
     EXPECT_EQ (GetState (g), State::UP_TO_DATE);
@@ -1417,7 +1417,7 @@ protected:
   GameStorageRetryTests ()
   {
     LOG (INFO) << "Changing game to retry storage";
-    g.SetStorage (&retryStorage);
+    g.SetStorage (retryStorage);
 
     ReinitialiseState (g);
     EXPECT_EQ (GetState (g), State::UP_TO_DATE);

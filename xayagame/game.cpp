@@ -392,13 +392,13 @@ GetHeightForBlockHash (XayaRpcClient& rpc, const uint256& hash)
 } // anonymous namespace
 
 void
-Game::SetStorage (StorageInterface* s)
+Game::SetStorage (StorageInterface& s)
 {
   std::lock_guard<std::mutex> lock(mut);
   CHECK (!mainLoop.IsRunning ());
   CHECK (pruningQueue == nullptr);
 
-  storage = std::make_unique<internal::StorageWithCachedHeight> (*s,
+  storage = std::make_unique<internal::StorageWithCachedHeight> (s,
       [this] (const uint256& hash) {
         CHECK (rpcClient != nullptr);
         return GetHeightForBlockHash (*rpcClient, hash);
@@ -417,11 +417,11 @@ Game::SetStorage (StorageInterface* s)
 }
 
 void
-Game::SetGameLogic (GameLogic* gl)
+Game::SetGameLogic (GameLogic& gl)
 {
   std::lock_guard<std::mutex> lock(mut);
   CHECK (!mainLoop.IsRunning ());
-  rules = gl;
+  rules = &gl;
   if (chain != Chain::UNKNOWN)
     rules->InitialiseGameContext (chain, gameId, rpcClient.get ());
 }

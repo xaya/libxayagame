@@ -246,11 +246,11 @@ SQLiteGame::PrepareStatement (const std::string& sql) const
   return database->PrepareStatement (sql);
 }
 
-StorageInterface*
+StorageInterface&
 SQLiteGame::GetStorage ()
 {
   CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
-  return database.get ();
+  return *database;
 }
 
 GameStateData

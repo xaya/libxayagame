@@ -33,7 +33,7 @@ InMemoryLogicFixture::InMemoryLogicFixture ()
 {
   game.Initialise (":memory:");
   game.InitialiseGameContext (xaya::Chain::MAIN, "xs", &rpcClient);
-  game.GetStorage ()->Initialise ();
+  game.GetStorage ().Initialise ();
   /* The initialisation above already sets up the database schema.  */
 
   mockXayaServer.StartListening ();

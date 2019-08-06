@@ -269,13 +269,13 @@ public:
    * remain valid until after the Game instance has been destructed!  This is
    * so that potentially batched transactions can still be flushed.
    */
-  void SetStorage (StorageInterface* s);
+  void SetStorage (StorageInterface& s);
 
   /**
    * Sets the game rules to use.  This must be called before starting
    * the main loop, and may not be called while it is running.
    */
-  void SetGameLogic (GameLogic* gl);
+  void SetGameLogic (GameLogic& gl);
 
   /**
    * Enables (or changes) pruning with the given number of blocks to keep.
