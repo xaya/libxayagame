@@ -58,6 +58,11 @@
     "returns": {}
   },
   {
+    "name": "getrawmempool",
+    "params": {},
+    "returns": []
+  },
+  {
     "name": "name_pending",
     "params": {},
     "returns": []

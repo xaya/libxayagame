@@ -57,6 +57,7 @@ MockXayaRpcServer::MockXayaRpcServer (jsonrpc::AbstractServerConnector& conn)
   EXPECT_CALL (*this, getblockheader (_)).Times (0);
   EXPECT_CALL (*this, game_sendupdates (_, _)).Times (0);
   EXPECT_CALL (*this, verifymessage (_, _, _)).Times (0);
+  EXPECT_CALL (*this, getrawmempool ()).Times (0);
   EXPECT_CALL (*this, name_pending ()).Times (0);
 }
 
