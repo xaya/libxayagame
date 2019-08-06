@@ -239,6 +239,9 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
 
   if (needReinit)
     ReinitialiseState ();
+
+  if (state == State::UP_TO_DATE && pending != nullptr)
+    pending->ProcessAttachedBlock (storage->GetCurrentGameState ());
 }
 
 void
@@ -323,6 +326,9 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
 
   if (needReinit)
     ReinitialiseState ();
+
+  if (state == State::UP_TO_DATE && pending != nullptr)
+    pending->ProcessDetachedBlock (storage->GetCurrentGameState (), data);
 }
 
 void
@@ -336,9 +342,13 @@ Game::PendingMove (const std::string& id, const Json::Value& data)
   VLOG (1) << "Processing pending move " << txid.ToHex ();
 
   std::lock_guard<std::mutex> lock(mut);
-
-  /* FIXME: Actual implementation, forwarding the data to a PendingMoveProcessor
-     (if we have it).  */
+  if (state == State::UP_TO_DATE)
+    {
+      CHECK (pending != nullptr);
+      pending->ProcessMove (storage->GetCurrentGameState (), data);
+    }
+  else
+    VLOG (1) << "Ignoring pending move while not up-to-date: " << data;
 }
 
 void
@@ -365,6 +375,8 @@ Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
   LOG (INFO) << "Connected to RPC daemon with chain " << ChainToString (chain);
   if (rules != nullptr)
     rules->InitialiseGameContext (chain, gameId, rpcClient.get ());
+  if (pending != nullptr)
+    pending->InitialiseGameContext (chain, gameId, rpcClient.get ());
 }
 
 unsigned
@@ -443,6 +455,16 @@ Game::SetGameLogic (GameLogic& gl)
 }
 
 void
+Game::SetPendingMoveProcessor (PendingMoveProcessor& p)
+{
+  std::lock_guard<std::mutex> lock(mut);
+  CHECK (!mainLoop.IsRunning ());
+  pending = &p;
+  if (chain != Chain::UNKNOWN)
+    pending->InitialiseGameContext (chain, gameId, rpcClient.get ());
+}
+
+void
 Game::EnablePruning (const unsigned nBlocks)
 {
   LOG (INFO) << "Enabling pruning with " << nBlocks << " blocks to keep";
@@ -470,15 +492,36 @@ Game::DetectZmqEndpoint ()
   }
   VLOG (1) << "Configured ZMQ notifications:\n" << notifications;
 
+  bool foundBlocks = false;
   for (const auto& val : notifications)
-    if (val.get ("type", "") == "pubgameblocks")
-      {
-        const std::string endpoint = val.get ("address", "").asString ();
-        CHECK (!endpoint.empty ());
-        LOG (INFO) << "Detected ZMQ endpoint: " << endpoint;
-        zmq.SetEndpoint (endpoint);
-        return true;
-      }
+    {
+      const auto& typeVal = val["type"];
+      if (!typeVal.isString ())
+        continue;
+
+      const auto& addrVal = val["address"];
+      CHECK (addrVal.isString ());
+      const std::string address = addrVal.asString ();
+      CHECK (!address.empty ());
+
+      const std::string type = typeVal.asString ();
+      if (type == "pubgameblocks")
+        {
+          LOG (INFO) << "Detected ZMQ blocks endpoint: " << address;
+          zmq.SetEndpoint (address);
+          foundBlocks = true;
+          continue;
+        }
+      if (type == "pubgamepending")
+        {
+          LOG (INFO) << "Detected ZMQ pending endpoint: " << address;
+          zmq.SetEndpointForPending (address);
+          continue;
+        }
+    }
+
+  if (foundBlocks)
+    return true;
 
   LOG (WARNING) << "No -zmqpubgameblocks notifier seems to be set up";
   return false;
@@ -579,6 +622,14 @@ Game::UntrackGame ()
 void
 Game::Start ()
 {
+  if (pending == nullptr)
+    {
+      LOG (WARNING)
+          << "No PendingMoveProcessor has been set, disabling pending moves"
+             " in the ZMQ subscriber";
+      zmq.SetEndpointForPending ("");
+    }
+
   TrackGame ();
   zmq.Start ();
 

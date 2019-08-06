@@ -117,6 +117,12 @@ GameTestFixture::CallBlockDetach (Game& g, const std::string& reqToken,
 }
 
 void
+GameTestFixture::CallPendingMove (Game& g, const Json::Value& mv) const
+{
+  g.PendingMove (gameId, mv);
+}
+
+void
 GameTestWithBlockchain::SetStartingBlock (const uint256& hash)
 {
   blockHashes = {hash};
