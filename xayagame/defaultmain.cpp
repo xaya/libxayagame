@@ -165,6 +165,9 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
 
       game->SetGameLogic (rules);
 
+      if (config.PendingMoves != nullptr)
+        game->SetPendingMoveProcessor (*config.PendingMoves);
+
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);
 
@@ -232,6 +235,9 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
       game->SetStorage (rules.GetStorage ());
 
       game->SetGameLogic (rules);
+
+      if (config.PendingMoves != nullptr)
+        game->SetPendingMoveProcessor (*config.PendingMoves);
 
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);

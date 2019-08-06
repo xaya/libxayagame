@@ -7,6 +7,7 @@
 
 #include "game.hpp"
 #include "gamelogic.hpp"
+#include "pendingmoves.hpp"
 #include "sqlitegame.hpp"
 #include "storage.hpp"
 
@@ -204,6 +205,12 @@ struct GameDaemonConfiguration
    * data directory.
    */
   std::string DataDirectory;
+
+  /**
+   * If set to non-null, then this PendingMoveProcessor instance is associated
+   * to the Game.
+   */
+  PendingMoveProcessor* PendingMoves = nullptr;
 
   /**
    * Factory class for customed instances of certain optional classes
