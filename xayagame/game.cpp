@@ -326,6 +326,22 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
 }
 
 void
+Game::PendingMove (const std::string& id, const Json::Value& data)
+{
+  CHECK_EQ (id, gameId);
+  VLOG (2) << "Pending move:\n" << data;
+
+  uint256 txid;
+  CHECK (txid.FromHex (data["txid"].asString ()));
+  VLOG (1) << "Processing pending move " << txid.ToHex ();
+
+  std::lock_guard<std::mutex> lock(mut);
+
+  /* FIXME: Actual implementation, forwarding the data to a PendingMoveProcessor
+     (if we have it).  */
+}
+
+void
 Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
 {
   std::lock_guard<std::mutex> lock(mut);

@@ -25,7 +25,14 @@ void
 ZmqSubscriber::SetEndpoint (const std::string& address)
 {
   CHECK (!IsRunning ());
-  addr = address;
+  addrBlocks = address;
+}
+
+void
+ZmqSubscriber::SetEndpointForPending (const std::string& address)
+{
+  CHECK (!IsRunning ());
+  addrPending = address;
 }
 
 void
@@ -171,12 +178,22 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
       VLOG (1) << "Received " << topic << " with sequence number " << seq;
       VLOG (2) << "Payload:\n" << payload;
 
+      enum class TopicType
+      {
+        UNKNOWN,
+        ATTACH,
+        DETACH,
+        PENDING,
+      };
+
       std::string gameId;
-      bool isAttach;
+      TopicType type = TopicType::UNKNOWN;
       if (CheckTopicPrefix (topic, "game-block-attach json ", gameId))
-        isAttach = true;
+        type = TopicType::ATTACH;
       else if (CheckTopicPrefix (topic, "game-block-detach json ", gameId))
-        isAttach = false;
+        type = TopicType::DETACH;
+      else if (CheckTopicPrefix (topic, "game-pending-move json ", gameId))
+        type = TopicType::PENDING;
       else
         LOG (FATAL) << "Unexpected topic of ZMQ notification: " << topic;
 
@@ -204,31 +221,67 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
           << "Error parsing notification JSON: " << parseErrs;
 
       for (auto i = range.first; i != range.second; ++i)
-        if (isAttach)
-          i->second->BlockAttach (gameId, data, seqMismatch);
-        else
-          i->second->BlockDetach (gameId, data, seqMismatch);
+        switch (type)
+          {
+          case TopicType::ATTACH:
+            i->second->BlockAttach (gameId, data, seqMismatch);
+            break;
+          case TopicType::DETACH:
+            i->second->BlockDetach (gameId, data, seqMismatch);
+            break;
+          case TopicType::PENDING:
+            i->second->PendingMove (gameId, data);
+            break;
+          default:
+            LOG (FATAL) << "Invalid topic type: " << static_cast<int> (type);
+          }
     }
 }
 
 void
 ZmqSubscriber::Start ()
 {
-  CHECK (IsEndpointSet ());
-  LOG (INFO) << "Starting ZMQ subscriber at address: " << addr;
+  CHECK (!addrBlocks.empty ()) << "ZMQ endpoint is not yet set";
 
   CHECK (!IsRunning ());
   CHECK (sockets.empty ());
 
+  LOG (INFO) << "Starting ZMQ subscriber for blocks: " << addrBlocks;
   auto socket = std::make_unique<zmq::socket_t> (ctx, ZMQ_SUB);
+  socket->connect (addrBlocks.c_str ());
+  zmq::socket_t* const socketBlocks = socket.get ();
+  sockets.push_back (std::move (socket));
   for (const auto& entry : listeners)
     for (const std::string cmd : {"game-block-attach", "game-block-detach"})
       {
         const std::string topic = cmd + " json " + entry.first;
-        socket->setsockopt (ZMQ_SUBSCRIBE, topic.data (), topic.size ());
+        socketBlocks->setsockopt (ZMQ_SUBSCRIBE, topic.data (), topic.size ());
       }
-  socket->connect (addr.c_str ());
-  sockets.push_back (std::move (socket));
+
+  if (!addrPending.empty ())
+    {
+      LOG (INFO) << "Receiving pending moves from: " << addrPending;
+
+      zmq::socket_t* socketPending = nullptr;
+      if (addrPending == addrBlocks)
+        socketPending = socketBlocks;
+      else
+        {
+          socket = std::make_unique<zmq::socket_t> (ctx, ZMQ_SUB);
+          socket->connect (addrPending.c_str ());
+          socketPending = socket.get ();
+          sockets.push_back (std::move (socket));
+        }
+
+      for (const auto& entry : listeners)
+        {
+          const std::string topic = "game-pending-move json " + entry.first;
+          socketPending->setsockopt (ZMQ_SUBSCRIBE, topic.data (),
+                                     topic.size ());
+        }
+    }
+  else
+    LOG (INFO) << "Not subscribing to pending moves";
 
   /* Reset last-seen sequence numbers for a fresh start.  */
   lastSeq.clear ();
@@ -241,7 +294,7 @@ void
 ZmqSubscriber::Stop ()
 {
   CHECK (IsRunning ());
-  LOG (INFO) << "Stopping ZMQ subscriber at address " << addr;
+  LOG (INFO) << "Stopping ZMQ subscriber at address " << addrBlocks;
 
   shouldStop = true;
 

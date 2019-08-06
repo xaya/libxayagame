@@ -52,6 +52,13 @@ public:
   virtual void BlockDetach (const std::string& gameId,
                             const Json::Value& data, bool seqMismatch) = 0;
 
+  /**
+   * Callback for pending moves added to the mempool.  Since pending moves
+   * are best effort only, we do not care about sequence number mismatches.
+   */
+  virtual void PendingMove (const std::string& gameId,
+                            const Json::Value& data) = 0;
+
 };
 
 /**
@@ -63,8 +70,11 @@ class ZmqSubscriber
 
 private:
 
-  /** The ZMQ endpoint to connect to.  */
-  std::string addr;
+  /** The ZMQ endpoint to connect to for block updates.  */
+  std::string addrBlocks;
+  /** The ZMQ endpoint to connect to for pending moves.  */
+  std::string addrPending;
+
   /** The ZMQ context that is used by the this instance.  */
   zmq::context_t ctx;
   /**
@@ -126,13 +136,11 @@ public:
   void SetEndpoint (const std::string& address);
 
   /**
-   * Returns whether the endpoint is set.
+   * Sets the ZMW endpoint that will be used to receive pending moves.
+   * Unlike SetEndpoint, this is optional.  If not set, then the ZMQ
+   * thread will simply not listen to pending moves.
    */
-  bool
-  IsEndpointSet () const
-  {
-    return !addr.empty ();
-  }
+  void SetEndpointForPending (const std::string& address);
 
   /**
    * Adds a new listener for the given game ID.  Must not be called when

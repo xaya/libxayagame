@@ -159,6 +159,7 @@ private:
                     bool seqMismatch) override;
   void BlockDetach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
+  void PendingMove (const std::string& id, const Json::Value& data) override;
 
   /**
    * Adds this game's ID to the tracked games of the core daemon.

@@ -26,6 +26,8 @@ using testing::_;
 using testing::InSequence;
 
 constexpr const char IPC_ENDPOINT[] = "ipc:///tmp/xayagame_zmqsubscriber_tests";
+constexpr const char IPC_ENDPOINT_PENDING[]
+    = "ipc:///tmp/xayagame_zmqsubscriber_tests_pending";
 
 constexpr const char GAME_ID[] = "test-game";
 constexpr const char OTHER_GAME_ID[] = "other-game";
@@ -41,12 +43,15 @@ public:
        should explicitly be specified in the individual tests.  */
     EXPECT_CALL (*this, BlockAttach (_, _, _)).Times (0);
     EXPECT_CALL (*this, BlockDetach (_, _, _)).Times (0);
+    EXPECT_CALL (*this, PendingMove (_, _)).Times (0);
   }
 
   MOCK_METHOD3 (BlockAttach, void (const std::string& gameId,
                                    const Json::Value& data, bool seqMismatch));
   MOCK_METHOD3 (BlockDetach, void (const std::string& gameId,
                                    const Json::Value& data, bool seqMismatch));
+  MOCK_METHOD2 (PendingMove, void (const std::string& gameId,
+                                   const Json::Value& data));
 
 };
 
@@ -85,17 +90,41 @@ protected:
   }
 
   /**
-   * Sends a multipart message consisting of the given strings.
+   * Sends a multipart message consisting of the given strings on the given
+   * socket.
    */
-  void
-  SendMultipart (const std::vector<std::string>& parts)
+  static void
+  SendMultipart (zmq::socket_t& sock, const std::vector<std::string>& parts)
   {
     for (size_t i = 0; i < parts.size (); ++i)
       {
         zmq::message_t msg(parts[i].begin (), parts[i].end ());
         const bool hasMore = (i + 1 < parts.size ());
-        ASSERT_TRUE (zmqSocket.send (msg, hasMore ? ZMQ_SNDMORE : 0));
+        ASSERT_TRUE (sock.send (msg, hasMore ? ZMQ_SNDMORE : 0));
       }
+  }
+
+  void
+  SendMultipart (const std::vector<std::string>& parts)
+  {
+    SendMultipart (zmqSocket, parts);
+  }
+
+  /**
+   * Sends a message with the given topic, JSON payload and sequence number
+   * on the given socket.
+   */
+  static void
+  SendMessage (zmq::socket_t& sock, const std::string& topic,
+               const Json::Value& payload, const uint32_t seq)
+  {
+    std::ostringstream payloadStr;
+    payloadStr << payload;
+
+    const std::string seqData(reinterpret_cast<const char*> (&seq),
+                              sizeof (seq));
+
+    SendMultipart (sock, {topic, payloadStr.str (), seqData});
   }
 
   static void
@@ -133,14 +162,6 @@ namespace
 
 /* ************************************************************************** */
 
-TEST_F (BasicZmqSubscriberTests, IsEndpointSet)
-{
-  ZmqSubscriber zmq;
-  EXPECT_FALSE (zmq.IsEndpointSet ());
-  zmq.SetEndpoint (IPC_ENDPOINT);
-  EXPECT_TRUE (zmq.IsEndpointSet ());
-}
-
 TEST_F (BasicZmqSubscriberTests, SetEndpointWhenRunning)
 {
   EXPECT_DEATH (
@@ -149,6 +170,14 @@ TEST_F (BasicZmqSubscriberTests, SetEndpointWhenRunning)
       zmq.SetEndpoint (IPC_ENDPOINT);
       zmq.Start ();
       zmq.SetEndpoint ("foo");
+    }, "!IsRunning");
+
+  EXPECT_DEATH (
+    {
+      ZmqSubscriber zmq;
+      zmq.SetEndpoint (IPC_ENDPOINT);
+      zmq.Start ();
+      zmq.SetEndpointForPending ("foo");
     }, "!IsRunning");
 }
 
@@ -169,7 +198,7 @@ TEST_F (BasicZmqSubscriberTests, StartWithoutEndpoint)
     {
       ZmqSubscriber zmq;
       zmq.Start ();
-    }, "IsEndpointSet");
+    }, "ZMQ endpoint is not yet set");
 }
 
 TEST_F (BasicZmqSubscriberTests, StartedTwice)
@@ -303,34 +332,18 @@ protected:
     SleepSome ();
   }
 
-  /**
-   * Sends a message with the given topic, JSON payload and sequence number.
-   */
-  void
-  SendMessage (const std::string& topic, const Json::Value& payload,
-               const uint32_t seq)
-  {
-    std::ostringstream payloadStr;
-    payloadStr << payload;
-
-    const std::string seqData(reinterpret_cast<const char*> (&seq),
-                              sizeof (seq));
-
-    SendMultipart ({topic, payloadStr.str (), seqData});
-  }
-
   void
   SendAttach (const std::string& gameId, const Json::Value& payload,
               const uint32_t seq)
   {
-    SendMessage ("game-block-attach json " + gameId, payload, seq);
+    SendMessage (zmqSocket, "game-block-attach json " + gameId, payload, seq);
   }
 
   void
   SendDetach (const std::string& gameId, const Json::Value& payload,
               const uint32_t seq)
   {
-    SendMessage ("game-block-detach json " + gameId, payload, seq);
+    SendMessage (zmqSocket, "game-block-detach json " + gameId, payload, seq);
   }
 
 };
@@ -439,6 +452,141 @@ TEST_F (ZmqSubscriberTests, InvalidJson)
       SleepSome ();
     }, "Error parsing");
 }
+
+/* ************************************************************************** */
+
+class ZmqSubscriberPendingTests : public BasicZmqSubscriberTests
+{
+
+protected:
+
+  /** Second socket bound to an alternate endpoint.  */
+  zmq::socket_t zmqSocketPending;
+
+  ZmqSubscriber zmq;
+
+  ZmqSubscriberPendingTests ()
+    : zmqSocketPending(zmqCtx, ZMQ_PUB)
+  {
+    zmqSocketPending.bind (IPC_ENDPOINT_PENDING);
+
+    zmq.SetEndpoint (IPC_ENDPOINT);
+    zmq.AddListener (GAME_ID, &mockListener);
+  }
+
+  ~ZmqSubscriberPendingTests ()
+  {
+    /* Wait so that the worker thread can process all sent messages before
+       the mock object verifies expectations.  */
+    SleepSome ();
+  }
+
+  /**
+   * Runs a test where just pending messages are sent and received on the
+   * given socket.
+   */
+  void
+  TestJustPending (zmq::socket_t& sock)
+  {
+    Json::Value payload1;
+    payload1["test"] = 42;
+    Json::Value payload2;
+    payload2["test"] = 5;
+
+    {
+      InSequence dummy;
+      EXPECT_CALL (mockListener, PendingMove (GAME_ID, payload1));
+      EXPECT_CALL (mockListener, PendingMove (GAME_ID, payload2));
+    }
+
+    SendPending (sock, GAME_ID, payload1);
+    SendPending (sock, GAME_ID, payload2);
+  }
+
+  /**
+   * Sends a pending move notification on the given socket.
+   */
+  static void
+  SendPending (zmq::socket_t& sock, const std::string& gameId,
+               const Json::Value& payload)
+  {
+    SendMessage (sock, "game-pending-move json " + gameId, payload, 42);
+  }
+
+};
+
+TEST_F (ZmqSubscriberPendingTests, BasicOneSocket)
+{
+  zmq.SetEndpointForPending (IPC_ENDPOINT);
+  zmq.Start ();
+  SleepSome ();
+
+  TestJustPending (zmqSocket);
+}
+
+TEST_F (ZmqSubscriberPendingTests, BasicTwoSockets)
+{
+  zmq.SetEndpointForPending (IPC_ENDPOINT_PENDING);
+  zmq.Start ();
+  SleepSome ();
+
+  TestJustPending (zmqSocketPending);
+}
+
+TEST_F (ZmqSubscriberPendingTests, MixedOneSocket)
+{
+  zmq.SetEndpointForPending (IPC_ENDPOINT);
+  zmq.Start ();
+  SleepSome ();
+
+  const std::string gameId = GAME_ID;
+
+  Json::Value payload;
+  payload["foo"] = "bar";
+
+  /* When we use just one socket for both types of notifications, then
+     they should be received in exactly the order in which they are sent
+     (as we just read from that one socket sequentially).  */
+
+  {
+    InSequence dummy;
+    EXPECT_CALL (mockListener, BlockDetach (gameId, payload, _));
+    EXPECT_CALL (mockListener, PendingMove (gameId, payload));
+    EXPECT_CALL (mockListener, BlockAttach (gameId, payload, _));
+  }
+
+  SendMessage (zmqSocket, "game-block-detach json " + gameId, payload, 1);
+  SendPending (zmqSocket, gameId, payload);
+  SendMessage (zmqSocket, "game-block-attach json " + gameId, payload, 2);
+}
+
+TEST_F (ZmqSubscriberPendingTests, MixedTwoSockets)
+{
+  zmq.SetEndpointForPending (IPC_ENDPOINT_PENDING);
+  zmq.Start ();
+  SleepSome ();
+
+  const std::string gameId = GAME_ID;
+
+  Json::Value payload;
+  payload["foo"] = "bar";
+
+  /* If we use two sockets and mix the messages from them, it is not defined
+     in what order we will receive block messages vs pending messages.  */
+
+  {
+    InSequence dummy;
+    EXPECT_CALL (mockListener, BlockDetach (gameId, payload, _));
+    EXPECT_CALL (mockListener, BlockAttach (gameId, payload, _));
+  }
+  EXPECT_CALL (mockListener, PendingMove (gameId, payload));
+
+  SendMessage (zmqSocket, "game-block-detach json " + gameId, payload, 1);
+  SendPending (zmqSocketPending, gameId, payload);
+  SendMessage (zmqSocket, "game-block-attach json " + gameId, payload, 2);
+}
+
+/* ************************************************************************** */
 
 } // anonymous namespace
 } // namespace internal

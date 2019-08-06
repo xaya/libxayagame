@@ -197,7 +197,7 @@ protected:
   static std::string
   GetZmqEndpoint (const Game& g)
   {
-    return g.zmq.addr;
+    return g.zmq.addrBlocks;
   }
 
   static State
