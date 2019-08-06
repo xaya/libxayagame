@@ -284,17 +284,6 @@ public:
   void EnablePruning (unsigned nBlocks);
 
   /**
-   * Sets the ZMQ endpoint that will be used to connect to the ZMQ interface
-   * of the Xaya daemon.  Must not be called anymore after Start() or
-   * Run() have been called.
-   */
-  void
-  SetZmqEndpoint (const std::string& addr)
-  {
-    zmq.SetEndpoint (addr);
-  }
-
-  /**
    * Detects the ZMQ endpoint by calling getzmqnotifications on the Xaya
    * daemon.  Returns false if pubgameblocks is not enabled.
    */

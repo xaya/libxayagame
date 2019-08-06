@@ -460,7 +460,7 @@ Game::DetectZmqEndpoint ()
         const std::string endpoint = val.get ("address", "").asString ();
         CHECK (!endpoint.empty ());
         LOG (INFO) << "Detected ZMQ endpoint: " << endpoint;
-        SetZmqEndpoint (endpoint);
+        zmq.SetEndpoint (endpoint);
         return true;
       }
 
