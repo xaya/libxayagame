@@ -12,16 +12,16 @@
 #include <sstream>
 #include <stack>
 
+namespace mover
+{
+namespace
+{
+
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
 using xaya::Chain;
 using xaya::GameStateData;
 using xaya::UndoData;
-
-namespace mover
-{
-namespace
-{
 
 /* ************************************************************************** */
 

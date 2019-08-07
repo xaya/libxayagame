@@ -18,10 +18,12 @@ libmover_la_LIBADD = \
 libmover_la_SOURCES = \
   logic.cpp \
   moves.cpp \
+  pending.cpp \
   proto/mover.pb.cc
 noinst_HEADERS = \
   logic.hpp \
   moves.hpp \
+  pending.hpp \
   proto/mover.pb.h
 
 moverd_CXXFLAGS = \
@@ -46,7 +48,8 @@ tests_LDADD = $(builddir)/libmover.la \
   $(JSONCPP_LIBS) $(GLOB_LIBS) $(PROTOBUF_LIBS) $(GTEST_LIBS)
 tests_SOURCES = \
   logic_tests.cpp \
-  moves_tests.cpp
+  moves_tests.cpp \
+  pending_tests.cpp
 
 proto/mover.pb.h proto/mover.pb.cc: $(srcdir)/proto/mover.proto
 	protoc --cpp_out=. "$<"

@@ -5,6 +5,7 @@
 #include "config.h"
 
 #include "logic.hpp"
+#include "pending.hpp"
 
 #include "xayagame/defaultmain.hpp"
 
@@ -15,6 +16,9 @@
 
 #include <cstdlib>
 #include <iostream>
+
+namespace
+{
 
 DEFINE_string (xaya_rpc_url, "",
                "URL at which Xaya Core's JSON-RPC interface is available");
@@ -34,6 +38,11 @@ DEFINE_string (datadir, "",
                "base data directory for game data (will be extended by the"
                " game ID and chain); must be set if --storage_type is not"
                " memory");
+
+DEFINE_bool (pending_moves, true,
+             "whether or not pending moves should be tracked");
+
+} // anonymous namespace
 
 int
 main (int argc, char** argv)
@@ -69,6 +78,10 @@ main (int argc, char** argv)
   config.EnablePruning = FLAGS_enable_pruning;
   config.StorageType = FLAGS_storage_type;
   config.DataDirectory = FLAGS_datadir;
+
+  mover::PendingMoves pending;
+  if (FLAGS_pending_moves)
+    config.PendingMoves = &pending;
 
   mover::MoverLogic rules;
   const int res = xaya::DefaultMain (config, "mv", rules);
