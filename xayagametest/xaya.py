@@ -1,4 +1,4 @@
-# Copyright (C) 2018 The Xaya developers
+# Copyright (C) 2018-2019 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,7 +21,7 @@ class Node ():
   used as component in an integration test of a Xaya game.
   """
 
-  def __init__ (self, basedir, rpcPort, zmqPort, binary):
+  def __init__ (self, basedir, rpcPort, zmqPorts, binary):
     self.log = logging.getLogger ("xayagametest.xayanode")
     self.datadir = os.path.join (basedir, "xayanode")
     self.binary = binary
@@ -31,8 +31,11 @@ class Node ():
       "rpcuser": "xayagametest",
       "rpcpassword": "xayagametest",
       "rpcport": rpcPort,
-      "zmqpubgameblocks": "tcp://127.0.0.1:%d" % zmqPort
+      "zmqpubgameblocks": "tcp://127.0.0.1:%d" % zmqPorts["blocks"],
     }
+    if "pending" in zmqPorts:
+      zmqPending = "tcp://127.0.0.1:%d" % zmqPorts["pending"]
+      self.config["zmqpubgamepending"] = zmqPending
     self.rpcurl = ("http://%s:%s@localhost:%d"
         % (self.config["rpcuser"], self.config["rpcpassword"],
            self.config["rpcport"]))

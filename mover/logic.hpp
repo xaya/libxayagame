@@ -23,17 +23,6 @@ namespace mover
 class MoverLogic : public xaya::GameLogic
 {
 
-private:
-
-  /**
-   * Parses a move object into direction and number of steps.  Returns false
-   * if the move is somehow invalid.
-   */
-  static bool ParseMove (const Json::Value& obj,
-                         proto::Direction& dir, unsigned& steps);
-
-  friend class ParseMoveTests;
-
 protected:
 
   xaya::GameStateData GetInitialStateInternal (unsigned& height,
