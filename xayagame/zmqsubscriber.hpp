@@ -17,6 +17,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 namespace xaya
 {
@@ -51,6 +52,13 @@ public:
   virtual void BlockDetach (const std::string& gameId,
                             const Json::Value& data, bool seqMismatch) = 0;
 
+  /**
+   * Callback for pending moves added to the mempool.  Since pending moves
+   * are best effort only, we do not care about sequence number mismatches.
+   */
+  virtual void PendingMove (const std::string& gameId,
+                            const Json::Value& data) = 0;
+
 };
 
 /**
@@ -62,12 +70,20 @@ class ZmqSubscriber
 
 private:
 
-  /** The ZMQ endpoint to connect to.  */
-  std::string addr;
+  /** The ZMQ endpoint to connect to for block updates.  */
+  std::string addrBlocks;
+  /** The ZMQ endpoint to connect to for pending moves.  */
+  std::string addrPending;
+
   /** The ZMQ context that is used by the this instance.  */
   zmq::context_t ctx;
-  /** The ZMQ socket used to subscribe to the Xaya daemon, if connected.  */
-  std::unique_ptr<zmq::socket_t> socket;
+  /**
+   * The ZMQ sockets used to subscribe to the Xaya daemon, if connected.
+   * If we have multiple addresses we listen to (e.g. different ones for
+   * blocks and pending moves), then this contains multiple sockets that
+   * are read in a multiplexed fashion using zmq::poll.
+   */
+  std::vector<std::unique_ptr<zmq::socket_t>> sockets;
 
   /** Game IDs and associated listeners.  */
   std::unordered_multimap<std::string, ZmqListener*> listeners;
@@ -120,13 +136,11 @@ public:
   void SetEndpoint (const std::string& address);
 
   /**
-   * Returns whether the endpoint is set.
+   * Sets the ZMW endpoint that will be used to receive pending moves.
+   * Unlike SetEndpoint, this is optional.  If not set, then the ZMQ
+   * thread will simply not listen to pending moves.
    */
-  bool
-  IsEndpointSet () const
-  {
-    return !addr.empty ();
-  }
+  void SetEndpointForPending (const std::string& address);
 
   /**
    * Adds a new listener for the given game ID.  Must not be called when
@@ -141,6 +155,15 @@ public:
   IsRunning () const
   {
     return worker != nullptr;
+  }
+
+  /**
+   * Returns true if notifications for pending moves are enabled.
+   */
+  bool
+  IsPendingEnabled () const
+  {
+    return !addrPending.empty ();
   }
 
   /**

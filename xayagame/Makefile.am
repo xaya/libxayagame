@@ -35,6 +35,7 @@ libxayagame_la_SOURCES = \
   heightcache.cpp \
   lmdbstorage.cpp \
   mainloop.cpp \
+  pendingmoves.cpp \
   pruningqueue.cpp \
   signatures.cpp \
   sqlitegame.cpp \
@@ -50,6 +51,7 @@ xayagame_HEADERS = \
   heightcache.hpp \
   lmdbstorage.hpp \
   mainloop.hpp \
+  pendingmoves.hpp \
   pruningqueue.hpp \
   signatures.hpp \
   sqlitegame.hpp \
@@ -92,6 +94,7 @@ tests_SOURCES = \
   heightcache_tests.cpp \
   lmdbstorage_tests.cpp \
   mainloop_tests.cpp \
+  pendingmoves_tests.cpp \
   pruningqueue_tests.cpp \
   signatures_tests.cpp \
   sqlitegame_tests.cpp \

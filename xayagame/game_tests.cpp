@@ -10,9 +10,11 @@
 
 #include "rpc-stubs/xayarpcserverstub.h"
 
+#include <xayautil/hash.hpp>
 #include <xayautil/uint256.hpp>
 
 #include <json/json.h>
+#include <jsonrpccpp/common/exception.h>
 #include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
@@ -283,6 +285,56 @@ public:
 
 };
 
+/**
+ * Processor for pending moves of our test game.  The JSON state returned
+ * for the pending moves is just a JSON object where names are mapped to
+ * the latest value in a move (i.e. what the value would be when all
+ * transactions are confirmed).
+ *
+ * In addition to the names, we also add the current state as string
+ * to the JSON object with key "state".
+ */
+class TestPendingMoves : public PendingMoveProcessor
+{
+
+private:
+
+  /** The currently built up JSON object.  */
+  Json::Value data;
+
+protected:
+
+  void
+  Clear () override
+  {
+    data = Json::Value (Json::objectValue);
+    data["state"] = GetConfirmedState ();
+  }
+
+  void
+  AddPendingMove (const Json::Value& mv) override
+  {
+    data["state"] = GetConfirmedState ();
+
+    const std::string nm = mv["name"].asString ();
+    const std::string val = mv["move"].asString ();
+    data[nm] = val;
+  }
+
+public:
+
+  TestPendingMoves ()
+    : data(Json::objectValue)
+  {}
+
+  Json::Value
+  ToJson () const override
+  {
+    return data;
+  }
+
+};
+
 /* ************************************************************************** */
 
 class GameTests : public GameTestWithBlockchain
@@ -386,7 +438,7 @@ TEST_F (ChainDetectionTests, Reconnection)
 
 using DetectZmqEndpointTests = GameTests;
 
-TEST_F (DetectZmqEndpointTests, Success)
+TEST_F (DetectZmqEndpointTests, BlocksWithoutPending)
 {
   const Json::Value notifications = ParseJson (R"(
     [
@@ -404,6 +456,27 @@ TEST_F (DetectZmqEndpointTests, Success)
   g.ConnectRpcClient (httpClient);
   ASSERT_TRUE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "address");
+  EXPECT_EQ (GetZmqEndpointPending (g), "");
+}
+
+TEST_F (DetectZmqEndpointTests, BlocksAndPending)
+{
+  const Json::Value notifications = ParseJson (R"(
+    [
+      {"type": "pubgameblocks", "address": "address blocks"},
+      {"type": "pubgamepending", "address": "address pending"}
+    ]
+  )");
+
+  EXPECT_CALL (mockXayaServer, getzmqnotifications ())
+      .WillOnce (Return (notifications));
+
+  Game g(GAME_ID);
+  mockXayaServer.SetBestBlock (0, BlockHash (0));
+  g.ConnectRpcClient (httpClient);
+  ASSERT_TRUE (g.DetectZmqEndpoint ());
+  EXPECT_EQ (GetZmqEndpoint (g), "address blocks");
+  EXPECT_EQ (GetZmqEndpointPending (g), "address pending");
 }
 
 TEST_F (DetectZmqEndpointTests, NotSet)
@@ -496,7 +569,8 @@ protected:
 
   /**
    * Converts a string in the game-state format to a series of moves as they
-   * would appear in the block notification.
+   * would appear in the block notification.  The txid of the move is derived
+   * by hashing the name.
    */
   static Json::Value
   Moves (const std::string& str)
@@ -508,7 +582,9 @@ protected:
       {
         Json::Value obj(Json::objectValue);
         obj["name"] = str.substr (i, 1);
-        obj["move"] = str.substr (i + 1, 1);
+        const std::string val = str.substr (i + 1, 1);
+        obj["move"] = val;
+        obj["txid"] = SHA256::Hash (val).ToHex ();
         moves.append (obj);
       }
 
@@ -666,6 +742,90 @@ TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
   EXPECT_EQ (state["blockhash"], GAME_GENESIS_HASH);
   EXPECT_EQ (state["height"].asInt (), 42);
   EXPECT_EQ (state["gamestate"]["state"], "");
+}
+
+/* ************************************************************************** */
+
+class GetPendingJsonState : public InitialStateTests
+{
+
+protected:
+
+  GetPendingJsonState ()
+  {
+    EXPECT_CALL (mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
+  }
+
+  /**
+   * Sets up the ZMQ endpoints (by mocking getzmqnotifications in the RPC
+   * server and detecting them).  This can either make the server expose
+   * a notification for pending moves or not.
+   */
+  void
+  SetupZmqEndpoints (const bool withPending)
+  {
+    Json::Value notifications = ParseJson (R"(
+      [
+        {"type": "pubgameblocks", "address": "tcp://127.0.0.1:32101"}
+      ]
+    )");
+
+    if (withPending)
+      notifications.append (ParseJson (R"(
+        {"type": "pubgamepending", "address": "tcp://127.0.0.1:32102"}
+      )"));
+
+    EXPECT_CALL (mockXayaServer, getzmqnotifications ())
+        .WillOnce (Return (notifications));
+    CHECK (g.DetectZmqEndpoint ());
+  }
+
+};
+
+TEST_F (GetPendingJsonState, NoAttachedProcessor)
+{
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  EXPECT_THROW (g.GetPendingJsonState (), jsonrpc::JsonRpcException);
+}
+
+TEST_F (GetPendingJsonState, PendingNotificationDisabled)
+{
+  TestPendingMoves proc;
+  g.SetPendingMoveProcessor (proc);
+
+  SetupZmqEndpoints (false);
+  g.Start ();
+
+  EXPECT_THROW (g.GetPendingJsonState (), jsonrpc::JsonRpcException);
+}
+
+TEST_F (GetPendingJsonState, PendingState)
+{
+  TestPendingMoves proc;
+  g.SetPendingMoveProcessor (proc);
+
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
+                               TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+
+  CallPendingMove (g, Moves ("ax")[0]);
+
+  const auto state = g.GetPendingJsonState ();
+  EXPECT_EQ (state["gameid"], GAME_ID);
+  EXPECT_EQ (state["chain"], "main");
+  EXPECT_EQ (state["state"], "up-to-date");
+  EXPECT_EQ (state["blockhash"], GAME_GENESIS_HASH);
+  EXPECT_EQ (state["pending"], ParseJson (R"(
+    {
+      "state": "",
+      "a": "x"
+    }
+  )"));
 }
 
 /* ************************************************************************** */
@@ -1109,6 +1269,113 @@ TEST_F (SyncingTests, MissedAttachWhileCatchingUp)
                    Moves ("a2c3"), NO_SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
+}
+
+/* ************************************************************************** */
+
+class PendingMoveUpdateTests : public SyncingTests
+{
+
+protected:
+
+  TestPendingMoves proc;
+
+  PendingMoveUpdateTests ()
+  {
+    g.SetPendingMoveProcessor (proc);
+  }
+
+  /**
+   * Sets up the mempool that should be returned by the mock server.
+   * The txid's are constructed by hashing the given strings.
+   */
+  void
+  SetMempool (const std::vector<std::string>& vals)
+  {
+    Json::Value mempool(Json::arrayValue);
+    for (const auto& v : vals)
+      mempool.append (SHA256::Hash (v).ToHex ());
+
+    EXPECT_CALL (mockXayaServer, getrawmempool ())
+        .WillRepeatedly (Return (mempool));
+  }
+
+};
+
+TEST_F (PendingMoveUpdateTests, CatchingUp)
+{
+  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
+
+  mockXayaServer.SetBestBlock (12, BlockHash (12));
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
+
+  CallBlockAttach (g, "reqtoken",
+                   TestGame::GenesisBlockHash (), BlockHash (11), 11,
+                   Moves ("a0b1"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  CallBlockDetach (g, "reqtoken",
+                   TestGame::GenesisBlockHash (), BlockHash (11), 11,
+                   NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::CATCHING_UP);
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
+
+  CallPendingMove (g, Moves ("ax")[0]);
+
+  /* No updates should have been processed at all.  */
+  EXPECT_EQ (proc.ToJson (), ParseJson ("{}"));
+}
+
+TEST_F (PendingMoveUpdateTests, PendingMoves)
+{
+  const auto mv = Moves ("axbyaz");
+  for (const auto& mv : Moves ("axbyaz"))
+    CallPendingMove (g, mv);
+
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({
+    "state": "",
+    "a": "z",
+    "b": "y"
+  })"));
+}
+
+TEST_F (PendingMoveUpdateTests, BlockAttach)
+{
+  SetMempool ({"y"});
+
+  for (const auto& mv : Moves ("axby"))
+    CallPendingMove (g, mv);
+
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "a0b1");
+
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({
+    "state": "a0b1",
+    "b": "y"
+  })"));
+}
+
+TEST_F (PendingMoveUpdateTests, BlockDetach)
+{
+  SetMempool ({"x"});
+
+  AttachBlock (g, BlockHash (11), Moves ("ax"));
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (11), "ax");
+
+  DetachBlock (g);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
+
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({
+    "state": "",
+    "a": "x"
+  })"));
 }
 
 /* ************************************************************************** */

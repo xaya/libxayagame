@@ -8,6 +8,7 @@
 #include "gamelogic.hpp"
 #include "heightcache.hpp"
 #include "mainloop.hpp"
+#include "pendingmoves.hpp"
 #include "pruningqueue.hpp"
 #include "storage.hpp"
 #include "transactionmanager.hpp"
@@ -133,6 +134,9 @@ private:
   /** The game rules in use.  */
   GameLogic* rules = nullptr;
 
+  /** The processor for pending moves, if any.  */
+  PendingMoveProcessor* pending = nullptr;
+
   /**
    * Desired size for batches of atomic transactions while the game is
    * catching up.  <= 1 means no batching even in these situations.
@@ -159,6 +163,7 @@ private:
                     bool seqMismatch) override;
   void BlockDetach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
+  void PendingMove (const std::string& id, const Json::Value& data) override;
 
   /**
    * Adds this game's ID to the tracked games of the core daemon.
@@ -278,13 +283,20 @@ public:
   void SetGameLogic (GameLogic& gl);
 
   /**
+   * Sets the processor for pending moves.  Setting one is optional; if no
+   * processor is set of pending move notifications are not enabled in the
+   * connected Xaya Core, then no pending state will be available.
+   */
+  void SetPendingMoveProcessor (PendingMoveProcessor& p);
+
+  /**
    * Enables (or changes) pruning with the given number of blocks to keep.
    * Must be called after the storage is set already.
    */
   void EnablePruning (unsigned nBlocks);
 
   /**
-   * Detects the ZMQ endpoint by calling getzmqnotifications on the Xaya
+   * Detects the ZMQ endpoint(s) by calling getzmqnotifications on the Xaya
    * daemon.  Returns false if pubgameblocks is not enabled.
    */
   bool DetectZmqEndpoint ();
@@ -326,6 +338,15 @@ public:
    * as well.
    */
   Json::Value GetCurrentJsonState () const;
+
+  /**
+   * Returns a JSON object that contains data about the current state
+   * of pending moves as JSON.
+   *
+   * If no PendingMoveProcessor is attached or if pending moves are disabled
+   * in the Xaya Core notifications, then this raises a JSON-RPC error.
+   */
+  Json::Value GetPendingJsonState () const;
 
   /**
    * Blocks the calling thread until a change to the game state has

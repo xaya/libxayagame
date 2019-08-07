@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,6 +21,13 @@ GameRpcServer::getcurrentstate ()
 {
   LOG (INFO) << "RPC method called: getcurrentstate";
   return game.GetCurrentJsonState ();
+}
+
+Json::Value
+GameRpcServer::getpendingstate ()
+{
+  LOG (INFO) << "RPC method called: getpendingstate";
+  return game.GetPendingJsonState ();
 }
 
 std::string

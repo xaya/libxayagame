@@ -6,6 +6,7 @@
 
 #include <glog/logging.h>
 
+#include <chrono>
 #include <sstream>
 
 namespace xaya
@@ -17,14 +18,21 @@ ZmqSubscriber::~ZmqSubscriber ()
 {
   if (IsRunning ())
     Stop ();
-  CHECK (socket == nullptr);
+  CHECK (sockets.empty ());
 }
 
 void
 ZmqSubscriber::SetEndpoint (const std::string& address)
 {
   CHECK (!IsRunning ());
-  addr = address;
+  addrBlocks = address;
+}
+
+void
+ZmqSubscriber::SetEndpointForPending (const std::string& address)
+{
+  CHECK (!IsRunning ());
+  addrPending = address;
 }
 
 void
@@ -38,29 +46,49 @@ bool
 ZmqSubscriber::ReceiveMultiparts (std::string& topic, std::string& payload,
                                   uint32_t& seq)
 {
+  CHECK (!sockets.empty ());
+
+  std::vector<zmq::pollitem_t> pollItems;
+  for (const auto& s : sockets)
+    {
+      pollItems.emplace_back ();
+      pollItems.back ().socket = static_cast<void*> (*s);
+      pollItems.back ().events = ZMQ_POLLIN;
+    }
+
+  /* Wait until we can receive messages from any of our sockets.  */
+  int rcPoll;
+  do
+    {
+      constexpr auto TIMEOUT = std::chrono::milliseconds (100);
+      rcPoll = zmq::poll (pollItems, TIMEOUT);
+
+      /* In case of an error, zmq::poll throws instead of returning
+         negative values.  */
+      CHECK_GE (rcPoll, 0);
+
+      /* Stop the thread if requested to, no need to read the messages anymore
+         if there are ones available.  */
+      if (shouldStop)
+        return false;
+    }
+  while (rcPoll == 0);
+
+  /* Find the socket that is available (or one of them).  */
+  zmq::socket_t* socket = nullptr;
+  for (size_t i = 0; i < pollItems.size (); ++i)
+    if (pollItems[i].revents & ZMQ_POLLIN)
+      {
+        socket = sockets[i].get ();
+        break;
+      }
+  CHECK (socket != nullptr);
+
+  /* Read all message parts from the socket.  */
   for (unsigned parts = 1; ; ++parts)
     {
       zmq::message_t msg;
-      try
-        {
-          bool gotMessage = false;
-          while (!gotMessage)
-            {
-              gotMessage = socket->recv (&msg);
-
-              /* Check if a shutdown is requested.  */
-              if (shouldStop)
-                return false;
-            }
-        }
-      catch (const zmq::error_t& exc)
-        {
-          /* See if the error is because the socket was closed.  In that case,
-             we just want to shut down the listener thread.  */
-          if (exc.num () == ETERM)
-            return false;
-          throw;
-        }
+      CHECK (socket->recv (&msg));
 
       switch (parts)
         {
@@ -150,12 +178,22 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
       VLOG (1) << "Received " << topic << " with sequence number " << seq;
       VLOG (2) << "Payload:\n" << payload;
 
+      enum class TopicType
+      {
+        UNKNOWN,
+        ATTACH,
+        DETACH,
+        PENDING,
+      };
+
       std::string gameId;
-      bool isAttach;
+      TopicType type = TopicType::UNKNOWN;
       if (CheckTopicPrefix (topic, "game-block-attach json ", gameId))
-        isAttach = true;
+        type = TopicType::ATTACH;
       else if (CheckTopicPrefix (topic, "game-block-detach json ", gameId))
-        isAttach = false;
+        type = TopicType::DETACH;
+      else if (CheckTopicPrefix (topic, "game-pending-move json ", gameId))
+        type = TopicType::PENDING;
       else
         LOG (FATAL) << "Unexpected topic of ZMQ notification: " << topic;
 
@@ -183,30 +221,67 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
           << "Error parsing notification JSON: " << parseErrs;
 
       for (auto i = range.first; i != range.second; ++i)
-        if (isAttach)
-          i->second->BlockAttach (gameId, data, seqMismatch);
-        else
-          i->second->BlockDetach (gameId, data, seqMismatch);
+        switch (type)
+          {
+          case TopicType::ATTACH:
+            i->second->BlockAttach (gameId, data, seqMismatch);
+            break;
+          case TopicType::DETACH:
+            i->second->BlockDetach (gameId, data, seqMismatch);
+            break;
+          case TopicType::PENDING:
+            i->second->PendingMove (gameId, data);
+            break;
+          default:
+            LOG (FATAL) << "Invalid topic type: " << static_cast<int> (type);
+          }
     }
 }
 
 void
 ZmqSubscriber::Start ()
 {
-  CHECK (IsEndpointSet ());
-  LOG (INFO) << "Starting ZMQ subscriber at address: " << addr;
+  CHECK (!addrBlocks.empty ()) << "ZMQ endpoint is not yet set";
 
   CHECK (!IsRunning ());
-  socket = std::make_unique<zmq::socket_t> (ctx, ZMQ_SUB);
+  CHECK (sockets.empty ());
+
+  LOG (INFO) << "Starting ZMQ subscriber for blocks: " << addrBlocks;
+  auto socket = std::make_unique<zmq::socket_t> (ctx, ZMQ_SUB);
+  socket->connect (addrBlocks.c_str ());
+  zmq::socket_t* const socketBlocks = socket.get ();
+  sockets.push_back (std::move (socket));
   for (const auto& entry : listeners)
     for (const std::string cmd : {"game-block-attach", "game-block-detach"})
       {
         const std::string topic = cmd + " json " + entry.first;
-        socket->setsockopt (ZMQ_SUBSCRIBE, topic.data (), topic.size ());
+        socketBlocks->setsockopt (ZMQ_SUBSCRIBE, topic.data (), topic.size ());
       }
-  constexpr int TIMEOUT_MS = 100;
-  socket->setsockopt (ZMQ_RCVTIMEO, &TIMEOUT_MS, sizeof (TIMEOUT_MS));
-  socket->connect (addr.c_str ());
+
+  if (!addrPending.empty ())
+    {
+      LOG (INFO) << "Receiving pending moves from: " << addrPending;
+
+      zmq::socket_t* socketPending = nullptr;
+      if (addrPending == addrBlocks)
+        socketPending = socketBlocks;
+      else
+        {
+          socket = std::make_unique<zmq::socket_t> (ctx, ZMQ_SUB);
+          socket->connect (addrPending.c_str ());
+          socketPending = socket.get ();
+          sockets.push_back (std::move (socket));
+        }
+
+      for (const auto& entry : listeners)
+        {
+          const std::string topic = "game-pending-move json " + entry.first;
+          socketPending->setsockopt (ZMQ_SUBSCRIBE, topic.data (),
+                                     topic.size ());
+        }
+    }
+  else
+    LOG (INFO) << "Not subscribing to pending moves";
 
   /* Reset last-seen sequence numbers for a fresh start.  */
   lastSeq.clear ();
@@ -219,13 +294,13 @@ void
 ZmqSubscriber::Stop ()
 {
   CHECK (IsRunning ());
-  LOG (INFO) << "Stopping ZMQ subscriber at address " << addr;
+  LOG (INFO) << "Stopping ZMQ subscriber at address " << addrBlocks;
 
   shouldStop = true;
 
   worker->join ();
   worker.reset ();
-  socket.reset ();
+  sockets.clear ();
 }
 
 } // namespace internal

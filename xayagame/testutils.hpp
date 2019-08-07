@@ -86,6 +86,7 @@ public:
                                             const std::string& message,
                                             const std::string& signature));
 
+  MOCK_METHOD0 (getrawmempool, Json::Value ());
   MOCK_METHOD0 (name_pending, Json::Value ());
 
 };
@@ -197,7 +198,13 @@ protected:
   static std::string
   GetZmqEndpoint (const Game& g)
   {
-    return g.zmq.addr;
+    return g.zmq.addrBlocks;
+  }
+
+  static std::string
+  GetZmqEndpointPending (const Game& g)
+  {
+    return g.zmq.addrPending;
   }
 
   static State
@@ -233,7 +240,7 @@ protected:
   }
 
   /**
-   * Calls BlockAttach on the given game instance.  The function takes care
+   * Calls BlockAttach on the given Game instance.  The function takes care
    * of setting up the blockData JSON object correctly based on the building
    * blocks given here.
    */
@@ -243,13 +250,18 @@ protected:
                         const Json::Value& moves, const bool seqMismatch) const;
 
   /**
-   * Calls BlockDetach on the given game instance, setting up the blockData
+   * Calls BlockDetach on the given Game instance, setting up the blockData
    * object correctly.
    */
   void CallBlockDetach (Game& g, const std::string& reqToken,
                         const uint256& parentHash, const uint256& blockHash,
                         unsigned height,
                         const Json::Value& moves, const bool seqMismatch) const;
+
+  /**
+   * Calls PendingMove on the given Game instance.
+   */
+  void CallPendingMove (Game& g, const Json::Value& data) const;
 
 };
 
