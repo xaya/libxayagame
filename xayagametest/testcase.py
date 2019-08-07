@@ -56,6 +56,11 @@ class XayaGameTest (object):
     self.addArguments (parser)
     self.args = parser.parse_args ()
 
+    # This can be set to "none", "one socket" (default) and "two sockets".
+    # That way, tests can control how the ZMQ notifications for pending moves
+    # should be sent, if they need to.
+    self.zmqPending = "one socket"
+
   def addArguments (self, parser):
     """
     This function is called to add additional arguments (test specific)
@@ -97,11 +102,26 @@ class XayaGameTest (object):
 
     basePort = random.randint (1024, 30000)
     self.log.info ("Using port range %d..%d, hopefully it is free"
-        % (basePort, basePort + 2))
+        % (basePort, basePort + 3))
 
-    self.xayanode = xaya.Node (self.basedir, basePort, basePort + 1,
+    zmqPorts = {
+      "blocks": basePort + 1,
+    }
+    if self.zmqPending == "none":
+      self.log.info ("Disabling ZMQ for pending moves in Xaya Core")
+    elif self.zmqPending == "one socket":
+      self.log.info ("Pending moves are sent on the same socket as blocks")
+      zmqPorts["pending"] = zmqPorts["blocks"]
+    elif self.zmqPending == "two sockets":
+      self.log.info ("Pending moves are sent on a different socket as blocks")
+      zmqPorts["pending"] = basePort + 2
+      assert zmqPorts["pending"] != zmqPorts["blocks"]
+    else:
+      raise AssertionError ("Invalid zmqPending: %s" % self.zmqPending)
+
+    self.xayanode = xaya.Node (self.basedir, basePort, zmqPorts,
                                self.args.xayad_binary)
-    self.gamenode = game.Node (self.basedir, basePort + 2,
+    self.gamenode = game.Node (self.basedir, basePort + 3,
                                self.args.game_daemon)
 
     class RpcHandles:
@@ -278,6 +298,21 @@ class XayaGameTest (object):
 
     actual = self.getGameState ()
     self.assertEqual (actual, expected)
+
+  def getPendingState (self):
+    """
+    Returns the current state of pending moves.  Callers must make sure to
+    wait some time before calling here themselves, as there is no way to
+    ensure this has synced with sent moves.
+    """
+
+    state = self.rpc.game.getpendingstate ()
+    self.assertEqual (state["gameid"], self.gameId)
+    self.assertEqual (state["state"], "up-to-date")
+    self.assertEqual (state["blockhash"], self.rpc.xaya.getbestblockhash ())
+    self.assertEqual (state["height"], self.rpc.xaya.getblockcount ())
+
+    return state["pending"]
 
   def assertEqual (self, a, b):
     """

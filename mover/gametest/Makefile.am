@@ -3,12 +3,16 @@ AM_TESTS_ENVIRONMENT = \
 
 TEST_LIBRARY = \
   mover.py \
+  pending.py \
   persistence.py
 
 REGTESTS = \
   basic.py \
   bind_locally.py \
   catching_up.py \
+  pending-disabled.py \
+  pending-onesocket.py \
+  pending-twosockets.py \
   persistence-lmdb.py \
   persistence-sqlite.py \
   pruning.py \
