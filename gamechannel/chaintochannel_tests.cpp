@@ -183,6 +183,8 @@ public:
 
   MOCK_METHOD0 (stop, void ());
   MOCK_METHOD0 (getcurrentstate, Json::Value ());
+  MOCK_METHOD0 (getpendingstate, Json::Value ());
+  MOCK_METHOD1 (waitforpendingchange, Json::Value (int));
 
 };
 
