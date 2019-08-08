@@ -8,10 +8,15 @@
 
 #include "testutils.hpp"
 
+#include <xayautil/hash.hpp>
+
 #include <json/json.h>
+#include <jsonrpccpp/client/connectors/httpclient.h>
+#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <sqlite3.h>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <glog/logging.h>
@@ -19,6 +24,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,6 +33,8 @@ namespace xaya
 {
 namespace
 {
+
+using testing::Return;
 
 /* ************************************************************************** */
 
@@ -206,11 +214,7 @@ protected:
   Json::Value
   GetStateAsJson (sqlite3* db) override
   {
-    State data;
-    const int rc = sqlite3_exec (db, R"(
-      SELECT `user`, `msg` FROM `chat`
-    )", &SaveToMap, &data, nullptr);
-    CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve current state from DB";
+    const State data = GetState (db);
 
     Json::Value res(Json::objectValue);
     for (const auto& entry : data)
@@ -266,13 +270,88 @@ public:
     Json::Value res(Json::arrayValue);
     for (const auto& p : perPlayer)
       {
+        std::ostringstream mvStr;
+        mvStr << p.second;
+
         Json::Value obj(Json::objectValue);
+        obj["txid"] = SHA256::Hash (mvStr.str ()).ToHex ();
         obj["name"] = p.first;
         obj["move"] = p.second;
         res.append (obj);
       }
 
     return res;
+  }
+
+  /**
+   * Queries the current state as map from the database.
+   */
+  static State
+  GetState (sqlite3* db)
+  {
+    State data;
+    const int rc = sqlite3_exec (db, R"(
+      SELECT `user`, `msg` FROM `chat`
+    )", &SaveToMap, &data, nullptr);
+    CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve current state from DB";
+
+    return data;
+  }
+
+};
+
+/**
+ * PendingMoveProcessor for the chat game.
+ */
+class ChatPendingMoves : public SQLiteGame::PendingMoves
+{
+
+private:
+
+  /**
+   * The current pending state, already as JSON.  This is an object
+   * mapping names to the array of pending chat messages in order.
+   *
+   * We include names in the database without pending moves as well,
+   * mapping to an empty value.  This allows us to test the access to the
+   * confirmed state in the database (which is the main point of having
+   * this in the first place).
+   */
+  Json::Value pending;
+
+protected:
+
+  void
+  Clear () override
+  {
+    pending = Json::Value (Json::objectValue);
+
+    const auto state = ChatGame::GetState (AccessConfirmedState ());
+    for (const auto& entry : state)
+      pending[entry.first] = Json::Value (Json::arrayValue);
+  }
+
+  void
+  AddPendingMove (const Json::Value& mv) override
+  {
+    const std::string name = mv["name"].asString ();
+    if (!pending.isMember (name))
+      pending[name] = Json::Value (Json::arrayValue);
+
+    for (const auto& val : mv["move"])
+      pending[name].append (val.asString ());
+  }
+
+public:
+
+  ChatPendingMoves (SQLiteGame& g)
+    : PendingMoves(g), pending(Json::objectValue)
+  {}
+
+  Json::Value
+  ToJson () const override
+  {
+    return pending;
   }
 
 };
@@ -813,6 +892,78 @@ TEST_F (GeneratedIdTests, ErrorHandling)
     {"foo", {3, 10}},
     {"bar", {4, 11}},
   });
+}
+
+/* ************************************************************************** */
+
+class SQLitePendingMoveTests : public SQLiteGameTests<ChatGame>
+{
+
+private:
+
+  jsonrpc::HttpServer httpServer;
+  jsonrpc::HttpClient httpClient;
+
+  MockXayaRpcServer mockXayaServer;
+  XayaRpcClient rpcClient;
+
+protected:
+
+  ChatPendingMoves proc;
+
+  SQLitePendingMoveTests ()
+    : httpServer(MockXayaRpcServer::HTTP_PORT),
+      httpClient(MockXayaRpcServer::HTTP_URL),
+      mockXayaServer(httpServer),
+      rpcClient(httpClient),
+      proc(rules)
+  {
+    proc.InitialiseGameContext (Chain::MAIN, GAME_ID, &rpcClient);
+    game.SetPendingMoveProcessor (proc);
+
+    EXPECT_CALL (mockXayaServer, getrawmempool ())
+        .WillRepeatedly (Return (Json::Value (Json::arrayValue)));
+
+    mockXayaServer.StartListening ();
+  }
+
+  ~SQLitePendingMoveTests ()
+  {
+    mockXayaServer.StopListening ();
+  }
+
+};
+
+TEST_F (SQLitePendingMoveTests, Works)
+{
+  ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({
+    {"domob", "new"},
+  }));
+
+  /* Verify the initial state is set up correctly based on the database.  */
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"(
+    {
+      "domob": [],
+      "foo": []
+    }
+  )"));
+
+  const auto moves = ChatGame::Moves ({
+    {"foo", "baz"},
+    {"new player", "hi"},
+    {"new player", "there"},
+  });
+  for (const auto& mv : moves)
+    CallPendingMove (game, mv);
+
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"(
+    {
+      "domob": [],
+      "foo": ["baz"],
+      "new player": ["hi", "there"]
+    }
+  )"));
 }
 
 /* ************************************************************************** */

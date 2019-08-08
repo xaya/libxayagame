@@ -74,7 +74,10 @@ protected:
   const GameStateData& GetConfirmedState () const;
 
   /**
-   * Clears the state, so it corresponds to an empty mempool.
+   * Clears the state, so it corresponds to an empty mempool.  This is called
+   * whenever the confirmed on-chain state changes.  It may also be called
+   * when the confirmed state did not change but the pending state needs to
+   * be rebuilt due to some other reason.
    */
   virtual void Clear () = 0;
 
