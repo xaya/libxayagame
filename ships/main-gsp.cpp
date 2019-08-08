@@ -36,6 +36,9 @@ DEFINE_string (datadir, "",
                "base data directory for game data (will be extended by the"
                " game ID and chain)");
 
+DEFINE_bool (pending_moves, true,
+             "whether or not pending moves should be tracked");
+
 } // anonymous namespace
 
 int
@@ -73,6 +76,10 @@ main (int argc, char** argv)
   ships::ShipsLogic rules;
   xaya::ChannelGspInstanceFactory instanceFact(rules);
   config.InstanceFactory = &instanceFact;
+
+  ships::ShipsPending pending(rules);
+  if (FLAGS_pending_moves)
+    config.PendingMoves = &pending;
 
   const int res = xaya::SQLiteMain (config, "xs", rules);
   google::protobuf::ShutdownProtobufLibrary ();

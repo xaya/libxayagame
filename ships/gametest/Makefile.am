@@ -7,6 +7,7 @@ REGTESTS = \
   channel_management.py \
   disputes.py \
   getchannel.py \
+  pending.py \
   reorg.py \
   winner_statement.py
 

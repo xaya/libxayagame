@@ -176,6 +176,32 @@ SerialisedState (const std::string& str)
   return res;
 }
 
+/**
+ * Returns a JSON dispute/resolution move object for the channel which has
+ * a state proof for the state parsed from text and signed by the given
+ * signatures.  Key should be either "r" or "d" to build resolutions or
+ * disputes, respectively.
+ */
+Json::Value
+BuildDisputeResolutionMove (const xaya::uint256& channelId,
+                            const xaya::uint256& txid,
+                            const std::string& key, const std::string& stateStr,
+                            const std::vector<std::string>& signatures)
+{
+  xaya::proto::StateProof proof;
+  auto* is = proof.mutable_initial_state ();
+  *is->mutable_data () = SerialisedState (stateStr);
+  for (const auto& sgn : signatures)
+    is->add_signatures (sgn);
+
+  Json::Value data(Json::objectValue);
+  data[key] = Json::Value (Json::objectValue);
+  data[key]["id"] = channelId.ToHex ();
+  data[key]["state"] = xaya::ProtoToBase64 (proof);
+
+  return Move ("xyz", txid, data);
+}
+
 TEST_F (StateUpdateTests, MoveNotAnObject)
 {
   const auto txid = xaya::SHA256::Hash ("foo");
@@ -796,28 +822,12 @@ protected:
     AddStatsRow ("name 1", 0, 0);
   }
 
-  /**
-   * Returns a JSON dispute/resolution move object for our channel which has
-   * a state proof for the state parsed from text and signed by the given
-   * signatures.  Key should be either "r" or "d" to build resolutions or
-   * disputes, respectively.
-   */
   Json::Value
   BuildMove (const std::string& key, const std::string& stateStr,
              const std::vector<std::string>& signatures)
   {
-    xaya::proto::StateProof proof;
-    auto* is = proof.mutable_initial_state ();
-    *is->mutable_data () = SerialisedState (stateStr);
-    for (const auto& sgn : signatures)
-      is->add_signatures (sgn);
-
-    Json::Value data(Json::objectValue);
-    data[key] = Json::Value (Json::objectValue);
-    data[key]["id"] = channelId.ToHex ();
-    data[key]["state"] = xaya::ProtoToBase64 (proof);
-
-    return Move ("xyz", txid, data);
+    return BuildDisputeResolutionMove (channelId, txid,
+                                       key, stateStr, signatures);
   }
 
 };
@@ -927,6 +937,181 @@ TEST_F (DisputeResolutionTests, ValidResolution)
 
   ExpectNumberOfChannels (1);
   ASSERT_FALSE (ExpectChannel (channelId)->HasDispute ());
+}
+
+/* ************************************************************************** */
+
+} // anonymous namespace
+
+class PendingTests : public InMemoryLogicFixture
+{
+
+private:
+
+  ShipsPending proc;
+
+protected:
+
+  xaya::proto::ChannelMetadata meta;
+
+  xaya::ChannelsTable tbl;
+
+  PendingTests ()
+    : proc(game), tbl(game)
+  {
+    proc.InitialiseGameContext (xaya::Chain::MAIN, "xs",
+                                &mockXayaServer.GetClient ());
+
+    CHECK (TextFormat::ParseFromString (R"(
+      participants:
+        {
+          name: "name 0"
+          address: "addr 0"
+        }
+      participants:
+        {
+          name: "name 1"
+          address: "addr 1"
+        }
+    )", &meta));
+
+    Json::Value signatureOk(Json::objectValue);
+    signatureOk["valid"] = true;
+    signatureOk["address"] = "addr 0";
+    EXPECT_CALL (*mockXayaServer,
+                 verifymessage ("", _, xaya::EncodeBase64 ("sgn 0")))
+        .WillRepeatedly (Return (signatureOk));
+
+    signatureOk["address"] = "addr 1";
+    EXPECT_CALL (*mockXayaServer,
+                 verifymessage ("", _, xaya::EncodeBase64 ("sgn 1")))
+        .WillRepeatedly (Return (signatureOk));
+  }
+
+  /**
+   * Submits a pending move to the processor.
+   */
+  void
+  AddPendingMove (const Json::Value& mv)
+  {
+    proc.AddPendingMoveUnsafe (mv);
+  }
+
+  /**
+   * Expects that the pending state has exactly the given channels (by ID).
+   * We do not care about the data for each channel, as this test is mostly
+   * about move parsing and forwarding of data.
+   */
+  void
+  ExpectPendingChannels (const std::set<xaya::uint256>& expected)
+  {
+    const auto actualJson = proc.ToJson ()["channels"];
+    ASSERT_TRUE (actualJson.isObject ());
+
+    std::set<xaya::uint256> actual;
+    for (auto it = actualJson.begin (); it != actualJson.end (); ++it)
+      {
+        xaya::uint256 txid;
+        ASSERT_TRUE (txid.FromHex (it.key ().asString ()));
+        actual.insert (txid);
+      }
+    ASSERT_EQ (actual.size (), actualJson.size ());
+
+    EXPECT_EQ (actual, expected);
+  }
+
+};
+
+namespace
+{
+
+TEST_F (PendingTests, StatesProcessed)
+{
+  const auto cid1 = xaya::SHA256::Hash ("channel 1");
+  auto h = tbl.CreateNew (cid1);
+  h->Reinitialise (meta, SerialisedState ("turn: 0"));
+  h.reset ();
+
+  const auto cid2 = xaya::SHA256::Hash ("channel 2");
+  h = tbl.CreateNew (cid2);
+  h->Reinitialise (meta, SerialisedState ("turn: 0"));
+  h.reset ();
+
+  const auto mv1 = BuildDisputeResolutionMove (
+      cid1, xaya::SHA256::Hash ("tx 1"), "d",
+      R"(
+        turn: 1
+        position_hashes: "foo"
+      )", {"sgn 0", "sgn 1"});
+  AddPendingMove (mv1);
+
+  const auto mv2 = BuildDisputeResolutionMove (
+      cid2, xaya::SHA256::Hash ("tx 2"), "r",
+      R"(
+        turn: 0
+        winner: 1
+      )", {"sgn 0", "sgn 1"});
+  AddPendingMove (mv2);
+
+  ExpectPendingChannels ({cid1, cid2});
+}
+
+TEST_F (PendingTests, NonObjectMove)
+{
+  const auto cid = xaya::SHA256::Hash ("channel");
+  auto h = tbl.CreateNew (cid);
+  h->Reinitialise (meta, SerialisedState ("turn: 0"));
+  h.reset ();
+
+  AddPendingMove (ParseJson (R"(
+    {
+      "move": 42
+    }
+  )"));
+
+  ExpectPendingChannels ({});
+}
+
+TEST_F (PendingTests, NonExistantChannel)
+{
+  const auto cid = xaya::SHA256::Hash ("channel");
+  auto h = tbl.CreateNew (cid);
+  h->Reinitialise (meta, SerialisedState ("turn: 0"));
+  h.reset ();
+
+  const auto wrongCid = xaya::SHA256::Hash ("other channel");
+  const auto mv = BuildDisputeResolutionMove (
+      wrongCid, xaya::SHA256::Hash ("tx"), "r",
+      R"(
+        turn: 0
+      )", {"sgn 0", "sgn 1"});
+  AddPendingMove (mv);
+
+  ExpectPendingChannels ({});
+}
+
+TEST_F (PendingTests, InvalidStateProof)
+{
+  const auto cid = xaya::SHA256::Hash ("channel");
+  auto h = tbl.CreateNew (cid);
+  h->Reinitialise (meta, SerialisedState ("turn: 0"));
+  h.reset ();
+
+  auto mv = ParseJson (R"(
+    {
+      "move":
+        {
+          "d":
+            {
+              "state": "invalid base64 proto"
+            }
+        }
+    }
+  )");
+  mv["move"]["d"]["id"] = cid.ToHex ();
+  AddPendingMove (mv);
+
+  ExpectPendingChannels ({});
 }
 
 /* ************************************************************************** */
