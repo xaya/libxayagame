@@ -4,6 +4,7 @@
 
 #include "channelgame.hpp"
 
+#include "protoutils.hpp"
 #include "protoversion.hpp"
 #include "schema.hpp"
 #include "stateproof.hpp"
@@ -139,6 +140,90 @@ ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
   ch.SetStateProof (proof);
   ch.ClearDispute ();
   return true;
+}
+
+void
+ChannelGame::PendingMoves::Clear ()
+{
+  channels.clear ();
+}
+
+void
+ChannelGame::PendingMoves::AddPendingStateProof (ChannelData& ch,
+                                                 const proto::StateProof& proof)
+{
+  ChannelGame& game = dynamic_cast<ChannelGame&> (GetSQLiteGame ());
+
+  const auto& id = ch.GetId ();
+  const auto& meta = ch.GetMetadata ();
+  const auto& rules = game.GetBoardRules ();
+
+  if (!CheckVersionedProto (rules, meta, proof))
+    return;
+
+  BoardState provenState;
+  if (!VerifyStateProof (GetXayaRpc (), rules, id, meta, ch.GetReinitState (),
+                         proof, provenState))
+    {
+      LOG (WARNING) << "StateProof of pending move is invalid";
+      return;
+    }
+
+  const auto provenParsed = rules.ParseState (id, meta, provenState);
+  CHECK (provenParsed != nullptr);
+  const unsigned provenCnt = provenParsed->TurnCount ();
+  VLOG (1)
+      << "Found valid pending state proof for channel " << id.ToHex ()
+      << " with turn count " << provenCnt;
+
+  const auto mit = channels.find (id);
+  if (mit == channels.end ())
+    {
+      const auto onChainParsed = rules.ParseState (id, meta,
+                                                   ch.GetLatestState ());
+      CHECK (onChainParsed != nullptr);
+      const unsigned onChainCnt = onChainParsed->TurnCount ();
+      VLOG (1) << "On-chain turn count: " << onChainCnt;
+      if (provenCnt > onChainCnt)
+        {
+          LOG (INFO)
+              << "Found new latest state for channel " << id.ToHex ()
+              << " in pending move with turn count " << provenCnt;
+          channels.emplace (id, PendingChannelData ({proof, provenCnt}));
+        }
+    }
+  else
+    {
+      PendingChannelData& pending = mit->second;
+      VLOG (1) << "Previous pending turn count: " << pending.turnCount;
+      if (provenCnt > pending.turnCount)
+        {
+          LOG (INFO)
+              << "Found new latest state for channel " << id.ToHex ()
+              << " in pending move with turn count " << provenCnt;
+          pending.proof = proof;
+          pending.turnCount = provenCnt;
+        }
+    }
+}
+
+Json::Value
+ChannelGame::PendingMoves::ToJson () const
+{
+  Json::Value channelsJson(Json::objectValue);
+  for (const auto& entry : channels)
+    {
+      Json::Value cur(Json::objectValue);
+      cur["id"] = entry.first.ToHex ();
+      cur["proof"] = ProtoToBase64 (entry.second.proof);
+      cur["turncount"] = entry.second.turnCount;
+      channelsJson[entry.first.ToHex ()] = cur;
+    }
+
+  Json::Value res(Json::objectValue);
+  res["channels"] = channelsJson;
+
+  return res;
 }
 
 void

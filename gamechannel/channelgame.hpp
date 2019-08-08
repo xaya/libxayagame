@@ -74,7 +74,81 @@ protected:
 
 public:
 
+  class PendingMoves;
+
   using SQLiteGame::SQLiteGame;
+
+};
+
+/**
+ * PendingMoveProcessor for a channel game's GSP.  This has functionality
+ * to build up "standard pending data", which contains state proofs known
+ * from pending disputes and resolutions.
+ *
+ * Subclasses must still implement AddPendingMove by themselves, where they
+ * at least have to parse their game-specific move format and pass any received
+ * state proofs (e.g. disputes and resolutions) on to AddPendingStateProof
+ * for processing by this class.
+ */
+class ChannelGame::PendingMoves : public SQLiteGame::PendingMoves
+{
+
+private:
+
+  /**
+   * The data stored for the pending state proof of one of the channels.
+   */
+  struct PendingChannelData
+  {
+
+    /** The actual StateProof corresponding to the latest known state.  */
+    proto::StateProof proof;
+
+    /** The turn count of this state proof.  */
+    unsigned turnCount;
+
+  };
+
+  /** Data for all channels that have pending updates.  */
+  std::map<uint256, PendingChannelData> channels;
+
+protected:
+
+  /**
+   * Clears the current state.  In case subclasses override Clear themselves,
+   * they should make sure to also call this version.
+   */
+  void Clear () override;
+
+  /**
+   * Processes a new StateProof received in a pending move for the given
+   * channel.  This verifies that the StateProof is valid and later than
+   * what we may have already, but it does not verify other conditions that
+   * may be imposed by ProcessDispute or ProcessResolution.  In other words,
+   * it may be that an update makes it into the pending state even though
+   * the corresponding move will be invalid when processed on-chain.  That is
+   * not an issue, though, as every fresher update than previously known
+   * can be useful for the channel game (independent of what the move
+   * will do in the end).
+   */
+  void AddPendingStateProof (ChannelData& ch, const proto::StateProof& proof);
+
+public:
+
+  explicit PendingMoves (ChannelGame& g)
+    : SQLiteGame::PendingMoves(g)
+  {}
+
+  /**
+   * Returns the pending channel state as JSON.  The JSON result will be
+   * an object with per-channel pending data in a "channels" field.
+   *
+   * If subclasses want to return more data, they should call this method
+   * and then extend the resulting JSON object with more fields.  They should
+   * not change the structure or remove fields, since that would break the
+   * general ChainToChannel logic reading this data.
+   */
+  Json::Value ToJson () const override;
 
 };
 
