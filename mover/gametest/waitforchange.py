@@ -62,6 +62,7 @@ class WaitForChangeTest (MoverTest):
     self.test_attach ()
     self.test_detach ()
     self.test_move ()
+    self.test_pending_disabled ()
     self.test_stopped ()
 
     # Since the initial game state on regtest is associated with the genesis
@@ -131,6 +132,18 @@ class WaitForChangeTest (MoverTest):
 
     self.move ("a", "k", 5)
     pending.shouldBeDone (self.rpc.game.getpendingstate ())
+
+  def test_pending_disabled (self):
+    self.mainLogger.info ("Tracking of pending moves disabled...")
+
+    self.stopGameDaemon ()
+    self.startGameDaemon (extraArgs=["--nopending_moves"])
+
+    self.expectError (-32603, ".*pending moves are not tracked.*",
+                      self.rpc.game.waitforpendingchange, 0)
+
+    self.stopGameDaemon ()
+    self.startGameDaemon ()
 
   def test_stopped (self):
     self.mainLogger.info ("Stopping the daemon while a waiter is active...")
