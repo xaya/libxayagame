@@ -100,6 +100,12 @@ private:
    */
   mutable std::condition_variable cvStateChanged;
 
+  /**
+   * Condition variable that is signalled whenever the pending state
+   * is changed.
+   */
+  mutable std::condition_variable cvPendingStateChanged;
+
   /** The chain type to which the game is connected.  */
   Chain chain = Chain::UNKNOWN;
 
@@ -136,6 +142,13 @@ private:
 
   /** The processor for pending moves, if any.  */
   PendingMoveProcessor* pending = nullptr;
+
+  /**
+   * Version number of the "current" pending state.  This number is incremented
+   * whenever the pending state may have changed, and is used to identify
+   * known states with WaitForPendingChange.
+   */
+  int pendingStateVersion = 1;
 
   /**
    * Desired size for batches of atomic transactions while the game is
@@ -228,6 +241,17 @@ private:
   void NotifyStateChange () const;
 
   /**
+   * Notifies potentially-waiting threads that the pending state has changed.
+   */
+  void NotifyPendingStateChange ();
+
+  /**
+   * Returns the current pending state as JSON, but assuming that the caller
+   * already holds the mut lock.
+   */
+  Json::Value UnlockedPendingJsonState () const;
+
+  /**
    * Converts a state enum value to a string for use in log messages and the
    * JSON-RPC interface.
    */
@@ -236,6 +260,12 @@ private:
   friend class GameTestFixture;
 
 public:
+
+  /**
+   * Special value for the old version in WaitForPendingChange that tells the
+   * function to always block.
+   */
+  static constexpr int WAITFORCHANGE_ALWAYS_BLOCK = 0;
 
   explicit Game (const std::string& id);
 
@@ -373,6 +403,18 @@ public:
    * expected anyway.
    */
   void WaitForChange (const uint256& oldBlock, uint256& newBlock) const;
+
+  /**
+   * Blocks the calling thread until a change to the pending state has
+   * been made.  Note that this function may return spuriously.
+   * Returns the new pending state as per GetPendingJsonState.
+   *
+   * If oldVersion is passed and not WAITFORCHANGE_ALWAYS_BLOCK, then the
+   * method returns immediately if the version of the current pending state
+   * (as returned in the JSON field "version") does not match the one
+   * passed in.
+   */
+  Json::Value WaitForPendingChange (int oldState) const;
 
   /**
    * Starts the ZMQ subscriber and other logic.  Must not be called before

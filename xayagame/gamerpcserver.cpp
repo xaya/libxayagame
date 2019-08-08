@@ -37,6 +37,13 @@ GameRpcServer::waitforchange (const std::string& knownBlock)
   return DefaultWaitForChange (game, knownBlock);
 }
 
+Json::Value
+GameRpcServer::waitforpendingchange (const int oldVersion)
+{
+  LOG (INFO) << "RPC method called: waitforpendingchange " << oldVersion;
+  return game.WaitForPendingChange (oldVersion);
+}
+
 std::string
 GameRpcServer::DefaultWaitForChange (const Game& g,
                                      const std::string& knownBlock)
@@ -50,7 +57,7 @@ GameRpcServer::DefaultWaitForChange (const Game& g,
   uint256 newBlock;
   g.WaitForChange (oldBlock, newBlock);
 
-  /* If there is no best block so far, return JSON null.  */
+  /* If there is no best block so far, return empty string.  */
   if (newBlock.IsNull ())
     return "";
 

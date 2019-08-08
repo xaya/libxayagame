@@ -244,7 +244,10 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
     ReinitialiseState ();
 
   if (state == State::UP_TO_DATE && pending != nullptr)
-    pending->ProcessAttachedBlock (storage->GetCurrentGameState ());
+    {
+      pending->ProcessAttachedBlock (storage->GetCurrentGameState ());
+      NotifyPendingStateChange ();
+    }
 }
 
 void
@@ -331,7 +334,10 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
     ReinitialiseState ();
 
   if (state == State::UP_TO_DATE && pending != nullptr)
-    pending->ProcessDetachedBlock (storage->GetCurrentGameState (), data);
+    {
+      pending->ProcessDetachedBlock (storage->GetCurrentGameState (), data);
+      NotifyPendingStateChange ();
+    }
 }
 
 void
@@ -349,6 +355,7 @@ Game::PendingMove (const std::string& id, const Json::Value& data)
     {
       CHECK (pending != nullptr);
       pending->ProcessMove (storage->GetCurrentGameState (), data);
+      NotifyPendingStateChange ();
     }
   else
     VLOG (1) << "Ignoring pending move while not up-to-date: " << data;
@@ -570,13 +577,19 @@ Json::Value
 Game::GetPendingJsonState () const
 {
   std::unique_lock<std::mutex> lock(mut);
+  return UnlockedPendingJsonState ();
+}
 
+Json::Value
+Game::UnlockedPendingJsonState () const
+{
   if (!zmq.IsPendingEnabled ())
     throw jsonrpc::JsonRpcException (jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR,
                                      "pending moves are not tracked");
   CHECK (pending != nullptr);
 
   Json::Value res(Json::objectValue);
+  res["version"] = pendingStateVersion;
   res["gameid"] = gameId;
   res["chain"] = ChainToString (chain);
   res["state"] = StateToString (state);
@@ -601,6 +614,19 @@ Game::NotifyStateChange () const
      typical case when they make changes to the state anyway).  */
   VLOG (1) << "Notifying waiting threads about state change...";
   cvStateChanged.notify_all ();
+}
+
+void
+Game::NotifyPendingStateChange ()
+{
+  /* Callers are expected to already hold the mut lock here (as that is the
+     typical case when they make changes to the state anyway).  */
+  CHECK_GT (pendingStateVersion, WAITFORCHANGE_ALWAYS_BLOCK);
+  ++pendingStateVersion;
+  VLOG (1)
+      << "Notifying waiting threads about change of pending state,"
+      << " new version: " << pendingStateVersion;
+  cvPendingStateChanged.notify_all ();
 }
 
 void
@@ -630,6 +656,34 @@ Game::WaitForChange (const uint256& oldBlock, uint256& newBlock) const
 
   if (!storage->GetCurrentBlockHash (newBlock))
     newBlock.SetNull ();
+}
+
+Json::Value
+Game::WaitForPendingChange (const int oldVersion) const
+{
+  std::unique_lock<std::mutex> lock(mut);
+
+  if (oldVersion != WAITFORCHANGE_ALWAYS_BLOCK
+        && oldVersion != pendingStateVersion)
+    {
+      VLOG (1)
+          << "Known version differs from current one,"
+             " returning immediately from WaitForPendingState";
+      return UnlockedPendingJsonState ();
+    }
+
+  if (zmq.IsRunning () && zmq.IsPendingEnabled ())
+    {
+      VLOG (1) << "Waiting for pending state change on condition variable...";
+      cvPendingStateChanged.wait_for (lock, WAITFORCHANGE_TIMEOUT);
+      VLOG (1) << "Potential state change detected in WaitForPendingChange";
+    }
+  else
+    LOG (WARNING)
+        << "WaitForPendingChange called with no ZMQ listener on pending moves,"
+           " returning immediately";
+
+  return UnlockedPendingJsonState ();
 }
 
 void
@@ -677,6 +731,7 @@ Game::Stop ()
   /* Make sure to wake up all listeners waiting for a state update (as there
      won't be one anymore).  */
   NotifyStateChange ();
+  NotifyPendingStateChange ();
 }
 
 void

@@ -23,6 +23,7 @@
 
 #include <glog/logging.h>
 
+#include <atomic>
 #include <cstdio>
 #include <map>
 #include <sstream>
@@ -746,12 +747,12 @@ TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
 
 /* ************************************************************************** */
 
-class GetPendingJsonState : public InitialStateTests
+class GetPendingJsonStateTests : public InitialStateTests
 {
 
 protected:
 
-  GetPendingJsonState ()
+  GetPendingJsonStateTests ()
   {
     EXPECT_CALL (mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
   }
@@ -782,7 +783,7 @@ protected:
 
 };
 
-TEST_F (GetPendingJsonState, NoAttachedProcessor)
+TEST_F (GetPendingJsonStateTests, NoAttachedProcessor)
 {
   SetupZmqEndpoints (true);
   g.Start ();
@@ -790,7 +791,7 @@ TEST_F (GetPendingJsonState, NoAttachedProcessor)
   EXPECT_THROW (g.GetPendingJsonState (), jsonrpc::JsonRpcException);
 }
 
-TEST_F (GetPendingJsonState, PendingNotificationDisabled)
+TEST_F (GetPendingJsonStateTests, PendingNotificationDisabled)
 {
   TestPendingMoves proc;
   g.SetPendingMoveProcessor (proc);
@@ -801,7 +802,7 @@ TEST_F (GetPendingJsonState, PendingNotificationDisabled)
   EXPECT_THROW (g.GetPendingJsonState (), jsonrpc::JsonRpcException);
 }
 
-TEST_F (GetPendingJsonState, PendingState)
+TEST_F (GetPendingJsonStateTests, PendingState)
 {
   TestPendingMoves proc;
   g.SetPendingMoveProcessor (proc);
@@ -1010,6 +1011,211 @@ TEST_F (WaitForChangeTests, OutdatedOldBlock)
 
   EXPECT_FALSE (newBlock.IsNull ());
   EXPECT_TRUE (newBlock == BlockHash (11));
+}
+
+/* ************************************************************************** */
+
+class WaitForPendingChangeTests : public GetPendingJsonStateTests
+{
+
+private:
+
+  /** The thread that is used to call WaitForPendingChange.  */
+  std::unique_ptr<std::thread> waiter;
+
+  TestPendingMoves proc;
+
+protected:
+
+  /** Flag that tells us when the waiter thread is done.  */
+  std::atomic<bool> waiterDone;
+
+  WaitForPendingChangeTests ()
+  {
+    EXPECT_CALL (mockXayaServer, getrawmempool ())
+        .WillRepeatedly (Return (Json::Value (Json::arrayValue)));
+
+    g.SetPendingMoveProcessor (proc);
+    SetStartingBlock (TestGame::GenesisBlockHash ());
+
+    mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+    ReinitialiseState (g);
+    EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  }
+
+  /**
+   * Calls WaitForPendingChange on a newly started thread, storing the output
+   * to the given variable.  If the method throws a JsonRpcException, then
+   * the output is set to null.
+   */
+  void
+  CallWaitForPendingChange (const int oldVersion, Json::Value& output)
+  {
+    ASSERT_EQ (waiter, nullptr);
+    waiterDone = false;
+    waiter = std::make_unique<std::thread> ([this, oldVersion, &output] ()
+      {
+        try
+          {
+            output = g.WaitForPendingChange (oldVersion);
+          }
+        catch (const jsonrpc::JsonRpcException& exc)
+          {
+            LOG (INFO)
+                << "Caught exception from WaitForPendingChange: "
+                << exc.what ();
+            output = Json::Value ();
+          }
+        waiterDone = true;
+      });
+  }
+
+  /**
+   * Verifies that a waiter has been started and received the notification
+   * of a new state already, or does so soon.
+   */
+  void
+  JoinWaiter ()
+  {
+    ASSERT_NE (waiter, nullptr);
+    if (!waiterDone)
+      SleepSome ();
+    EXPECT_TRUE (waiterDone);
+    waiter->join ();
+    waiter.reset ();
+  }
+
+};
+
+TEST_F (WaitForPendingChangeTests, ZmqNotRunning)
+{
+  SetupZmqEndpoints (true);
+
+  Json::Value out;
+  CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
+  JoinWaiter ();
+  EXPECT_TRUE (out.isObject ());
+}
+
+TEST_F (WaitForPendingChangeTests, NotTrackingPendingMoves)
+{
+  SetupZmqEndpoints (false);
+  g.Start ();
+
+  Json::Value out;
+  CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
+  JoinWaiter ();
+
+  /* When pending moves are not tracked, then WaitForPendingChange should
+     throw a JSON-RPC error just like GetPendingJsonState.  */
+  EXPECT_TRUE (out.isNull ());
+}
+
+TEST_F (WaitForPendingChangeTests, StopWakesUpWaiters)
+{
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  Json::Value out;
+  CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
+  SleepSome ();
+  EXPECT_FALSE (waiterDone);
+  g.Stop ();
+  JoinWaiter ();
+  EXPECT_TRUE (out.isObject ());
+}
+
+TEST_F (WaitForPendingChangeTests, OldVersionImmediateReturn)
+{
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  const auto state = g.GetPendingJsonState ();
+
+  Json::Value out;
+  CallWaitForPendingChange (42, out);
+  JoinWaiter ();
+  EXPECT_EQ (out, state);
+}
+
+TEST_F (WaitForPendingChangeTests, OldVersionWaiting)
+{
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  const int oldVersion = g.GetPendingJsonState ()["version"].asInt ();
+
+  Json::Value out;
+  CallWaitForPendingChange (oldVersion, out);
+
+  SleepSome ();
+  EXPECT_FALSE (waiterDone);
+
+  CallPendingMove (g, Moves ("ax")[0]);
+  JoinWaiter ();
+}
+
+TEST_F (WaitForPendingChangeTests, PendingMove)
+{
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  Json::Value out;
+  CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
+
+  SleepSome ();
+  EXPECT_FALSE (waiterDone);
+
+  CallPendingMove (g, Moves ("ax")[0]);
+  JoinWaiter ();
+  EXPECT_EQ (out["pending"], ParseJson (R"(
+    {
+      "state": "",
+      "a": "x"
+    }
+  )"));
+}
+
+TEST_F (WaitForPendingChangeTests, AttachedBlock)
+{
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  Json::Value out;
+  CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
+
+  SleepSome ();
+  EXPECT_FALSE (waiterDone);
+
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  JoinWaiter ();
+  EXPECT_EQ (out["pending"], ParseJson (R"(
+    {
+      "state": "a0b1"
+    }
+  )"));
+}
+
+TEST_F (WaitForPendingChangeTests, DetachedBlock)
+{
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+
+  Json::Value out;
+  CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
+
+  SleepSome ();
+  EXPECT_FALSE (waiterDone);
+
+  DetachBlock (g);
+  JoinWaiter ();
+  EXPECT_EQ (out["pending"], ParseJson (R"(
+    {
+      "state": ""
+    }
+  )"));
 }
 
 /* ************************************************************************** */
