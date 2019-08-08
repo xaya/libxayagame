@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-# Copyright (C) 2018 The Xaya developers
+# Copyright (C) 2018-2019 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 from mover import MoverTest
 
 """
-Tests the waitforchange RPC method behaviour.
+Tests the waitforchange and waitforpendingchange RPC methods.
 """
 
 import threading
@@ -24,41 +24,44 @@ def sleepSome ():
 
 class ForChangeWaiter (threading.Thread):
   """
-  Thread subclass that calls the waitforchange RPC method and just blocks
-  until it receives the result.
+  Thread subclass that calls the waitfor(pending)change RPC method and just
+  blocks until it receives the result.
   """
 
-  def __init__ (self, node):
+  def __init__ (self, node, method, getOldVersion):
     super (ForChangeWaiter, self).__init__ ()
     self.node = node
+    self.method = method
+    self.getOldVersion = getOldVersion
     self.result = None
     self.start ()
     sleepSome ()
 
   def run (self):
     rpc = self.node.createRpc ()
-    state = rpc.getcurrentstate ()
-    oldBlock = ""
-    if "blockhash" in state:
-      oldBlock = state["blockhash"]
-    self.result = rpc.waitforchange (oldBlock)
+    fcn = getattr (rpc, self.method)
+    self.result = fcn (self.getOldVersion (rpc))
 
   def shouldBeRunning (self):
     sleepSome ()
     assert self.is_alive ()
 
-  def shouldBeDone (self, expected):
+  def shouldBeDone (self, expected=None):
     sleepSome ()
     assert not self.is_alive ()
     self.join ()
-    assert self.result == expected
+    if expected is not None:
+      assert self.result == expected
 
 
 class WaitForChangeTest (MoverTest):
 
   def run (self):
+    self.generate (101)
+
     self.test_attach ()
     self.test_detach ()
+    self.test_move ()
     self.test_stopped ()
 
     # Since the initial game state on regtest is associated with the genesis
@@ -66,14 +69,44 @@ class WaitForChangeTest (MoverTest):
     # signaled because of the initial state or where there is not yet a current
     # best block and null is returned from the RPC.
 
+  def getBlockChangeWaiter (self):
+    """
+    Returns a ForChangeWaiter instance calling waitforchange.
+    """
+
+    def getOldVersion (rpc):
+      state = rpc.getcurrentstate ()
+      if "blockhash" in state:
+        return state["blockhash"]
+      return ""
+
+    return ForChangeWaiter (self.gamenode, "waitforchange", getOldVersion)
+
+  def getPendingChangeWaiter (self):
+    """
+    Returns a ForChangeWaiter instance calling waitforpendingchange.
+    """
+
+    def getOldVersion (rpc):
+      state = rpc.getpendingstate ()
+      if "version" in state:
+        return state["version"]
+      return 0
+
+    return ForChangeWaiter (self.gamenode, "waitforpendingchange",
+                            getOldVersion)
+
   def test_attach (self):
     self.mainLogger.info ("Block attaches...")
 
-    waiter = ForChangeWaiter (self.gamenode)
-    waiter.shouldBeRunning ()
+    blocks = self.getBlockChangeWaiter ()
+    pending = self.getPendingChangeWaiter ()
+    blocks.shouldBeRunning ()
+    pending.shouldBeRunning ()
 
     self.generate (1)
-    waiter.shouldBeDone (self.rpc.xaya.getbestblockhash ())
+    blocks.shouldBeDone (self.rpc.xaya.getbestblockhash ())
+    pending.shouldBeDone (self.rpc.game.getpendingstate ())
 
   def test_detach (self):
     self.mainLogger.info ("Block detaches...")
@@ -81,20 +114,35 @@ class WaitForChangeTest (MoverTest):
     self.generate (1)
     blk = self.rpc.xaya.getbestblockhash ()
 
-    waiter = ForChangeWaiter (self.gamenode)
-    waiter.shouldBeRunning ()
+    blocks = self.getBlockChangeWaiter ()
+    pending = self.getPendingChangeWaiter ()
+    blocks.shouldBeRunning ()
+    pending.shouldBeRunning ()
 
     self.rpc.xaya.invalidateblock (blk)
-    waiter.shouldBeDone (self.rpc.xaya.getbestblockhash ())
+    blocks.shouldBeDone (self.rpc.xaya.getbestblockhash ())
+    pending.shouldBeDone (self.rpc.game.getpendingstate ())
+
+  def test_move (self):
+    self.mainLogger.info ("Move sent...")
+
+    pending = self.getPendingChangeWaiter ()
+    pending.shouldBeRunning ()
+
+    self.move ("a", "k", 5)
+    pending.shouldBeDone (self.rpc.game.getpendingstate ())
 
   def test_stopped (self):
     self.mainLogger.info ("Stopping the daemon while a waiter is active...")
 
-    waiter = ForChangeWaiter (self.gamenode)
-    waiter.shouldBeRunning ()
+    blocks = self.getBlockChangeWaiter ()
+    pending = self.getPendingChangeWaiter ()
+    blocks.shouldBeRunning ()
+    pending.shouldBeRunning ()
 
     self.stopGameDaemon ()
-    waiter.shouldBeDone (self.rpc.xaya.getbestblockhash ())
+    blocks.shouldBeDone (self.rpc.xaya.getbestblockhash ())
+    pending.shouldBeDone ()
     self.startGameDaemon ()
 
 
