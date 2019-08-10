@@ -492,8 +492,9 @@ ChannelManager::WaitForChange (const int knownVersion) const
           && knownVersion != stateVersion)
     {
       VLOG (1)
-          << "Known version differs from current one,"
-             " returning immediately from WaitForChange";
+          << "Known version " << knownVersion
+          << " differs from current one (" << stateVersion
+          << "), returning immediately from WaitForChange";
       return UnlockedToJson ();
     }
 
