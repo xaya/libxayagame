@@ -155,9 +155,10 @@ private:
 
 public:
 
-  HttpRpcServer ()
+  template <typename... Args>
+    HttpRpcServer (Args&... args)
     : httpServer(MockServer::HTTP_PORT),
-      srv(httpServer),
+      srv(httpServer, args...),
       httpClient(MockServer::HTTP_URL),
       rpcClient(httpClient)
   {
@@ -196,7 +197,7 @@ public:
   /**
    * Returns the HTTP client connector.
    */
-  jsonrpc::IClientConnector&
+  jsonrpc::HttpClient&
   GetClientConnector ()
   {
     return httpClient;
