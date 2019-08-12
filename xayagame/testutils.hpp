@@ -25,6 +25,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <mutex>
 #include <vector>
 #include <string>
@@ -137,6 +138,45 @@ public:
 };
 
 /**
+ * An RPC client together with its HttpClient connector.
+ */
+template <typename RpcClient>
+  class HttpRpcClient
+{
+
+private:
+
+  jsonrpc::HttpClient httpClient;
+  RpcClient rpcClient;
+
+public:
+
+  explicit HttpRpcClient (const std::string& url)
+    : httpClient(url),
+      rpcClient(httpClient)
+  {}
+
+  /**
+   * Returns the underlying RPC client.
+   */
+  RpcClient&
+  operator* ()
+  {
+    return rpcClient;
+  }
+
+  /**
+   * Returns the underlying client connector.
+   */
+  jsonrpc::HttpClient&
+  GetConnector ()
+  {
+    return httpClient;
+  }
+
+};
+
+/**
  * A mock RPC server together with the HttpServer and HttpClient for it.
  * This is what we usually need for a mock server, so it makes it more
  * convenient to have all together.
@@ -150,17 +190,15 @@ private:
   jsonrpc::HttpServer httpServer;
   MockServer srv;
 
-  jsonrpc::HttpClient httpClient;
-  typename MockServer::RpcClient rpcClient;
+  HttpRpcClient<typename MockServer::RpcClient> rpcClient;
 
 public:
 
   template <typename... Args>
-    HttpRpcServer (Args&... args)
+    explicit HttpRpcServer (Args&... args)
     : httpServer(MockServer::HTTP_PORT),
       srv(httpServer, args...),
-      httpClient(MockServer::HTTP_URL),
-      rpcClient(httpClient)
+      rpcClient(MockServer::HTTP_URL)
   {
     srv.StartListening ();
   }
@@ -191,7 +229,7 @@ public:
   typename MockServer::RpcClient&
   GetClient ()
   {
-    return rpcClient;
+    return *rpcClient;
   }
 
   /**
@@ -200,7 +238,18 @@ public:
   jsonrpc::HttpClient&
   GetClientConnector ()
   {
-    return httpClient;
+    return rpcClient.GetConnector ();
+  }
+
+  /**
+   * Creates a fresh HTTP client connection (which can be used e.g. from
+   * a different thread) and returns it.
+   */
+  std::unique_ptr<HttpRpcClient<typename MockServer::RpcClient>>
+  CreateClient ()
+  {
+    return std::make_unique<HttpRpcClient<typename MockServer::RpcClient>> (
+        MockServer::HTTP_URL);
   }
 
 };
