@@ -365,29 +365,47 @@ ShipsLogic::HandleCloseChannel (const Json::Value& obj)
   tbl.DeleteById (id);
 }
 
+namespace
+{
+
+/**
+ * Tries to parse a dispute or resolution move.  If successful (the move
+ * is valid and the channel it refers to exists), this returns the channel's
+ * handle and sets the StateProof proto that was retrieved from the move.
+ * Otherwise, a null handle is returned.
+ */
+xaya::ChannelsTable::Handle
+ParseDisputeResolutionMove (const Json::Value& obj, xaya::ChannelsTable& tbl,
+                            xaya::proto::StateProof& proof)
+{
+  if (!obj.isObject ())
+    return nullptr;
+
+  if (obj.size () != 2)
+    {
+      LOG (WARNING) << "Invalid dispute/resolution move: " << obj;
+      return nullptr;
+    }
+
+  if (!ExtractProto (obj["state"], proof))
+    {
+      LOG (WARNING) << "Failed to extract StateProof from move: " << obj;
+      return nullptr;
+    }
+
+  return RetrieveChannelFromMove (obj, tbl);
+}
+
+} // anonymous namespace
+
 void
 ShipsLogic::HandleDisputeResolution (const Json::Value& obj,
                                      const unsigned height,
                                      const bool isDispute)
 {
-  if (!obj.isObject ())
-    return;
-
-  if (obj.size () != 2)
-    {
-      LOG (WARNING) << "Invalid dispute/resolution move: " << obj;
-      return;
-    }
-
-  xaya::proto::StateProof proof;
-  if (!ExtractProto (obj["state"], proof))
-    {
-      LOG (WARNING) << "Failed to extract StateProof from move: " << obj;
-      return;
-    }
-
   xaya::ChannelsTable tbl(*this);
-  auto h = RetrieveChannelFromMove (obj, tbl);
+  xaya::proto::StateProof proof;
+  auto h = ParseDisputeResolutionMove (obj, tbl, proof);
   if (h == nullptr)
     return;
 
@@ -511,6 +529,50 @@ ShipsLogic::GetStateAsJson (sqlite3* db)
 {
   GameStateJson gsj(*this);
   return gsj.GetFullJson ();
+}
+
+void
+ShipsPending::HandleDisputeResolution (const Json::Value& obj)
+{
+  ShipsLogic& game = dynamic_cast<ShipsLogic&> (GetSQLiteGame ());
+
+  xaya::ChannelsTable tbl(game);
+  xaya::proto::StateProof proof;
+  auto h = ParseDisputeResolutionMove (obj, tbl, proof);
+  if (h == nullptr)
+    return;
+
+  LOG (INFO) << "Obtained StateProof from pending move";
+  VLOG (1) << "StateProof:\n" << proof.DebugString ();
+
+  AddPendingStateProof (*h, proof);
+}
+
+void
+ShipsPending::AddPendingMoveUnsafe (const Json::Value& mv)
+{
+  CHECK (mv.isObject ()) << "Not an object: " << mv;
+
+  const auto& data = mv["move"];
+  if (!data.isObject ())
+    {
+      LOG (WARNING) << "Move is not an object: " << data;
+      return;
+    }
+
+  /* We do not full validation here, only the things necessary for sane
+     processing.  Even if a move is actually invalid, we can still apply
+     its pending StateProof in case it is valid.  */
+
+  HandleDisputeResolution (data["d"]);
+  HandleDisputeResolution (data["r"]);
+}
+
+void
+ShipsPending::AddPendingMove (const Json::Value& mv)
+{
+  AccessConfirmedState ();
+  AddPendingMoveUnsafe (mv);
 }
 
 } // namespace ships

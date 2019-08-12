@@ -34,6 +34,13 @@ ChannelGspRpcServer::getcurrentstate ()
 }
 
 Json::Value
+ChannelGspRpcServer::getpendingstate ()
+{
+  LOG (INFO) << "RPC method called: getpendingstate";
+  return game.GetPendingJsonState ();
+}
+
+Json::Value
 ChannelGspRpcServer::getchannel (const std::string& channelId)
 {
   LOG (INFO) << "RPC method called: getchannel " << channelId;
@@ -45,6 +52,13 @@ ChannelGspRpcServer::waitforchange (const std::string& knownBlock)
 {
   LOG (INFO) << "RPC method called: waitforchange " << knownBlock;
   return GameRpcServer::DefaultWaitForChange (game, knownBlock);
+}
+
+Json::Value
+ChannelGspRpcServer::waitforpendingchange (const int oldVersion)
+{
+  LOG (INFO) << "RPC method called: waitforpendingchange " << oldVersion;
+  return game.WaitForPendingChange (oldVersion);
 }
 
 Json::Value

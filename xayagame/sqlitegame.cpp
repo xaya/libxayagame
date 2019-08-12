@@ -226,6 +226,13 @@ SQLiteGame::SQLiteGame () = default;
 SQLiteGame::~SQLiteGame () = default;
 
 void
+SQLiteGame::EnsureCurrentState (const GameStateData& state)
+{
+  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
+  database->EnsureCurrentState (state);
+}
+
+void
 SQLiteGame::Initialise (const std::string& dbFile)
 {
   database = std::make_unique<Storage> (*this, dbFile);
@@ -328,8 +335,7 @@ SQLiteGame::ProcessForwardInternal (const GameStateData& oldState,
                                     const Json::Value& blockData,
                                     UndoData& undo)
 {
-  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
-  database->EnsureCurrentState (oldState);
+  EnsureCurrentState (oldState);
 
   SQLiteSession session(database->GetDatabase ());
   {
@@ -412,8 +418,7 @@ SQLiteGame::ProcessBackwardsInternal (const GameStateData& newState,
                                       const Json::Value& blockData,
                                       const UndoData& undo)
 {
-  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
-  database->EnsureCurrentState (newState);
+  EnsureCurrentState (newState);
 
   /* Note that the undo data holds the *forward* changeset, not the inverted
      one.  Thus we have to invert it here before applying.  It might seem
@@ -439,8 +444,7 @@ SQLiteGame::Ids (const std::string& key)
 Json::Value
 SQLiteGame::GameStateToJson (const GameStateData& state)
 {
-  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
-  database->EnsureCurrentState (state);
+  EnsureCurrentState (state);
   return GetStateAsJson (database->GetDatabase ());
 }
 
@@ -448,11 +452,10 @@ Json::Value
 SQLiteGame::GetCustomStateData (const Game& game, const std::string& jsonField,
                                 const std::function<Json::Value (sqlite3*)>& cb)
 {
-  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
   return game.GetCustomStateData (jsonField,
       [this, &cb] (const GameStateData& state)
         {
-          database->EnsureCurrentState (state);
+          EnsureCurrentState (state);
           return cb (database->GetDatabase ());
         });
 }
@@ -536,6 +539,15 @@ SQLiteGame::AutoId::Sync (SQLiteGame& game, const std::string& key)
 
   LOG (INFO) << "Synced AutoId " << key << " to database";
   dbValue = nextValue;
+}
+
+/* ************************************************************************** */
+
+sqlite3*
+SQLiteGame::PendingMoves::AccessConfirmedState ()
+{
+  game.EnsureCurrentState (GetConfirmedState ());
+  return game.database->GetDatabase ();
 }
 
 /* ************************************************************************** */

@@ -7,6 +7,7 @@
 
 #include "game.hpp"
 #include "gamelogic.hpp"
+#include "pendingmoves.hpp"
 #include "storage.hpp"
 
 #include <sqlite3.h>
@@ -70,6 +71,12 @@ private:
    * to UpdateState).  It is set to null when no set is active.
    */
   ActiveAutoIds* activeIds = nullptr;
+
+  /**
+   * Ensures that the current state of the database matches the passed in
+   * "fake game state".
+   */
+  void EnsureCurrentState (const GameStateData& state);
 
 protected:
 
@@ -161,6 +168,8 @@ protected:
                                           const UndoData& undo) override;
 
 public:
+
+  class PendingMoves;
 
   /** Type for automatically generated IDs.  */
   using IdT = uint64_t;
@@ -265,6 +274,50 @@ public:
   {
     nextValue = std::max (nextValue, end + 1);
   }
+
+};
+
+/**
+ * PendingMoveProcessor for a game based on SQLite.  This exposes the current
+ * confirmed state as SQLite handle to the callbacks, which is the form
+ * they need for SQLiteGame-based games.
+ */
+class SQLiteGame::PendingMoves : public PendingMoveProcessor
+{
+
+private:
+
+  /** The underlying SQLiteGame instance, which manages the database.  */
+  SQLiteGame& game;
+
+protected:
+
+  explicit PendingMoves (SQLiteGame& g)
+    : game(g)
+  {}
+
+  /**
+   * Returns our reference of SQLiteGame.  That may be useful in a game-specific
+   * way for subclasses, and it can also be used to expose PrepareStatement.
+   */
+  SQLiteGame&
+  GetSQLiteGame ()
+  {
+    return game;
+  }
+
+  /**
+   * Returns an SQLite handle for the database with the current state.
+   * This function may only be called when a callback is running (Clear
+   * or AddPendingMove), and it must not modify the state (only read from it).
+   *
+   * The function also ensures that the current state exposed by the upstream
+   * PendingMoveProcessor for the current callback matches the state of the
+   * database.  So if the state is accessed through other means (e.g. using
+   * SQLiteGame::PrepareStatement), then calling this function and discarding
+   * the return value is a way to ensure consistency.
+   */
+  sqlite3* AccessConfirmedState ();
 
 };
 

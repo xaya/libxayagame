@@ -112,6 +112,41 @@ protected:
 
 };
 
+/**
+ * PendingMoveProcessor for Xayaships.  This just passes StateProofs recovered
+ * from pending disputes and resolutions to ChannelGame::PendingMoves.
+ */
+class ShipsPending : public xaya::ChannelGame::PendingMoves
+{
+
+private:
+
+  /**
+   * Tries to process a pending dispute or resolution move.
+   */
+  void HandleDisputeResolution (const Json::Value& obj);
+
+  /**
+   * Processes a new move, but does not call AccessConfirmedState.  This is
+   * used in tests, so that we can get away without setting up a consistent
+   * current state in the database.
+   */
+  void AddPendingMoveUnsafe (const Json::Value& mv);
+
+  friend class PendingTests;
+
+protected:
+
+  void AddPendingMove (const Json::Value& mv) override;
+
+public:
+
+  ShipsPending (ShipsLogic& g)
+    : PendingMoves(g)
+  {}
+
+};
+
 } // namespace ships
 
 #endif // XAYASHIPS_LOGIC_HPP
