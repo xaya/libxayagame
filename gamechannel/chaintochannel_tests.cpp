@@ -14,9 +14,6 @@
 #include <xayautil/hash.hpp>
 
 #include <jsonrpccpp/common/exception.h>
-#include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -69,9 +66,13 @@ private:
 
 public:
 
-  explicit TestGspServer (const uint256& id, const proto::ChannelMetadata& m,
-                          TestGame& g,
-                          jsonrpc::AbstractServerConnector& conn)
+  static constexpr int HTTP_PORT = 32200;
+  static constexpr const char* HTTP_URL = "http://localhost:32200";
+  using RpcClient = ChannelGspRpcClient;
+
+  explicit TestGspServer (jsonrpc::AbstractServerConnector& conn,
+                          const uint256& id, const proto::ChannelMetadata& m,
+                          TestGame& g)
     : ChannelGspRpcServerStub(conn), channelId(id), meta(m),
       game(g), tbl(game)
   {
@@ -188,28 +189,16 @@ public:
 class ChainToChannelFeederTests : public ChannelManagerTestFixture
 {
 
-private:
-
-  jsonrpc::HttpServer httpServerGsp;
-  jsonrpc::HttpClient httpClientGsp;
-
-  ChannelGspRpcClient rpcGsp;
-
 protected:
 
   ChainToChannelFeeder feeder;
-  TestGspServer gspServer;
+  HttpRpcServer<TestGspServer> gspServer;
 
   ChainToChannelFeederTests ()
-    : httpServerGsp(32200),
-      httpClientGsp("http://localhost:32200"),
-      rpcGsp(httpClientGsp),
-      feeder(rpcGsp, cm),
-      gspServer(channelId, meta, game, httpServerGsp)
+    : feeder(gspServer.GetClient (), cm),
+      gspServer(channelId, meta, game)
   {
-    httpClientGsp.SetTimeout (RPC_TIMEOUT_MS);
-
-    gspServer.StartListening ();
+    gspServer.GetClientConnector ().SetTimeout (RPC_TIMEOUT_MS);
   }
 
   ~ChainToChannelFeederTests ()
@@ -217,9 +206,7 @@ protected:
     /* Shut down the waiting loop gracefully and wake up any waiting
        threads so we can stop.  */
     feeder.Stop ();
-    gspServer.NotifyChange ();
-
-    gspServer.StopListening ();
+    gspServer->NotifyChange ();
   }
 
   /**
@@ -243,7 +230,7 @@ using UpdateDataTests = ChainToChannelFeederTests;
 TEST_F (UpdateDataTests, NotUpToDate)
 {
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  gspServer.SetState ("blk", "catching-up", "0 0", ValidProof ("20 6"), 0);
+  gspServer->SetState ("blk", "catching-up", "0 0", ValidProof ("20 6"), 0);
   feeder.Start ();
 
   SleepSome ();
@@ -253,7 +240,7 @@ TEST_F (UpdateDataTests, NotUpToDate)
 TEST_F (UpdateDataTests, NoGspState)
 {
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  gspServer.SetNoState ("up-to-date");
+  gspServer->SetNoState ("up-to-date");
   feeder.Start ();
 
   SleepSome ();
@@ -263,7 +250,7 @@ TEST_F (UpdateDataTests, NoGspState)
 TEST_F (UpdateDataTests, ChannelNotOnChain)
 {
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  gspServer.SetChannelNotOnChain ("blk", "up-to-date");
+  gspServer->SetChannelNotOnChain ("blk", "up-to-date");
   feeder.Start ();
 
   SleepSome ();
@@ -272,7 +259,7 @@ TEST_F (UpdateDataTests, ChannelNotOnChain)
 
 TEST_F (UpdateDataTests, BlockHashAndHeight)
 {
-  gspServer.SetChannelNotOnChain ("blk 1", "up-to-date");
+  gspServer->SetChannelNotOnChain ("blk 1", "up-to-date");
   feeder.Start ();
 
   SleepSome ();
@@ -281,8 +268,8 @@ TEST_F (UpdateDataTests, BlockHashAndHeight)
   EXPECT_EQ (height, 42);
   EXPECT_EQ (hash, SHA256::Hash ("blk 1"));
 
-  gspServer.SetState ("blk 2", "up-to-date", "0 0", ValidProof ("10 5"), 0);
-  gspServer.NotifyChange ();
+  gspServer->SetState ("blk 2", "up-to-date", "0 0", ValidProof ("10 5"), 0);
+  gspServer->NotifyChange ();
 
   SleepSome ();
   hash = GetOnChainBlock (height);
@@ -293,7 +280,7 @@ TEST_F (UpdateDataTests, BlockHashAndHeight)
 TEST_F (UpdateDataTests, UpdatesProof)
 {
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  gspServer.SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
+  gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
   feeder.Start ();
 
   SleepSome ();
@@ -319,7 +306,7 @@ TEST_F (UpdateDataTests, Reinitialisation)
       }
   )", &reinitBasedProof));
 
-  gspServer.SetState ("blk", "up-to-date", "42 10", reinitBasedProof, 0);
+  gspServer->SetState ("blk", "up-to-date", "42 10", reinitBasedProof, 0);
   feeder.Start ();
 
   SleepSome ();
@@ -330,7 +317,7 @@ TEST_F (UpdateDataTests, Reinitialisation)
 TEST_F (UpdateDataTests, NoDispute)
 {
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  gspServer.SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
+  gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
   feeder.Start ();
 
   SleepSome ();
@@ -340,7 +327,7 @@ TEST_F (UpdateDataTests, NoDispute)
 TEST_F (UpdateDataTests, WithDispute)
 {
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  gspServer.SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 42);
+  gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 42);
   feeder.Start ();
 
   SleepSome ();
@@ -356,7 +343,7 @@ protected:
 
   WaitForChangeLoopTests ()
   {
-    gspServer.SetState ("start", "up-to-date", "0 0", ValidProof ("0 0"), 0);
+    gspServer->SetState ("start", "up-to-date", "0 0", ValidProof ("0 0"), 0);
     feeder.Start ();
     SleepSome ();
   }
@@ -365,50 +352,50 @@ protected:
 
 TEST_F (WaitForChangeLoopTests, UpdateLoopRuns)
 {
-  gspServer.SetState ("blk 1", "up-to-date", "0 0", ValidProof ("10 5"), 0);
+  gspServer->SetState ("blk 1", "up-to-date", "0 0", ValidProof ("10 5"), 0);
 
   SleepSome ();
   EXPECT_EQ (GetLatestState (), "0 0");
 
-  gspServer.NotifyChange ();
+  gspServer->NotifyChange ();
   SleepSome ();
   EXPECT_EQ (GetLatestState (), "10 5");
 
-  gspServer.SetState ("blk 2", "up-to-date", "0 0", ValidProof ("20 6"), 0);
-  gspServer.NotifyChange ();
+  gspServer->SetState ("blk 2", "up-to-date", "0 0", ValidProof ("20 6"), 0);
+  gspServer->NotifyChange ();
   SleepSome ();
   EXPECT_EQ (GetLatestState (), "20 6");
 }
 
 TEST_F (WaitForChangeLoopTests, NoGspState)
 {
-  gspServer.SetNoState ("up-to-date");
-  gspServer.NotifyChange ();
+  gspServer->SetNoState ("up-to-date");
+  gspServer->NotifyChange ();
   SleepSome ();
   EXPECT_EQ (GetLatestState (), "0 0");
 }
 
 TEST_F (WaitForChangeLoopTests, NoChangeInBlock)
 {
-  gspServer.SetState ("blk", "up-to-date", "0 0", ValidProof ("10 5"), 0);
-  gspServer.NotifyChange ();
+  gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("10 5"), 0);
+  gspServer->NotifyChange ();
   SleepSome ();
   EXPECT_EQ (GetLatestState (), "10 5");
 
-  gspServer.SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
-  gspServer.NotifyChange ();
+  gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
+  gspServer->NotifyChange ();
   SleepSome ();
   EXPECT_EQ (GetLatestState (), "10 5");
 }
 
 TEST_F (WaitForChangeLoopTests, TimeoutsGetRepeated)
 {
-  gspServer.SetState ("blk", "up-to-date", "0 0", ValidProof ("10 5"), 0);
+  gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("10 5"), 0);
 
   std::this_thread::sleep_for (std::chrono::milliseconds (2 * RPC_TIMEOUT_MS));
   EXPECT_EQ (GetLatestState (), "0 0");
 
-  gspServer.NotifyChange ();
+  gspServer->NotifyChange ();
   SleepSome ();
   EXPECT_EQ (GetLatestState (), "10 5");
 }

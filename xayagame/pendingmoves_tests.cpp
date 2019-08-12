@@ -8,9 +8,6 @@
 
 #include <xayautil/hash.hpp>
 
-#include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
-
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -118,30 +115,16 @@ class PendingMovesTests : public testing::Test
 
 private:
 
-  jsonrpc::HttpServer httpServer;
-  jsonrpc::HttpClient httpClient;
-
-  MockXayaRpcServer mockXayaServer;
-  XayaRpcClient rpcClient;
+  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
 
 protected:
 
   MessageArrayPendingMoves proc;
 
   PendingMovesTests ()
-    : httpServer(MockXayaRpcServer::HTTP_PORT),
-      httpClient(MockXayaRpcServer::HTTP_URL),
-      mockXayaServer(httpServer),
-      rpcClient(httpClient)
   {
-    proc.InitialiseGameContext (Chain::MAIN, "game id", &rpcClient);
-
-    mockXayaServer.StartListening ();
-  }
-
-  ~PendingMovesTests ()
-  {
-    mockXayaServer.StopListening ();
+    proc.InitialiseGameContext (Chain::MAIN, "game id",
+                                &mockXayaServer.GetClient ());
   }
 
   /**
@@ -155,7 +138,7 @@ protected:
     for (const auto& v : values)
       txids.append (SHA256::Hash (v).ToHex ());
 
-    EXPECT_CALL (mockXayaServer, getrawmempool ())
+    EXPECT_CALL (*mockXayaServer, getrawmempool ())
         .WillRepeatedly (Return (txids));
   }
 

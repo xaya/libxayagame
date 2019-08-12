@@ -6,11 +6,6 @@
 
 #include "testutils.hpp"
 
-#include "rpc-stubs/xayarpcclient.h"
-
-#include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -24,45 +19,29 @@ using testing::Return;
 class SignaturesTests : public testing::Test
 {
 
-private:
-
-  jsonrpc::HttpServer httpServer;
-  jsonrpc::HttpClient httpClient;
-
 protected:
 
-  MockXayaRpcServer mockXayaServer;
-  XayaRpcClient rpcClient;
-
-  SignaturesTests ()
-    : httpServer(MockXayaRpcServer::HTTP_PORT),
-      httpClient(MockXayaRpcServer::HTTP_URL),
-      mockXayaServer(httpServer),
-      rpcClient(httpClient)
-  {
-    mockXayaServer.StartListening ();
-  }
-
-  ~SignaturesTests ()
-  {
-    mockXayaServer.StopListening ();
-  }
+  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
 
 };
 
 TEST_F (SignaturesTests, InvalidSignature)
 {
-  EXPECT_CALL (mockXayaServer, verifymessage ("", "my message", "my signature"))
+  EXPECT_CALL (*mockXayaServer,
+               verifymessage ("", "my message", "my signature"))
       .WillOnce (Return (ParseJson (R"({"valid": false})")));
-  EXPECT_EQ (VerifyMessage (rpcClient, "my message", "my signature"),
+  EXPECT_EQ (VerifyMessage (mockXayaServer.GetClient (),
+                            "my message", "my signature"),
              "invalid");
 }
 
 TEST_F (SignaturesTests, ValidSignature)
 {
-  EXPECT_CALL (mockXayaServer, verifymessage ("", "my message", "my signature"))
+  EXPECT_CALL (*mockXayaServer,
+               verifymessage ("", "my message", "my signature"))
       .WillOnce (Return (ParseJson (R"({"valid": true, "address": "addr"})")));
-  EXPECT_EQ (VerifyMessage (rpcClient, "my message", "my signature"),
+  EXPECT_EQ (VerifyMessage (mockXayaServer.GetClient (),
+                            "my message", "my signature"),
              "addr");
 }
 

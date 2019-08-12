@@ -74,7 +74,8 @@ protected:
     proto::StateTransition proto;
     CHECK (TextFormat::ParseFromString (transition, &proto));
 
-    return VerifyStateTransition (rpcClient, game.rules, channelId, meta,
+    return VerifyStateTransition (mockXayaServer.GetClient (),
+                                  game.rules, channelId, meta,
                                   oldState, proto);
   }
 
@@ -185,7 +186,8 @@ protected:
   bool
   VerifyProof (const BoardState& chainState, const std::string& proof)
   {
-    return VerifyStateProof (rpcClient, game.rules, channelId, meta, chainState,
+    return VerifyStateProof (mockXayaServer.GetClient (),
+                             game.rules, channelId, meta, chainState,
                              TextProof (proof), endState);
   }
 
@@ -419,7 +421,9 @@ protected:
   bool
   ExtendProof (const std::string& oldProof, const BoardMove& mv)
   {
-    return ExtendStateProof (rpcClient, rpcWallet, game.rules, channelId, meta,
+    return ExtendStateProof (mockXayaServer.GetClient (),
+                             mockXayaWallet.GetClient (),
+                             game.rules, channelId, meta,
                              TextProof (oldProof), mv, newProof);
   }
 
@@ -451,7 +455,7 @@ TEST_F (ExtendStateProofTests, InvalidMove)
 
 TEST_F (ExtendStateProofTests, SignatureFailure)
 {
-  EXPECT_CALL (mockXayaWallet, signmessage ("addr0", _))
+  EXPECT_CALL (*mockXayaWallet, signmessage ("addr0", _))
       .WillOnce (Throw (jsonrpc::JsonRpcException (-5)));
 
   EXPECT_FALSE (ExtendProof (R"(
@@ -466,9 +470,9 @@ TEST_F (ExtendStateProofTests, SignatureFailure)
 
 TEST_F (ExtendStateProofTests, Valid)
 {
-  EXPECT_CALL (mockXayaWallet, signmessage ("addr0", _))
+  EXPECT_CALL (*mockXayaWallet, signmessage ("addr0", _))
       .WillRepeatedly (Return (EncodeBase64 ("sgn0")));
-  EXPECT_CALL (mockXayaWallet, signmessage ("addr1", _))
+  EXPECT_CALL (*mockXayaWallet, signmessage ("addr1", _))
       .WillRepeatedly (Return (EncodeBase64 ("sgn1")));
 
   struct Test
@@ -547,7 +551,8 @@ TEST_F (ExtendStateProofTests, Valid)
       EXPECT_EQ (newProof.transitions_size (), t.numTrans);
 
       BoardState provenState;
-      CHECK (VerifyStateProof (rpcClient, game.rules, channelId, meta, "0 0",
+      CHECK (VerifyStateProof (mockXayaServer.GetClient (),
+                               game.rules, channelId, meta, "0 0",
                                newProof, provenState));
       auto p = game.rules.ParseState (channelId, meta, provenState);
       CHECK (p != nullptr);

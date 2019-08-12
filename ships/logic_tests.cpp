@@ -273,7 +273,7 @@ TEST_F (CreateChannelTests, FailsForTxidCollision)
 {
   /* Turn off the mock server.  We don't need it, and it complicates the
      death test due to extra threads.  */
-  mockXayaServer.StopListening ();
+  mockXayaServer->StopListening ();
 
   const auto data = ParseJson (R"(
     {"c": {"addr": "address"}}
@@ -586,8 +586,8 @@ protected:
     const std::string hashed
         = xaya::GetChannelSignatureMessage (channelId, meta,
                                             "winnerstatement", data);
-    EXPECT_CALL (mockXayaServer, verifymessage ("", hashed,
-                                                xaya::EncodeBase64 (sgn)))
+    EXPECT_CALL (*mockXayaServer,
+                 verifymessage ("", hashed, xaya::EncodeBase64 (sgn)))
         .WillOnce (Return (res));
   }
 
@@ -781,13 +781,13 @@ protected:
     Json::Value signatureOk(Json::objectValue);
     signatureOk["valid"] = true;
     signatureOk["address"] = "addr 0";
-    EXPECT_CALL (mockXayaServer, verifymessage ("", _,
-                                                xaya::EncodeBase64 ("sgn 0")))
+    EXPECT_CALL (*mockXayaServer,
+                 verifymessage ("", _, xaya::EncodeBase64 ("sgn 0")))
         .WillRepeatedly (Return (signatureOk));
 
     signatureOk["address"] = "addr 1";
-    EXPECT_CALL (mockXayaServer, verifymessage ("", _,
-                                                xaya::EncodeBase64 ("sgn 1")))
+    EXPECT_CALL (*mockXayaServer,
+                 verifymessage ("", _, xaya::EncodeBase64 ("sgn 1")))
         .WillRepeatedly (Return (signatureOk));
 
     /* Explicitly add stats rows so we can use ExpectStatsRow even if there

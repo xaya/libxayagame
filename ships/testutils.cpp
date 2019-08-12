@@ -26,22 +26,12 @@ ParseJson (const std::string& str)
 }
 
 InMemoryLogicFixture::InMemoryLogicFixture ()
-  : httpServer(xaya::MockXayaRpcServer::HTTP_PORT),
-    httpClient(xaya::MockXayaRpcServer::HTTP_URL),
-    mockXayaServer(httpServer),
-    rpcClient(httpClient)
 {
   game.Initialise (":memory:");
-  game.InitialiseGameContext (xaya::Chain::MAIN, "xs", &rpcClient);
+  game.InitialiseGameContext (xaya::Chain::MAIN, "xs",
+                              &mockXayaServer.GetClient ());
   game.GetStorage ().Initialise ();
   /* The initialisation above already sets up the database schema.  */
-
-  mockXayaServer.StartListening ();
-}
-
-InMemoryLogicFixture::~InMemoryLogicFixture ()
-{
-  mockXayaServer.StopListening ();
 }
 
 sqlite3*

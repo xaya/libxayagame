@@ -12,8 +12,6 @@
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 
 #include <json/json.h>
-#include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <gtest/gtest.h>
 
@@ -37,15 +35,9 @@ Json::Value ParseJson (const std::string& str);
 class InMemoryLogicFixture : public testing::Test
 {
 
-private:
-
-  jsonrpc::HttpServer httpServer;
-  jsonrpc::HttpClient httpClient;
-
 protected:
 
-  xaya::MockXayaRpcServer mockXayaServer;
-  XayaRpcClient rpcClient;
+  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
 
   ShipsLogic game;
 
@@ -54,11 +46,6 @@ protected:
    * in-memory database and sets up the schema on it.
    */
   InMemoryLogicFixture ();
-
-  /**
-   * The destructor shuts down the mock Xaya server.
-   */
-  ~InMemoryLogicFixture ();
 
   /**
    * Returns the raw database handle of the test game.

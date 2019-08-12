@@ -15,8 +15,6 @@
 
 #include <json/json.h>
 #include <jsonrpccpp/common/exception.h>
-#include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -343,12 +341,7 @@ class GameTests : public GameTestWithBlockchain
 
 protected:
 
-  /** HTTP server connector for the mock server.  */
-  jsonrpc::HttpServer httpServer;
-  /** Mock for the Xaya daemon RPC server.  */
-  MockXayaRpcServerWithState mockXayaServer;
-  /** HTTP connection to the mock server for the client.  */
-  jsonrpc::HttpClient httpClient;
+  HttpRpcServer<MockXayaRpcServerWithState> mockXayaServer;
 
   /** In-memory storage that can be used in tests.  */
   MemoryStorage storage;
@@ -356,21 +349,12 @@ protected:
   TestGame rules;
 
   GameTests ()
-    : GameTestWithBlockchain(GAME_ID),
-      httpServer(MockXayaRpcServer::HTTP_PORT), mockXayaServer(httpServer),
-      httpClient(MockXayaRpcServer::HTTP_URL)
+    : GameTestWithBlockchain(GAME_ID)
   {
-    mockXayaServer.StartListening ();
-
     /* The mocked RPC server listens on separate threads and is already set up
        (cannot be started only from within the death test), so we need to run
        those threadsafe.  */
     testing::FLAGS_gtest_death_test_style = "threadsafe";
-  }
-
-  ~GameTests ()
-  {
-    mockXayaServer.StopListening ();
   }
 
   void
@@ -396,11 +380,11 @@ TEST_F (XayaVersionTests, Works)
 {
   Json::Value networkInfo(Json::objectValue);
   networkInfo["version"] = 1020300;
-  EXPECT_CALL (mockXayaServer, getnetworkinfo ())
+  EXPECT_CALL (*mockXayaServer, getnetworkinfo ())
       .WillOnce (Return (networkInfo));
 
   Game g(GAME_ID);
-  g.ConnectRpcClient (httpClient);
+  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
   EXPECT_EQ (g.GetXayaVersion (), 1020300);
 }
 
@@ -411,8 +395,8 @@ using ChainDetectionTests = GameTests;
 TEST_F (ChainDetectionTests, ChainDetected)
 {
   Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (httpClient);
+  mockXayaServer->SetBestBlock (0, BlockHash (0));
+  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
   EXPECT_TRUE (g.GetChain () == Chain::MAIN);
 }
 
@@ -422,15 +406,15 @@ TEST_F (ChainDetectionTests, Reconnection)
      in the forked environment.  If we set up the mock expectations before
      forking, they will be set in both processes, but only fulfilled
      in one of them.  */
-  mockXayaServer.StopListening ();
+  mockXayaServer->StopListening ();
 
   Game g(GAME_ID);
   EXPECT_DEATH (
     {
-      mockXayaServer.StartListening ();
-      mockXayaServer.SetBestBlock (0, BlockHash (0));
-      g.ConnectRpcClient (httpClient);
-      g.ConnectRpcClient (httpClient);
+      mockXayaServer->StartListening ();
+      mockXayaServer->SetBestBlock (0, BlockHash (0));
+      g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
+      g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
     },
     "RPC client is already connected");
 }
@@ -449,12 +433,12 @@ TEST_F (DetectZmqEndpointTests, BlocksWithoutPending)
     ]
   )");
 
-  EXPECT_CALL (mockXayaServer, getzmqnotifications ())
+  EXPECT_CALL (*mockXayaServer, getzmqnotifications ())
       .WillOnce (Return (notifications));
 
   Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (httpClient);
+  mockXayaServer->SetBestBlock (0, BlockHash (0));
+  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
   ASSERT_TRUE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "address");
   EXPECT_EQ (GetZmqEndpointPending (g), "");
@@ -469,12 +453,12 @@ TEST_F (DetectZmqEndpointTests, BlocksAndPending)
     ]
   )");
 
-  EXPECT_CALL (mockXayaServer, getzmqnotifications ())
+  EXPECT_CALL (*mockXayaServer, getzmqnotifications ())
       .WillOnce (Return (notifications));
 
   Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (httpClient);
+  mockXayaServer->SetBestBlock (0, BlockHash (0));
+  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
   ASSERT_TRUE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "address blocks");
   EXPECT_EQ (GetZmqEndpointPending (g), "address pending");
@@ -489,12 +473,12 @@ TEST_F (DetectZmqEndpointTests, NotSet)
     ]
   )");
 
-  EXPECT_CALL (mockXayaServer, getzmqnotifications ())
+  EXPECT_CALL (*mockXayaServer, getzmqnotifications ())
       .WillOnce (Return (notifications));
 
   Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (httpClient);
+  mockXayaServer->SetBestBlock (0, BlockHash (0));
+  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
   ASSERT_FALSE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "");
 }
@@ -515,13 +499,13 @@ TEST_F (TrackGameTests, CallsMade)
 {
   {
     InSequence dummy;
-    EXPECT_CALL (mockXayaServer, trackedgames ("add", GAME_ID));
-    EXPECT_CALL (mockXayaServer, trackedgames ("remove", GAME_ID));
+    EXPECT_CALL (*mockXayaServer, trackedgames ("add", GAME_ID));
+    EXPECT_CALL (*mockXayaServer, trackedgames ("remove", GAME_ID));
   }
 
   Game g(GAME_ID);
-  mockXayaServer.SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (httpClient);
+  mockXayaServer->SetBestBlock (0, BlockHash (0));
+  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
   TrackGame (g);
   UntrackGame (g);
 }
@@ -549,11 +533,11 @@ protected:
   InitialStateTests()
     : g(GAME_ID)
   {
-    EXPECT_CALL (mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
+    EXPECT_CALL (*mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
         .WillRepeatedly (Return (GAME_GENESIS_HASH));
 
-    mockXayaServer.SetBestBlock (0, BlockHash (0));
-    g.ConnectRpcClient (httpClient);
+    mockXayaServer->SetBestBlock (0, BlockHash (0));
+    g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
 
     g.SetStorage (storage);
     g.SetGameLogic (rules);
@@ -608,10 +592,10 @@ TEST_F (InitialStateTests, AfterGenesis)
   Json::Value upd(Json::objectValue);
   upd["toblock"] = BlockHash (20).ToHex ();
   upd["reqtoken"] = "reqtoken";
-  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+  EXPECT_CALL (*mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
       .WillOnce (Return (upd));
 
-  mockXayaServer.SetBestBlock (20, BlockHash (20));
+  mockXayaServer->SetBestBlock (20, BlockHash (20));
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectInitialStateInStorage ();
@@ -624,12 +608,12 @@ TEST_F (InitialStateTests, WaitingForGenesis)
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
-  mockXayaServer.SetBestBlock (9, BlockHash (9));
+  mockXayaServer->SetBestBlock (9, BlockHash (9));
   SetStartingBlock (BlockHash (8));
   AttachBlock (g, BlockHash (9), emptyMoves);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
-  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
   AttachBlock (g, TestGame::GenesisBlockHash (), emptyMoves);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectInitialStateInStorage ();
@@ -642,12 +626,12 @@ TEST_F (InitialStateTests, MissedNotification)
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
-  mockXayaServer.SetBestBlock (9, BlockHash (9));
+  mockXayaServer->SetBestBlock (9, BlockHash (9));
   SetStartingBlock (BlockHash (8));
   AttachBlock (g, BlockHash (9), emptyMoves);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
-  mockXayaServer.SetBestBlock (20, TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (20, TestGame::GenesisBlockHash ());
   CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20), 20,
                    emptyMoves, SEQ_MISMATCH);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
@@ -656,10 +640,10 @@ TEST_F (InitialStateTests, MissedNotification)
 
 TEST_F (InitialStateTests, MismatchingGenesisHash)
 {
-  EXPECT_CALL (mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
+  EXPECT_CALL (*mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
       .WillRepeatedly (Return (std::string (64, '0')));
 
-  mockXayaServer.SetBestBlock (20, BlockHash (20));
+  mockXayaServer->SetBestBlock (20, BlockHash (20));
   EXPECT_DEATH (
       ReinitialiseState (g),
       "genesis block hash and height do not match");
@@ -682,8 +666,8 @@ TEST_F (GetCurrentJsonStateTests, NoStateYet)
 
 TEST_F (GetCurrentJsonStateTests, InitialState)
 {
-  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
-                               TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
+                                TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
 
   const Json::Value state = g.GetCurrentJsonState ();
@@ -697,8 +681,8 @@ TEST_F (GetCurrentJsonStateTests, InitialState)
 
 TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
 {
-  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
-                               TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
+                                TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
   SetStartingBlock (TestGame::GenesisBlockHash ());
   AttachBlock (g, BlockHash (11), Moves ("a0b1"));
@@ -719,11 +703,11 @@ TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
 {
   Json::Value blockHeaderData(Json::objectValue);
   blockHeaderData["height"] = 42;
-  EXPECT_CALL (mockXayaServer, getblockheader (GAME_GENESIS_HASH))
+  EXPECT_CALL (*mockXayaServer, getblockheader (GAME_GENESIS_HASH))
       .WillOnce (Return (blockHeaderData));
 
-  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
-                               TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
+                                TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
 
   /* Use another game instance (but with the same underlying storage) to
@@ -731,7 +715,7 @@ TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
      state).  */
   Game freshGame(GAME_ID);
   TestGame freshRules;
-  freshGame.ConnectRpcClient (httpClient);
+  freshGame.ConnectRpcClient (mockXayaServer.GetClientConnector ());
   freshGame.SetStorage (storage);
   freshGame.SetGameLogic (freshRules);
   ReinitialiseState (freshGame);
@@ -754,7 +738,7 @@ protected:
 
   GetPendingJsonStateTests ()
   {
-    EXPECT_CALL (mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
+    EXPECT_CALL (*mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
   }
 
   /**
@@ -776,7 +760,7 @@ protected:
         {"type": "pubgamepending", "address": "tcp://127.0.0.1:32102"}
       )"));
 
-    EXPECT_CALL (mockXayaServer, getzmqnotifications ())
+    EXPECT_CALL (*mockXayaServer, getzmqnotifications ())
         .WillOnce (Return (notifications));
     CHECK (g.DetectZmqEndpoint ());
   }
@@ -810,8 +794,8 @@ TEST_F (GetPendingJsonStateTests, PendingState)
   SetupZmqEndpoints (true);
   g.Start ();
 
-  mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
-                               TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
+                                TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
 
   CallPendingMove (g, Moves ("ax")[0]);
@@ -857,10 +841,10 @@ protected:
         {"type": "pubgameblocks", "address": "tcp://127.0.0.1:32101"}
       ]
     )");
-    EXPECT_CALL (mockXayaServer, getzmqnotifications ())
+    EXPECT_CALL (*mockXayaServer, getzmqnotifications ())
         .WillOnce (Return (notifications));
 
-    EXPECT_CALL (mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
+    EXPECT_CALL (*mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
 
     CHECK (g.DetectZmqEndpoint ());
     g.Start ();
@@ -920,7 +904,7 @@ TEST_F (WaitForChangeTests, InitialState)
   SleepSome ();
 
   EXPECT_EQ (GetState (g), State::PREGENESIS);
-  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
 
@@ -929,7 +913,7 @@ TEST_F (WaitForChangeTests, InitialState)
 
 TEST_F (WaitForChangeTests, BlockAttach)
 {
-  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
 
@@ -942,7 +926,7 @@ TEST_F (WaitForChangeTests, BlockAttach)
 
 TEST_F (WaitForChangeTests, BlockDetach)
 {
-  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   AttachBlock (g, BlockHash (11), Moves (""));
@@ -968,7 +952,7 @@ TEST_F (WaitForChangeTests, ReturnsNoBestBlock)
 
 TEST_F (WaitForChangeTests, ReturnsBestBlock)
 {
-  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
 
@@ -983,7 +967,7 @@ TEST_F (WaitForChangeTests, ReturnsBestBlock)
 
 TEST_F (WaitForChangeTests, UpToDateOldBlock)
 {
-  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
 
@@ -999,7 +983,7 @@ TEST_F (WaitForChangeTests, UpToDateOldBlock)
 
 TEST_F (WaitForChangeTests, OutdatedOldBlock)
 {
-  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   AttachBlock (g, BlockHash (11), Moves (""));
@@ -1032,13 +1016,13 @@ protected:
 
   WaitForPendingChangeTests ()
   {
-    EXPECT_CALL (mockXayaServer, getrawmempool ())
+    EXPECT_CALL (*mockXayaServer, getrawmempool ())
         .WillRepeatedly (Return (Json::Value (Json::arrayValue)));
 
     g.SetPendingMoveProcessor (proc);
     SetStartingBlock (TestGame::GenesisBlockHash ());
 
-    mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+    mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
     ReinitialiseState (g);
     EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   }
@@ -1227,8 +1211,8 @@ protected:
 
   SyncingTests()
   {
-    mockXayaServer.SetBestBlock (GAME_GENESIS_HEIGHT,
-                                 TestGame::GenesisBlockHash ());
+    mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
+                                  TestGame::GenesisBlockHash ());
     SetStartingBlock (TestGame::GenesisBlockHash ());
     ReinitialiseState (g);
     EXPECT_EQ (GetState (g), State::UP_TO_DATE);
@@ -1311,10 +1295,10 @@ TEST_F (SyncingTests, UpToDateIgnoresReqtoken)
 
 TEST_F (SyncingTests, CatchingUpForward)
 {
-  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+  EXPECT_CALL (*mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
 
-  mockXayaServer.SetBestBlock (12, BlockHash (12));
+  mockXayaServer->SetBestBlock (12, BlockHash (12));
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (TestGame::GenesisBlockHash (), "");
@@ -1351,7 +1335,7 @@ TEST_F (SyncingTests, CatchingUpForward)
 
 TEST_F (SyncingTests, CatchingUpBackwards)
 {
-  EXPECT_CALL (mockXayaServer,
+  EXPECT_CALL (*mockXayaServer,
                game_sendupdates (BlockHash (12).ToHex (), GAME_ID))
       .WillOnce (Return (SendupdatesResponse (TestGame::GenesisBlockHash (),
                                               "reqtoken")));
@@ -1364,7 +1348,7 @@ TEST_F (SyncingTests, CatchingUpBackwards)
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (BlockHash (12), "a2b1c3");
 
-  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (BlockHash (12), "a2b1c3");
@@ -1388,13 +1372,13 @@ TEST_F (SyncingTests, CatchingUpMultistep)
      -maxgameblockattaches limit is one reason why this may happen
      (https://github.com/xaya/xaya/pull/66).  */
 
-  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+  EXPECT_CALL (*mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (12), "token 1")));
-  EXPECT_CALL (mockXayaServer,
+  EXPECT_CALL (*mockXayaServer,
                game_sendupdates (BlockHash (12).ToHex (), GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (13), "token 2")));
 
-  mockXayaServer.SetBestBlock (13, BlockHash (13));
+  mockXayaServer->SetBestBlock (13, BlockHash (13));
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (TestGame::GenesisBlockHash (), "");
@@ -1418,10 +1402,10 @@ TEST_F (SyncingTests, CatchingUpMultistep)
 
 TEST_F (SyncingTests, MissedAttachWhileUpToDate)
 {
-  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+  EXPECT_CALL (*mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (20), "reqtoken")));
 
-  mockXayaServer.SetBestBlock (20, BlockHash (20));
+  mockXayaServer->SetBestBlock (20, BlockHash (20));
   CallBlockAttach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20), 20,
                    Moves ("a1"), SEQ_MISMATCH);
 
@@ -1431,10 +1415,10 @@ TEST_F (SyncingTests, MissedAttachWhileUpToDate)
 
 TEST_F (SyncingTests, MissedDetachWhileUpToDate)
 {
-  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+  EXPECT_CALL (*mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (20), "reqtoken")));
 
-  mockXayaServer.SetBestBlock (20, BlockHash (20));
+  mockXayaServer->SetBestBlock (20, BlockHash (20));
   CallBlockDetach (g, NO_REQ_TOKEN, BlockHash (19), BlockHash (20), 20,
                    SEQ_MISMATCH);
 
@@ -1446,14 +1430,14 @@ TEST_F (SyncingTests, MissedAttachWhileCatchingUp)
 {
   {
     InSequence dummy;
-    EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+    EXPECT_CALL (*mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
         .WillOnce (Return (SendupdatesResponse (BlockHash (12), "a")));
-    EXPECT_CALL (mockXayaServer,
+    EXPECT_CALL (*mockXayaServer,
                  game_sendupdates (BlockHash (11).ToHex (), GAME_ID))
         .WillOnce (Return (SendupdatesResponse (BlockHash (12), "b")));
   }
 
-  mockXayaServer.SetBestBlock (12, BlockHash (12));
+  mockXayaServer->SetBestBlock (12, BlockHash (12));
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (TestGame::GenesisBlockHash (), "");
@@ -1502,7 +1486,7 @@ protected:
     for (const auto& v : vals)
       mempool.append (SHA256::Hash (v).ToHex ());
 
-    EXPECT_CALL (mockXayaServer, getrawmempool ())
+    EXPECT_CALL (*mockXayaServer, getrawmempool ())
         .WillRepeatedly (Return (mempool));
   }
 
@@ -1510,10 +1494,10 @@ protected:
 
 TEST_F (PendingMoveUpdateTests, CatchingUp)
 {
-  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+  EXPECT_CALL (*mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
 
-  mockXayaServer.SetBestBlock (12, BlockHash (12));
+  mockXayaServer->SetBestBlock (12, BlockHash (12));
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (TestGame::GenesisBlockHash (), "");
@@ -1658,7 +1642,7 @@ TEST_F (PruningTests, WithReqToken)
 
 TEST_F (PruningTests, MissedZmq)
 {
-  EXPECT_CALL (mockXayaServer, game_sendupdates (_, GAME_ID))
+  EXPECT_CALL (*mockXayaServer, game_sendupdates (_, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
 
   AttachBlock (g, BlockHash (11), Moves ("a0b1"));
@@ -1775,14 +1759,14 @@ TEST_F (GameLogicTransactionsTests, CatchingUpBatched)
 
     EXPECT_CALL (fallibleStorage, RollbackTransactionMock ()).Times (0);
 
-    EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+    EXPECT_CALL (*mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
         .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
 
     EXPECT_CALL (fallibleStorage, BeginTransactionMock ());
     EXPECT_CALL (fallibleStorage, CommitTransactionMock ());
   }
 
-  mockXayaServer.SetBestBlock (12, BlockHash (12));
+  mockXayaServer->SetBestBlock (12, BlockHash (12));
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectGameState (storage, TestGame::GenesisBlockHash (), "");
@@ -1916,9 +1900,9 @@ TEST_F (GameStorageRetryTests, InitialState)
 
 TEST_F (GameStorageRetryTests, AttachBlock)
 {
-  EXPECT_CALL (mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
+  EXPECT_CALL (*mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (11), "reqtoken")));
-  mockXayaServer.SetBestBlock (11, BlockHash (11));
+  mockXayaServer->SetBestBlock (11, BlockHash (11));
 
   EXPECT_EQ (retryStorage.GetNumFailures (), 0);
   retryStorage.RetryNext ();
@@ -1938,11 +1922,11 @@ TEST_F (GameStorageRetryTests, AttachBlock)
 
 TEST_F (GameStorageRetryTests, DetachBlock)
 {
-  EXPECT_CALL (mockXayaServer,
+  EXPECT_CALL (*mockXayaServer,
                game_sendupdates (BlockHash (11).ToHex (), GAME_ID))
       .WillOnce (Return (SendupdatesResponse (TestGame::GenesisBlockHash (),
                                               "reqtoken")));
-  mockXayaServer.SetBestBlock (10, TestGame::GenesisBlockHash ());
+  mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
 
   AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (retryStorage.GetNumFailures (), 0);

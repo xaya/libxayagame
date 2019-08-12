@@ -34,7 +34,10 @@ protected:
   MoveSender onChain;
 
   MoveSenderTests ()
-    : onChain(gameId, channelId, "player", rpcClient, rpcWallet, game.channel)
+    : onChain(gameId, channelId, "player",
+              mockXayaServer.GetClient (),
+              mockXayaWallet.GetClient (),
+              game.channel)
   {}
 
 };
@@ -43,7 +46,7 @@ TEST_F (MoveSenderTests, SendMoveSuccess)
 {
   const uint256 txid = SHA256::Hash ("txid");
   const std::string expectedValue = R"({"g":{"game id":[42,null,{"a":"b"}]}})";
-  EXPECT_CALL (mockXayaWallet, name_update ("p/player", expectedValue))
+  EXPECT_CALL (*mockXayaWallet, name_update ("p/player", expectedValue))
       .WillOnce (Return (txid.ToHex ()));
 
   EXPECT_EQ (onChain.SendMove (ParseJson (R"([
@@ -54,7 +57,7 @@ TEST_F (MoveSenderTests, SendMoveSuccess)
 TEST_F (MoveSenderTests, SendMoveError)
 {
   const std::string expectedValue = R"({"g":{"game id":{}}})";
-  EXPECT_CALL (mockXayaWallet, name_update ("p/player", expectedValue))
+  EXPECT_CALL (*mockXayaWallet, name_update ("p/player", expectedValue))
       .WillOnce (Throw (jsonrpc::JsonRpcException ("error")));
 
   EXPECT_TRUE (onChain.SendMove (ParseJson ("{}")).IsNull ());
@@ -76,7 +79,7 @@ TEST_F (MoveSenderTests, IsPending)
   p["txid"] = txidOther.ToHex ();
   pendings.append (p);
 
-  EXPECT_CALL (mockXayaServer, name_pending ())
+  EXPECT_CALL (*mockXayaServer, name_pending ())
       .WillRepeatedly (Return (pendings));
 
   EXPECT_TRUE (onChain.IsPending (txidPending));

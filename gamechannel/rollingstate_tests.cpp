@@ -46,7 +46,7 @@ protected:
   RollingState state;
 
   RollingStateTests ()
-    : state(game.rules, rpcClient, channelId)
+    : state(game.rules, mockXayaServer.GetClient (), channelId)
   {
     meta1.set_reinit ("reinit 1");
     meta1.add_participants ()->set_address ("addr 0");

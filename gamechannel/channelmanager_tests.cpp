@@ -44,7 +44,10 @@ ValidProof (const std::string& state)
 }
 
 ChannelManagerTestFixture::ChannelManagerTestFixture ()
-  : cm(game.rules, game.channel, rpcClient, rpcWallet, channelId, "player")
+  : cm(game.rules, game.channel,
+       mockXayaServer.GetClient (),
+       mockXayaWallet.GetClient (),
+       channelId, "player")
 {
   CHECK (TextFormat::ParseFromString (R"(
     participants:
@@ -62,9 +65,9 @@ ChannelManagerTestFixture::ChannelManagerTestFixture ()
   ValidSignature ("sgn", "my addr");
   ValidSignature ("other sgn", "not my addr");
 
-  EXPECT_CALL (mockXayaWallet, signmessage ("my addr", _))
+  EXPECT_CALL (*mockXayaWallet, signmessage ("my addr", _))
       .WillRepeatedly (Return (EncodeBase64 ("sgn")));
-  EXPECT_CALL (mockXayaWallet, signmessage ("not my addr", _))
+  EXPECT_CALL (*mockXayaWallet, signmessage ("not my addr", _))
       .WillRepeatedly (Throw (jsonrpc::JsonRpcException (-5)));
 }
 
@@ -122,7 +125,9 @@ protected:
 
   ChannelManagerTests ()
     : onChain("game id", channelId, "player",
-              rpcClient, rpcWallet, game.channel),
+              mockXayaServer.GetClient (),
+              mockXayaWallet.GetClient (),
+              game.channel),
       offChain(cm)
   {
     cm.SetMoveSender (onChain);
@@ -184,7 +189,7 @@ protected:
       };
 
     const uint256 txid = SHA256::Hash ("txid");
-    EXPECT_CALL (mockXayaWallet, name_update ("p/player", Truly (isOk)))
+    EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
         .Times (n)
         .WillRepeatedly (Return (txid.ToHex ()));
 
@@ -434,7 +439,7 @@ protected:
   ExpectOnChainMove ()
   {
     const std::string expectedVal = R"({"g":{"game id":"100"}})";
-    EXPECT_CALL (mockXayaWallet, name_update ("p/player", expectedVal))
+    EXPECT_CALL (*mockXayaWallet, name_update ("p/player", expectedVal))
         .WillOnce (Return (SHA256::Hash ("txid").ToHex ()));
   }
 
@@ -524,7 +529,7 @@ TEST_F (ResolveDisputeTests, RetryAfterBlock)
   p["txid"] = txid.ToHex ();
   pendings.append (p);
 
-  EXPECT_CALL (mockXayaServer, name_pending ())
+  EXPECT_CALL (*mockXayaServer, name_pending ())
       .WillOnce (Return (pendings))
       .WillOnce (Return (ParseJson ("[]")));
 
@@ -579,7 +584,7 @@ TEST_F (FileDisputeTests, RetryAfterBlock)
   p["txid"] = txid.ToHex ();
   pendings.append (p);
 
-  EXPECT_CALL (mockXayaServer, name_pending ())
+  EXPECT_CALL (*mockXayaServer, name_pending ())
       .WillOnce (Return (pendings))
       .WillOnce (Return (ParseJson ("[]")));
 
