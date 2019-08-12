@@ -10,13 +10,17 @@
 #include "game.hpp"
 #include "storage.hpp"
 
+#include "rpc-stubs/xayarpcclient.h"
 #include "rpc-stubs/xayarpcserverstub.h"
+#include "rpc-stubs/xayawalletrpcclient.h"
 #include "rpc-stubs/xayawalletrpcserverstub.h"
 
 #include <xayautil/uint256.hpp>
 
 #include <json/json.h>
+#include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server.h>
+#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -59,6 +63,9 @@ public:
 
   /** The listening address of the mock server.  */
   static constexpr const char* HTTP_URL = "http://localhost:32100";
+
+  /** The type of the corresponding RPC client.  */
+  using RpcClient = XayaRpcClient;
 
   /**
    * Constructs the server at the given connector.  It does not start
@@ -105,6 +112,9 @@ public:
   /** The listening address of the mock server.  */
   static constexpr const char* HTTP_URL = "http://localhost:32101";
 
+  /** The type of the corresponding RPC client.  */
+  using RpcClient = XayaWalletRpcClient;
+
   /**
    * Constructs the server at the given connector.  It does not start
    * listening yet.
@@ -123,6 +133,74 @@ public:
                                           const std::string& msg));
   MOCK_METHOD2 (name_update, std::string (const std::string& name,
                                           const std::string& value));
+
+};
+
+/**
+ * A mock RPC server together with the HttpServer and HttpClient for it.
+ * This is what we usually need for a mock server, so it makes it more
+ * convenient to have all together.
+ */
+template <typename MockServer>
+  class HttpRpcServer
+{
+
+private:
+
+  jsonrpc::HttpServer httpServer;
+  MockServer srv;
+
+  jsonrpc::HttpClient httpClient;
+  typename MockServer::RpcClient rpcClient;
+
+public:
+
+  HttpRpcServer ()
+    : httpServer(MockServer::HTTP_PORT),
+      srv(httpServer),
+      httpClient(MockServer::HTTP_URL),
+      rpcClient(httpClient)
+  {
+    srv.StartListening ();
+  }
+
+  ~HttpRpcServer ()
+  {
+    srv.StopListening ();
+  }
+
+  /**
+   * Returns the mock server object, e.g. to set expectations.
+   */
+  MockServer&
+  operator* ()
+  {
+    return srv;
+  }
+
+  MockServer*
+  operator-> ()
+  {
+    return &srv;
+  }
+
+  /**
+   * Returns the RPC client connection.
+   */
+  typename MockServer::RpcClient&
+  GetClient ()
+  {
+    return rpcClient;
+  }
+
+  /**
+   * Returns the HTTP client connector.
+   */
+  jsonrpc::IClientConnector&
+  GetClientConnector ()
+  {
+    return httpClient;
+  }
 
 };
 
