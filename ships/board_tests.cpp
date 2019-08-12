@@ -16,9 +16,6 @@
 #include <xayautil/hash.hpp>
 #include <xayautil/uint256.hpp>
 
-#include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
-
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
 
@@ -658,11 +655,6 @@ class ApplyMoveAndTurnCountTests : public BoardTests
 
 private:
 
-  jsonrpc::HttpServer httpServer;
-  jsonrpc::HttpClient httpClient;
-
-  xaya::MockXayaRpcServer mockXayaServer;
-
   /**
    * Calls ApplyMoveProto with a given move onto a given state, both as
    * proto instances.
@@ -674,26 +666,13 @@ private:
     auto oldState = ParseState (state);
     CHECK (oldState != nullptr) << "Old state is invalid: " << state;
 
-    return ApplyMoveProto (*oldState, rpcClient, mv, newState);
+    return ApplyMoveProto (*oldState, mockXayaServer.GetClient (),
+                           mv, newState);
   }
 
 protected:
 
-  XayaRpcClient rpcClient;
-
-  ApplyMoveAndTurnCountTests ()
-    : httpServer(xaya::MockXayaRpcServer::HTTP_PORT),
-      httpClient(xaya::MockXayaRpcServer::HTTP_URL),
-      mockXayaServer(httpServer),
-      rpcClient(httpClient)
-  {
-    mockXayaServer.StartListening ();
-  }
-
-  ~ApplyMoveAndTurnCountTests ()
-  {
-    mockXayaServer.StopListening ();
-  }
+  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
 
   /**
    * Tries to apply a move onto the given state and expects that it is invalid.
@@ -741,8 +720,8 @@ protected:
     const std::string hashed
         = xaya::GetChannelSignatureMessage (channelId, meta,
                                             "winnerstatement", data);
-    EXPECT_CALL (mockXayaServer, verifymessage ("", hashed,
-                                                xaya::EncodeBase64 (sgn)))
+    EXPECT_CALL (*mockXayaServer,
+                 verifymessage ("", hashed, xaya::EncodeBase64 (sgn)))
         .WillOnce (Return (res));
   }
 
@@ -1538,8 +1517,8 @@ protected:
   bool
   Verify (const xaya::proto::SignedData& data, proto::WinnerStatement& stmt)
   {
-    return VerifySignedWinnerStatement (rules, rpcClient, channelId, meta,
-                                        data, stmt);
+    return VerifySignedWinnerStatement (rules, mockXayaServer.GetClient (),
+                                        channelId, meta, data, stmt);
   }
 
 };
