@@ -738,12 +738,17 @@ protected:
 
   /**
    * Waits for the waiter thread to return and checks that the JSON value
-   * from it matches the then-correct ToJson output.
+   * from it matches the then-correct ToJson output.  Also expects that the
+   * thread is finished "soon" (rather than timeout later).
    */
   void
   JoinWaiter ()
   {
     CHECK (waiter != nullptr);
+
+    SleepSome ();
+    EXPECT_FALSE (IsWaiting ());
+
     LOG (INFO) << "Joining the waiter thread...";
     waiter->join ();
     LOG (INFO) << "Waiter thread finished";
@@ -781,6 +786,8 @@ TEST_F (WaitForChangeTests, OnChainNonExistant)
 
 TEST_F (WaitForChangeTests, OffChain)
 {
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+
   CallWaitForChange ();
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   JoinWaiter ();
@@ -788,6 +795,8 @@ TEST_F (WaitForChangeTests, OffChain)
 
 TEST_F (WaitForChangeTests, OffChainNoChange)
 {
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+
   CallWaitForChange ();
   cm.ProcessOffChain ("", ValidProof ("10 5"));
 
@@ -802,6 +811,7 @@ TEST_F (WaitForChangeTests, LocalMove)
 {
   ExpectOneBroadcast ("11 6");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+
   CallWaitForChange ();
   cm.ProcessLocalMove ("1");
   JoinWaiter ();
@@ -833,6 +843,10 @@ TEST_F (WaitForChangeTests, UpToDateKnownVersion)
 {
   const int known = cm.ToJson ()["version"].asInt ();
   CallWaitForChange (known);
+
+  SleepSome ();
+  EXPECT_TRUE (IsWaiting ());
+
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   JoinWaiter ();
 }
