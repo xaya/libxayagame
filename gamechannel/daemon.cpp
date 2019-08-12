@@ -43,10 +43,12 @@ ChannelDaemon::XayaBasedInstances::~XayaBasedInstances ()
 
 ChannelDaemon::GspFeederInstances::GspFeederInstances (ChannelDaemon& d,
                                                        const std::string& rpc)
-  : gspClient(rpc), gspRpc(gspClient),
-    feeder(gspRpc, d.xayaBased->cm)
+  : gspClientBlocks(rpc), gspRpcBlocks(gspClientBlocks),
+    gspClientPending(rpc), gspRpcPending(gspClientPending),
+    feeder(gspRpcBlocks, &gspRpcPending, d.xayaBased->cm)
 {
-  gspClient.SetTimeout (GSP_RPC_TIMEOUT_MS);
+  gspClientBlocks.SetTimeout (GSP_RPC_TIMEOUT_MS);
+  gspClientPending.SetTimeout (GSP_RPC_TIMEOUT_MS);
 }
 
 void

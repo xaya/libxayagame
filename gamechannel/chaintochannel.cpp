@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,9 +19,11 @@
 namespace xaya
 {
 
-ChainToChannelFeeder::ChainToChannelFeeder (ChannelGspRpcClient& r,
+ChainToChannelFeeder::ChainToChannelFeeder (ChannelGspRpcClient& rBlocks,
+                                            ChannelGspRpcClient* rPending,
                                             ChannelManager& cm)
-  : rpc(r), manager(cm)
+  : rpcBlocks(rBlocks), rpcPending(rPending), manager(cm),
+    channelIdHex(manager.GetChannelId ().ToHex ())
 {
   lastBlock.SetNull ();
 }
@@ -29,7 +31,8 @@ ChainToChannelFeeder::ChainToChannelFeeder (ChannelGspRpcClient& r,
 ChainToChannelFeeder::~ChainToChannelFeeder ()
 {
   Stop ();
-  CHECK (loop == nullptr);
+  CHECK (loopBlocks == nullptr);
+  CHECK (loopPending == nullptr);
 }
 
 namespace
@@ -54,10 +57,9 @@ template <typename Proto>
 } // anonymous namespace
 
 void
-ChainToChannelFeeder::UpdateOnce ()
+ChainToChannelFeeder::UpdateBlocks ()
 {
-  const std::string channelIdHex = manager.GetChannelId ().ToHex ();
-  const auto data = rpc.getchannel (channelIdHex);
+  const auto data = rpcBlocks.getchannel (channelIdHex);
 
   if (data["state"] != "up-to-date")
     {
@@ -120,9 +122,9 @@ ChainToChannelFeeder::UpdateOnce ()
 }
 
 void
-ChainToChannelFeeder::RunLoop ()
+ChainToChannelFeeder::RunBlockLoop ()
 {
-  UpdateOnce ();
+  UpdateBlocks ();
 
   while (!stopLoop)
     {
@@ -131,7 +133,7 @@ ChainToChannelFeeder::RunLoop ()
       std::string newBlockHex;
       try
         {
-          newBlockHex = rpc.waitforchange (lastBlockHex);
+          newBlockHex = rpcBlocks.waitforchange (lastBlockHex);
         }
       catch (const jsonrpc::JsonRpcException& exc)
         {
@@ -155,7 +157,83 @@ ChainToChannelFeeder::RunLoop ()
           continue;
         }
 
-      UpdateOnce ();
+      UpdateBlocks ();
+    }
+}
+
+void
+ChainToChannelFeeder::UpdatePending (const Json::Value& state)
+{
+  const auto& versionVal = state["version"];
+  CHECK (versionVal.isInt ());
+  pendingVersion = versionVal.asInt ();
+
+  const auto& pending = state["pending"];
+  CHECK (pending.isObject ());
+  const auto& channels = pending["channels"];
+  CHECK (channels.isObject ());
+
+  const auto& ch = channels[channelIdHex];
+  if (ch.isNull ())
+    return;
+  CHECK (ch.isObject ());
+
+  const auto& proofVal = ch["proof"];
+  CHECK (proofVal.isString ());
+  if (lastPendingProof == proofVal.asString ())
+    return;
+
+  LOG (INFO)
+      << "Detected new StateProof in pending move, turn count: "
+      << ch["turncount"].asInt ();
+  VLOG (2) << "Full pending channel update: " << ch;
+
+  const auto proof = DecodeProto<proto::StateProof> (proofVal);
+  manager.ProcessPending (proof);
+  lastPendingProof = proofVal.asString ();
+}
+
+void
+ChainToChannelFeeder::RunPendingLoop ()
+{
+  if (rpcPending == nullptr)
+    {
+      LOG (WARNING) << "Processing of pending moves is disabled";
+      return;
+    }
+
+  try
+    {
+      UpdatePending (rpcPending->getpendingstate ());
+    }
+  catch (const jsonrpc::JsonRpcException& exc)
+    {
+      /* If this exception was thrown because processing of pending updates
+         is disabled, then all is fine and we just stop the loop silently.  */
+      LOG (INFO) << "Error calling getpendingstate: " << exc.what ();
+      CHECK_EQ (exc.GetCode (), jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR);
+
+      LOG (WARNING)
+          << "Pending moves are disabled in the GSP,"
+             " no updates will be processed";
+      return;
+    }
+
+  while (!stopLoop)
+    {
+      try
+        {
+          UpdatePending (rpcPending->waitforpendingchange (pendingVersion));
+        }
+      catch (const jsonrpc::JsonRpcException& exc)
+        {
+          /* Especially timeouts are fine, we should just ignore them.
+             A relatively small timeout is needed in order to not block
+             too long when waiting for shutting down the loop.  */
+          VLOG (1) << "Error calling waitforpendingchange: " << exc.what ();
+          CHECK_EQ (exc.GetCode (), jsonrpc::Errors::ERROR_CLIENT_CONNECTOR);
+          continue;
+        }
     }
 }
 
@@ -163,26 +241,40 @@ void
 ChainToChannelFeeder::Start ()
 {
   LOG (INFO) << "Starting chain-to-channel feeder loop...";
-  CHECK (loop == nullptr) << "Feeder loop is already running";
+  CHECK (loopBlocks == nullptr) << "Feeder loop is already running";
+  CHECK (loopPending == nullptr);
 
   stopLoop = false;
-  loop = std::make_unique<std::thread> ([this] ()
+  loopBlocks = std::make_unique<std::thread> ([this] ()
     {
-      RunLoop ();
+      RunBlockLoop ();
+    });
+  loopPending = std::make_unique<std::thread> ([this] ()
+    {
+      RunPendingLoop ();
     });
 }
 
 void
 ChainToChannelFeeder::Stop ()
 {
-  if (loop == nullptr)
-    return;
+  /* We always either have both loops started or none.  If pending moves
+     are disabled on the GSP, then the pending loop exits early; but the
+     thread instance is still set.  */
+  if (loopBlocks == nullptr)
+    {
+      CHECK (loopPending == nullptr);
+      return;
+    }
+  CHECK (loopPending != nullptr);
 
   LOG (INFO) << "Stopping chain-to-channel feeder loop...";
 
   stopLoop = true;
-  loop->join ();
-  loop.reset ();
+  loopBlocks->join ();
+  loopBlocks.reset ();
+  loopPending->join ();
+  loopPending.reset ();
 }
 
 } // namespace xaya

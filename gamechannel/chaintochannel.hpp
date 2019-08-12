@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2019 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,24 +19,36 @@ namespace xaya
 /**
  * Instances of this class connect to a channel-game GSP by RPC and feed
  * updates received for a particular channel to a local ChannelManager.
- * This is done through a separate thread that just calls waitforchange
- * and getchannel in a loop.
+ * This is done through separate threads that just call waitforchange,
+ * getchannel and waitforpendingchange in a loop.
  */
 class ChainToChannelFeeder
 {
 
 private:
 
-  /** The RPC connection to the GSP.  */
-  ChannelGspRpcClient& rpc;
+  /** The RPC connection for waitforchange.  */
+  ChannelGspRpcClient& rpcBlocks;
+  /**
+   * The RPC connection for waitforpendingchange.  We need a separate instance
+   * here since this is called from a different thread than waitforchange.
+   *
+   * This may be null, in which case no pending moves are processed.
+   */
+  ChannelGspRpcClient* rpcPending;
 
   /** The ChannelManager that is updated.  */
   ChannelManager& manager;
 
-  /** The running thread (if any).  */
-  std::unique_ptr<std::thread> loop;
+  /** Our channel ID as hex (used to process updates).  */
+  const std::string channelIdHex;
 
-  /** Atomic flag telling the running thread to stop.  */
+  /** The running thread (if any) for block updates.  */
+  std::unique_ptr<std::thread> loopBlocks;
+  /** The running thread (if any) for pending updates.  */
+  std::unique_ptr<std::thread> loopPending;
+
+  /** Atomic flag telling the running threads to stop.  */
   std::atomic<bool> stopLoop;
 
   /**
@@ -46,26 +58,55 @@ private:
   uint256 lastBlock;
 
   /**
+   * The last "version" of the pending state returned.  This is only accessed
+   * from the loop thread doing pending updates.
+   */
+  int pendingVersion = 0;
+
+  /**
+   * The last base64-encoded StateProof received in a pending move.  We use
+   * this as a crude test to detect when a pending update actually changed
+   * the state of our channel, so that we avoid feeding unnecessary updates
+   * to the ChannelManager.
+   */
+  std::string lastPendingProof;
+
+  /**
    * Queries the GSP for the current state and updates the ChannelManager
    * and lastBlock from the result.
    */
-  void UpdateOnce ();
+  void UpdateBlocks ();
 
   /**
-   * Runs the main loop.  This is the function executed by the loop
-   * thread when started.
+   * Performs an update of the pending state (i.e. potentially feeds the
+   * new StateProof to our ChannelManager) based on the given JSON.
    */
-  void RunLoop ();
+  void UpdatePending (const Json::Value& state);
+
+  /**
+   * Runs the main loop for block updates.
+   */
+  void RunBlockLoop ();
+
+  /**
+   * Runs the main loop for pending updates.
+   */
+  void RunPendingLoop ();
 
 public:
 
   /**
    * Constructs a ChainToChannelFeeder instance based on the given GSP RPC
-   * client and ChannelManager to update.  Note that the GSP RPC client will
-   * be used from a separate thread and must thus not be used anywhere else
-   * at the same time.
+   * client(s) and ChannelManager to update.  Note that the GSP RPC clients will
+   * be used from separate threads and must thus not be used anywhere else
+   * at the same time, nor can they be the same instance.
+   *
+   * If no RPC client for pending updates is given, then processing of
+   * pending moves is disabled.
    */
-  explicit ChainToChannelFeeder (ChannelGspRpcClient& r, ChannelManager& cm);
+  explicit ChainToChannelFeeder (ChannelGspRpcClient& rBlocks,
+                                 ChannelGspRpcClient* rPending,
+                                 ChannelManager& cm);
 
   ~ChainToChannelFeeder ();
 

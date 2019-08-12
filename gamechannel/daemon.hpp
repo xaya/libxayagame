@@ -78,10 +78,15 @@ private:
   struct GspFeederInstances
   {
 
-    /** The HTTP client for the GSP RPC.  */
-    jsonrpc::HttpClient gspClient;
-    /** The RPC client for the GSP.  */
-    ChannelGspRpcClient gspRpc;
+    /** The HTTP client for the GSP RPC and waitforchange.  */
+    jsonrpc::HttpClient gspClientBlocks;
+    /** The RPC client for the GSP with waitforchange.  */
+    ChannelGspRpcClient gspRpcBlocks;
+
+    /** The HTTP client for the GSP RPC and waitforpendingchange.  */
+    jsonrpc::HttpClient gspClientPending;
+    /** The RPC client for the GSP with waitforpendingchange.  */
+    ChannelGspRpcClient gspRpcPending;
 
     /** The ChainToChannelFeeder instance.  */
     ChainToChannelFeeder feeder;

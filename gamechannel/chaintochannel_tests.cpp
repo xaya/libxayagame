@@ -25,6 +25,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -212,7 +213,10 @@ private:
   std::string gspState;
   uint256 bestBlockHash;
 
+  Json::Value pendingState;
+
   NotifiableWaiter waiterBlocks;
+  NotifiableWaiter waiterPending;
 
 public:
 
@@ -225,14 +229,24 @@ public:
                           TestGame& g)
     : ChannelGspRpcServerStub(conn), channelId(id), meta(m),
       game(g), tbl(game),
-      waiterBlocks("blocks")
+      waiterBlocks("blocks"), waiterPending("pending")
   {
     EXPECT_CALL (*this, stop ()).Times (0);
     EXPECT_CALL (*this, getcurrentstate ()).Times (0);
+
+    pendingState = ParseJson (R"(
+      {
+        "version": 1,
+        "pending":
+          {
+            "channels": {}
+          }
+      }
+    )");
   }
 
   /**
-   * Disables blocking in the waitforchange calls and wakes up
+   * Disables blocking in the waitfor(pending)change calls and wakes up
    * all currently blocked threads.  This ensures that we are ready to
    * stop the server and feeder loop.
    */
@@ -241,6 +255,7 @@ public:
   {
     LOG (INFO) << "Disabling blocking in the test GSP server...";
     waiterBlocks.StopBlocking ();
+    waiterPending.StopBlocking ();
   }
 
   /**
@@ -301,6 +316,15 @@ public:
     return waiterBlocks;
   }
 
+  /**
+   * Returns the NotifiableWaiter instance for pending notifications.
+   */
+  NotifiableWaiter&
+  Pending ()
+  {
+    return waiterPending;
+  }
+
   Json::Value
   getchannel (const std::string& channelIdHex) override
   {
@@ -338,10 +362,26 @@ public:
     return bestBlockHash.ToHex ();
   }
 
+  Json::Value
+  getpendingstate () override
+  {
+    LOG (INFO) << "RPC call: getpendingstate";
+    std::lock_guard<std::mutex> lock(waiterPending.GetMutex ());
+
+    return pendingState;
+  }
+
+  Json::Value
+  waitforpendingchange (const int oldVersion) override
+  {
+    LOG (INFO) << "RPC call: waitforpending " << oldVersion;
+    waiterPending.Wait ();
+
+    return pendingState;
+  }
+
   MOCK_METHOD0 (stop, void ());
   MOCK_METHOD0 (getcurrentstate, Json::Value ());
-  MOCK_METHOD0 (getpendingstate, Json::Value ());
-  MOCK_METHOD1 (waitforpendingchange, Json::Value (int));
 
 };
 
@@ -352,14 +392,25 @@ class ChainToChannelFeederTests : public ChannelManagerTestFixture
 
 protected:
 
-  ChainToChannelFeeder feeder;
   HttpRpcServer<TestGspServer> gspServer;
 
+private:
+
+  std::unique_ptr<HttpRpcClient<ChannelGspRpcClient>> rpcGspBlocks;
+  std::unique_ptr<HttpRpcClient<ChannelGspRpcClient>> rpcGspPending;
+
+protected:
+
+  ChainToChannelFeeder feeder;
+
   ChainToChannelFeederTests ()
-    : feeder(gspServer.GetClient (), cm),
-      gspServer(channelId, meta, game)
+    : gspServer(channelId, meta, game),
+      rpcGspBlocks(gspServer.CreateClient ()),
+      rpcGspPending(gspServer.CreateClient ()),
+      feeder(**rpcGspBlocks, &**rpcGspPending, cm)
   {
-    gspServer.GetClientConnector ().SetTimeout (RPC_TIMEOUT_MS);
+    rpcGspBlocks->GetConnector ().SetTimeout (RPC_TIMEOUT_MS);
+    rpcGspPending->GetConnector ().SetTimeout (RPC_TIMEOUT_MS);
   }
 
   ~ChainToChannelFeederTests ()
