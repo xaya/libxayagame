@@ -22,6 +22,7 @@
 
 #include <glog/logging.h>
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -36,6 +37,157 @@ namespace
 
 /** Timeout (in milliseconds) for the test GSP connection.  */
 constexpr int RPC_TIMEOUT_MS = 50;
+
+/* ************************************************************************** */
+
+/**
+ * Utilities for implementing fake waitforchange calls, including the
+ * ability to notify them and wait for a thread to be actually woken
+ * and finish processing.  This is useful to ensure that the update we
+ * are looking for has indeed happened and we can verify the results.
+ */
+class NotifiableWaiter
+{
+
+private:
+
+  /** Some name for this waiter, used in log messages.  */
+  const std::string name;
+
+  std::mutex mut;
+  std::condition_variable cv;
+
+  /**
+   * If set, allow multiple threads to call Wait at the same time.  This is
+   * needed to test what happens when calls time out.
+   */
+  std::atomic<bool> allowMulti;
+
+  /**
+   * Whether to allow calls to Wait to block.  We set this to false in
+   * order to enable a clean shutdown.
+   */
+  std::atomic<bool> block;
+
+  /** Number of threads that are currently in the Wait call.  */
+  std::atomic<unsigned> numWaiting;
+
+  /**
+   * Number of times Wait has been called.  This can be used to wait until
+   * the function returns and is called again after notifying of the update.
+   */
+  std::atomic<unsigned> waitCalls;
+
+public:
+
+  NotifiableWaiter (const std::string& n)
+    : name(n)
+  {
+    allowMulti = false;
+    block = true;
+    numWaiting = false;
+    waitCalls = 0;
+  }
+
+  /**
+   * Returns the mutex used internally, so we can lock it for other, external
+   * updates that should be synchronised.
+   */
+  std::mutex&
+  GetMutex ()
+  {
+    return mut;
+  }
+
+  /**
+   * Allows multiple calls to Wait at the same time.  By default, we do not
+   * allow that.  But we need to in order to test timeouts of callers.
+   */
+  void
+  AllowMultiCalls ()
+  {
+    allowMulti = true;
+  }
+
+  /**
+   * Disables blocking in Wait calls and wakes up all currently blocked
+   * threads.  This ensures that we are ready to stop gracefully.
+   */
+  void
+  StopBlocking ()
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    block = false;
+    cv.notify_all ();
+  }
+
+  /**
+   * Waits for the condition to be notified the next time.
+   */
+  void
+  Wait ()
+  {
+    if (!block)
+      return;
+
+    VLOG (1) << "Preparing to wait for '" << name << "'";
+    std::unique_lock<std::mutex> lock(mut);
+
+    if (!allowMulti)
+      CHECK_EQ (numWaiting, 0)
+          << "There is already a thread waiting for " << name;
+
+    ++waitCalls;
+    ++numWaiting;
+    VLOG (1) << "Waiting for update to '" << name << "'";
+    cv.wait (lock);
+    VLOG (1) << "Received update to '" << name << "'";
+    --numWaiting;
+  }
+
+  /**
+   * Performs an update to some state by calling the passed closure,
+   * and then notifies the waiting thread of an update.  This ensures that
+   * there actually is a waiting thread before performing the callback,
+   * and that the waiter has finished processing (i.e. called Wait again)
+   * before returning.
+   *
+   * While the callback is executing, the lock will be held so that it
+   * can safely update any state required without racing with the
+   * threads calling Wait.
+   */
+  void
+  Update (const std::function<void ()>& cb)
+  {
+    CHECK (block) << "Waiter is already shutting down!";
+
+    VLOG (1) << "Sleeping until we have a waiting thread on '" << name << "'";
+    while (numWaiting == 0)
+      SleepSome ();
+
+    unsigned oldCalls;
+    {
+      std::lock_guard<std::mutex> lock(mut);
+      cb ();
+
+      oldCalls = waitCalls;
+
+      LOG (INFO) << "Notifying waiter '" << name << "' about an update";
+      cv.notify_all ();
+    }
+
+    while (waitCalls == oldCalls)
+      SleepSome ();
+
+    if (allowMulti)
+      CHECK_GT (waitCalls, oldCalls);
+    else
+      CHECK_EQ (waitCalls, oldCalls + 1);
+  }
+
+};
+
+/* ************************************************************************** */
 
 /**
  * GSP RPC server for use in the tests.  It allows to set a current
@@ -60,9 +212,7 @@ private:
   std::string gspState;
   uint256 bestBlockHash;
 
-  /* Mutex and condition variable for the faked waitforchange.  */
-  std::mutex mut;
-  std::condition_variable cv;
+  NotifiableWaiter waiterBlocks;
 
 public:
 
@@ -74,10 +224,23 @@ public:
                           const uint256& id, const proto::ChannelMetadata& m,
                           TestGame& g)
     : ChannelGspRpcServerStub(conn), channelId(id), meta(m),
-      game(g), tbl(game)
+      game(g), tbl(game),
+      waiterBlocks("blocks")
   {
     EXPECT_CALL (*this, stop ()).Times (0);
     EXPECT_CALL (*this, getcurrentstate ()).Times (0);
+  }
+
+  /**
+   * Disables blocking in the waitforchange calls and wakes up
+   * all currently blocked threads.  This ensures that we are ready to
+   * stop the server and feeder loop.
+   */
+  void
+  StopBlocking ()
+  {
+    LOG (INFO) << "Disabling blocking in the test GSP server...";
+    waiterBlocks.StopBlocking ();
   }
 
   /**
@@ -86,7 +249,6 @@ public:
   void
   SetNoState (const std::string& state)
   {
-    std::lock_guard<std::mutex> lock(mut);
     gspState = state;
     bestBlockHash.SetNull ();
   }
@@ -103,7 +265,7 @@ public:
             const proto::StateProof& proof,
             const unsigned disputeHeight)
   {
-    std::lock_guard<std::mutex> lock(mut);
+    LOG (INFO) << "Setting on-chain state to block: " << bestBlkPreimage;
 
     gspState = state;
     bestBlockHash = SHA256::Hash (bestBlkPreimage);
@@ -124,8 +286,6 @@ public:
   SetChannelNotOnChain (const std::string& bestBlkPreimage,
                         const std::string& state)
   {
-    std::lock_guard<std::mutex> lock(mut);
-
     gspState = state;
     bestBlockHash = SHA256::Hash (bestBlkPreimage);
 
@@ -133,20 +293,19 @@ public:
   }
 
   /**
-   * Notifies all waiting threads of a change.
+   * Returns the NotifiableWaiter instance for block notifications.
    */
-  void
-  NotifyChange ()
+  NotifiableWaiter&
+  Blocks ()
   {
-    std::lock_guard<std::mutex> lock(mut);
-    cv.notify_all ();
+    return waiterBlocks;
   }
 
   Json::Value
   getchannel (const std::string& channelIdHex) override
   {
     LOG (INFO) << "RPC call: getchannel " << channelIdHex;
-    std::lock_guard<std::mutex> lock(mut);
+    std::lock_guard<std::mutex> lock(waiterBlocks.GetMutex ());
 
     Json::Value res(Json::objectValue);
     res["state"] = gspState;
@@ -171,9 +330,7 @@ public:
   waitforchange (const std::string& knownBlock) override
   {
     LOG (INFO) << "RPC call: waitforchange " << knownBlock;
-    std::unique_lock<std::mutex> lock(mut);
-
-    cv.wait (lock);
+    waiterBlocks.Wait ();
 
     if (bestBlockHash.IsNull ())
       return "";
@@ -187,6 +344,8 @@ public:
   MOCK_METHOD1 (waitforpendingchange, Json::Value (int));
 
 };
+
+/* ************************************************************************** */
 
 class ChainToChannelFeederTests : public ChannelManagerTestFixture
 {
@@ -207,8 +366,8 @@ protected:
   {
     /* Shut down the waiting loop gracefully and wake up any waiting
        threads so we can stop.  */
+    gspServer->StopBlocking ();
     feeder.Stop ();
-    gspServer->NotifyChange ();
   }
 
   /**
@@ -235,7 +394,7 @@ TEST_F (UpdateDataTests, NotUpToDate)
   gspServer->SetState ("blk", "catching-up", "0 0", ValidProof ("20 6"), 0);
   feeder.Start ();
 
-  SleepSome ();
+  gspServer->Blocks ().Update ([] () {});
   EXPECT_EQ (GetLatestState (), "10 5");
 }
 
@@ -245,7 +404,7 @@ TEST_F (UpdateDataTests, NoGspState)
   gspServer->SetNoState ("up-to-date");
   feeder.Start ();
 
-  SleepSome ();
+  gspServer->Blocks ().Update ([] () {});
   EXPECT_EQ (GetLatestState (), "10 5");
 }
 
@@ -255,7 +414,7 @@ TEST_F (UpdateDataTests, ChannelNotOnChain)
   gspServer->SetChannelNotOnChain ("blk", "up-to-date");
   feeder.Start ();
 
-  SleepSome ();
+  gspServer->Blocks ().Update ([] () {});
   EXPECT_FALSE (GetExists ());
 }
 
@@ -264,16 +423,18 @@ TEST_F (UpdateDataTests, BlockHashAndHeight)
   gspServer->SetChannelNotOnChain ("blk 1", "up-to-date");
   feeder.Start ();
 
-  SleepSome ();
+  gspServer->Blocks ().Update ([] () {});
   unsigned height;
   uint256 hash = GetOnChainBlock (height);
   EXPECT_EQ (height, 42);
   EXPECT_EQ (hash, SHA256::Hash ("blk 1"));
 
-  gspServer->SetState ("blk 2", "up-to-date", "0 0", ValidProof ("10 5"), 0);
-  gspServer->NotifyChange ();
+  gspServer->Blocks ().Update ([this] ()
+    {
+      gspServer->SetState ("blk 2", "up-to-date",
+                           "0 0", ValidProof ("10 5"), 0);
+    });
 
-  SleepSome ();
   hash = GetOnChainBlock (height);
   EXPECT_EQ (height, 42);
   EXPECT_EQ (hash, SHA256::Hash ("blk 2"));
@@ -285,7 +446,7 @@ TEST_F (UpdateDataTests, UpdatesProof)
   gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
   feeder.Start ();
 
-  SleepSome ();
+  gspServer->Blocks ().Update ([] () {});
   EXPECT_EQ (GetLatestState (), "20 6");
 }
 
@@ -311,7 +472,7 @@ TEST_F (UpdateDataTests, Reinitialisation)
   gspServer->SetState ("blk", "up-to-date", "42 10", reinitBasedProof, 0);
   feeder.Start ();
 
-  SleepSome ();
+  gspServer->Blocks ().Update ([] () {});
   EXPECT_EQ (GetLatestState (), "43 11");
   EXPECT_EQ (GetBoardStates ().GetReinitId (), "other reinit");
 }
@@ -322,7 +483,7 @@ TEST_F (UpdateDataTests, NoDispute)
   gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
   feeder.Start ();
 
-  SleepSome ();
+  gspServer->Blocks ().Update ([] () {});
   EXPECT_EQ (GetDisputeHeight (), 0);
 }
 
@@ -332,7 +493,7 @@ TEST_F (UpdateDataTests, WithDispute)
   gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 42);
   feeder.Start ();
 
-  SleepSome ();
+  gspServer->Blocks ().Update ([] () {});
   EXPECT_EQ (GetDisputeHeight (), 42);
 }
 
@@ -354,51 +515,70 @@ protected:
 
 TEST_F (WaitForChangeLoopTests, UpdateLoopRuns)
 {
-  gspServer->SetState ("blk 1", "up-to-date", "0 0", ValidProof ("10 5"), 0);
-
-  SleepSome ();
+  gspServer->Blocks ().Update ([] () {});
   EXPECT_EQ (GetLatestState (), "0 0");
 
-  gspServer->NotifyChange ();
-  SleepSome ();
+  gspServer->Blocks ().Update ([this] ()
+    {
+      gspServer->SetState ("blk 1", "up-to-date",
+                           "0 0", ValidProof ("10 5"), 0);
+    });
   EXPECT_EQ (GetLatestState (), "10 5");
 
-  gspServer->SetState ("blk 2", "up-to-date", "0 0", ValidProof ("20 6"), 0);
-  gspServer->NotifyChange ();
-  SleepSome ();
+  gspServer->Blocks ().Update ([this] ()
+    {
+      gspServer->SetState ("blk 2", "up-to-date",
+                           "0 0", ValidProof ("20 6"), 0);
+    });
   EXPECT_EQ (GetLatestState (), "20 6");
 }
 
 TEST_F (WaitForChangeLoopTests, NoGspState)
 {
-  gspServer->SetNoState ("up-to-date");
-  gspServer->NotifyChange ();
-  SleepSome ();
+  gspServer->Blocks ().Update ([this] ()
+    {
+      gspServer->SetNoState ("up-to-date");
+    });
   EXPECT_EQ (GetLatestState (), "0 0");
 }
 
 TEST_F (WaitForChangeLoopTests, NoChangeInBlock)
 {
-  gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("10 5"), 0);
-  gspServer->NotifyChange ();
-  SleepSome ();
+  gspServer->Blocks ().Update ([this] ()
+    {
+      gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("10 5"), 0);
+    });
   EXPECT_EQ (GetLatestState (), "10 5");
 
-  gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
-  gspServer->NotifyChange ();
-  SleepSome ();
+  /* The new state has the same "block hash" (even though it is not the same
+     actual state).  Thus the update should be skipped, and the old state
+     should remain.  */
+  gspServer->Blocks ().Update ([this] ()
+    {
+      gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("20 6"), 0);
+    });
   EXPECT_EQ (GetLatestState (), "10 5");
 }
 
 TEST_F (WaitForChangeLoopTests, TimeoutsGetRepeated)
 {
-  gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("10 5"), 0);
+  gspServer->Blocks ().AllowMultiCalls ();
 
-  std::this_thread::sleep_for (std::chrono::milliseconds (2 * RPC_TIMEOUT_MS));
-  EXPECT_EQ (GetLatestState (), "0 0");
+  gspServer->Blocks ().Update ([this] ()
+    {
+      gspServer->SetState ("blk", "up-to-date", "0 0", ValidProof ("10 5"), 0);
 
-  gspServer->NotifyChange ();
-  SleepSome ();
+      const auto timeout = std::chrono::milliseconds (RPC_TIMEOUT_MS);
+      std::this_thread::sleep_for (2 * timeout);
+    });
+
+  /* The tracking of when processing has finished does not work well in this
+     case, since we have multiple timed out calls that return from Wait without
+     doing anything (because the client has already retried and is no longer
+     receiving the response at all).  Thus just give us one more chance
+     to process the current state.  */
+  gspServer->Blocks ().Update ([] () {});
+
   EXPECT_EQ (GetLatestState (), "10 5");
 }
 
