@@ -245,6 +245,15 @@ public:
                         const proto::StateProof& proof);
 
   /**
+   * Processes a StateProof retrieved from a pending move.  This works very
+   * similarly to an off-chain update, except that we assume it is for the
+   * current on-chain reinit.  (Which is likely but not necessarily true,
+   * but we do not trust the received data anyway and validate it, so that we
+   * can just ignore invalid data.)
+   */
+  void ProcessPending (const proto::StateProof& proof);
+
+  /**
    * Processes an on-chain update that did not contain any data for our channel.
    */
   void ProcessOnChainNonExistant (const uint256& blk, unsigned h);

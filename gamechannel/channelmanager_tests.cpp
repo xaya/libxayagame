@@ -293,6 +293,37 @@ TEST_F (ProcessOffChainTests, WhenNotExists)
 
 /* ************************************************************************** */
 
+using ProcessPendingTests = ChannelManagerTests;
+
+TEST_F (ProcessPendingTests, UpdatesState)
+{
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  cm.ProcessPending (ValidProof ("12 6"));
+  EXPECT_EQ (GetLatestState (), "12 6");
+}
+
+TEST_F (ProcessPendingTests, TriggersResolutionn)
+{
+  ExpectMoves (1, "resolution");
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
+  cm.ProcessPending (ValidProof ("12 6"));
+}
+
+TEST_F (ProcessPendingTests, WhenNotExists)
+{
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  ProcessOnChainNonExistant ();
+
+  /* This does nothing, but it should also not crash or otherwise
+     fail completely.  */
+  cm.ProcessPending (ValidProof ("20 10"));
+
+  ProcessOnChain ("0 0", ValidProof ("15 7"), 0);
+  EXPECT_EQ (GetLatestState (), "15 7");
+}
+
+/* ************************************************************************** */
+
 using ProcessLocalMoveTests = ChannelManagerTests;
 
 TEST_F (ProcessLocalMoveTests, WhenNotExists)
@@ -384,6 +415,14 @@ TEST_F (AutoMoveTests, ProcessOffChain)
   EXPECT_EQ (GetLatestState (), "20 9");
 }
 
+TEST_F (AutoMoveTests, ProcessPending)
+{
+  ExpectOneBroadcast ("20 9");
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  cm.ProcessPending (ValidProof ("18 8"));
+  EXPECT_EQ (GetLatestState (), "20 9");
+}
+
 TEST_F (AutoMoveTests, ProcessLocalMove)
 {
   ExpectOneBroadcast ("20 8");
@@ -456,6 +495,13 @@ TEST_F (MaybeOnChainMoveTests, OffChain)
   ExpectOnChainMove ();
   ProcessOnChain ("0 0", ValidProof ("55 2"), 0);
   cm.ProcessOffChain ("", ValidProof ("100 3"));
+}
+
+TEST_F (MaybeOnChainMoveTests, Pending)
+{
+  ExpectOnChainMove ();
+  ProcessOnChain ("0 0", ValidProof ("55 2"), 0);
+  cm.ProcessPending (ValidProof ("100 3"));
 }
 
 TEST_F (MaybeOnChainMoveTests, LocalMove)
@@ -812,6 +858,29 @@ TEST_F (WaitForChangeTests, OffChainNoChange)
   JoinWaiter ();
 }
 
+TEST_F (WaitForChangeTests, Pending)
+{
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+
+  CallWaitForChange ();
+  cm.ProcessPending (ValidProof ("12 6"));
+  JoinWaiter ();
+}
+
+TEST_F (WaitForChangeTests, PendingNoChange)
+{
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+
+  CallWaitForChange ();
+  cm.ProcessPending (ValidProof ("10 5"));
+
+  SleepSome ();
+  EXPECT_TRUE (IsWaiting ());
+
+  cm.StopUpdates ();
+  JoinWaiter ();
+}
+
 TEST_F (WaitForChangeTests, LocalMove)
 {
   ExpectOneBroadcast ("11 6");
@@ -881,6 +950,14 @@ TEST_F (StopUpdatesTests, OffChain)
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.StopUpdates ();
   cm.ProcessOffChain ("", ValidProof ("12 6"));
+  EXPECT_EQ (GetLatestState (), "10 5");
+}
+
+TEST_F (StopUpdatesTests, Pending)
+{
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  cm.StopUpdates ();
+  cm.ProcessPending (ValidProof ("12 6"));
   EXPECT_EQ (GetLatestState (), "10 5");
 }
 

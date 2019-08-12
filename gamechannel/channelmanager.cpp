@@ -195,6 +195,29 @@ ChannelManager::ProcessOffChain (const std::string& reinitId,
 }
 
 void
+ChannelManager::ProcessPending (const proto::StateProof& proof)
+{
+  std::lock_guard<std::mutex> lock(mut);
+
+  if (stopped)
+    {
+      LOG (INFO) << "ChannelManager is stopped, ignoring update";
+      return;
+    }
+
+  if (!exists)
+    {
+      LOG (ERROR) << "Channel does not exist on chain, ignoring pending move";
+      return;
+    }
+
+  if (!boardStates.UpdateWithMove (boardStates.GetReinitId (), proof))
+    return;
+
+  ProcessStateUpdate (false);
+}
+
+void
 ChannelManager::ProcessOnChainNonExistant (const uint256& blk, const unsigned h)
 {
   LOG_IF (INFO, exists)
@@ -341,7 +364,7 @@ ChannelManager::ProcessLocalMove (const BoardMove& mv)
 
   if (!exists)
     {
-      LOG (ERROR) << "Channel does not exist on chain, ingoring local move";
+      LOG (ERROR) << "Channel does not exist on chain, ignoring local move";
       return;
     }
 
