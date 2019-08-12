@@ -15,12 +15,7 @@
 #include <xayagame/testutils.hpp>
 #include <xayautil/uint256.hpp>
 
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
-
 #include <json/json.h>
-#include <jsonrpccpp/client/connectors/httpclient.h>
-#include <jsonrpccpp/server/connectors/httpserver.h>
 
 #include <gtest/gtest.h>
 
@@ -146,21 +141,10 @@ public:
 class TestGameFixture : public testing::Test
 {
 
-private:
-
-  jsonrpc::HttpServer httpServer;
-  jsonrpc::HttpClient httpClient;
-
-  jsonrpc::HttpServer httpServerWallet;
-  jsonrpc::HttpClient httpClientWallet;
-
 protected:
 
-  MockXayaRpcServer mockXayaServer;
-  XayaRpcClient rpcClient;
-
-  MockXayaWalletRpcServer mockXayaWallet;
-  XayaWalletRpcClient rpcWallet;
+  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
+  HttpRpcServer<MockXayaWalletRpcServer> mockXayaWallet;
 
   TestGame game;
 
@@ -169,11 +153,6 @@ protected:
    * in-memory database and sets up the schema on it.
    */
   TestGameFixture ();
-
-  /**
-   * The destructor shuts down the mock Xaya server.
-   */
-  ~TestGameFixture ();
 
   /**
    * Returns the raw database handle of the test game.

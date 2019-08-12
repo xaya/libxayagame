@@ -58,7 +58,7 @@ protected:
     const auto po = game.rules.ParseState (channelId, meta, old);
     CHECK (po != nullptr);
 
-    return po->ApplyMove (rpcClient, mv, newState);
+    return po->ApplyMove (mockXayaServer.GetClient (), mv, newState);
   }
 
 };

@@ -238,28 +238,12 @@ TestGame::GetBoardRules () const
 }
 
 TestGameFixture::TestGameFixture ()
-  : httpServer(MockXayaRpcServer::HTTP_PORT),
-    httpClient(MockXayaRpcServer::HTTP_URL),
-    httpServerWallet(MockXayaWalletRpcServer::HTTP_PORT),
-    httpClientWallet(MockXayaWalletRpcServer::HTTP_URL),
-    mockXayaServer(httpServer),
-    rpcClient(httpClient),
-    mockXayaWallet(httpServerWallet),
-    rpcWallet(httpClientWallet)
 {
   game.Initialise (":memory:");
-  game.InitialiseGameContext (Chain::MAIN, "add", &rpcClient);
+  game.InitialiseGameContext (Chain::MAIN, "add",
+                              &mockXayaServer.GetClient ());
   game.GetStorage ().Initialise ();
   /* The initialisation above already sets up the database schema.  */
-
-  mockXayaServer.StartListening ();
-  mockXayaWallet.StartListening ();
-}
-
-TestGameFixture::~TestGameFixture ()
-{
-  mockXayaServer.StopListening ();
-  mockXayaWallet.StopListening ();
 }
 
 sqlite3*
@@ -276,7 +260,7 @@ TestGameFixture::ValidSignature (const std::string& sgn,
   res["valid"] = true;
   res["address"] = addr;
 
-  EXPECT_CALL (mockXayaServer, verifymessage ("", _, EncodeBase64 (sgn)))
+  EXPECT_CALL (*mockXayaServer, verifymessage ("", _, EncodeBase64 (sgn)))
       .WillRepeatedly (Return (res));
 }
 
@@ -294,7 +278,7 @@ TestGameFixture::ExpectSignature (const uint256& channelId,
 
   const std::string hashed
       = GetChannelSignatureMessage (channelId, meta, topic, msg);
-  EXPECT_CALL (mockXayaServer, verifymessage ("", hashed, EncodeBase64 (sgn)))
+  EXPECT_CALL (*mockXayaServer, verifymessage ("", hashed, EncodeBase64 (sgn)))
       .WillOnce (Return (res));
 }
 
