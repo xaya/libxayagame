@@ -73,6 +73,8 @@ public:
   void revealposition () override;
   std::string filedispute () override;
 
+  bool validateposition (const std::string& str) override;
+
 };
 
 } // namespace ships

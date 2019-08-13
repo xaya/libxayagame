@@ -31,6 +31,33 @@ ShipsChannelRpcServer::waitforchange (const int knownVersion)
   return ExtendStateJson (std::move (state));
 }
 
+namespace
+{
+
+/**
+ * Tries to parse a string into a position and validates it.  Returns true
+ * and initialises grid if it is valid, and false otherwise.
+ */
+bool
+ParseAndValidatePosition (const std::string& str, Grid& grid)
+{
+  if (!grid.FromString (str))
+    {
+      LOG (ERROR) << "Invalid position string given";
+      return false;
+    }
+
+  if (!VerifyPositionOfShips (grid))
+    {
+      LOG (ERROR) << "Invalid ships position given";
+      return false;
+    }
+
+  return true;
+}
+
+} // anonymous namespace
+
 void
 ShipsChannelRpcServer::setposition (const std::string& str)
 {
@@ -43,21 +70,21 @@ ShipsChannelRpcServer::setposition (const std::string& str)
     }
 
   Grid pos;
-  if (!pos.FromString (str))
-    {
-      LOG (ERROR) << "Invalid position string given";
-      return;
-    }
-
-  if (!VerifyPositionOfShips (pos))
-    {
-      LOG (ERROR) << "Invalid ships position given";
-      return;
-    }
+  if (!ParseAndValidatePosition (str, pos))
+    return;
 
   std::lock_guard<std::mutex> lock(mut);
   channel.SetPosition (pos);
   daemon.GetChannelManager ().TriggerAutoMoves ();
+}
+
+bool
+ShipsChannelRpcServer::validateposition (const std::string& str)
+{
+  LOG (INFO) << "RPC method called: validateposition\n" << str;
+
+  Grid pos;
+  return ParseAndValidatePosition (str, pos);
 }
 
 void

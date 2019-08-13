@@ -34,5 +34,10 @@
     "name": "filedispute",
     "params": {},
     "returns": "txid"
+  },
+  {
+    "name": "validateposition",
+    "params": ["position string"],
+    "returns": true
   }
 ]

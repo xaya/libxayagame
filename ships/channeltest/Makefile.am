@@ -7,6 +7,7 @@ REGTESTS = \
   pending.py \
   reorg.py \
   tx_fail.py \
+  validateposition.py \
   waitforchange.py
 
 EXTRA_DIST = $(REGTESTS)
