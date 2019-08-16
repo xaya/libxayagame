@@ -32,6 +32,7 @@ AX_PKG_CHECK_MODULES([JSONRPCSERVER], [libjsonrpccpp-server], [])
 AX_PKG_CHECK_MODULES([SQLITE3], [sqlite3], [],
   [SQLITE3_CFLAGS+=" -DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"])
 AX_PKG_CHECK_MODULES([LMDB], [lmdb], [])
+AX_PKG_CHECK_MODULES([PROTOBUF], [protobuf])
 
 # Private dependencies of the library itself.
 AX_PKG_CHECK_MODULES([GLOG], [], [libglog])
@@ -39,10 +40,9 @@ AX_PKG_CHECK_MODULES([OPENSSL], [], [openssl])
 AX_PKG_CHECK_MODULES([ZMQ], [], [libzmq])
 
 # Private dependencies that are not needed for libxayagame, but only for
-# the unit tests of the moverd binary.
+# the unit tests and the example binaries.
 PKG_CHECK_MODULES([GFLAGS], [gflags])
 PKG_CHECK_MODULES([GTEST], [gmock gtest_main])
-PKG_CHECK_MODULES([PROTOBUF], [protobuf])
 
 AC_CONFIG_FILES([
   Makefile \
