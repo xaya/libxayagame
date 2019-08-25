@@ -19,6 +19,14 @@ namespace xaya
 namespace
 {
 
+/** Clock used for timing the callbacks.  */
+using PerformanceTimer = std::chrono::high_resolution_clock;
+
+/** Duration type used for reporting callback timings.  */
+using CallbackDuration = std::chrono::microseconds;
+/** Unit (as string) for the callback timings.  */
+constexpr const char* CALLBACK_DURATION_UNIT = "us";
+
 /**
  * Timeout for WaitForChange (i.e. return after this time even if there
  * has not been any change).  Having a timeout in the first place avoids
@@ -79,8 +87,14 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
     internal::ActiveTransaction tx(transactionManager);
 
     UndoData undo;
+    const auto start = PerformanceTimer::now ();
     const GameStateData newState
         = rules->ProcessForward (oldState, blockData, undo);
+    const auto end = PerformanceTimer::now ();
+    VLOG (1)
+        << "Processing block " << height << " forward took "
+        << std::chrono::duration_cast<CallbackDuration> (end - start).count ()
+        << " " << CALLBACK_DURATION_UNIT;
 
     storage->AddUndoData (hash, height, undo);
     storage->SetCurrentGameStateWithHeight (hash, height, newState);
@@ -126,11 +140,18 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
   {
     internal::ActiveTransaction tx(transactionManager);
 
+    const auto start = PerformanceTimer::now ();
     const GameStateData oldState
         = rules->ProcessBackwards (newState, blockData, undo);
+    const auto end = PerformanceTimer::now ();
 
     const unsigned height = blockData["block"]["height"].asUInt ();
     CHECK_GT (height, 0);
+
+    VLOG (1)
+        << "Undoing block " << height << " took "
+        << std::chrono::duration_cast<CallbackDuration> (end - start).count ()
+        << " " << CALLBACK_DURATION_UNIT;
 
     storage->SetCurrentGameStateWithHeight (parent, height - 1, oldState);
     storage->ReleaseUndoData (hash);
