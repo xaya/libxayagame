@@ -100,12 +100,12 @@ class XayaGameTest (object):
     self.mainLogger.info ("Base directory for integration test: %s"
                             % self.basedir)
 
-    basePort = random.randint (1024, 30000)
+    self.basePort = random.randint (1024, 30000)
     self.log.info ("Using port range %d..%d, hopefully it is free"
-        % (basePort, basePort + 3))
+        % (self.basePort, self.basePort + 3))
 
     zmqPorts = {
-      "blocks": basePort + 1,
+      "blocks": self.basePort + 1,
     }
     if self.zmqPending == "none":
       self.log.info ("Disabling ZMQ for pending moves in Xaya Core")
@@ -114,14 +114,14 @@ class XayaGameTest (object):
       zmqPorts["pending"] = zmqPorts["blocks"]
     elif self.zmqPending == "two sockets":
       self.log.info ("Pending moves are sent on a different socket as blocks")
-      zmqPorts["pending"] = basePort + 2
+      zmqPorts["pending"] = self.basePort + 2
       assert zmqPorts["pending"] != zmqPorts["blocks"]
     else:
       raise AssertionError ("Invalid zmqPending: %s" % self.zmqPending)
 
-    self.xayanode = xaya.Node (self.basedir, basePort, zmqPorts,
+    self.xayanode = xaya.Node (self.basedir, self.basePort, zmqPorts,
                                self.args.xayad_binary)
-    self.gamenode = game.Node (self.basedir, basePort + 3,
+    self.gamenode = game.Node (self.basedir, self.basePort + 3,
                                self.args.game_daemon)
 
     class RpcHandles:
@@ -214,6 +214,23 @@ class XayaGameTest (object):
 
     self.rpc.game = None
     self.gamenode.stop ()
+
+  def recreateGameDaemon (self, gameBinary=None, extraArgs=[]):
+    """
+    Recreates and resyncs from scratch the game daemon.  This can optionally
+    set a different binary and extra args for it as well.
+    """
+
+    if gameBinary is None:
+      gameBinary = self.args.game_daemon
+
+    self.log.info ("Recreating game daemon with binary %s..." % gameBinary)
+    self.stopGameDaemon ()
+
+    self.gamenode = game.Node (self.basedir, self.basePort + 3,
+                               gameBinary)
+    self.startGameDaemon (extraArgs=extraArgs)
+    self.log.info ("Restarted fresh game daemon")
 
   ##############################################################################
   # Utility methods for testing.
