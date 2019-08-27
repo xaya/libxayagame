@@ -73,6 +73,12 @@ private:
   ActiveAutoIds* activeIds = nullptr;
 
   /**
+   * If set to true, then we enable 'PRAGMA reverse_unordered_selects' in the
+   * SQLite environment.  This can be used for debugging.
+   */
+  bool messForDebug = false;
+
+  /**
    * Ensures that the current state of the database matches the passed in
    * "fake game state".
    */
@@ -198,6 +204,17 @@ public:
    * as main storage in Game.
    */
   StorageInterface& GetStorage ();
+
+  /**
+   * Sets a flag (off by default) that determines whether to set
+   * 'PRAGMA reverse_unordered_selects' in SQLite (and potentially
+   * other related features).  Changing this flag "should" not affect
+   * a game's state updates, which can be used to test for certain types
+   * of bugs.
+   *
+   * This must only be called before Initialise opens the database first.
+   */
+  void SetMessForDebug (bool val);
 
   Json::Value GameStateToJson (const GameStateData& state) override;
 

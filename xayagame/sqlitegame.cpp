@@ -140,6 +140,14 @@ protected:
     sqlite3_limit (GetDatabase (), SQLITE_LIMIT_ATTACHED, 0);
     LOG (INFO) << "Set allowed number of attached databases to zero";
 
+    if (game.messForDebug)
+      {
+        CHECK_EQ (sqlite3_exec (GetDatabase (), R"(
+          PRAGMA `reverse_unordered_selects` = 1;
+        )", nullptr, nullptr, nullptr), SQLITE_OK);
+        LOG (INFO) << "Enabled mess-for-debug in the database";
+      }
+
     ActiveAutoIds ids(game);
     game.SetupSchema (GetDatabase ());
   }
@@ -265,6 +273,13 @@ SQLiteGame::GetInitialStateInternal (unsigned& height, std::string& hashHex)
 {
   GetInitialStateBlock (height, hashHex);
   return INITIAL_STATE;
+}
+
+void
+SQLiteGame::SetMessForDebug (const bool val)
+{
+  CHECK (database == nullptr) << "SQLiteGame has already been initialised";
+  messForDebug = val;
 }
 
 namespace

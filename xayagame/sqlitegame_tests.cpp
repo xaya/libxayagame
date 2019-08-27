@@ -130,6 +130,8 @@ public:
     shouldFail = v;
   }
 
+  using SQLiteGame::GetDatabaseForTesting;
+
 };
 
 /* ************************************************************************** */
@@ -578,10 +580,10 @@ private:
   /** The filename of the temporary on-disk database.  */
   std::string filename;
 
+protected:
+
   /** Resettable game logic.  */
   std::unique_ptr<ChatGame> rules;
-
-protected:
 
   /**
    * The game instance we use.  Since we can change the storage and game logic
@@ -596,7 +598,7 @@ protected:
     filename = std::tmpnam (nullptr);
     LOG (INFO) << "Using temporary database file: " << filename;
 
-    CreateChatGame ();
+    CreateChatGame (false);
 
     SetStartingBlock (GenesisHash ());
     InitialiseState (game, *rules);
@@ -613,11 +615,14 @@ protected:
 
   /**
    * Creates a fresh ChatGame instance and attaches it to the game instance.
+   * Sets mess-for-debug to the given value.
    */
   void
-  CreateChatGame ()
+  CreateChatGame (const bool mess)
   {
     rules = std::make_unique<ChatGame> ();
+    rules->SetMessForDebug (mess);
+
     rules->Initialise (filename);
     rules->InitialiseGameContext (Chain::MAIN, GAME_ID, nullptr);
 
@@ -644,11 +649,69 @@ TEST_F (PersistenceTests, KeepsData)
     {"foo", "bar"},
   });
 
-  CreateChatGame ();
+  CreateChatGame (false);
   ExpectState ({
     {"domob", "new"},
     {"foo", "bar"},
   });
+}
+
+/* ************************************************************************** */
+
+class MessForDebugTests : public PersistenceTests
+{
+
+private:
+
+  /**
+   * Callback that builds up a vector of strings from result columns.
+   */
+  static int
+  SaveUserToArray (void* ptr, int columns, char** strs, char** names)
+  {
+    UserArray* arr = static_cast<UserArray*> (ptr);
+    CHECK_EQ (columns, 1);
+    CHECK_EQ (std::string (names[0]), "user");
+    arr->push_back (strs[0]);
+    return 0;
+  }
+
+protected:
+
+  using UserArray = std::vector<std::string>;
+
+  /**
+   * Queries the usernames in the database, without specifying an order.
+   */
+  static UserArray
+  GetUnorderedUsernames (sqlite3* db)
+  {
+    UserArray res;
+
+    const int rc = sqlite3_exec (db, R"(
+      SELECT `user` FROM `chat`
+    )", &SaveUserToArray, &res, nullptr);
+    CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve chat users from DB";
+
+    return res;
+  }
+
+};
+
+TEST_F (MessForDebugTests, UnorderedSelect)
+{
+  ExpectState ({
+    {"domob", "hello world"},
+    {"foo", "bar"},
+  });
+
+  CreateChatGame (false);
+  const auto before = GetUnorderedUsernames (rules->GetDatabaseForTesting ());
+
+  CreateChatGame (true);
+  const auto after = GetUnorderedUsernames (rules->GetDatabaseForTesting ());
+
+  EXPECT_NE (before, after);
 }
 
 /* ************************************************************************** */
