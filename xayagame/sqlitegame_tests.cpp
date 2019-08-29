@@ -128,6 +128,7 @@ public:
   SetShouldFail (const bool v)
   {
     shouldFail = v;
+    LOG (INFO) << "Should fail is now: " << shouldFail;
   }
 
   using SQLiteGame::GetDatabaseForTesting;
@@ -381,7 +382,7 @@ InitialiseState (Game& game, SQLiteGame& rules)
 }
 
 template <typename G>
-  class SQLiteGameTests : public GameTestWithBlockchain
+  class UninitialisedSQLiteGameTests : public GameTestWithBlockchain
 {
 
 protected:
@@ -389,7 +390,7 @@ protected:
   Game game;
   G rules;
 
-  SQLiteGameTests ()
+  UninitialisedSQLiteGameTests ()
     : GameTestWithBlockchain(GAME_ID),
       game(GAME_ID)
   {
@@ -400,8 +401,6 @@ protected:
 
     game.SetStorage (rules.GetStorage ());
     game.SetGameLogic (rules);
-
-    InitialiseState (game, rules);
 
     /* We don't want to use a mock Xaya server, so reinitialising the state
        won't work.  Just set it to up-to-date, which is fine after we set the
@@ -422,12 +421,30 @@ protected:
 
 };
 
+template <typename G>
+  class SQLiteGameTests : public UninitialisedSQLiteGameTests<G>
+{
+
+protected:
+
+  using UninitialisedSQLiteGameTests<G>::game;
+  using UninitialisedSQLiteGameTests<G>::rules;
+
+  SQLiteGameTests ()
+  {
+    InitialiseState (game, rules);
+  }
+
+};
+
 /* ************************************************************************** */
 
-using StateInitialisationTests = SQLiteGameTests<ChatGame>;
+using StateInitialisationTests = UninitialisedSQLiteGameTests<ChatGame>;
 
 TEST_F (StateInitialisationTests, HeightAndHash)
 {
+  InitialiseState (game, rules);
+
   unsigned height;
   std::string hashHex;
   const GameStateData state = rules.GetInitialState (height, hashHex);
@@ -437,11 +454,13 @@ TEST_F (StateInitialisationTests, HeightAndHash)
 
 TEST_F (StateInitialisationTests, DatabaseInitialised)
 {
+  InitialiseState (game, rules);
   ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
 }
 
 TEST_F (StateInitialisationTests, MultipleRequests)
 {
+  InitialiseState (game, rules);
   ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
   ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
 }
@@ -449,15 +468,10 @@ TEST_F (StateInitialisationTests, MultipleRequests)
 TEST_F (StateInitialisationTests, ErrorHandling)
 {
   rules.SetShouldFail (true);
-  try
-    {
-      ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
-      FAIL () << "No exception was thrown";
-    }
-  catch (const Failure& exc)
-    {}
+  ASSERT_THROW (InitialiseState (game, rules), Failure);
 
   rules.SetShouldFail (false);
+  InitialiseState (game, rules);
   ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
 }
 
@@ -563,6 +577,57 @@ TEST_F (MovingTests, ErrorHandling)
     {"a", "x"},
     {"a", "y"},
   }));
+  ExpectState ({
+    {"a", "y"},
+    {"domob", "new"},
+    {"foo", "bar"},
+  });
+}
+
+/* ************************************************************************** */
+
+/**
+ * Modified ChatGame instance that accesses GetContext() from initialisation
+ * and state update to ensure that the context is available.
+ */
+class ChatGameRequiringContext : public ChatGame
+{
+
+protected:
+
+  void
+  InitialiseState (sqlite3* db) override
+  {
+    GetContext ();
+    ChatGame::InitialiseState (db);
+  }
+
+  void
+  UpdateState (sqlite3* db, const Json::Value& blockData) override
+  {
+    GetContext ();
+    ChatGame::UpdateState (db, blockData);
+  }
+
+};
+
+using ContextAvailabilityTests = SQLiteGameTests<ChatGameRequiringContext>;
+
+TEST_F (ContextAvailabilityTests, Initialisation)
+{
+  /* Access the current state immediately, without doing any other operations
+     on the game state.  */
+  ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
+}
+
+TEST_F (ContextAvailabilityTests, Updates)
+{
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({
+    {"domob", "new"},
+    {"a", "x"},
+    {"a", "y"},
+  }));
+
   ExpectState ({
     {"a", "y"},
     {"domob", "new"},

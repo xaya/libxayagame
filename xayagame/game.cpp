@@ -39,6 +39,7 @@ constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
 Game::Game (const std::string& id)
   : gameId(id)
 {
+  genesisHash.SetNull ();
   zmq.AddListener (gameId, this);
 }
 
@@ -823,12 +824,21 @@ Game::ReinitialiseState ()
   /* We do not have a current state in the storage.  This means that we have
      to reset to the initial state.  */
 
-  unsigned genesisHeight;
-  std::string genesisHashHex;
-  const GameStateData genesisData
-      = rules->GetInitialState (genesisHeight, genesisHashHex);
-  uint256 genesisHash;
-  CHECK (genesisHash.FromHex (genesisHashHex));
+  if (genesisHash.IsNull ())
+    {
+      /* GetInitialState may be expensive, and it may do things like update
+         some external game state (setting it to the initial one) as we do
+         e.g. with SQLiteGame.  Hence we should avoid calling it often, and
+         cache the genesis height once known.  That way, we call the function
+         exactly twice, independent of how many blocks / reinitialisations
+         we process in the mean time.  */
+
+      std::string genesisHashHex;
+      rules->GetInitialState (genesisHeight, genesisHashHex);
+
+      CHECK (genesisHash.FromHex (genesisHashHex));
+      LOG (INFO) << "Got genesis height from game: " << genesisHeight;
+    }
 
   /* If the current block height in the daemon is not yet the game's genesis
      height, simply wait for the genesis hash to be attached.  */
@@ -842,15 +852,26 @@ Game::ReinitialiseState ()
       return;
     }
 
-  /* Otherwise, we can store the initial state and start to sync from there.  */
+  /* Otherwise, we can store the initial state and start to sync from there.
+     Note that we need to clear the storage *before* we call GetInitialState
+     again here, because the latter will update the external state for
+     the initial game state with SQLiteGame (and potentially other
+     storage modules in the future).  */
+
+  transactionManager.TryAbortTransaction ();
+  storage->Clear ();
+
+  std::string genesisHashHex;
+  const GameStateData genesisData
+      = rules->GetInitialState (genesisHeight, genesisHashHex);
+  CHECK (genesisHash.FromHex (genesisHashHex));
+
   const std::string blockHashHex = rpcClient->getblockhash (genesisHeight);
   uint256 blockHash;
   CHECK (blockHash.FromHex (blockHashHex));
   CHECK (blockHash == genesisHash)
     << "The game's genesis block hash and height do not match";
 
-  transactionManager.TryAbortTransaction ();
-  storage->Clear ();
   while (true)
     try
       {

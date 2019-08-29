@@ -104,10 +104,20 @@ private:
   SQLiteGame& game;
 
   /**
+   * Checks whether the game-state is marked as "initialised" in the
+   * internal bookkeeping table.
+   */
+  bool IsGameInitialised () const;
+
+  /**
+   * Initialises the game state in the database by calling InitialiseState
+   * on the underlying game.
+   */
+  void InitialiseGame ();
+
+  /**
    * Verifies that the database state corresponds to the given "current state"
-   * from libxayagame.  The function also makes sure to call InitialiseState
-   * if the passed-in state is the initial-keyword and the database's state
-   * has not yet been initialised.
+   * from libxayagame.
    */
   void EnsureCurrentState (const GameStateData& state);
 
@@ -160,49 +170,27 @@ public:
 
 };
 
-void
-SQLiteGame::Storage::EnsureCurrentState (const GameStateData& state)
+bool
+SQLiteGame::Storage::IsGameInitialised () const
 {
-  VLOG (1) << "Ensuring current database matches game state: " << state;
-
-  /* In any case, state-based methods of GameLogic are only ever called when
-     there is already a "current state" in the storage.  */
-  uint256 hash;
-  CHECK (GetCurrentBlockHash (hash));
-  const std::string hashHex = hash.ToHex ();
-
-  /* Handle the case of a regular block hash (no initial state).  */
-  const size_t prefixLen = std::strlen (BLOCKHASH_STATE);
-  if (state.substr (0, prefixLen) == BLOCKHASH_STATE)
-    {
-      CHECK (hashHex == state.substr (prefixLen))
-          << "Current best block in the database (" << hashHex
-          << ") does not match claimed current game state";
-      return;
-    }
-
-  /* Verify initial state.  */
-  CHECK (state == INITIAL_STATE) << "Unexpected game state value: " << state;
-  unsigned height;
-  std::string initialHashHex;
-  game.GetInitialStateBlock (height, initialHashHex);
-  CHECK (hashHex == initialHashHex)
-      << "Current best block in the database (" << hashHex
-      << ") does not match the game's initial block " << initialHashHex;
-
-  /* Check if the state has already been initialised.  */
   auto* stmt = PrepareStatement (R"(
     SELECT `gamestate_initialised` FROM `xayagame_gamevars`
   )");
+
   CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW)
       << "Failed to fetch result for from xayagame_gamevars";
   const int initialised = sqlite3_column_int (stmt, 0);
   StepWithNoResult (stmt);
 
-  /* If it has not yet been initialised, do so now.  */
-  if (initialised != 0)
+  return initialised;
+}
+
+void
+SQLiteGame::Storage::InitialiseGame ()
+{
+  if (IsGameInitialised ())
     {
-      VLOG (1) << "Initial state has already been set in the DB";
+      VLOG (1) << "Game state is already initialised in the database";
       return;
     }
 
@@ -224,6 +212,39 @@ SQLiteGame::Storage::EnsureCurrentState (const GameStateData& state)
       StepWithNoResult (PrepareStatement ("ROLLBACK TO `xayagame-stateinit`"));
       throw;
     }
+}
+
+void
+SQLiteGame::Storage::EnsureCurrentState (const GameStateData& state)
+{
+  VLOG (1) << "Ensuring current database matches game state: " << state;
+
+  /* In any case, state-based methods of GameLogic are only ever called when
+     there is already a "current state" in the storage.  */
+  uint256 hash;
+  CHECK (GetCurrentBlockHash (hash));
+  const std::string hashHex = hash.ToHex ();
+
+  /* Handle the case of a regular block hash (no initial state).  */
+  const size_t prefixLen = std::strlen (BLOCKHASH_STATE);
+  if (state.substr (0, prefixLen) == BLOCKHASH_STATE)
+    {
+      CHECK (hashHex == state.substr (prefixLen))
+          << "Current best block in the database (" << hashHex
+          << ") does not match claimed current game state";
+      CHECK (IsGameInitialised ());
+      return;
+    }
+
+  /* Verify initial state.  */
+  CHECK (state == INITIAL_STATE) << "Unexpected game state value: " << state;
+  unsigned height;
+  std::string initialHashHex;
+  game.GetInitialStateBlock (height, initialHashHex);
+  CHECK (hashHex == initialHashHex)
+      << "Current best block in the database (" << hashHex
+      << ") does not match the game's initial block " << initialHashHex;
+  CHECK (IsGameInitialised ());
 }
 
 /* ************************************************************************** */
@@ -272,6 +293,10 @@ GameStateData
 SQLiteGame::GetInitialStateInternal (unsigned& height, std::string& hashHex)
 {
   GetInitialStateBlock (height, hashHex);
+
+  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
+  database->InitialiseGame ();
+
   return INITIAL_STATE;
 }
 

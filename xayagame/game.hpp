@@ -113,6 +113,15 @@ private:
   State state = State::UNKNOWN;
 
   /**
+   * The game's genesis height, if known already.  We cache that from the
+   * first call to GetInitialState, so that we can avoid calling it all
+   * over again on each block before we reach the genesis height.
+   */
+  unsigned genesisHeight;
+  /** The game's genesis hash, if already known (zero otherwise).  */
+  uint256 genesisHash;
+
+  /**
    * While the state is PREGENESIS, this holds the block hash of the game's
    * initial state to which we are catching up.  For CATCHING_UP, this is
    * the TOBLOCK returned from game_sendupdates.
