@@ -1,4 +1,4 @@
-# Copyright (C) 2018 The Xaya developers
+# Copyright (C) 2018-2019 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -30,11 +30,25 @@ class Node ():
   """
 
   def __init__ (self, basedir, port, binary):
+    """
+    Initialises the instance for using the given basedir, port and GSP binary.
+    binary can be an array, in which case it is passed as such (with arguments
+    added to it) to subprocess.Popen.  This can be used, for instance, to
+    make the binary something like ["valgrind", "moverd"].
+    """
+
     self.log = logging.getLogger ("xayagametest.gamenode")
     self.datadir = os.path.join (basedir, "gamenode")
     self.port = port
     self.rpcurl = "http://localhost:%d" % self.port
-    self.binary = binary
+
+    if isinstance (binary, list):
+      self.binaryCmd = binary
+      self.realBinary = binary[-1]
+    else:
+      assert isinstance (binary, str)
+      self.binaryCmd = [binary]
+      self.realBinary = binary
 
     self.log.info ("Creating fresh data directory for the game node in %s"
                     % self.datadir)
@@ -49,7 +63,7 @@ class Node ():
       return
 
     self.log.info ("Starting new game process")
-    args = [self.binary]
+    args = list (self.binaryCmd)
     args.append ("--xaya_rpc_url=%s" % xayarpc)
     args.append ("--game_rpc_port=%d" % self.port)
     args.append ("--datadir=%s" % self.datadir)
@@ -102,7 +116,7 @@ class Node ():
 
     obj = re.compile (expr)
     logfile = os.path.join (self.datadir,
-                            os.path.basename (self.binary) + ".INFO")
+                            os.path.basename (self.realBinary) + ".INFO")
 
     count = 0
     for line in open (logfile, 'r'):

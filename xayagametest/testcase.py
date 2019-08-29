@@ -15,6 +15,7 @@ import logging
 import os.path
 import random
 import re
+import shlex
 import shutil
 import sys
 import time
@@ -49,6 +50,9 @@ class XayaGameTest (object):
                          help="xayad binary to use in the test")
     parser.add_argument ("--game_daemon", default=gameBinaryDefault,
                          help="game daemon binary to use in the test")
+    parser.add_argument ("--run_game_with", default="",
+                         help="run game daemon with this helper binary"
+                              " (e.g. valgrind)")
     parser.add_argument ("--dir", default=DEFAULT_DIR,
                          help="base directory for test runs")
     parser.add_argument ("--nocleanup", default=False, action="store_true",
@@ -100,6 +104,11 @@ class XayaGameTest (object):
     self.mainLogger.info ("Base directory for integration test: %s"
                             % self.basedir)
 
+    # Potentially split multiple parts of the "run_game_with" argument
+    # into individual arguments.  If run_game_with with "", then this
+    # produces an empty array.
+    self.runGameWith = shlex.split (self.args.run_game_with)
+
     self.basePort = random.randint (1024, 30000)
     self.log.info ("Using port range %d..%d, hopefully it is free"
         % (self.basePort, self.basePort + 3))
@@ -121,8 +130,7 @@ class XayaGameTest (object):
 
     self.xayanode = xaya.Node (self.basedir, self.basePort, zmqPorts,
                                self.args.xayad_binary)
-    self.gamenode = game.Node (self.basedir, self.basePort + 3,
-                               self.args.game_daemon)
+    self.gamenode = self.createGameNode ()
 
     class RpcHandles:
       xaya = None
@@ -221,16 +229,28 @@ class XayaGameTest (object):
     set a different binary and extra args for it as well.
     """
 
+    self.stopGameDaemon ()
+    self.gamenode = self.createGameNode (gameBinary)
+    self.startGameDaemon (extraArgs=extraArgs)
+
+    self.log.info ("Restarted fresh game daemon with binary %s"
+                    % self.gamenode.realBinary)
+
+  def createGameNode (self, gameBinary=None):
+    """
+    Creates a Game instance with the configuration of this test case
+    (optionally overriding the GSP binary with the given one).
+
+    This is used internally and should not be called from tests themselves.
+    """
+
     if gameBinary is None:
       gameBinary = self.args.game_daemon
 
-    self.log.info ("Recreating game daemon with binary %s..." % gameBinary)
-    self.stopGameDaemon ()
+    gameCmd = list (self.runGameWith)
+    gameCmd.append (gameBinary)
 
-    self.gamenode = game.Node (self.basedir, self.basePort + 3,
-                               gameBinary)
-    self.startGameDaemon (extraArgs=extraArgs)
-    self.log.info ("Restarted fresh game daemon")
+    return game.Node (self.basedir, self.basePort + 3, gameCmd)
 
   ##############################################################################
   # Utility methods for testing.
