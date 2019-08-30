@@ -89,6 +89,7 @@ CreateStorage (const GameDaemonConfiguration& config,
     }
 
   LOG (FATAL) << "Invalid storage type selected: " << config.StorageType;
+  return nullptr;
 }
 
 /**
