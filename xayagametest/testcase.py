@@ -273,7 +273,8 @@ class XayaGameTest (object):
 
     try:
       return self.rpc.xaya.name_update (name, value, options)
-    except:
+    except Exception as exc:
+      self.log.exception (exc)
       self.log.info ("name_update for %s failed, trying name_register" % name)
       return self.rpc.xaya.name_register (name, value, options)
 
