@@ -7,6 +7,7 @@ Basic framework for integration tests of Xaya games.
 """
 
 import game
+import premine
 import xaya
 
 import argparse
@@ -387,3 +388,13 @@ class XayaGameTest (object):
       self.assertEqual (c, code)
       msgPattern = re.compile (msgRegExp)
       assert msgPattern.match (m)
+
+  def collectPremine (self, addr=None):
+    """
+    Collects the premine coins (whose keys are publicly known on regtest)
+    and sends them to the given address or a new address from the wallet if
+    no address is given.  This can be used in tests to obtain a large balance
+    and use it for testing purposes.
+    """
+
+    premine.collect (self.rpc.xaya, addr, logger=self.log)
