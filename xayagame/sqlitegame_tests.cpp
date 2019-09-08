@@ -637,6 +637,77 @@ TEST_F (ContextAvailabilityTests, Updates)
 
 /* ************************************************************************** */
 
+/**
+ * Modified ChatGame that uses a UNIQUE constraint on the message.  We use
+ * that to test that the basic "delete + insert fresh" situation works
+ * with undoing and UNIQUE constraints.  For more details, see
+ * https://github.com/xaya/libxayagame/issues/86.
+ */
+class UniqueMessageChat : public ChatGame
+{
+
+protected:
+
+  void
+  SetupSchema (sqlite3* db) override
+  {
+    ExecuteWithNoResult (db, R"(
+      CREATE TABLE IF NOT EXISTS `chat`
+          (`user` TEXT PRIMARY KEY,
+           `msg` TEXT,
+           UNIQUE (`msg`));
+    )");
+  }
+
+  void
+  UpdateState (sqlite3* db, const Json::Value& blockData) override
+  {
+    for (const auto& m : blockData["moves"])
+      {
+        const std::string name = m["name"].asString ();
+        for (const auto& v : m["move"])
+          {
+            const std::string msg = v.asString ();
+            ExecuteWithNoResult (db, R"(
+              DELETE FROM `chat`
+                WHERE `msg` = ')" + msg + "'");
+            ExecuteWithNoResult (db, R"(
+              INSERT OR REPLACE INTO `chat` (`user`, `msg`) VALUES
+            (')" + name + "', '" + msg + "')");
+          }
+      }
+  }
+
+};
+
+using UniqueConstraintTests = SQLiteGameTests<UniqueMessageChat>;
+
+TEST_F (UniqueConstraintTests, Undo)
+{
+  ExpectState ({
+    {"domob", "hello world"},
+    {"foo", "bar"},
+  });
+
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({
+    {"andy", "hello world"},
+    {"baz", "bar"},
+    {"baz", "baz"},
+  }));
+  ExpectState ({
+    {"andy", "hello world"},
+    {"baz", "baz"},
+  });
+
+  DetachBlock (game);
+  ExpectState ({
+    {"domob", "hello world"},
+    {"foo", "bar"},
+  });
+}
+
+/* ************************************************************************** */
+
 class PersistenceTests : public GameTestWithBlockchain
 {
 

@@ -43,6 +43,12 @@ namespace xaya
  * The undo data for a block is the changeset created by the SQLite session
  * extension for the modifications to the database done by the game itself
  * (but not through the SQLiteStorage, as that is handled by libxayagame).
+ *
+ * Note that the SQLite session extension has some weird behaviour together
+ * with UNIQUE constraints.  Games need to be careful when using those; it
+ * will work for most cases, but some edge cases might fail to undo properly.
+ * For more information, see the discussion on the sqlite-user mailing list:
+ * http://sqlite.1065341.n5.nabble.com/Inverted-changesets-and-UNIQUE-constraints-td108318.html.
  */
 class SQLiteGame : public GameLogic
 {
