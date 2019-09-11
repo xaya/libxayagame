@@ -92,7 +92,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
     const GameStateData newState
         = rules->ProcessForward (oldState, blockData, undo);
     const auto end = PerformanceTimer::now ();
-    VLOG (1)
+    LOG (INFO)
         << "Processing block " << height << " forward took "
         << std::chrono::duration_cast<CallbackDuration> (end - start).count ()
         << " " << CALLBACK_DURATION_UNIT;
@@ -149,7 +149,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
     const unsigned height = blockData["block"]["height"].asUInt ();
     CHECK_GT (height, 0);
 
-    VLOG (1)
+    LOG (INFO)
         << "Undoing block " << height << " took "
         << std::chrono::duration_cast<CallbackDuration> (end - start).count ()
         << " " << CALLBACK_DURATION_UNIT;
