@@ -10,6 +10,7 @@ REGTESTS = \
   basic.py \
   bind_locally.py \
   catching_up.py \
+  dupjsonkeys.py \
   pending-disabled.py \
   pending-onesocket.py \
   pending-twosockets.py \

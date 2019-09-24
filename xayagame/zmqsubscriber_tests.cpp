@@ -365,6 +365,35 @@ TEST_F (ZmqSubscriberTests, ListenerCalled)
   SendDetach (GAME_ID, payload2, 1);
 }
 
+TEST_F (ZmqSubscriberTests, JsonKeysDeduped)
+{
+  Json::Value payload;
+  std::istringstream in(R"(
+    {
+      "test": 42,
+      "nested":
+        {
+          "field": "last"
+        }
+    }
+  )");
+  in >> payload;
+  EXPECT_CALL (mockListener, BlockAttach (GAME_ID, payload, _));
+
+  const std::string topic = std::string ("game-block-attach json ") + GAME_ID;
+  SendMultipart ({topic, R"(
+    {
+      "test": 1,
+      "nested":
+        {
+          "field": "first",
+          "field": "last"
+        },
+      "test": 42
+    }
+  )", "1234"});
+}
+
 TEST_F (ZmqSubscriberTests, SequenceNumber)
 {
   Json::Value payload;
