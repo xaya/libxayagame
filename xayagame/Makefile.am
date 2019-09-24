@@ -4,7 +4,11 @@ rpcstubdir = $(xayagamedir)/rpc-stubs
 
 pkgconfig_DATA = libxayagame.pc
 
-EXTRA_DIST = rpc-stubs/game.json rpc-stubs/xaya.json rpc-stubs/xaya-wallet.json
+EXTRA_DIST = \
+  rpc-stubs/game.json \
+  rpc-stubs/test.json \
+  rpc-stubs/xaya.json \
+  rpc-stubs/xaya-wallet.json
 
 RPC_STUBS = \
   rpc-stubs/gamerpcclient.h \
@@ -13,8 +17,11 @@ RPC_STUBS = \
   rpc-stubs/xayarpcserverstub.h \
   rpc-stubs/xayawalletrpcclient.h \
   rpc-stubs/xayawalletrpcserverstub.h
-BUILT_SOURCES = $(RPC_STUBS)
-CLEANFILES = $(RPC_STUBS)
+RPC_STUBS_TEST = \
+  rpc-stubs/testrpcclient.h \
+  rpc-stubs/testrpcserverstub.h
+BUILT_SOURCES = $(RPC_STUBS) $(RPC_STUBS_TEST)
+CLEANFILES = $(RPC_STUBS) $(RPC_STUBS_TEST)
 
 libxayagame_la_CXXFLAGS = \
   -I$(top_srcdir) \
@@ -104,16 +111,23 @@ tests_SOURCES = \
   zmqsubscriber_tests.cpp
 TESTHEADERS = storage_tests.hpp
 
-test_exceptions_CXXFLAGS = $(GLOG_CFLAGS)
-test_exceptions_LDADD = $(GLOG_LIBS)
+test_exceptions_CXXFLAGS = \
+  $(GLOG_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS)
+test_exceptions_LDADD = \
+  $(GLOG_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS)
 test_exceptions_SOURCES = test_exceptions.cpp
 
-check_HEADERS = $(TESTUTILHEADERS) $(TESTHEADERS)
+check_HEADERS = $(TESTUTILHEADERS) $(TESTHEADERS) $(RPC_STUBS_TEST)
 
 rpc-stubs/gamerpcclient.h: $(srcdir)/rpc-stubs/game.json
 	jsonrpcstub "$<" --cpp-client=GameRpcClient --cpp-client-file="$@"
 rpc-stubs/gamerpcserverstub.h: $(srcdir)/rpc-stubs/game.json
 	jsonrpcstub "$<" --cpp-server=GameRpcServerStub --cpp-server-file="$@"
+
+rpc-stubs/testrpcclient.h: $(srcdir)/rpc-stubs/test.json
+	jsonrpcstub "$<" --cpp-client=TestRpcClient --cpp-client-file="$@"
+rpc-stubs/testrpcserverstub.h: $(srcdir)/rpc-stubs/test.json
+	jsonrpcstub "$<" --cpp-server=TestRpcServerStub --cpp-server-file="$@"
 
 rpc-stubs/xayarpcclient.h: $(srcdir)/rpc-stubs/xaya.json
 	jsonrpcstub "$<" --cpp-client=XayaRpcClient --cpp-client-file="$@"

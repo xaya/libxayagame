@@ -1,0 +1,7 @@
+[
+  {
+    "name": "add",
+    "params": [1, 2],
+    "returns": 3
+  }
+]
