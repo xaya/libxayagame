@@ -168,7 +168,11 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
   rbuilder["allowComments"] = false;
   rbuilder["strictRoot"] = true;
   rbuilder["failIfExtra"] = true;
-  rbuilder["rejectDupKeys"] = true;
+  /* Xaya Core's univalue accepts duplicate keys, so it may forward moves to
+     us that contain duplicate keys.  We need to handle them gracefully when
+     parsing.  With our options, JsonCpp will accept them, and dedup by
+     keeping only the last value.  */
+  rbuilder["rejectDupKeys"] = false;
 
   std::string topic;
   std::string payload;
