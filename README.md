@@ -1,4 +1,4 @@
-# Xaya Game Library and Mover
+# Xaya Game Library
 
 `libxayagame` is a C++ library that makes it easy to implement games on the
 [Xaya platform](https://xaya.io/).  It takes care of the interaction with
@@ -31,13 +31,12 @@ your system, respectively.
 for the configuration and/or build to be successful:
 
 - [`libjsoncpp`](https://github.com/open-source-parsers/jsoncpp):
-  The Debian package `libjsoncpp-dev` is not fresh enough, so it needs
-  to be built from source.  In particular, it must be a version that
-  includes the commit
-  [`4f24acaf4c6737cd07d40a02edad0a56147e0713`](https://github.com/cinemast/libjson-rpc-cpp/commit/4f24acaf4c6737cd07d40a02edad0a56147e0713).
+  The Debian package `libjsoncpp-dev` can be used.
 - [`jsonrpccpp`](https://github.com/cinemast/libjson-rpc-cpp/):
   For Debian, the packages `libjsonrpccpp-dev` and `libjsonrpccpp-tools`
-  can be installed.
+  are not fresh enough.  They need to be built from source;
+  in particular, it must be a version that includes the commit
+  [`4f24acaf4c6737cd07d40a02edad0a56147e0713`](https://github.com/cinemast/libjson-rpc-cpp/commit/4f24acaf4c6737cd07d40a02edad0a56147e0713).
 - [`ZeroMQ C++ bindings`](http://zeromq.org/bindings:cpp):
   Available in the Debian package `libzmq3-dev`.
 - [SQLite3](https://www.sqlite.org/) with the
@@ -49,13 +48,12 @@ for the configuration and/or build to be successful:
 - [`glog`](https://github.com/google/glog):
   Available for Debian as `libgoogle-glog-dev`.
 - [`gflags`](https://github.com/gflags/gflags):
-  The package (`libgflags-dev`) included with Debian 9 "Stretch" does
-  not include the `pkg-config` file yet, build from source instead.
+  The package (`libgflags-dev`) included with Debian can be used.
 - [Protocol buffers]((https://developers.google.com/protocol-buffers/)
   are used both in C++ and Python.  On Debian, the packages
   `libprotobuf-dev`, `protobuf-compiler` and `python-protobuf` can be used.
 
 For the unit tests, also the
 [Google test framework](https://github.com/google/googletest) is needed.
-The package included with Debian 9 "Stretch" is not fresh enough,
+The package included with Debian 10 "Buster" is not fresh enough,
 it should be built and installed from source instead.
