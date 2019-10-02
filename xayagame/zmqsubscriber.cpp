@@ -222,7 +222,8 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
       std::string parseErrs;
       std::istringstream in(payload);
       CHECK (Json::parseFromStream (rbuilder, in, &data, &parseErrs))
-          << "Error parsing notification JSON: " << parseErrs;
+          << "Error parsing notification JSON: " << parseErrs
+          << "\n" << payload;
 
       for (auto i = range.first; i != range.second; ++i)
         switch (type)
