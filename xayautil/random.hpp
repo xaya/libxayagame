@@ -7,6 +7,8 @@
 
 #include "uint256.hpp"
 
+#include <vector>
+
 namespace xaya
 {
 
@@ -56,6 +58,20 @@ public:
    * random number stream.
    */
   uint32_t NextInt (uint32_t n);
+
+  /**
+   * Performs a random roll and returns true with probability numer/denom.
+   */
+  bool ProbabilityRoll (uint32_t numer, uint32_t denom);
+
+  /**
+   * Selects one entry randomly from a given set of choices.  Each choice
+   * has a certain "weight", and its probability is weight / total weights.
+   * The parameter is the array of weights, and returned is an index into that
+   * array that matches the selected outcome.  The sum of all weights must be
+   * representable in an uint32.
+   */
+  size_t SelectByWeight (const std::vector<uint32_t>& weights);
 
 };
 

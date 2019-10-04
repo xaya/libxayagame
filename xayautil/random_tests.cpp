@@ -81,7 +81,7 @@ TEST_F (RandomTests, Integers)
 TEST_F (RandomTests, NextInt)
 {
   constexpr unsigned n = 10;
-  constexpr unsigned rolls = 10000;
+  constexpr unsigned rolls = 10'000;
   constexpr unsigned threshold = rolls / n * 80 / 100;
 
   std::vector<unsigned> cnt(n);
@@ -98,14 +98,53 @@ TEST_F (RandomTests, NextInt)
 TEST_F (RandomTests, NextIntLargeN)
 {
   constexpr uint32_t n = std::numeric_limits<uint32_t>::max ();
-  constexpr unsigned rolls = 1000;
-  constexpr uint32_t threshold = 4000000000;
+  constexpr unsigned rolls = 1'000;
+  constexpr uint32_t threshold = 4'000'000'000;
 
   for (unsigned i = 0; i < rolls; ++i)
     if (rnd.NextInt (n) >= threshold)
       return;
 
   FAIL () << "Threshold has never been exceeded";
+}
+
+TEST_F (RandomTests, ProbabilityRoll)
+{
+  constexpr uint32_t numer = 70;
+  constexpr uint32_t denom = 100;
+  constexpr unsigned rolls = 1'000'000;
+
+  unsigned success = 0;
+  for (unsigned i = 0; i < rolls; ++i)
+    if (rnd.ProbabilityRoll (numer, denom))
+      ++success;
+
+  LOG (INFO)
+      << "Rolled " << rolls << " tries for probability "
+      << numer << "/" << denom << " and got " << success << " successes";
+  EXPECT_GE (success, 690'000);
+  EXPECT_LE (success, 710'000);
+}
+
+TEST_F (RandomTests, SelectByWeight)
+{
+  const std::vector<uint32_t> weights = {55, 10, 35};
+  constexpr unsigned rolls = 1'000'000;
+
+  unsigned counts[] = {0, 0, 0};
+  for (unsigned i = 0; i < rolls; ++i)
+    ++counts[rnd.SelectByWeight (weights)];
+
+  for (unsigned i = 0; i < weights.size (); ++i)
+    LOG (INFO)
+        << "Choice " << i << " with weight " << weights[i]
+        << " was selected " << counts[i] << " times";
+
+  for (unsigned i = 0; i < weights.size (); ++i)
+    {
+      EXPECT_GE (counts[i], 10'000 * (weights[i] - 1));
+      EXPECT_LE (counts[i], 10'000 * (weights[i] + 1));
+    }
 }
 
 } // anonymous namespace

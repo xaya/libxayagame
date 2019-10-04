@@ -117,4 +117,30 @@ Random::NextInt (const uint32_t n)
     }
 }
 
+bool
+Random::ProbabilityRoll (uint32_t numer, uint32_t denom)
+{
+  const auto val = NextInt (denom);
+  return val < numer;
+}
+
+size_t
+Random::SelectByWeight (const std::vector<uint32_t>& weights)
+{
+  uint64_t totalWeights = 0;
+  for (const auto w : weights)
+    totalWeights += w;
+  CHECK_LE (totalWeights, std::numeric_limits<uint32_t>::max ());
+
+  uint32_t roll = NextInt (totalWeights);
+  for (size_t i = 0; i < weights.size (); ++i)
+    {
+      if (roll < weights[i])
+        return i;
+      roll -= weights[i];
+    }
+
+  LOG (FATAL) << "No option selected";
+}
+
 } // namespace xaya
