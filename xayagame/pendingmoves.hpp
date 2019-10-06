@@ -39,8 +39,11 @@ private:
     /** The current confirmed game state.  */
     const GameStateData& state;
 
-    explicit CurrentState (const GameStateData& s)
-      : state(s)
+    /** The number of confirmed blocks on the chain.  */
+    const unsigned height;
+
+    explicit CurrentState (const GameStateData& s, const unsigned h)
+      : state(s), height(h)
     {}
 
   };
@@ -74,6 +77,12 @@ protected:
   const GameStateData& GetConfirmedState () const;
 
   /**
+   * Returns the number of confirmed blocks on the chain (i.e. the current
+   * block height).  Must only be called while a callback is running.
+   */
+  unsigned GetConfirmedHeight () const;
+
+  /**
    * Clears the state, so it corresponds to an empty mempool.  This is called
    * whenever the confirmed on-chain state changes.  It may also be called
    * when the confirmed state did not change but the pending state needs to
@@ -105,7 +114,7 @@ public:
    * of Xaya Core and then rebuilds the pending state based on known moves
    * that are still in the mempool.
    */
-  void ProcessAttachedBlock (const GameStateData& state);
+  void ProcessAttachedBlock (const GameStateData& state, unsigned h);
 
   /**
    * Processes a detached block.  This clears the pending state and rebuilds
@@ -115,13 +124,14 @@ public:
    * state must be the confirmed game-state *after* the block has been
    * detached already (i.e. the state before, not "at", the block).
    */
-  void ProcessDetachedBlock (const GameStateData& state,
+  void ProcessDetachedBlock (const GameStateData& state, unsigned h,
                              const Json::Value& blockData);
 
   /**
    * Processes a newly received pending move.
    */
-  void ProcessMove (const GameStateData& state, const Json::Value& mv);
+  void ProcessMove (const GameStateData& state, unsigned h,
+                    const Json::Value& mv);
 
   /**
    * Returns a JSON representation of the current state.  This is exposed

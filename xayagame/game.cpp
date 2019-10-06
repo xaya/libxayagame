@@ -214,6 +214,8 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
       return;
     }
 
+  const unsigned height = data["block"]["height"].asUInt ();
+
   bool needReinit = false;
   try
     {
@@ -254,7 +256,7 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
       /* Attach the block in the pruning queue.  This is done after updating the
          state so that a potential pruning with nBlocks=0 can take place.  */
       if (pruningQueue != nullptr)
-        pruningQueue->AttachBlock (hash, data["block"]["height"].asUInt ());
+        pruningQueue->AttachBlock (hash, height);
     }
   catch (const StorageInterface::RetryWithNewTransaction& exc)
     {
@@ -267,7 +269,7 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
 
   if (state == State::UP_TO_DATE && pending != nullptr)
     {
-      pending->ProcessAttachedBlock (storage->GetCurrentGameState ());
+      pending->ProcessAttachedBlock (storage->GetCurrentGameState (), height);
       NotifyPendingStateChange ();
     }
 }
@@ -357,7 +359,14 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
 
   if (state == State::UP_TO_DATE && pending != nullptr)
     {
-      pending->ProcessDetachedBlock (storage->GetCurrentGameState (), data);
+      /* The heigh tpassed to the PendingMoveProcessor should be the "confirmed"
+         height for processing moves, which means that it is one less than the
+         currently detached height.  */
+      const unsigned height = data["block"]["height"].asUInt ();
+      CHECK_GT (height, 0);
+
+      pending->ProcessDetachedBlock (storage->GetCurrentGameState (),
+                                     height - 1, data);
       NotifyPendingStateChange ();
     }
 }
@@ -375,8 +384,12 @@ Game::PendingMove (const std::string& id, const Json::Value& data)
   std::lock_guard<std::mutex> lock(mut);
   if (state == State::UP_TO_DATE)
     {
+      uint256 hash;
+      unsigned height;
+      CHECK (storage->GetCurrentBlockHashWithHeight (hash, height));
+
       CHECK (pending != nullptr);
-      pending->ProcessMove (storage->GetCurrentGameState (), data);
+      pending->ProcessMove (storage->GetCurrentGameState (), height, data);
       NotifyPendingStateChange ();
     }
   else

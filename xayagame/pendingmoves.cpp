@@ -26,11 +26,12 @@ public:
   /**
    * Sets the context based on the current state.
    */
-  explicit ContextSetter (PendingMoveProcessor& p, const GameStateData& s)
+  explicit ContextSetter (PendingMoveProcessor& p, const GameStateData& s,
+                          const unsigned h)
     : proc(p)
   {
     CHECK (proc.ctx == nullptr);
-    proc.ctx = std::make_unique<CurrentState> (s);
+    proc.ctx = std::make_unique<CurrentState> (s, h);
   }
 
   /**
@@ -49,6 +50,13 @@ PendingMoveProcessor::GetConfirmedState () const
 {
   CHECK (ctx != nullptr) << "No callback is running at the moment";
   return ctx->state;
+}
+
+unsigned
+PendingMoveProcessor::GetConfirmedHeight () const
+{
+  CHECK (ctx != nullptr) << "No callback is running at the moment";
+  return ctx->height;
 }
 
 void
@@ -102,16 +110,18 @@ GetMoveTxid (const Json::Value& mv)
 } // anonymous namespace
 
 void
-PendingMoveProcessor::ProcessAttachedBlock (const GameStateData& state)
+PendingMoveProcessor::ProcessAttachedBlock (const GameStateData& state,
+                                            const unsigned h)
 {
   VLOG (1) << "Updating pending state for attached block...";
 
-  ContextSetter setter(*this, state);
+  ContextSetter setter(*this, state, h);
   Reset ();
 }
 
 void
 PendingMoveProcessor::ProcessDetachedBlock (const GameStateData& state,
+                                            const unsigned h,
                                             const Json::Value& blockData)
 {
   /* We want to insert moves from the detached block into our map of
@@ -131,12 +141,13 @@ PendingMoveProcessor::ProcessDetachedBlock (const GameStateData& state,
       << mvArray.size () << " moves unconfirmed";
   VLOG (2) << "Block data: " << blockData;
 
-  ContextSetter setter(*this, state);
+  ContextSetter setter(*this, state, h);
   Reset ();
 }
 
 void
 PendingMoveProcessor::ProcessMove (const GameStateData& state,
+                                   const unsigned h,
                                    const Json::Value& mv)
 {
   const uint256 txid = GetMoveTxid (mv);
@@ -150,7 +161,7 @@ PendingMoveProcessor::ProcessMove (const GameStateData& state,
       return;
     }
 
-  ContextSetter setter(*this, state);
+  ContextSetter setter(*this, state, h);
   AddPendingMove (mv);
 }
 

@@ -308,12 +308,14 @@ protected:
   {
     data = Json::Value (Json::objectValue);
     data["state"] = GetConfirmedState ();
+    data["height"] = static_cast<int> (GetConfirmedHeight ());
   }
 
   void
   AddPendingMove (const Json::Value& mv) override
   {
     data["state"] = GetConfirmedState ();
+    data["height"] = static_cast<int> (GetConfirmedHeight ());
 
     const std::string nm = mv["name"].asString ();
     const std::string val = mv["move"].asString ();
@@ -808,6 +810,7 @@ TEST_F (GetPendingJsonStateTests, PendingState)
   EXPECT_EQ (state["pending"], ParseJson (R"(
     {
       "state": "",
+      "height": 10,
       "a": "x"
     }
   )"));
@@ -1155,6 +1158,7 @@ TEST_F (WaitForPendingChangeTests, PendingMove)
   EXPECT_EQ (out["pending"], ParseJson (R"(
     {
       "state": "",
+      "height": 10,
       "a": "x"
     }
   )"));
@@ -1175,7 +1179,8 @@ TEST_F (WaitForPendingChangeTests, AttachedBlock)
   JoinWaiter ();
   EXPECT_EQ (out["pending"], ParseJson (R"(
     {
-      "state": "a0b1"
+      "state": "a0b1",
+      "height": 2
     }
   )"));
 }
@@ -1197,7 +1202,8 @@ TEST_F (WaitForPendingChangeTests, DetachedBlock)
   JoinWaiter ();
   EXPECT_EQ (out["pending"], ParseJson (R"(
     {
-      "state": ""
+      "state": "",
+      "height": 1
     }
   )"));
 }
@@ -1528,6 +1534,7 @@ TEST_F (PendingMoveUpdateTests, PendingMoves)
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "state": "",
+    "height": 10,
     "a": "z",
     "b": "y"
   })"));
@@ -1546,6 +1553,7 @@ TEST_F (PendingMoveUpdateTests, BlockAttach)
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "state": "a0b1",
+    "height": 2,
     "b": "y"
   })"));
 }
@@ -1564,6 +1572,7 @@ TEST_F (PendingMoveUpdateTests, BlockDetach)
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "state": "",
+    "height": 1,
     "a": "x"
   })"));
 }

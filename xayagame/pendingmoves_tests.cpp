@@ -44,6 +44,7 @@ protected:
   {
     data = Json::Value (Json::objectValue);
     data["confirmed"] = GetConfirmedState ();
+    data["height"] = static_cast<int> (GetConfirmedHeight ());
     data["names"] = Json::Value (Json::objectValue);
   }
 
@@ -61,6 +62,7 @@ protected:
     names[name].append (msg);
 
     data["confirmed"] = GetConfirmedState ();
+    data["height"] = static_cast<int> (GetConfirmedHeight ());
   }
 
 public:
@@ -148,14 +150,15 @@ protected:
 
 TEST_F (PendingMovesTests, AddingMoves)
 {
-  proc.ProcessMove ("state", MoveJson ("foo", "bar"));
-  proc.ProcessMove ("state", MoveJson ("foo", "baz"));
-  proc.ProcessMove ("state", MoveJson ("foo", "bar"));
-  proc.ProcessMove ("state", MoveJson ("abc", "def"));
-  proc.ProcessMove ("state", MoveJson ("abc", "def"));
+  proc.ProcessMove ("state", 10, MoveJson ("foo", "bar"));
+  proc.ProcessMove ("state", 10, MoveJson ("foo", "baz"));
+  proc.ProcessMove ("state", 10, MoveJson ("foo", "bar"));
+  proc.ProcessMove ("state", 10, MoveJson ("abc", "def"));
+  proc.ProcessMove ("state", 10, MoveJson ("abc", "def"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "state",
+    "height": 10,
     "names":
       {
         "abc": ["def"],
@@ -166,17 +169,18 @@ TEST_F (PendingMovesTests, AddingMoves)
 
 TEST_F (PendingMovesTests, AttachedBlock)
 {
-  proc.ProcessMove ("old", MoveJson ("foo", "c"));
-  proc.ProcessMove ("old", MoveJson ("foo", "b"));
-  proc.ProcessMove ("old", MoveJson ("foo", "a"));
-  proc.ProcessMove ("old", MoveJson ("bar", "x"));
-  proc.ProcessMove ("old", MoveJson ("baz", "y"));
+  proc.ProcessMove ("old", 10, MoveJson ("foo", "c"));
+  proc.ProcessMove ("old", 10, MoveJson ("foo", "b"));
+  proc.ProcessMove ("old", 10, MoveJson ("foo", "a"));
+  proc.ProcessMove ("old", 10, MoveJson ("bar", "x"));
+  proc.ProcessMove ("old", 10, MoveJson ("baz", "y"));
 
   SetMempool ({"b", "c", "y", "z"});
-  proc.ProcessAttachedBlock ("new");
+  proc.ProcessAttachedBlock ("new", 11);
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "new",
+    "height": 11,
     "names":
       {
         "foo": ["b", "c"],
@@ -187,21 +191,22 @@ TEST_F (PendingMovesTests, AttachedBlock)
 
 TEST_F (PendingMovesTests, DetachedBlock)
 {
-  proc.ProcessMove ("new", MoveJson ("foo", "b"));
-  proc.ProcessMove ("new", MoveJson ("bar", "x"));
+  proc.ProcessMove ("new", 10, MoveJson ("foo", "b"));
+  proc.ProcessMove ("new", 10, MoveJson ("bar", "x"));
 
   SetMempool ({"a", "b", "x", "y", "z"});
-  proc.ProcessDetachedBlock ("old", BlockJson (
+  proc.ProcessDetachedBlock ("old", 9, BlockJson (
     {
       MoveJson ("foo", "a"),
       MoveJson ("baz", "y"),
     }));
 
   /* This should be ignored, as we have it already.  */
-  proc.ProcessMove ("old", MoveJson ("foo", "a"));
+  proc.ProcessMove ("old", 9, MoveJson ("foo", "a"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "old",
+    "height": 9,
     "names":
       {
         "foo": ["a", "b"],
@@ -219,21 +224,22 @@ TEST_F (PendingMovesTests, OneBlockReorg)
      pending moves).  While this should be covered by the tests before,
      it makes sense to verify this important situation also explicitly.  */
 
-  proc.ProcessMove ("new 1", MoveJson ("foo", "b"));
-  proc.ProcessMove ("new 1", MoveJson ("bar", "x"));
+  proc.ProcessMove ("new 1", 10, MoveJson ("foo", "b"));
+  proc.ProcessMove ("new 1", 10, MoveJson ("bar", "x"));
 
   SetMempool ({"a", "b", "x", "y"});
-  proc.ProcessDetachedBlock ("old", BlockJson (
+  proc.ProcessDetachedBlock ("old", 9, BlockJson (
     {
       MoveJson ("foo", "a"),
       MoveJson ("baz", "y"),
     }));
 
-  proc.ProcessMove ("old", MoveJson ("foo", "a"));
-  proc.ProcessMove ("baz", MoveJson ("baz", "y"));
+  proc.ProcessMove ("old", 9, MoveJson ("foo", "a"));
+  proc.ProcessMove ("baz", 9, MoveJson ("baz", "y"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "old",
+    "height": 9,
     "names":
       {
         "foo": ["a", "b"],
@@ -243,10 +249,11 @@ TEST_F (PendingMovesTests, OneBlockReorg)
   })"));
 
   SetMempool ({});
-  proc.ProcessAttachedBlock ("new 2");
+  proc.ProcessAttachedBlock ("new 2", 10);
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "new 2",
+    "height": 10,
     "names": {}
   })"));
 }
