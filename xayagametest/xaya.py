@@ -31,6 +31,7 @@ class Node ():
       "rpcuser": "xayagametest",
       "rpcpassword": "xayagametest",
       "rpcport": rpcPort,
+      "fallbackfee": 0.001,
       "zmqpubgameblocks": "tcp://127.0.0.1:%d" % zmqPorts["blocks"],
     }
     if "pending" in zmqPorts:
