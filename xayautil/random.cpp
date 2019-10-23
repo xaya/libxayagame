@@ -19,11 +19,47 @@ Random::Random ()
   seed.SetNull ();
 }
 
+Random::Random (Random&& other)
+{
+  *this = std::move (other);
+}
+
+Random&
+Random::operator= (Random&& other)
+{
+  seed = std::move (other.seed);
+  nextIndex = other.nextIndex;
+
+  other.seed.SetNull ();
+
+  return *this;
+}
+
 void
 Random::Seed (const uint256& s)
 {
   seed = s;
   nextIndex = 0;
+}
+
+Random
+Random::BranchOff (const std::string& key) const
+{
+  CHECK (!seed.IsNull ()) << "Random instance has not been seeded";
+
+  CHECK_LT (nextIndex, uint256::NUM_BYTES);
+  std::string nextIndexByte;
+  nextIndexByte.push_back (static_cast<char> (nextIndex));
+  CHECK_EQ (nextIndexByte.size (), 1);
+
+  SHA256 hasher;
+  hasher << seed << nextIndexByte;
+  hasher << key;
+
+  Random res;
+  res.Seed (hasher.Finalise ());
+
+  return res;
 }
 
 template <>
@@ -32,7 +68,10 @@ template <>
 {
   CHECK (!seed.IsNull ()) << "Random instance has not been seeded";
 
-  CHECK_LE (nextIndex, uint256::NUM_BYTES);
+  CHECK_LT (nextIndex, uint256::NUM_BYTES);
+  const unsigned char res = seed.GetBlob ()[nextIndex];
+
+  ++nextIndex;
   if (nextIndex == uint256::NUM_BYTES)
     {
       SHA256 hasher;
@@ -41,8 +80,7 @@ template <>
       nextIndex = 0;
     }
 
-  const unsigned char* data = seed.GetBlob ();
-  return data[nextIndex++];
+  return res;
 }
 
 template <>
