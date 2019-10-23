@@ -39,6 +39,15 @@ public:
    */
   Random ();
 
+  /**
+   * Random instances are movable (but not copyable).  Moving the instance
+   * transfers its state (i.e. the sequence of future random bytes) to the
+   * new target, and leaves the old one unseeded.
+   */
+  Random (Random&&);
+
+  Random& operator= (Random&&);
+
   Random (const Random&) = delete;
   void operator= (const Random&) = delete;
 

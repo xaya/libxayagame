@@ -19,6 +19,22 @@ Random::Random ()
   seed.SetNull ();
 }
 
+Random::Random (Random&& other)
+{
+  *this = std::move (other);
+}
+
+Random&
+Random::operator= (Random&& other)
+{
+  seed = std::move (other.seed);
+  nextIndex = other.nextIndex;
+
+  other.seed.SetNull ();
+
+  return *this;
+}
+
 void
 Random::Seed (const uint256& s)
 {

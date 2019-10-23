@@ -147,5 +147,13 @@ TEST_F (RandomTests, SelectByWeight)
     }
 }
 
+TEST_F (RandomTests, Moving)
+{
+  ASSERT_EQ (rnd.Next<uint32_t> (), 0x7ca22c16);
+  Random other = std::move (rnd);
+  EXPECT_EQ (other.Next<uint32_t> (), 0x65349f6c);
+  EXPECT_DEATH (rnd.Next<unsigned char> (), "has not been seeded");
+}
+
 } // anonymous namespace
 } // namespace xaya
