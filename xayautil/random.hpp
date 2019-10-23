@@ -57,6 +57,18 @@ public:
   void Seed (const uint256& s);
 
   /**
+   * Branches off a new Random instance.  The new instance will be seeded
+   * based on the state of this instance and the given "key" string.  The
+   * state of this instance is not affected by the branching off.
+   *
+   * This functionality can be used to split the single sequence of random
+   * bytes into a hierarchy of byte streams, so that e.g. independent
+   * computations can be run in parallel, with their own deterministic Random
+   * instance.
+   */
+  Random BranchOff (const std::string& key) const;
+
+  /**
    * Extracts the next byte or perhaps other type (e.g. uint32_t).
    */
   template <typename T>

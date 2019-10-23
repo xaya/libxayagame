@@ -42,6 +42,26 @@ Random::Seed (const uint256& s)
   nextIndex = 0;
 }
 
+Random
+Random::BranchOff (const std::string& key) const
+{
+  CHECK (!seed.IsNull ()) << "Random instance has not been seeded";
+
+  CHECK_LT (nextIndex, uint256::NUM_BYTES);
+  std::string nextIndexByte;
+  nextIndexByte.push_back (static_cast<char> (nextIndex));
+  CHECK_EQ (nextIndexByte.size (), 1);
+
+  SHA256 hasher;
+  hasher << seed << nextIndexByte;
+  hasher << key;
+
+  Random res;
+  res.Seed (hasher.Finalise ());
+
+  return res;
+}
+
 template <>
   unsigned char
   Random::Next<unsigned char> ()

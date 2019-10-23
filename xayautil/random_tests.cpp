@@ -155,5 +155,37 @@ TEST_F (RandomTests, Moving)
   EXPECT_DEATH (rnd.Next<unsigned char> (), "has not been seeded");
 }
 
+TEST_F (RandomTests, BranchingOff)
+{
+  /* Branch off two different instances and check the expected values.
+     Branching off again with the same key should yield the same bytes.  */
+  Random branched = rnd.BranchOff ("foo");
+  EXPECT_EQ (branched.Next<uint32_t> (), 0x34b115e1);
+  branched = rnd.BranchOff ("bar");
+  EXPECT_EQ (branched.Next<uint32_t> (), 0x3fc15d5e);
+  branched = rnd.BranchOff ("foo");
+  EXPECT_EQ (branched.Next<uint32_t> (), 0x34b115e1);
+
+  /* All of this branching should not have altered the state of the
+     instance itself.  */
+  ASSERT_EQ (rnd.Next<uint32_t> (), 0x7ca22c16);
+
+  /* If we now branch off, the modified next-byte index should result
+     in a different sequence of bytes.  */
+  branched = rnd.BranchOff ("foo");
+  EXPECT_EQ (branched.Next<uint32_t> (), 0x1f49504c);
+
+  /* Also if we let the initial Random reseed we should get (yet) another
+     sequence of branched off bytes.  */
+  for (unsigned i = 0; i < 3; ++i)
+    rnd.Next<uint64_t> ();
+  ASSERT_EQ (rnd.Next<uint32_t> (), 0x7eaf87e8);
+  branched = rnd.BranchOff ("foo");
+  EXPECT_EQ (branched.Next<uint32_t> (), 0x5a111de7);
+
+  /* Verify the state of the initial Random again.  */
+  ASSERT_EQ (rnd.Next<uint32_t> (), 0x67d811d6);
+}
+
 } // anonymous namespace
 } // namespace xaya
