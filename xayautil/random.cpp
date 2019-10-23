@@ -48,7 +48,10 @@ template <>
 {
   CHECK (!seed.IsNull ()) << "Random instance has not been seeded";
 
-  CHECK_LE (nextIndex, uint256::NUM_BYTES);
+  CHECK_LT (nextIndex, uint256::NUM_BYTES);
+  const unsigned char res = seed.GetBlob ()[nextIndex];
+
+  ++nextIndex;
   if (nextIndex == uint256::NUM_BYTES)
     {
       SHA256 hasher;
@@ -57,8 +60,7 @@ template <>
       nextIndex = 0;
     }
 
-  const unsigned char* data = seed.GetBlob ();
-  return data[nextIndex++];
+  return res;
 }
 
 template <>
