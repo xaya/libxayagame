@@ -39,6 +39,8 @@ for the configuration and/or build to be successful:
   [`4f24acaf4c6737cd07d40a02edad0a56147e0713`](https://github.com/cinemast/libjson-rpc-cpp/commit/4f24acaf4c6737cd07d40a02edad0a56147e0713).
 - [`ZeroMQ C++ bindings`](http://zeromq.org/bindings:cpp):
   Available in the Debian package `libzmq3-dev`.
+- [`zlib`](https://zlib.net):
+  Available in Debian as `zlib1g-dev`.
 - [SQLite3](https://www.sqlite.org/) with the
   [session extension](https://www.sqlite.org/sessionintro.html).
   In Debian, the `libsqlite3-dev` package can be installed.
