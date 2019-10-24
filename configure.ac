@@ -36,6 +36,7 @@ AX_PKG_CHECK_MODULES([PROTOBUF], [protobuf])
 
 # Private dependencies of the library itself.
 AX_PKG_CHECK_MODULES([GLOG], [], [libglog])
+AX_PKG_CHECK_MODULES([ZLIB], [], [zlib])
 AX_PKG_CHECK_MODULES([OPENSSL], [], [openssl])
 AX_PKG_CHECK_MODULES([ZMQ], [], [libzmq])
 
