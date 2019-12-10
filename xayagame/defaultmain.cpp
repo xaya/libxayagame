@@ -29,6 +29,12 @@ CustomisedInstanceFactory::BuildRpcServer (
   return res;
 }
 
+std::vector<std::unique_ptr<GameComponent>>
+CustomisedInstanceFactory::BuildGameComponents (Game& game)
+{
+  return {};
+}
+
 namespace
 {
 
@@ -172,7 +178,7 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);
 
-      std::vector<std::unique_ptr<GameComponent>> components;
+      auto components = instanceFact->BuildGameComponents (*game);
 
       auto serverConnector = CreateRpcServerConnector (config);
       if (serverConnector == nullptr)
@@ -245,7 +251,7 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);
 
-      std::vector<std::unique_ptr<GameComponent>> components;
+      auto components = instanceFact->BuildGameComponents (*game);
 
       auto serverConnector = CreateRpcServerConnector (config);
       if (serverConnector == nullptr)

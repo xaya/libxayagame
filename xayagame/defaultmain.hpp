@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace xaya
 {
@@ -131,6 +132,13 @@ public:
   virtual std::unique_ptr<GameComponent> BuildRpcServer (
       Game& game,
       jsonrpc::AbstractServerConnector& conn);
+
+  /**
+   * Builds general components that should be run alongside the game.
+   * By default, just returns an empty list.
+   */
+  virtual std::vector<std::unique_ptr<GameComponent>> BuildGameComponents (
+      Game& game);
 
 };
 
