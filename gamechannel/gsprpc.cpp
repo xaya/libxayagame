@@ -86,11 +86,11 @@ ChannelGspRpcServer::DefaultGetChannel (const Game& g, ChannelGame& chg,
       });
 }
 
-std::unique_ptr<RpcServerInterface>
+std::unique_ptr<GameComponent>
 ChannelGspInstanceFactory::BuildRpcServer (
     Game& game, jsonrpc::AbstractServerConnector& conn)
 {
-  std::unique_ptr<RpcServerInterface> res;
+  std::unique_ptr<GameComponent> res;
   res.reset (new WrappedRpcServer<ChannelGspRpcServer> (game, chGame, conn));
   return res;
 }

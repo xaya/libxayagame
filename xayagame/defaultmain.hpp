@@ -34,42 +34,41 @@ enum class RpcServerType
 };
 
 /**
- * Interace for a class that runs the game's RPC server.  We need this mainly
- * since the server classes from jsonrpccpp do not inherit from a single
- * super class which we could use instead.
+ * Interface for a general component of the game daemon that runs while
+ * the game is running.  For instance, the API RPC server, or another API.
  */
-class RpcServerInterface
+class GameComponent
 {
 
 protected:
 
-  RpcServerInterface () = default;
+  GameComponent () = default;
 
 public:
 
-  virtual ~RpcServerInterface () = default;
+  virtual ~GameComponent () = default;
 
-  RpcServerInterface (const RpcServerInterface&) = delete;
-  void operator=  (const RpcServerInterface&) = delete;
-
-  /**
-   * Starts listening on the server.
-   */
-  virtual void StartListening () = 0;
+  GameComponent (const GameComponent&) = delete;
+  void operator=  (const GameComponent&) = delete;
 
   /**
-   * Stops listening in the server.
+   * Starts the component (when the game is set up).
    */
-  virtual void StopListening () = 0;
+  virtual void Start () = 0;
+
+  /**
+   * Stops the component after the game is stopped.
+   */
+  virtual void Stop () = 0;
 
 };
 
 /**
- * Simple implementation of RpcServerInterface, that simply wraps a templated
- * actual server class.
+ * Simple implementation of GameComponent, that simply wraps a templated
+ * libjson-rpc-cpp RPC server.
  */
 template <typename T>
-  class WrappedRpcServer : public RpcServerInterface
+  class WrappedRpcServer : public GameComponent
 {
 
 private:
@@ -96,13 +95,13 @@ public:
   }
 
   void
-  StartListening () override
+  Start () override
   {
     server.StartListening ();
   }
 
   void
-  StopListening () override
+  Stop () override
   {
     server.StopListening ();
   }
@@ -129,7 +128,7 @@ public:
    * Returns an instance of the RPC server that should be used for the game.
    * By default, this method builds a standard GameRpcServer.
    */
-  virtual std::unique_ptr<RpcServerInterface> BuildRpcServer (
+  virtual std::unique_ptr<GameComponent> BuildRpcServer (
       Game& game,
       jsonrpc::AbstractServerConnector& conn);
 

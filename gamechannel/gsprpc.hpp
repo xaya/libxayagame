@@ -80,7 +80,7 @@ public:
     : chGame(chg)
   {}
 
-  std::unique_ptr<RpcServerInterface> BuildRpcServer (
+  std::unique_ptr<GameComponent> BuildRpcServer (
       Game& game, jsonrpc::AbstractServerConnector& conn) override;
 
 };
