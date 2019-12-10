@@ -29,6 +29,12 @@ CustomisedInstanceFactory::BuildRpcServer (
   return res;
 }
 
+std::vector<std::unique_ptr<GameComponent>>
+CustomisedInstanceFactory::BuildGameComponents (Game& game)
+{
+  return {};
+}
+
 namespace
 {
 
@@ -172,20 +178,22 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);
 
+      auto components = instanceFact->BuildGameComponents (*game);
+
       auto serverConnector = CreateRpcServerConnector (config);
-      std::unique_ptr<RpcServerInterface> rpcServer;
       if (serverConnector == nullptr)
           LOG (WARNING)
               << "No connector has been set up for the game RPC server,"
                  " no RPC interface will be available";
       else
-          rpcServer = instanceFact->BuildRpcServer (*game, *serverConnector);
+          components.push_back (
+              instanceFact->BuildRpcServer (*game, *serverConnector));
 
-      if (rpcServer != nullptr)
-        rpcServer->StartListening ();
+      for (auto& c : components)
+        c->Start ();
       game->Run ();
-      if (rpcServer != nullptr)
-        rpcServer->StopListening ();
+      for (auto& c : components)
+        c->Stop ();
 
       /* We need to make sure that the Game instance is destructed before the
          storage is.  That is necessary, since destructing the Game instance
@@ -243,20 +251,22 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);
 
+      auto components = instanceFact->BuildGameComponents (*game);
+
       auto serverConnector = CreateRpcServerConnector (config);
-      std::unique_ptr<RpcServerInterface> rpcServer;
       if (serverConnector == nullptr)
           LOG (WARNING)
               << "No connector has been set up for the game RPC server,"
                  " no RPC interface will be available";
       else
-          rpcServer = instanceFact->BuildRpcServer (*game, *serverConnector);
+          components.push_back (
+              instanceFact->BuildRpcServer (*game, *serverConnector));
 
-      if (rpcServer != nullptr)
-        rpcServer->StartListening ();
+      for (auto& c : components)
+        c->Start ();
       game->Run ();
-      if (rpcServer != nullptr)
-        rpcServer->StopListening ();
+      for (auto& c : components)
+        c->Stop ();
 
       /* We need to make sure that the Game instance is destructed before the
          storage is.  That is necessary, since destructing the Game instance

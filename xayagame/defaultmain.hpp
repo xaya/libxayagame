@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace xaya
 {
@@ -34,39 +35,45 @@ enum class RpcServerType
 };
 
 /**
- * Interace for a class that runs the game's RPC server.  We need this mainly
- * since the server classes from jsonrpccpp do not inherit from a single
- * super class which we could use instead.
+ * Interface for a general component of the game daemon that runs while
+ * the game is running.  For instance, the API RPC server, or another API.
  */
-class RpcServerInterface
+class GameComponent
 {
 
 protected:
 
-  RpcServerInterface () = default;
+  GameComponent () = default;
 
 public:
 
-  virtual ~RpcServerInterface () = default;
+  virtual ~GameComponent () = default;
 
-  RpcServerInterface (const RpcServerInterface&) = delete;
-  void operator=  (const RpcServerInterface&) = delete;
-
-  /**
-   * Starts listening on the server.
-   */
-  virtual void StartListening () = 0;
+  GameComponent (const GameComponent&) = delete;
+  void operator=  (const GameComponent&) = delete;
 
   /**
-   * Stops listening in the server.
+   * Starts the component (when the game is set up).
    */
-  virtual void StopListening () = 0;
+  virtual void Start () = 0;
+
+  /**
+   * Stops the component after the game is stopped.
+   */
+  virtual void Stop () = 0;
 
 };
 
 /**
- * Simple implementation of RpcServerInterface, that simply wraps a templated
- * actual server class.
+ * Interace for a class that runs the game's RPC server.  We need this mainly
+ * since the server classes from jsonrpccpp do not inherit from a single
+ * super class which we could use instead.
+ */
+using RpcServerInterface = GameComponent;
+
+/**
+ * Simple implementation of GameComponent, that simply wraps a templated
+ * libjson-rpc-cpp RPC server.
  */
 template <typename T>
   class WrappedRpcServer : public RpcServerInterface
@@ -96,13 +103,13 @@ public:
   }
 
   void
-  StartListening () override
+  Start () override
   {
     server.StartListening ();
   }
 
   void
-  StopListening () override
+  Stop () override
   {
     server.StopListening ();
   }
@@ -132,6 +139,13 @@ public:
   virtual std::unique_ptr<RpcServerInterface> BuildRpcServer (
       Game& game,
       jsonrpc::AbstractServerConnector& conn);
+
+  /**
+   * Builds general components that should be run alongside the game.
+   * By default, just returns an empty list.
+   */
+  virtual std::vector<std::unique_ptr<GameComponent>> BuildGameComponents (
+      Game& game);
 
 };
 
