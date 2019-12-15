@@ -99,8 +99,12 @@ protected:
     for (size_t i = 0; i < parts.size (); ++i)
       {
         zmq::message_t msg(parts[i].begin (), parts[i].end ());
-        const bool hasMore = (i + 1 < parts.size ());
-        ASSERT_TRUE (sock.send (msg, hasMore ? ZMQ_SNDMORE : 0));
+        zmq::send_flags flags;
+        if (i + 1 < parts.size ())
+          flags = zmq::send_flags::sndmore;
+        else
+          flags = zmq::send_flags::none;
+        ASSERT_TRUE (sock.send (std::move (msg), flags));
       }
   }
 

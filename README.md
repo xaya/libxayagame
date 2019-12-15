@@ -37,8 +37,11 @@ for the configuration and/or build to be successful:
   are not fresh enough.  They need to be built from source;
   in particular, it must be a version that includes the commit
   [`4f24acaf4c6737cd07d40a02edad0a56147e0713`](https://github.com/cinemast/libjson-rpc-cpp/commit/4f24acaf4c6737cd07d40a02edad0a56147e0713).
-- [`ZeroMQ C++ bindings`](http://zeromq.org/bindings:cpp):
-  Available in the Debian package `libzmq3-dev`.
+- [`ZeroMQ`](https://zeromq.org/) with
+  [C++ bindings](https://github.com/zeromq/cppzmq):
+  Core ZeroMQ is available in the Debian package `libzmq3-dev`.  The C++
+  bindings need to be installed from the source repository, as the version
+  in the Debian package (at least for Debain 10 "Buster") is too old.
 - [`zlib`](https://zlib.net):
   Available in Debian as `zlib1g-dev`.
 - [SQLite3](https://www.sqlite.org/) with the
