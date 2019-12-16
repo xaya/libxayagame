@@ -41,7 +41,9 @@ AX_PKG_CHECK_MODULES([GLOG], [], [libglog])
 # make sure we have at least this version.
 AX_PKG_CHECK_MODULES([ZLIB], [], [zlib >= 1.2.11])
 AX_PKG_CHECK_MODULES([OPENSSL], [], [openssl])
-AX_PKG_CHECK_MODULES([ZMQ], [], [libzmq])
+# We use the recv variant taking message_t& over deprecated older functions,
+# which requires at least version 4.3.1.
+AX_PKG_CHECK_MODULES([ZMQ], [], [libzmq >= 4.3.1])
 
 # Private dependencies that are not needed for libxayagame, but only for
 # the unit tests and the example binaries.

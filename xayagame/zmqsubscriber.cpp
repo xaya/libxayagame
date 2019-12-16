@@ -88,7 +88,7 @@ ZmqSubscriber::ReceiveMultiparts (std::string& topic, std::string& payload,
   for (unsigned parts = 1; ; ++parts)
     {
       zmq::message_t msg;
-      CHECK (socket->recv (&msg));
+      CHECK (socket->recv (msg));
 
       switch (parts)
         {
