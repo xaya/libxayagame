@@ -62,3 +62,16 @@ For the unit tests, also the
 [Google test framework](https://github.com/google/googletest) is needed.
 The package included with Debian 10 "Buster" is not fresh enough,
 it should be built and installed from source instead.
+
+### Docker Image
+
+We also provide a
+[Dockerfile](https://github.com/xaya/libxayagame/blob/master/Dockerfile),
+which can be used to build an image based on Debian that has all dependencies
+and libxayagame itself prebuilt and installed.  (Hint:  The file can also
+just serve as documentation for how to get all dependencies and build
+libxayagame yourself on a Debian system.)
+
+[Builds of this
+image](https://hub.docker.com/repository/docker/xaya/libxayagame)
+are also published on Docker Hub.
