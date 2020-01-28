@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -95,6 +95,20 @@ protected:
   class AutoId;
 
   /**
+   * Callback function that retrieves some custom state JSON from
+   * the database with block height information.
+   */
+  using ExtractJsonFromDbWithBlock
+    = std::function<Json::Value (sqlite3* db, const uint256& hash,
+                                 unsigned height)>;
+
+  /**
+   * Callback function that retrieves some custom state JSON from
+   * the database alone.
+   */
+  using ExtractJsonFromDb = std::function<Json::Value (sqlite3* db)>;
+
+  /**
    * This method is called on every open of the SQLite database, and should
    * ensure that the database schema is set up correctly.  It should create it
    * when the database has been created, and may change it if the database
@@ -158,7 +172,16 @@ protected:
    */
   Json::Value GetCustomStateData (
       const Game& game, const std::string& jsonField,
-      const std::function<Json::Value (sqlite3*)>& cb);
+      const ExtractJsonFromDbWithBlock& cb);
+
+  /**
+   * Extracts custom state JSON as per the other overload, but the callback
+   * gets only passed the database itself.  This is enough for many situations
+   * and corresponds to the previous version of this API.
+   */
+  Json::Value GetCustomStateData (const Game& game,
+                                  const std::string& jsonField,
+                                  const ExtractJsonFromDb& cb);
 
   /**
    * Returns a direct handle to the underlying SQLite database.

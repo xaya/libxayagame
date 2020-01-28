@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -575,7 +575,7 @@ Game::DetectZmqEndpoint ()
 Json::Value
 Game::GetCustomStateData (
     const std::string& jsonField,
-    const std::function<Json::Value (const GameStateData&)>& cb) const
+    const ExtractJsonFromStateWithBlock& cb) const
 {
   std::unique_lock<std::mutex> lock(mut);
 
@@ -592,10 +592,23 @@ Game::GetCustomStateData (
       res["height"] = height;
 
       const GameStateData gameState = storage->GetCurrentGameState ();
-      res[jsonField] = cb (gameState);
+      res[jsonField] = cb (gameState, hash, height);
     }
 
   return res;
+}
+
+Json::Value
+Game::GetCustomStateData (
+    const std::string& jsonField,
+    const ExtractJsonFromState& cb) const
+{
+  return GetCustomStateData (jsonField,
+    [&cb] (const GameStateData& state, const uint256& hash,
+           const unsigned height)
+    {
+      return cb (state);
+    });
 }
 
 Json::Value

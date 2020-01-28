@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -276,6 +276,21 @@ public:
    */
   static constexpr int WAITFORCHANGE_ALWAYS_BLOCK = 0;
 
+  /**
+   * Callback function that retrieves some custom state JSON from
+   * a game state with block height information.
+   */
+  using ExtractJsonFromStateWithBlock
+    = std::function<Json::Value (const GameStateData& state,
+                                 const uint256& hash, unsigned height)>;
+
+  /**
+   * Callback function that retrieves some custom state JSON from
+   * a game state alone.
+   */
+  using ExtractJsonFromState
+    = std::function<Json::Value (const GameStateData& state)>;
+
   explicit Game (const std::string& id);
 
   Game () = delete;
@@ -365,7 +380,15 @@ public:
    */
   Json::Value GetCustomStateData (
       const std::string& jsonField,
-      const std::function<Json::Value (const GameStateData&)>& cb) const;
+      const ExtractJsonFromStateWithBlock& cb) const;
+
+  /**
+   * Extracts custom state JSON as per the other overload, but the callback
+   * gets only passed the game state itself.  This is enough for many situations
+   * and corresponds to the previous version of this API.
+   */
+  Json::Value GetCustomStateData (const std::string& jsonField,
+                                  const ExtractJsonFromState& cb) const;
 
   /**
    * Returns a JSON object that contains the current game state as well as

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -489,15 +489,29 @@ SQLiteGame::GameStateToJson (const GameStateData& state)
 }
 
 Json::Value
-SQLiteGame::GetCustomStateData (const Game& game, const std::string& jsonField,
-                                const std::function<Json::Value (sqlite3*)>& cb)
+SQLiteGame::GetCustomStateData (
+    const Game& game, const std::string& jsonField,
+    const ExtractJsonFromDbWithBlock& cb)
 {
   return game.GetCustomStateData (jsonField,
-      [this, &cb] (const GameStateData& state)
+      [this, &cb] (const GameStateData& state, const uint256& hash,
+                   const unsigned height)
         {
           EnsureCurrentState (state);
-          return cb (database->GetDatabase ());
+          return cb (database->GetDatabase (), hash, height);
         });
+}
+
+Json::Value
+SQLiteGame::GetCustomStateData (
+    const Game& game, const std::string& jsonField,
+    const ExtractJsonFromDb& cb)
+{
+  return GetCustomStateData (game, jsonField,
+    [&cb] (sqlite3* db, const uint256& hash, const unsigned height)
+    {
+      return cb (db);
+    });
 }
 
 sqlite3*
