@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,10 +12,84 @@
 #include <sqlite3.h>
 
 #include <map>
+#include <memory>
 #include <string>
 
 namespace xaya
 {
+
+/**
+ * Wrapper around an SQLite database connection.  This object mostly holds
+ * an sqlite3* handle (that is owned and managed by it), but it also
+ * provides some extra services like statement caching.
+ */
+class SQLiteDatabase
+{
+
+private:
+
+  /**
+   * The SQLite database handle, which is owned and managed by the
+   * current instance.  It will be opened in the constructor, and
+   * finalised in the destructor.
+   */
+  sqlite3* db;
+
+  /**
+   * A cache of prepared statements (mapping from the SQL command to the
+   * statement pointer).
+   */
+  mutable std::map<std::string, sqlite3_stmt*> preparedStatements;
+
+public:
+
+  /**
+   * Opens the database at the given filename into this instance.  The flags
+   * are passed on to sqlite3_open_v2.
+   */
+  explicit SQLiteDatabase (const std::string& file, int flags);
+
+  /**
+   * Closes the database connection.
+   */
+  ~SQLiteDatabase ();
+
+  /**
+   * Returns the raw handle of the SQLite database.
+   */
+  sqlite3*
+  operator* ()
+  {
+    return db;
+  }
+
+  /**
+   * Returns the raw handle, like operator*.  This function is meant
+   * for code that then only does read operations and no writes.
+   */
+  sqlite3*
+  ro () const
+  {
+    return db;
+  }
+
+  /**
+   * Prepares an SQL statement given as string and stores it in the cache,
+   * or retrieves the existing statement from the cache.  The prepared statement
+   * is also reset, so that it can be reused right away.
+   *
+   * The returned statement is managed (and, in particular, finalised) by the
+   * SQLiteDatabase object, not by the caller.
+   */
+  sqlite3_stmt* Prepare (const std::string& sql);
+
+  /**
+   * Prepares an SQL statement given as string like Prepare.  This method
+   * is meant for statements that are read-only, i.e. SELECT.
+   */
+  sqlite3_stmt* PrepareRo (const std::string& sql) const;
+
+};
 
 /**
  * Implementation of StorageInterface, where all data is stored in an SQLite
@@ -39,14 +113,11 @@ private:
    */
   const std::string filename;
 
-  /** The SQLite database handle if the connection is open.  */
-  sqlite3* db = nullptr;
-
   /**
-   * A cache of prepared statements (mapping from the SQL command to the
-   * statement pointer).
+   * The database connection we use (mainly) and for writes, if one is
+   * opened at the moment.
    */
-  mutable std::map<std::string, sqlite3_stmt*> preparedStatements;
+  std::unique_ptr<SQLiteDatabase> db;
 
   /**
    * Set to true when we have a currently open transaction.  This is used to
@@ -56,15 +127,10 @@ private:
   bool startedTransaction = false;
 
   /**
-   * Opens the database at filename into the handle.  It is an error if the
-   * handle is already opened.
+   * Opens the database at filename into db.  It is an error if the
+   * database is already opened.
    */
   void OpenDatabase ();
-
-  /**
-   * Closes the internal database handle.  Assumes that the handle is open.
-   */
-  void CloseDatabase ();
 
 protected:
 
@@ -109,8 +175,6 @@ public:
   SQLiteStorage () = delete;
   SQLiteStorage (const SQLiteStorage&) = delete;
   void operator= (const SQLiteStorage&) = delete;
-
-  ~SQLiteStorage ();
 
   void Initialise () override;
 
