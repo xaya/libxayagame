@@ -28,6 +28,9 @@ class SQLiteDatabase
 
 private:
 
+  /** Whether or not we have already set the SQLite logger.  */
+  static bool loggerInitialised;
+
   /**
    * The SQLite database handle, which is owned and managed by the
    * current instance.  It will be opened in the constructor, and
@@ -165,7 +168,9 @@ protected:
 
 public:
 
-  explicit SQLiteStorage (const std::string& f);
+  explicit SQLiteStorage (const std::string& f)
+    : filename(f)
+  {}
 
   SQLiteStorage () = delete;
   SQLiteStorage (const SQLiteStorage&) = delete;

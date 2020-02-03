@@ -11,9 +11,45 @@
 namespace xaya
 {
 
+/* ************************************************************************** */
+
+namespace
+{
+
+/**
+ * Error callback for SQLite, which prints logs using glog.
+ */
+void
+SQLiteErrorLogger (void* arg, const int errCode, const char* msg)
+{
+  LOG (ERROR) << "SQLite error (code " << errCode << "): " << msg;
+}
+
+} // anonymous namespace
+
+bool SQLiteDatabase::loggerInitialised = false;
+
 SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
   : db(nullptr)
 {
+  if (!loggerInitialised)
+    {
+      LOG (INFO)
+          << "Using SQLite version " << SQLITE_VERSION
+          << " (library version: " << sqlite3_libversion () << ")";
+      CHECK_EQ (SQLITE_VERSION_NUMBER, sqlite3_libversion_number ())
+          << "Mismatch between header and library SQLite versions";
+
+      const int rc
+          = sqlite3_config (SQLITE_CONFIG_LOG, &SQLiteErrorLogger, nullptr);
+      if (rc != SQLITE_OK)
+        LOG (WARNING) << "Failed to set up SQLite error handler: " << rc;
+      else
+        LOG (INFO) << "Configured SQLite error handler";
+
+      loggerInitialised = true;
+    }
+
   const int rc = sqlite3_open_v2 (file.c_str (), &db, flags, nullptr);
   if (rc != SQLITE_OK)
     LOG (FATAL) << "Failed to open SQLite database: " << file;
@@ -72,17 +108,10 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
   return res;
 }
 
+/* ************************************************************************** */
+
 namespace
 {
-
-/**
- * Error callback for SQLite, which prints logs using glog.
- */
-void
-SQLiteErrorLogger (void* arg, const int errCode, const char* msg)
-{
-  LOG (ERROR) << "SQLite error (code " << errCode << "): " << msg;
-}
 
 /**
  * Binds a BLOB corresponding to an uint256 value to a statement parameter.
@@ -125,23 +154,6 @@ GetStringBlob (sqlite3_stmt* stmt, const int ind)
 }
 
 } // anonymous namespace
-
-SQLiteStorage::SQLiteStorage (const std::string& f)
-  : filename(f)
-{
-  LOG (INFO)
-      << "Using SQLite version " << SQLITE_VERSION
-      << " (library version: " << sqlite3_libversion () << ")";
-  CHECK_EQ (SQLITE_VERSION_NUMBER, sqlite3_libversion_number ())
-      << "Mismatch between header and library SQLite versions";
-
-  const int rc
-      = sqlite3_config (SQLITE_CONFIG_LOG, &SQLiteErrorLogger, nullptr);
-  if (rc != SQLITE_OK)
-    LOG (WARNING) << "Failed to set up SQLite error handler: " << rc;
-  else
-    LOG (INFO) << "Configured SQLite error handler";
-}
 
 void
 SQLiteStorage::OpenDatabase ()
@@ -385,5 +397,7 @@ SQLiteStorage::RollbackTransaction ()
   CHECK (startedTransaction);
   startedTransaction = false;
 }
+
+/* ************************************************************************** */
 
 } // namespace xaya
