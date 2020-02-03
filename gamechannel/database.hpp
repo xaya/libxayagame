@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,6 +10,7 @@
 #include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
 
+#include <xayagame/sqlitestorage.hpp>
 #include <xayautil/uint256.hpp>
 
 #include <sqlite3.h>
@@ -18,8 +19,6 @@
 
 namespace xaya
 {
-
-class ChannelGame;
 
 /**
  * Wrapper class around the state of one channel in the database.  This
@@ -32,8 +31,8 @@ class ChannelData
 
 private:
 
-  /** The underlying ChannelGame, through which we access the database.  */
-  ChannelGame& game;
+  /** The underlying database.  */
+  SQLiteDatabase& db;
 
   /** The ID of this channel.  */
   uint256 id;
@@ -65,12 +64,12 @@ private:
   /**
    * Constructs a new instance for the given ID.
    */
-  explicit ChannelData (ChannelGame& g, const uint256& i);
+  explicit ChannelData (SQLiteDatabase& db, const uint256& i);
 
   /**
    * Constructs an instance based on the given result row.
    */
-  explicit ChannelData (ChannelGame& g, sqlite3_stmt* row);
+  explicit ChannelData (SQLiteDatabase& db, sqlite3_stmt* row);
 
   friend class ChannelsTable;
 
@@ -135,16 +134,16 @@ class ChannelsTable
 
 private:
 
-  /** The underlying ChannelGame instance, through which we access the db.  */
-  ChannelGame& game;
+  /** The underlying database instance.  */
+  SQLiteDatabase& db;
 
 public:
 
   /** Movable handle to a channel instance.  */
   using Handle = std::unique_ptr<ChannelData>;
 
-  explicit ChannelsTable (ChannelGame& g)
-    : game(g)
+  explicit ChannelsTable (SQLiteDatabase& d)
+    : db(d)
   {}
 
   ChannelsTable () = delete;

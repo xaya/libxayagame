@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,6 +11,8 @@
 namespace xaya
 {
 
+/* ************************************************************************** */
+
 namespace
 {
 
@@ -22,6 +24,94 @@ SQLiteErrorLogger (void* arg, const int errCode, const char* msg)
 {
   LOG (ERROR) << "SQLite error (code " << errCode << "): " << msg;
 }
+
+} // anonymous namespace
+
+bool SQLiteDatabase::loggerInitialised = false;
+
+SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
+  : db(nullptr)
+{
+  if (!loggerInitialised)
+    {
+      LOG (INFO)
+          << "Using SQLite version " << SQLITE_VERSION
+          << " (library version: " << sqlite3_libversion () << ")";
+      CHECK_EQ (SQLITE_VERSION_NUMBER, sqlite3_libversion_number ())
+          << "Mismatch between header and library SQLite versions";
+
+      const int rc
+          = sqlite3_config (SQLITE_CONFIG_LOG, &SQLiteErrorLogger, nullptr);
+      if (rc != SQLITE_OK)
+        LOG (WARNING) << "Failed to set up SQLite error handler: " << rc;
+      else
+        LOG (INFO) << "Configured SQLite error handler";
+
+      loggerInitialised = true;
+    }
+
+  const int rc = sqlite3_open_v2 (file.c_str (), &db, flags, nullptr);
+  if (rc != SQLITE_OK)
+    LOG (FATAL) << "Failed to open SQLite database: " << file;
+
+  CHECK (db != nullptr);
+  LOG (INFO) << "Opened SQLite database successfully: " << file;
+}
+
+SQLiteDatabase::~SQLiteDatabase ()
+{
+  for (const auto& stmt : preparedStatements)
+    {
+      /* sqlite3_finalize returns the error code corresponding to the last
+         evaluation of the statement, not an error code "about" finalising it.
+         Thus we want to ignore it here.  */
+      sqlite3_finalize (stmt.second);
+    }
+
+  CHECK (db != nullptr);
+  const int rc = sqlite3_close (db);
+  if (rc != SQLITE_OK)
+    LOG (ERROR) << "Failed to close SQLite database";
+}
+
+sqlite3_stmt*
+SQLiteDatabase::Prepare (const std::string& sql)
+{
+  return PrepareRo (sql);
+}
+
+sqlite3_stmt*
+SQLiteDatabase::PrepareRo (const std::string& sql) const
+{
+  CHECK (db != nullptr);
+  const auto mit = preparedStatements.find (sql);
+  if (mit != preparedStatements.end ())
+    {
+      /* sqlite3_reset returns an error code if the last execution of the
+         statement had an error.  We don't care about that here.  */
+      sqlite3_reset (mit->second);
+
+      const int rc = sqlite3_clear_bindings (mit->second);
+      if (rc != SQLITE_OK)
+        LOG (ERROR) << "Failed to reset bindings for statement: " << rc;
+
+      return mit->second;
+    }
+
+  sqlite3_stmt* res = nullptr;
+  const int rc = sqlite3_prepare_v2 (db, sql.c_str (), sql.size () + 1,
+                                     &res, nullptr);
+  if (rc != SQLITE_OK)
+    LOG (FATAL) << "Failed to prepare SQL statement: " << rc;
+
+  preparedStatements.emplace (sql, res);
+  return res;
+}
+
+/* ************************************************************************** */
+
+namespace
+{
 
 /**
  * Binds a BLOB corresponding to an uint256 value to a statement parameter.
@@ -65,94 +155,28 @@ GetStringBlob (sqlite3_stmt* stmt, const int ind)
 
 } // anonymous namespace
 
-SQLiteStorage::SQLiteStorage (const std::string& f)
-  : filename(f)
-{
-  LOG (INFO)
-      << "Using SQLite version " << SQLITE_VERSION
-      << " (library version: " << sqlite3_libversion () << ")";
-  CHECK_EQ (SQLITE_VERSION_NUMBER, sqlite3_libversion_number ())
-      << "Mismatch between header and library SQLite versions";
-
-  const int rc
-      = sqlite3_config (SQLITE_CONFIG_LOG, &SQLiteErrorLogger, nullptr);
-  if (rc != SQLITE_OK)
-    LOG (WARNING) << "Failed to set up SQLite error handler: " << rc;
-  else
-    LOG (INFO) << "Configured SQLite error handler";
-}
-
-SQLiteStorage::~SQLiteStorage ()
-{
-  CloseDatabase ();
-}
-
 void
 SQLiteStorage::OpenDatabase ()
 {
   CHECK (db == nullptr);
-  const int rc = sqlite3_open (filename.c_str (), &db);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to open SQLite database: " << filename;
-
-  CHECK (db != nullptr);
-  LOG (INFO) << "Opened SQLite database successfully: " << filename;
+  db = std::make_unique<SQLiteDatabase> (filename,
+          SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
 
   SetupSchema ();
 }
 
-void
-SQLiteStorage::CloseDatabase ()
-{
-  for (const auto& stmt : preparedStatements)
-    {
-      /* sqlite3_finalize returns the error code corresponding to the last
-         evaluation of the statement, not an error code "about" finalising it.
-         Thus we want to ignore it here.  */
-      sqlite3_finalize (stmt.second);
-    }
-  preparedStatements.clear ();
-
-  CHECK (db != nullptr);
-  const int rc = sqlite3_close (db);
-  if (rc != SQLITE_OK)
-    LOG (ERROR) << "Failed to close SQLite database";
-  db = nullptr;
-}
-
-sqlite3*
+SQLiteDatabase&
 SQLiteStorage::GetDatabase ()
 {
   CHECK (db != nullptr);
-  return db;
+  return *db;
 }
 
-sqlite3_stmt*
-SQLiteStorage::PrepareStatement (const std::string& sql) const
+const SQLiteDatabase&
+SQLiteStorage::GetDatabase () const
 {
   CHECK (db != nullptr);
-  const auto mit = preparedStatements.find (sql);
-  if (mit != preparedStatements.end ())
-    {
-      /* sqlite3_reset returns an error code if the last execution of the
-         statement had an error.  We don't care about that here.  */
-      sqlite3_reset (mit->second);
-
-      const int rc = sqlite3_clear_bindings (mit->second);
-      if (rc != SQLITE_OK)
-        LOG (ERROR) << "Failed to reset bindings for statement: " << rc;
-
-      return mit->second;
-    }
-
-  sqlite3_stmt* res = nullptr;
-  const int rc = sqlite3_prepare_v2 (db, sql.c_str (), sql.size () + 1,
-                                     &res, nullptr);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to prepare SQL statement: " << rc;
-
-  preparedStatements.emplace (sql, res);
-  return res;
+  return *db;
 }
 
 /**
@@ -172,7 +196,7 @@ void
 SQLiteStorage::SetupSchema ()
 {
   LOG (INFO) << "Setting up database schema if it does not exist yet";
-  const int rc = sqlite3_exec (db, R"(
+  const int rc = sqlite3_exec (**db, R"(
     CREATE TABLE IF NOT EXISTS `xayagame_current`
         (`key` TEXT PRIMARY KEY,
          `value` BLOB);
@@ -196,7 +220,7 @@ SQLiteStorage::Initialise ()
 void
 SQLiteStorage::Clear ()
 {
-  CloseDatabase ();
+  db.reset ();
 
   if (filename == ":memory:")
     LOG (INFO)
@@ -216,7 +240,7 @@ SQLiteStorage::Clear ()
 bool
 SQLiteStorage::GetCurrentBlockHash (uint256& hash) const
 {
-  auto* stmt = PrepareStatement (R"(
+  auto* stmt = db->Prepare (R"(
     SELECT `value` FROM `xayagame_current` WHERE `key` = 'blockhash'
   )");
 
@@ -239,7 +263,7 @@ SQLiteStorage::GetCurrentBlockHash (uint256& hash) const
 GameStateData
 SQLiteStorage::GetCurrentGameState () const
 {
-  auto* stmt = PrepareStatement (R"(
+  auto* stmt = db->Prepare (R"(
     SELECT `value` FROM `xayagame_current` WHERE `key` = 'gamestate'
   )");
 
@@ -259,29 +283,31 @@ SQLiteStorage::SetCurrentGameState (const uint256& hash,
 {
   CHECK (startedTransaction);
 
-  StepWithNoResult (PrepareStatement ("SAVEPOINT `xayagame-setcurrentstate`"));
+  StepWithNoResult (db->Prepare ("SAVEPOINT `xayagame-setcurrentstate`"));
 
-  sqlite3_stmt* stmt = PrepareStatement (R"(
+  sqlite3_stmt* stmt = db->Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_current` (`key`, `value`)
       VALUES ('blockhash', ?1)
   )");
   BindUint256 (stmt, 1, hash);
   StepWithNoResult (stmt);
 
-  stmt = PrepareStatement (R"(
+  stmt = db->Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_current` (`key`, `value`)
       VALUES ('gamestate', ?1)
   )");
   BindStringBlob (stmt, 1, data);
   StepWithNoResult (stmt);
 
-  StepWithNoResult (PrepareStatement ("RELEASE `xayagame-setcurrentstate`"));
+  StepWithNoResult (db->Prepare (R"(
+    RELEASE `xayagame-setcurrentstate`
+  )"));
 }
 
 bool
 SQLiteStorage::GetUndoData (const uint256& hash, UndoData& data) const
 {
-  auto* stmt = PrepareStatement (R"(
+  auto* stmt = db->Prepare (R"(
     SELECT `data` FROM `xayagame_undo` WHERE `hash` = ?1
   )");
   BindUint256 (stmt, 1, hash);
@@ -304,7 +330,7 @@ SQLiteStorage::AddUndoData (const uint256& hash,
 {
   CHECK (startedTransaction);
 
-  auto* stmt = PrepareStatement (R"(
+  auto* stmt = db->Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_undo` (`hash`, `data`, `height`)
       VALUES (?1, ?2, ?3)
   )");
@@ -324,7 +350,7 @@ SQLiteStorage::ReleaseUndoData (const uint256& hash)
 {
   CHECK (startedTransaction);
 
-  auto* stmt = PrepareStatement (R"(
+  auto* stmt = db->Prepare (R"(
     DELETE FROM `xayagame_undo` WHERE `hash` = ?1
   )");
 
@@ -337,7 +363,7 @@ SQLiteStorage::PruneUndoData (const unsigned height)
 {
   CHECK (startedTransaction);
 
-  auto* stmt = PrepareStatement (R"(
+  auto* stmt = db->Prepare (R"(
     DELETE FROM `xayagame_undo` WHERE `height` <= ?1
   )");
 
@@ -353,13 +379,13 @@ SQLiteStorage::BeginTransaction ()
 {
   CHECK (!startedTransaction);
   startedTransaction = true;
-  StepWithNoResult (PrepareStatement ("SAVEPOINT `xayagame-sqlitegame`"));
+  StepWithNoResult (db->Prepare ("SAVEPOINT `xayagame-sqlitegame`"));
 }
 
 void
 SQLiteStorage::CommitTransaction ()
 {
-  StepWithNoResult (PrepareStatement ("RELEASE `xayagame-sqlitegame`"));
+  StepWithNoResult (db->Prepare ("RELEASE `xayagame-sqlitegame`"));
   CHECK (startedTransaction);
   startedTransaction = false;
 }
@@ -367,9 +393,11 @@ SQLiteStorage::CommitTransaction ()
 void
 SQLiteStorage::RollbackTransaction ()
 {
-  StepWithNoResult (PrepareStatement ("ROLLBACK TO `xayagame-sqlitegame`"));
+  StepWithNoResult (db->Prepare ("ROLLBACK TO `xayagame-sqlitegame`"));
   CHECK (startedTransaction);
   startedTransaction = false;
 }
+
+/* ************************************************************************** */
 
 } // namespace xaya

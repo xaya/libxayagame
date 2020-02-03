@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,6 +12,7 @@
 #include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
 
+#include <xayagame/sqlitestorage.hpp>
 #include <xayagame/testutils.hpp>
 #include <xayautil/uint256.hpp>
 
@@ -112,12 +113,12 @@ class TestGame : public ChannelGame
 
 protected:
 
-  void SetupSchema (sqlite3* db) override;
+  void SetupSchema (SQLiteDatabase& db) override;
   void GetInitialStateBlock (unsigned& height,
                              std::string& hashHex) const override;
-  void InitialiseState (sqlite3* db) override;
-  void UpdateState (sqlite3* db, const Json::Value& blockData) override;
-  Json::Value GetStateAsJson (sqlite3* db) override;
+  void InitialiseState (SQLiteDatabase& db) override;
+  void UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override;
+  Json::Value GetStateAsJson (const SQLiteDatabase& db) override;
 
   const BoardRules& GetBoardRules () const override;
 
@@ -157,7 +158,7 @@ protected:
   /**
    * Returns the raw database handle of the test game.
    */
-  sqlite3* GetDb ();
+  SQLiteDatabase& GetDb ();
 
   /**
    * Sets up the mock server to validate *any* message with the given

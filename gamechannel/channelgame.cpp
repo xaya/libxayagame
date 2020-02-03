@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -17,9 +17,9 @@ namespace xaya
 {
 
 void
-ChannelGame::SetupGameChannelsSchema (sqlite3* db)
+ChannelGame::SetupGameChannelsSchema (SQLiteDatabase& db)
 {
-  InternalSetupGameChannelsSchema (db);
+  InternalSetupGameChannelsSchema (*db);
 }
 
 bool

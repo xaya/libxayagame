@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -36,7 +36,7 @@ protected:
   xaya::ChannelsTable tbl;
 
   StateUpdateTests ()
-    : tbl(game)
+    : tbl(GetDb ())
   {}
 
   /**
@@ -57,7 +57,7 @@ protected:
     blockData["block"] = block;
     blockData["moves"] = moveJson;
 
-    game.UpdateState (nullptr, blockData);
+    game.UpdateState (GetDb (), blockData);
   }
 
   /**
@@ -100,7 +100,7 @@ protected:
   void
   UpdateStats (const xaya::proto::ChannelMetadata& meta, const int winner)
   {
-    game.UpdateStats (meta, winner);
+    game.UpdateStats (GetDb (), meta, winner);
   }
 
   /**
@@ -110,7 +110,7 @@ protected:
   void
   AddStatsRow (const std::string& name, const int won, const int lost)
   {
-    auto* stmt = game.PrepareStatement (R"(
+    auto* stmt = GetDb ().Prepare (R"(
       INSERT INTO `game_stats`
         (`name`, `won`, `lost`) VALUES (?1, ?2, ?3)
     )");
@@ -126,7 +126,7 @@ protected:
   void
   ExpectStatsRow (const std::string& name, const int won, const int lost)
   {
-    auto* stmt = game.PrepareStatement (R"(
+    auto* stmt = GetDb ().Prepare (R"(
       SELECT `won`, `lost`
         FROM `game_stats`
         WHERE `name` = ?1
@@ -957,7 +957,7 @@ protected:
   xaya::ChannelsTable tbl;
 
   PendingTests ()
-    : proc(game), tbl(game)
+    : proc(game), tbl(GetDb ())
   {
     proc.InitialiseGameContext (xaya::Chain::MAIN, "xs",
                                 &mockXayaServer.GetClient ());
@@ -994,7 +994,7 @@ protected:
   void
   AddPendingMove (const Json::Value& mv)
   {
-    proc.AddPendingMoveUnsafe (mv);
+    proc.AddPendingMoveUnsafe (GetDb (), mv);
   }
 
   /**

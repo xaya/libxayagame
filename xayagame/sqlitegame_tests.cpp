@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -168,9 +168,9 @@ private:
 protected:
 
   void
-  SetupSchema (sqlite3* db) override
+  SetupSchema (SQLiteDatabase& db) override
   {
-    ExecuteWithNoResult (db, R"(
+    ExecuteWithNoResult (*db, R"(
       CREATE TABLE IF NOT EXISTS `chat`
           (`user` TEXT PRIMARY KEY,
            `msg` TEXT);
@@ -178,25 +178,25 @@ protected:
   }
 
   void
-  InitialiseState (sqlite3* db) override
+  InitialiseState (SQLiteDatabase& db) override
   {
     /* To verify proper intialisation, the initial state of the chat game is
        not empty but has predefined starting messages.  */
 
-    ExecuteWithNoResult (db, R"(
+    ExecuteWithNoResult (*db, R"(
       INSERT INTO `chat` (`user`, `msg`) VALUES ('domob', 'hello world')
     )");
 
     if (shouldFail)
       throw Failure ();
 
-    ExecuteWithNoResult (db, R"(
+    ExecuteWithNoResult (*db, R"(
       INSERT INTO `chat` (`user`, `msg`) VALUES ('foo', 'bar')
     )");
   }
 
   void
-  UpdateState (sqlite3* db, const Json::Value& blockData) override
+  UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override
   {
     for (const auto& m : blockData["moves"])
       {
@@ -204,7 +204,7 @@ protected:
         for (const auto& v : m["move"])
           {
             const std::string value = v.asString ();
-            ExecuteWithNoResult (db, R"(
+            ExecuteWithNoResult (*db, R"(
               INSERT OR REPLACE INTO `chat` (`user`, `msg`) VALUES
             (')" + name + "', '" + value + "')");
           }
@@ -215,7 +215,7 @@ protected:
   }
 
   Json::Value
-  GetStateAsJson (sqlite3* db) override
+  GetStateAsJson (const SQLiteDatabase& db) override
   {
     const State data = GetState (db);
 
@@ -290,10 +290,10 @@ public:
    * Queries the current state as map from the database.
    */
   static State
-  GetState (sqlite3* db)
+  GetState (const SQLiteDatabase& db)
   {
     State data;
-    const int rc = sqlite3_exec (db, R"(
+    const int rc = sqlite3_exec (db.ro (), R"(
       SELECT `user`, `msg` FROM `chat`
     )", &SaveToMap, &data, nullptr);
     CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve current state from DB";
@@ -596,14 +596,14 @@ class ChatGameRequiringContext : public ChatGame
 protected:
 
   void
-  InitialiseState (sqlite3* db) override
+  InitialiseState (SQLiteDatabase& db) override
   {
     GetContext ();
     ChatGame::InitialiseState (db);
   }
 
   void
-  UpdateState (sqlite3* db, const Json::Value& blockData) override
+  UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override
   {
     GetContext ();
     ChatGame::UpdateState (db, blockData);
@@ -649,9 +649,9 @@ class UniqueMessageChat : public ChatGame
 protected:
 
   void
-  SetupSchema (sqlite3* db) override
+  SetupSchema (SQLiteDatabase& db) override
   {
-    ExecuteWithNoResult (db, R"(
+    ExecuteWithNoResult (*db, R"(
       CREATE TABLE IF NOT EXISTS `chat`
           (`user` TEXT PRIMARY KEY,
            `msg` TEXT,
@@ -660,7 +660,7 @@ protected:
   }
 
   void
-  UpdateState (sqlite3* db, const Json::Value& blockData) override
+  UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override
   {
     for (const auto& m : blockData["moves"])
       {
@@ -668,10 +668,10 @@ protected:
         for (const auto& v : m["move"])
           {
             const std::string msg = v.asString ();
-            ExecuteWithNoResult (db, R"(
+            ExecuteWithNoResult (*db, R"(
               DELETE FROM `chat`
                 WHERE `msg` = ')" + msg + "'");
-            ExecuteWithNoResult (db, R"(
+            ExecuteWithNoResult (*db, R"(
               INSERT OR REPLACE INTO `chat` (`user`, `msg`) VALUES
             (')" + name + "', '" + msg + "')");
           }
@@ -820,11 +820,11 @@ protected:
    * Queries the usernames in the database, without specifying an order.
    */
   static UserArray
-  GetUnorderedUsernames (sqlite3* db)
+  GetUnorderedUsernames (SQLiteDatabase& db)
   {
     UserArray res;
 
-    const int rc = sqlite3_exec (db, R"(
+    const int rc = sqlite3_exec (*db, R"(
       SELECT `user` FROM `chat`
     )", &SaveUserToArray, &res, nullptr);
     CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve chat users from DB";
@@ -885,9 +885,9 @@ private:
 protected:
 
   void
-  SetupSchema (sqlite3* db) override
+  SetupSchema (SQLiteDatabase& db) override
   {
-    ExecuteWithNoResult (db, R"(
+    ExecuteWithNoResult (*db, R"(
       CREATE TABLE IF NOT EXISTS `first` (
           `id` INTEGER PRIMARY KEY,
           `name` TEXT
@@ -903,12 +903,12 @@ protected:
   }
 
   void
-  InitialiseState (sqlite3* db) override
+  InitialiseState (SQLiteDatabase& db) override
   {
     /* To verify proper intialisation, the initial state is not empty but
        has some pre-existing data and IDs.  */
 
-    ExecuteWithNoResult (db, R"(
+    ExecuteWithNoResult (*db, R"(
       INSERT INTO `first` (`id`, `name`) VALUES (2, 'domob');
       INSERT INTO `second` (`id`, `name`) VALUES (5, 'domob');
     )");
@@ -925,7 +925,7 @@ protected:
   }
 
   void
-  UpdateState (sqlite3* db, const Json::Value& blockData) override
+  UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override
   {
     for (const auto& m : blockData["moves"])
       {
@@ -936,10 +936,10 @@ protected:
         std::ostringstream secondId;
         secondId << Ids ("second").GetNext ();
 
-        ExecuteWithNoResult (db, R"(
+        ExecuteWithNoResult (*db, R"(
           INSERT INTO `first` (`id`, `name`) VALUES
         ()" + firstId.str () + ", '" + name + "')");
-        ExecuteWithNoResult (db, R"(
+        ExecuteWithNoResult (*db, R"(
           INSERT INTO `second` (`id`, `name`) VALUES
         ()" + secondId.str () + ", '" + name + "')");
       }
@@ -949,16 +949,16 @@ protected:
   }
 
   Json::Value
-  GetStateAsJson (sqlite3* db) override
+  GetStateAsJson (const SQLiteDatabase& db) override
   {
     Map first;
-    int rc = sqlite3_exec (db, R"(
+    int rc = sqlite3_exec (db.ro (), R"(
       SELECT `id`, `name` FROM `first`
     )", &SaveToMap, &first, nullptr);
     CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve first table";
 
     Map second;
-    rc = sqlite3_exec (db, R"(
+    rc = sqlite3_exec (db.ro (), R"(
       SELECT `id`, `name` FROM `second`
     )", &SaveToMap, &second, nullptr);
     CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve second table";

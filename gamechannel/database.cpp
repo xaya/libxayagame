@@ -1,10 +1,9 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "database.hpp"
 
-#include "channelgame.hpp"
 #include "stateproof.hpp"
 
 #include <glog/logging.h>
@@ -82,14 +81,14 @@ StateProofFromReinit (const BoardState& reinit, proto::StateProof& proof)
 
 } // anonymous namespace
 
-ChannelData::ChannelData (ChannelGame& g, const uint256& i)
-  : game(g), id(i), initialised(false), disputeHeight(0), dirty(true)
+ChannelData::ChannelData (SQLiteDatabase& d, const uint256& i)
+  : db(d), id(i), initialised(false), disputeHeight(0), dirty(true)
 {
   LOG (INFO) << "Created new ChannelData instance for ID " << id.ToHex ();
 }
 
-ChannelData::ChannelData (ChannelGame& g, sqlite3_stmt* row)
-  : game(g), initialised(true), dirty(false)
+ChannelData::ChannelData (SQLiteDatabase& d, sqlite3_stmt* row)
+  : db(d), initialised(true), dirty(false)
 {
   const int len = sqlite3_column_bytes (row, COLUMN_ID);
   CHECK_EQ (len, uint256::NUM_BYTES);
@@ -127,7 +126,7 @@ ChannelData::~ChannelData ()
 
   LOG (INFO) << "ChannelData " << id.ToHex () << " is dirty, updating...";
 
-  auto* stmt = game.PrepareStatement (R"(
+  auto* stmt = db.Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_game_channels`
       (`id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`)
       VALUES (?1, ?2, ?3, ?4, ?5)
@@ -224,13 +223,13 @@ ChannelData::SetDisputeHeight (const unsigned h)
 ChannelsTable::Handle
 ChannelsTable::GetFromResult (sqlite3_stmt* row)
 {
-  return Handle (new ChannelData (game, row));
+  return Handle (new ChannelData (db, row));
 }
 
 ChannelsTable::Handle
 ChannelsTable::GetById (const uint256& id)
 {
-  auto* stmt = game.PrepareStatement (R"(
+  auto* stmt = db.PrepareRo (R"(
     SELECT `id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`
       FROM `xayagame_game_channels`
       WHERE `id` = ?1
@@ -252,13 +251,13 @@ ChannelsTable::GetById (const uint256& id)
 ChannelsTable::Handle
 ChannelsTable::CreateNew (const uint256& id)
 {
-  return Handle (new ChannelData (game, id));
+  return Handle (new ChannelData (db, id));
 }
 
 void
 ChannelsTable::DeleteById (const uint256& id)
 {
-  auto* stmt = game.PrepareStatement (R"(
+  auto* stmt = db.Prepare (R"(
     DELETE FROM `xayagame_game_channels`
       WHERE `id` = ?1
   )");
@@ -269,7 +268,7 @@ ChannelsTable::DeleteById (const uint256& id)
 sqlite3_stmt*
 ChannelsTable::QueryAll ()
 {
-  return game.PrepareStatement (R"(
+  return db.PrepareRo (R"(
     SELECT `id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`
       FROM `xayagame_game_channels`
       ORDER BY `id`
@@ -279,7 +278,7 @@ ChannelsTable::QueryAll ()
 sqlite3_stmt*
 ChannelsTable::QueryForDisputeHeight (const unsigned height)
 {
-  auto* stmt = game.PrepareStatement (R"(
+  auto* stmt = db.PrepareRo (R"(
     SELECT `id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`
       FROM `xayagame_game_channels`
       WHERE `disputeHeight` <= ?1

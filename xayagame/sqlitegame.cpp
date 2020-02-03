@@ -4,8 +4,6 @@
 
 #include "sqlitegame.hpp"
 
-#include "sqlitestorage.hpp"
-
 #include <glog/logging.h>
 
 #include <cstring>
@@ -130,7 +128,8 @@ protected:
   {
     SQLiteStorage::SetupSchema ();
 
-    const int rc = sqlite3_exec (GetDatabase (), R"(
+    auto& db = GetDatabase ();
+    const int rc = sqlite3_exec (*db, R"(
       CREATE TABLE IF NOT EXISTS `xayagame_gamevars`
           (`onlyonerow` INTEGER PRIMARY KEY,
            `gamestate_initialised` INTEGER);
@@ -147,19 +146,19 @@ protected:
     /* Since we use the session extension to handle rollbacks, only the main
        database should be used.  To enforce this (at least partially), disallow
        any attached databases.  */
-    sqlite3_limit (GetDatabase (), SQLITE_LIMIT_ATTACHED, 0);
+    sqlite3_limit (*db, SQLITE_LIMIT_ATTACHED, 0);
     LOG (INFO) << "Set allowed number of attached databases to zero";
 
     if (game.messForDebug)
       {
-        CHECK_EQ (sqlite3_exec (GetDatabase (), R"(
+        CHECK_EQ (sqlite3_exec (*db, R"(
           PRAGMA `reverse_unordered_selects` = 1;
         )", nullptr, nullptr, nullptr), SQLITE_OK);
         LOG (INFO) << "Enabled mess-for-debug in the database";
       }
 
     ActiveAutoIds ids(game);
-    game.SetupSchema (GetDatabase ());
+    game.SetupSchema (db);
   }
 
 public:
@@ -173,7 +172,7 @@ public:
 bool
 SQLiteGame::Storage::IsGameInitialised () const
 {
-  auto* stmt = PrepareStatement (R"(
+  auto* stmt = GetDatabase ().PrepareRo (R"(
     SELECT `gamestate_initialised` FROM `xayagame_gamevars`
   )");
 
@@ -194,22 +193,24 @@ SQLiteGame::Storage::InitialiseGame ()
       return;
     }
 
+  auto& db = GetDatabase ();
+
   LOG (INFO) << "Setting initial state in the DB";
-  StepWithNoResult (PrepareStatement ("SAVEPOINT `xayagame-stateinit`"));
+  StepWithNoResult (db.Prepare ("SAVEPOINT `xayagame-stateinit`"));
   try
     {
       ActiveAutoIds ids(game);
-      game.InitialiseState (GetDatabase ());
-      StepWithNoResult (PrepareStatement (R"(
+      game.InitialiseState (db);
+      StepWithNoResult (db.Prepare (R"(
         UPDATE `xayagame_gamevars` SET `gamestate_initialised` = 1
       )"));
-      StepWithNoResult (PrepareStatement ("RELEASE `xayagame-stateinit`"));
+      StepWithNoResult (db.Prepare ("RELEASE `xayagame-stateinit`"));
       LOG (INFO) << "Initialised the DB state successfully";
     }
   catch (...)
     {
       LOG (ERROR) << "Initialising state failed, rolling back the DB change";
-      StepWithNoResult (PrepareStatement ("ROLLBACK TO `xayagame-stateinit`"));
+      StepWithNoResult (db.Prepare ("ROLLBACK TO `xayagame-stateinit`"));
       throw;
     }
 }
@@ -268,18 +269,11 @@ SQLiteGame::Initialise (const std::string& dbFile)
 }
 
 void
-SQLiteGame::SetupSchema (sqlite3* db)
+SQLiteGame::SetupSchema (SQLiteDatabase& db)
 {
   /* Nothing needs to be set up here, but subclasses probably do some setup
      in an overridden method.  The set up of the schema we need for SQLiteGame
      is done in Storage::SetupSchema already before calling here.  */
-}
-
-sqlite3_stmt*
-SQLiteGame::PrepareStatement (const std::string& sql) const
-{
-  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
-  return database->PrepareStatement (sql);
 }
 
 StorageInterface&
@@ -377,10 +371,11 @@ SQLiteGame::ProcessForwardInternal (const GameStateData& oldState,
 {
   EnsureCurrentState (oldState);
 
-  SQLiteSession session(database->GetDatabase ());
+  auto& db = database->GetDatabase ();
+  SQLiteSession session(*db);
   {
     ActiveAutoIds ids(*this);
-    UpdateState (database->GetDatabase (), blockData);
+    UpdateState (db, blockData);
   }
   undo = session.ExtractChangeset ();
 
@@ -468,7 +463,7 @@ SQLiteGame::ProcessBackwardsInternal (const GameStateData& newState,
      only when actually needed.  */
 
   InvertedChangeset changeset(undo);
-  changeset.Apply (database->GetDatabase ());
+  changeset.Apply (*database->GetDatabase ());
 
   return BLOCKHASH_STATE + blockData["block"]["parent"].asString ();
 }
@@ -508,13 +503,13 @@ SQLiteGame::GetCustomStateData (
     const ExtractJsonFromDb& cb)
 {
   return GetCustomStateData (game, jsonField,
-    [&cb] (sqlite3* db, const uint256& hash, const unsigned height)
+    [&cb] (const SQLiteDatabase& db, const uint256& hash, const unsigned height)
     {
       return cb (db);
     });
 }
 
-sqlite3*
+SQLiteDatabase&
 SQLiteGame::GetDatabaseForTesting ()
 {
   CHECK (database != nullptr) << "SQLiteGame has not been initialised";
@@ -544,7 +539,7 @@ BindString (sqlite3_stmt* stmt, const int ind, const std::string& value)
 
 SQLiteGame::AutoId::AutoId (SQLiteGame& game, const std::string& key)
 {
-  auto* stmt = game.PrepareStatement (R"(
+  auto* stmt = game.database->GetDatabase ().Prepare (R"(
     SELECT `nextid` FROM `xayagame_autoids` WHERE `key` = ?1
   )");
   BindString (stmt, 1, key);
@@ -582,7 +577,7 @@ SQLiteGame::AutoId::Sync (SQLiteGame& game, const std::string& key)
       return;
     }
 
-  auto* stmt = game.PrepareStatement (R"(
+  auto* stmt = game.database->GetDatabase ().Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_autoids`
       (`key`, `nextid`) VALUES (?1, ?2)
   )");
@@ -597,8 +592,8 @@ SQLiteGame::AutoId::Sync (SQLiteGame& game, const std::string& key)
 
 /* ************************************************************************** */
 
-sqlite3*
-SQLiteGame::PendingMoves::AccessConfirmedState ()
+const SQLiteDatabase&
+SQLiteGame::PendingMoves::AccessConfirmedState () const
 {
   game.EnsureCurrentState (GetConfirmedState ());
   return game.database->GetDatabase ();

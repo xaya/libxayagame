@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -47,14 +47,14 @@ protected:
   GameStateJson gsj;
 
   GameStateJsonTests ()
-    : tbl(game), gsj(game)
+    : tbl(GetDb ()), gsj(GetDb (), GetBoardRules ())
   {}
 
 };
 
 TEST_F (GameStateJsonTests, GameStats)
 {
-  CHECK_EQ (sqlite3_exec (GetDb (), R"(
+  CHECK_EQ (sqlite3_exec (*GetDb (), R"(
     INSERT INTO `game_stats`
       (`name`, `won`, `lost`) VALUES ('foo', 10, 2), ('bar', 5, 5)
   )", nullptr, nullptr, nullptr), SQLITE_OK);

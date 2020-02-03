@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -71,9 +71,9 @@ ChannelGspRpcServer::DefaultGetChannel (const Game& g, ChannelGame& chg,
                                      "channel ID is not a valid uint256");
 
   return chg.GetCustomStateData (g, "channel",
-    [&chg, &id] (sqlite3* db)
+    [&chg, &id] (const SQLiteDatabase& db)
       {
-        ChannelsTable tbl(chg);
+        ChannelsTable tbl(const_cast<SQLiteDatabase&> (db));
         auto h = tbl.GetById (id);
 
         if (h == nullptr)

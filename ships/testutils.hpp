@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,7 @@
 #include "grid.hpp"
 #include "logic.hpp"
 
+#include <xayagame/sqlitestorage.hpp>
 #include <xayagame/testutils.hpp>
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 
@@ -50,7 +51,12 @@ protected:
   /**
    * Returns the raw database handle of the test game.
    */
-  sqlite3* GetDb ();
+  xaya::SQLiteDatabase& GetDb ();
+
+  /**
+   * Returns our board rules.
+   */
+  const ShipsBoardRules& GetBoardRules () const;
 
 };
 
