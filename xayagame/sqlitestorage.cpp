@@ -153,18 +153,18 @@ SQLiteStorage::OpenDatabase ()
   SetupSchema ();
 }
 
-sqlite3*
+SQLiteDatabase&
 SQLiteStorage::GetDatabase ()
 {
   CHECK (db != nullptr);
-  return **db;
+  return *db;
 }
 
-sqlite3_stmt*
-SQLiteStorage::PrepareStatement (const std::string& sql) const
+const SQLiteDatabase&
+SQLiteStorage::GetDatabase () const
 {
   CHECK (db != nullptr);
-  return db->Prepare (sql);
+  return *db;
 }
 
 /**

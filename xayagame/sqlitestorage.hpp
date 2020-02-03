@@ -147,19 +147,14 @@ protected:
   virtual void SetupSchema ();
 
   /**
-   * Returns the handle of the SQLite database.
+   * Returns the underlying SQLiteDatabase instance.
    */
-  sqlite3* GetDatabase ();
+  SQLiteDatabase& GetDatabase ();
 
   /**
-   * Prepares an SQL statement given as string and stores it in the cache,
-   * or retrieves the existing statement from the cache.  The prepared statement
-   * is also reset, so that it can be reused right away.
-   *
-   * The returned statement is managed (and, in particular, finalised) by the
-   * SQLiteStorage object, not by the caller.
+   * Returns the underlying SQLiteDatabase instance.
    */
-  sqlite3_stmt* PrepareStatement (const std::string& sql) const;
+  const SQLiteDatabase& GetDatabase () const;
 
   /**
    * Steps a given statement and expects no results (i.e. for an update).

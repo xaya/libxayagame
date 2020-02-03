@@ -8,7 +8,7 @@
 #include "game.hpp"
 #include "gamelogic.hpp"
 #include "pendingmoves.hpp"
-#include "storage.hpp"
+#include "sqlitestorage.hpp"
 
 #include <sqlite3.h>
 
@@ -184,12 +184,12 @@ protected:
                                   const ExtractJsonFromDb& cb);
 
   /**
-   * Returns a direct handle to the underlying SQLite database.
+   * Returns a direct handle to the underlying SQLiteDatabase.
    *
    * THIS SHOULD ONLY BE USED FOR UNIT TESTS AND NOT IN PRODUCTION CODE!
    * For real code, only use the handle passed into the callbacks.
    */
-  sqlite3* GetDatabaseForTesting ();
+  SQLiteDatabase& GetDatabaseForTesting ();
 
   GameStateData GetInitialStateInternal (unsigned& height,
                                          std::string& hashHex) override;

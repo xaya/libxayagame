@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -820,11 +820,11 @@ protected:
    * Queries the usernames in the database, without specifying an order.
    */
   static UserArray
-  GetUnorderedUsernames (sqlite3* db)
+  GetUnorderedUsernames (SQLiteDatabase& db)
   {
     UserArray res;
 
-    const int rc = sqlite3_exec (db, R"(
+    const int rc = sqlite3_exec (*db, R"(
       SELECT `user` FROM `chat`
     )", &SaveUserToArray, &res, nullptr);
     CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve chat users from DB";
