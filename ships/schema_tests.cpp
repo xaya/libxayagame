@@ -22,7 +22,7 @@ protected:
   void
   SetupSchema ()
   {
-    game.SetupSchema (*GetDb ());
+    game.SetupSchema (GetDb ());
   }
 
 };

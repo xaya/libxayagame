@@ -40,4 +40,10 @@ InMemoryLogicFixture::GetDb ()
   return game.GetDatabaseForTesting ();
 }
 
+const ShipsBoardRules&
+InMemoryLogicFixture::GetBoardRules () const
+{
+  return dynamic_cast<const ShipsBoardRules&> (game.GetBoardRules ());
+}
+
 } // namespace ships

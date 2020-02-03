@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,6 +10,7 @@
 #include <gamechannel/boardrules.hpp>
 #include <gamechannel/channelgame.hpp>
 #include <gamechannel/proto/metadata.pb.h>
+#include <xayagame/sqlitestorage.hpp>
 #include <xayautil/uint256.hpp>
 
 #include <json/json.h>
@@ -42,35 +43,40 @@ private:
    * Tries to process a "create channel" move, if the JSON object describes
    * a valid one.
    */
-  void HandleCreateChannel (const Json::Value& obj, const std::string& name,
+  void HandleCreateChannel (xaya::SQLiteDatabase& db,
+                            const Json::Value& obj, const std::string& name,
                             const xaya::uint256& txid);
 
   /**
    * Tries to process a "join channel" move.
    */
-  void HandleJoinChannel (const Json::Value& obj, const std::string& name,
+  void HandleJoinChannel (xaya::SQLiteDatabase& db,
+                          const Json::Value& obj, const std::string& name,
                           const xaya::uint256& txid);
 
   /**
    * Tries to process an "abort channel" move.
    */
-  void HandleAbortChannel (const Json::Value& obj, const std::string& name);
+  void HandleAbortChannel (xaya::SQLiteDatabase& db,
+                           const Json::Value& obj, const std::string& name);
 
   /**
    * Tries to process a channel close with winner statement.
    */
-  void HandleCloseChannel (const Json::Value& obj);
+  void HandleCloseChannel (xaya::SQLiteDatabase& db,
+                           const Json::Value& obj);
 
   /**
    * Tries to process a dispute/resolution move.
    */
-  void HandleDisputeResolution (const Json::Value& obj, unsigned height,
+  void HandleDisputeResolution (xaya::SQLiteDatabase& db,
+                                const Json::Value& obj, unsigned height,
                                 bool isDispute);
 
   /**
    * Processes all expired disputes, force-closing the channels.
    */
-  void ProcessExpiredDisputes (unsigned height);
+  void ProcessExpiredDisputes (xaya::SQLiteDatabase& db, unsigned height);
 
   /**
    * Updates the game stats in the global database state for a channel that
@@ -78,7 +84,8 @@ private:
    * (remove) the channel itself from the database; it just updates the
    * game_stats table.
    */
-  void UpdateStats (const xaya::proto::ChannelMetadata& meta, int winner);
+  void UpdateStats (xaya::SQLiteDatabase& db,
+                    const xaya::proto::ChannelMetadata& meta, int winner);
 
   /**
    * Binds a TEXT SQLite parameter to a string.  This is a utility method that
@@ -98,17 +105,20 @@ private:
 
 protected:
 
-  const xaya::BoardRules& GetBoardRules () const override;
-
-  void SetupSchema (sqlite3* db) override;
+  void SetupSchema (xaya::SQLiteDatabase& db) override;
 
   void GetInitialStateBlock (unsigned& height,
                              std::string& hashHex) const override;
-  void InitialiseState (sqlite3* db) override;
+  void InitialiseState (xaya::SQLiteDatabase& db) override;
 
-  void UpdateState (sqlite3* db, const Json::Value& blockData) override;
+  void UpdateState (xaya::SQLiteDatabase& db,
+                    const Json::Value& blockData) override;
 
-  Json::Value GetStateAsJson (sqlite3* db) override;
+  Json::Value GetStateAsJson (const xaya::SQLiteDatabase& db) override;
+
+public:
+
+  const xaya::BoardRules& GetBoardRules () const override;
 
 };
 
@@ -124,14 +134,16 @@ private:
   /**
    * Tries to process a pending dispute or resolution move.
    */
-  void HandleDisputeResolution (const Json::Value& obj);
+  void HandleDisputeResolution (xaya::SQLiteDatabase& db,
+                                const Json::Value& obj);
 
   /**
    * Processes a new move, but does not call AccessConfirmedState.  This is
    * used in tests, so that we can get away without setting up a consistent
    * current state in the database.
    */
-  void AddPendingMoveUnsafe (const Json::Value& mv);
+  void AddPendingMoveUnsafe (const xaya::SQLiteDatabase& db,
+                             const Json::Value& mv);
 
   friend class PendingTests;
 

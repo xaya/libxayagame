@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -33,7 +33,7 @@ protected:
    * Sets up the game-channel-related database schema.  This method should be
    * called from the overridden SetupSchema method.
    */
-  void SetupGameChannelsSchema (sqlite3* db);
+  void SetupGameChannelsSchema (SQLiteDatabase& db);
 
   /**
    * Processes a request (e.g. sent in a move) to open a dispute at the

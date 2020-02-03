@@ -113,12 +113,12 @@ class TestGame : public ChannelGame
 
 protected:
 
-  void SetupSchema (sqlite3* db) override;
+  void SetupSchema (SQLiteDatabase& db) override;
   void GetInitialStateBlock (unsigned& height,
                              std::string& hashHex) const override;
-  void InitialiseState (sqlite3* db) override;
-  void UpdateState (sqlite3* db, const Json::Value& blockData) override;
-  Json::Value GetStateAsJson (sqlite3* db) override;
+  void InitialiseState (SQLiteDatabase& db) override;
+  void UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override;
+  Json::Value GetStateAsJson (const SQLiteDatabase& db) override;
 
   const BoardRules& GetBoardRules () const override;
 

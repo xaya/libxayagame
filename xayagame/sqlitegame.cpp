@@ -158,7 +158,7 @@ protected:
       }
 
     ActiveAutoIds ids(game);
-    game.SetupSchema (*db);
+    game.SetupSchema (db);
   }
 
 public:
@@ -172,7 +172,7 @@ public:
 bool
 SQLiteGame::Storage::IsGameInitialised () const
 {
-  auto* stmt = GetDatabase ().Prepare (R"(
+  auto* stmt = GetDatabase ().PrepareRo (R"(
     SELECT `gamestate_initialised` FROM `xayagame_gamevars`
   )");
 
@@ -200,7 +200,7 @@ SQLiteGame::Storage::InitialiseGame ()
   try
     {
       ActiveAutoIds ids(game);
-      game.InitialiseState (*db);
+      game.InitialiseState (db);
       StepWithNoResult (db.Prepare (R"(
         UPDATE `xayagame_gamevars` SET `gamestate_initialised` = 1
       )"));
@@ -269,18 +269,11 @@ SQLiteGame::Initialise (const std::string& dbFile)
 }
 
 void
-SQLiteGame::SetupSchema (sqlite3* db)
+SQLiteGame::SetupSchema (SQLiteDatabase& db)
 {
   /* Nothing needs to be set up here, but subclasses probably do some setup
      in an overridden method.  The set up of the schema we need for SQLiteGame
      is done in Storage::SetupSchema already before calling here.  */
-}
-
-sqlite3_stmt*
-SQLiteGame::PrepareStatement (const std::string& sql) const
-{
-  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
-  return database->GetDatabase ().Prepare (sql);
 }
 
 StorageInterface&
@@ -382,7 +375,7 @@ SQLiteGame::ProcessForwardInternal (const GameStateData& oldState,
   SQLiteSession session(*db);
   {
     ActiveAutoIds ids(*this);
-    UpdateState (*db, blockData);
+    UpdateState (db, blockData);
   }
   undo = session.ExtractChangeset ();
 
@@ -487,7 +480,7 @@ Json::Value
 SQLiteGame::GameStateToJson (const GameStateData& state)
 {
   EnsureCurrentState (state);
-  return GetStateAsJson (*database->GetDatabase ());
+  return GetStateAsJson (database->GetDatabase ());
 }
 
 Json::Value
@@ -500,7 +493,7 @@ SQLiteGame::GetCustomStateData (
                    const unsigned height)
         {
           EnsureCurrentState (state);
-          return cb (*database->GetDatabase (), hash, height);
+          return cb (database->GetDatabase (), hash, height);
         });
 }
 
@@ -510,7 +503,7 @@ SQLiteGame::GetCustomStateData (
     const ExtractJsonFromDb& cb)
 {
   return GetCustomStateData (game, jsonField,
-    [&cb] (sqlite3* db, const uint256& hash, const unsigned height)
+    [&cb] (const SQLiteDatabase& db, const uint256& hash, const unsigned height)
     {
       return cb (db);
     });
@@ -546,7 +539,7 @@ BindString (sqlite3_stmt* stmt, const int ind, const std::string& value)
 
 SQLiteGame::AutoId::AutoId (SQLiteGame& game, const std::string& key)
 {
-  auto* stmt = game.PrepareStatement (R"(
+  auto* stmt = game.database->GetDatabase ().Prepare (R"(
     SELECT `nextid` FROM `xayagame_autoids` WHERE `key` = ?1
   )");
   BindString (stmt, 1, key);
@@ -584,7 +577,7 @@ SQLiteGame::AutoId::Sync (SQLiteGame& game, const std::string& key)
       return;
     }
 
-  auto* stmt = game.PrepareStatement (R"(
+  auto* stmt = game.database->GetDatabase ().Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_autoids`
       (`key`, `nextid`) VALUES (?1, ?2)
   )");
@@ -599,11 +592,11 @@ SQLiteGame::AutoId::Sync (SQLiteGame& game, const std::string& key)
 
 /* ************************************************************************** */
 
-sqlite3*
-SQLiteGame::PendingMoves::AccessConfirmedState ()
+const SQLiteDatabase&
+SQLiteGame::PendingMoves::AccessConfirmedState () const
 {
   game.EnsureCurrentState (GetConfirmedState ());
-  return *game.database->GetDatabase ();
+  return game.database->GetDatabase ();
 }
 
 /* ************************************************************************** */

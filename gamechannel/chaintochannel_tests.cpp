@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -72,9 +72,9 @@ public:
 
   explicit TestGspServer (jsonrpc::AbstractServerConnector& conn,
                           const uint256& id, const proto::ChannelMetadata& m,
-                          TestGame& g)
+                          SQLiteDatabase& db, TestGame& g)
     : ChannelGspRpcServerStub(conn), channelId(id), meta(m),
-      game(g), tbl(game)
+      game(g), tbl(db)
   {
     EXPECT_CALL (*this, stop ()).Times (0);
     EXPECT_CALL (*this, getcurrentstate ()).Times (0);
@@ -198,7 +198,7 @@ protected:
 
   ChainToChannelFeederTests ()
     : feeder(gspServer.GetClient (), cm),
-      gspServer(channelId, meta, game)
+      gspServer(channelId, meta, GetDb (), game)
   {
     gspServer.GetClientConnector ().SetTimeout (RPC_TIMEOUT_MS);
   }

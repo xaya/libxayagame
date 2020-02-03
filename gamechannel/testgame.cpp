@@ -202,7 +202,7 @@ AdditionChannel::MaybeOnChainMove (const ParsedBoardState& state,
 }
 
 void
-TestGame::SetupSchema (sqlite3* db)
+TestGame::SetupSchema (SQLiteDatabase& db)
 {
   SetupGameChannelsSchema (db);
 }
@@ -214,19 +214,19 @@ TestGame::GetInitialStateBlock (unsigned& height, std::string& hashHex) const
 }
 
 void
-TestGame::InitialiseState (sqlite3* db)
+TestGame::InitialiseState (SQLiteDatabase& db)
 {
   LOG (FATAL) << "TestGame::InitialiseState is not implemented";
 }
 
 void
-TestGame::UpdateState (sqlite3* db, const Json::Value& blockData)
+TestGame::UpdateState (SQLiteDatabase& db, const Json::Value& blockData)
 {
   LOG (FATAL) << "TestGame::UpdateState is not implemented";
 }
 
 Json::Value
-TestGame::GetStateAsJson (sqlite3* db)
+TestGame::GetStateAsJson (const SQLiteDatabase& db)
 {
   LOG (FATAL) << "TestGame::GetStateAsJson is not implemented";
 }

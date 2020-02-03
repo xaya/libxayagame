@@ -53,6 +53,11 @@ protected:
    */
   xaya::SQLiteDatabase& GetDb ();
 
+  /**
+   * Returns our board rules.
+   */
+  const ShipsBoardRules& GetBoardRules () const;
+
 };
 
 } // namespace ships

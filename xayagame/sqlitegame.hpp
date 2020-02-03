@@ -99,14 +99,15 @@ protected:
    * the database with block height information.
    */
   using ExtractJsonFromDbWithBlock
-    = std::function<Json::Value (sqlite3* db, const uint256& hash,
+    = std::function<Json::Value (const SQLiteDatabase& db, const uint256& hash,
                                  unsigned height)>;
 
   /**
    * Callback function that retrieves some custom state JSON from
    * the database alone.
    */
-  using ExtractJsonFromDb = std::function<Json::Value (sqlite3* db)>;
+  using ExtractJsonFromDb
+    = std::function<Json::Value (const SQLiteDatabase& db)>;
 
   /**
    * This method is called on every open of the SQLite database, and should
@@ -120,7 +121,7 @@ protected:
    * Note that table names starting with "xayagame_" are reserved for use by
    * libxayagame itself and must not be used by game implementations.
    */
-  virtual void SetupSchema (sqlite3* db);
+  virtual void SetupSchema (SQLiteDatabase& db);
 
   /**
    * Returns the height and block hash (as big-endian hex) at which the
@@ -135,27 +136,21 @@ protected:
    * be assumed that no existing data is stored in the database, except what
    * was potentially inserted through SetupSchema.
    */
-  virtual void InitialiseState (sqlite3* db) = 0;
+  virtual void InitialiseState (SQLiteDatabase& db) = 0;
 
   /**
    * Updates the current state in the database for the given block of moves.
    * Note that no un-finalised sqlite3_stmt handles or other things open
    * against the database may be left behind when the function returns.
    */
-  virtual void UpdateState (sqlite3* db, const Json::Value& blockData) = 0;
+  virtual void UpdateState (SQLiteDatabase& db,
+                            const Json::Value& blockData) = 0;
 
   /**
    * Retrieves the current state in the database and encodes it as JSON
    * to be returned by the game daemon's JSON-RPC interface.
    */
-  virtual Json::Value GetStateAsJson (sqlite3* db) = 0;
-
-  /**
-   * Prepares an SQLite statement in the underlying database and returns
-   * the prepared statement.  The returned statement is owned and managed
-   * by the SQLiteStorage and must not be freed manually!
-   */
-  sqlite3_stmt* PrepareStatement (const std::string& sql) const;
+  virtual Json::Value GetStateAsJson (const SQLiteDatabase& db) = 0;
 
   /**
    * Returns a handle to an AutoId instance for a given named key.  That can
@@ -344,7 +339,7 @@ protected:
 
   /**
    * Returns our reference of SQLiteGame.  That may be useful in a game-specific
-   * way for subclasses, and it can also be used to expose PrepareStatement.
+   * way for subclasses.
    */
   SQLiteGame&
   GetSQLiteGame ()
@@ -363,7 +358,7 @@ protected:
    * SQLiteGame::PrepareStatement), then calling this function and discarding
    * the return value is a way to ensure consistency.
    */
-  sqlite3* AccessConfirmedState ();
+  const SQLiteDatabase& AccessConfirmedState () const;
 
 };
 

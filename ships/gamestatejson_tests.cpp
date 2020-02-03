@@ -47,7 +47,7 @@ protected:
   GameStateJson gsj;
 
   GameStateJsonTests ()
-    : tbl(game), gsj(game)
+    : tbl(GetDb ()), gsj(GetDb (), GetBoardRules ())
   {}
 
 };

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -23,10 +23,10 @@ ShipsLogic::GetBoardRules () const
 }
 
 void
-ShipsLogic::SetupSchema (sqlite3* db)
+ShipsLogic::SetupSchema (xaya::SQLiteDatabase& db)
 {
   SetupGameChannelsSchema (db);
-  SetupShipsSchema (db);
+  SetupShipsSchema (*db);
 }
 
 void
@@ -59,14 +59,14 @@ ShipsLogic::GetInitialStateBlock (unsigned& height, std::string& hashHex) const
 }
 
 void
-ShipsLogic::InitialiseState (sqlite3* db)
+ShipsLogic::InitialiseState (xaya::SQLiteDatabase& db)
 {
   /* The game simply starts with an empty database.  No stats for any names
      yet, and also no channels defined.  */
 }
 
 void
-ShipsLogic::UpdateState (sqlite3* db, const Json::Value& blockData)
+ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
 {
   const auto& blk = blockData["block"];
   CHECK (blk.isObject ());
@@ -109,19 +109,20 @@ ShipsLogic::UpdateState (sqlite3* db, const Json::Value& blockData)
           continue;
         }
 
-      HandleCreateChannel (data["c"], name, txid);
-      HandleJoinChannel (data["j"], name, txid);
-      HandleAbortChannel (data["a"], name);
-      HandleCloseChannel (data["w"]);
-      HandleDisputeResolution (data["d"], height, true);
-      HandleDisputeResolution (data["r"], height, false);
+      HandleCreateChannel (db, data["c"], name, txid);
+      HandleJoinChannel (db, data["j"], name, txid);
+      HandleAbortChannel (db, data["a"], name);
+      HandleCloseChannel (db, data["w"]);
+      HandleDisputeResolution (db, data["d"], height, true);
+      HandleDisputeResolution (db, data["r"], height, false);
     }
 
-  ProcessExpiredDisputes (height);
+  ProcessExpiredDisputes (db, height);
 }
 
 void
-ShipsLogic::HandleCreateChannel (const Json::Value& obj,
+ShipsLogic::HandleCreateChannel (xaya::SQLiteDatabase& db,
+                                 const Json::Value& obj,
                                  const std::string& name,
                                  const xaya::uint256& txid)
 {
@@ -140,7 +141,7 @@ ShipsLogic::HandleCreateChannel (const Json::Value& obj,
       << "Creating channel with ID " << txid.ToHex ()
       << " for user " << name << " with address " << addr;
 
-  xaya::ChannelsTable tbl(*this);
+  xaya::ChannelsTable tbl(db);
 
   /* Verify that this is indeed a new instance and not an existing one.  That
      should never happen, assuming that txid's do not collide.  */
@@ -194,7 +195,8 @@ RetrieveChannelFromMove (const Json::Value& obj, xaya::ChannelsTable& tbl)
 } // anonymous namespace
 
 void
-ShipsLogic::HandleJoinChannel (const Json::Value& obj, const std::string& name,
+ShipsLogic::HandleJoinChannel (xaya::SQLiteDatabase& db,
+                               const Json::Value& obj, const std::string& name,
                                const xaya::uint256& txid)
 {
   if (!obj.isObject ())
@@ -208,7 +210,7 @@ ShipsLogic::HandleJoinChannel (const Json::Value& obj, const std::string& name,
     }
   const std::string addr = addrVal.asString ();
 
-  xaya::ChannelsTable tbl(*this);
+  xaya::ChannelsTable tbl(db);
   auto h = RetrieveChannelFromMove (obj, tbl);
   if (h == nullptr)
     return;
@@ -247,7 +249,8 @@ ShipsLogic::HandleJoinChannel (const Json::Value& obj, const std::string& name,
 }
 
 void
-ShipsLogic::HandleAbortChannel (const Json::Value& obj, const std::string& name)
+ShipsLogic::HandleAbortChannel (xaya::SQLiteDatabase& db,
+                                const Json::Value& obj, const std::string& name)
 {
   if (!obj.isObject ())
     return;
@@ -258,7 +261,7 @@ ShipsLogic::HandleAbortChannel (const Json::Value& obj, const std::string& name)
       return;
     }
 
-  xaya::ChannelsTable tbl(*this);
+  xaya::ChannelsTable tbl(db);
   auto h = RetrieveChannelFromMove (obj, tbl);
   if (h == nullptr)
     return;
@@ -312,7 +315,8 @@ template <typename T>
 } // anonymous namespace
 
 void
-ShipsLogic::HandleCloseChannel (const Json::Value& obj)
+ShipsLogic::HandleCloseChannel (xaya::SQLiteDatabase& db,
+                                const Json::Value& obj)
 {
   if (!obj.isObject ())
     return;
@@ -330,7 +334,7 @@ ShipsLogic::HandleCloseChannel (const Json::Value& obj)
       return;
     }
 
-  xaya::ChannelsTable tbl(*this);
+  xaya::ChannelsTable tbl(db);
   auto h = RetrieveChannelFromMove (obj, tbl);
   if (h == nullptr)
     return;
@@ -360,7 +364,7 @@ ShipsLogic::HandleCloseChannel (const Json::Value& obj)
       << " with winner " << stmt.winner ()
       << " (" << meta.participants (stmt.winner ()).name () << ")";
 
-  UpdateStats (meta, stmt.winner ());
+  UpdateStats (db, meta, stmt.winner ());
   h.reset ();
   tbl.DeleteById (id);
 }
@@ -399,11 +403,12 @@ ParseDisputeResolutionMove (const Json::Value& obj, xaya::ChannelsTable& tbl,
 } // anonymous namespace
 
 void
-ShipsLogic::HandleDisputeResolution (const Json::Value& obj,
+ShipsLogic::HandleDisputeResolution (xaya::SQLiteDatabase& db,
+                                     const Json::Value& obj,
                                      const unsigned height,
                                      const bool isDispute)
 {
-  xaya::ChannelsTable tbl(*this);
+  xaya::ChannelsTable tbl(db);
   xaya::proto::StateProof proof;
   auto h = ParseDisputeResolutionMove (obj, tbl, proof);
   if (h == nullptr)
@@ -434,11 +439,12 @@ ShipsLogic::HandleDisputeResolution (const Json::Value& obj,
 }
 
 void
-ShipsLogic::ProcessExpiredDisputes (const unsigned height)
+ShipsLogic::ProcessExpiredDisputes (xaya::SQLiteDatabase& db,
+                                    const unsigned height)
 {
   LOG (INFO) << "Processing expired disputes for height " << height << "...";
 
-  xaya::ChannelsTable tbl(*this);
+  xaya::ChannelsTable tbl(db);
   auto* stmt = tbl.QueryForDisputeHeight (height - DISPUTE_BLOCKS);
   while (true)
     {
@@ -472,7 +478,7 @@ ShipsLogic::ProcessExpiredDisputes (const unsigned height)
           << meta.participants (winner).name () << " won, "
           << meta.participants (loser).name () << " lost";
 
-      UpdateStats (meta, winner);
+      UpdateStats (db, meta, winner);
       h.reset ();
       tbl.DeleteById (id);
     }
@@ -488,7 +494,8 @@ ShipsLogic::BindStringParam (sqlite3_stmt* stmt, const int ind,
 }
 
 void
-ShipsLogic::UpdateStats (const xaya::proto::ChannelMetadata& meta,
+ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
+                         const xaya::proto::ChannelMetadata& meta,
                          const int winner)
 {
   CHECK_GE (winner, 0);
@@ -499,7 +506,7 @@ ShipsLogic::UpdateStats (const xaya::proto::ChannelMetadata& meta,
   const std::string& winnerName = meta.participants (winner).name ();
   const std::string& loserName = meta.participants (loser).name ();
 
-  auto* stmt = PrepareStatement (R"(
+  auto* stmt = db.Prepare (R"(
     INSERT OR IGNORE INTO `game_stats`
       (`name`, `won`, `lost`) VALUES (?1, 0, 0), (?2, 0, 0)
   )");
@@ -507,7 +514,7 @@ ShipsLogic::UpdateStats (const xaya::proto::ChannelMetadata& meta,
   BindStringParam (stmt, 2, loserName);
   CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
 
-  stmt = PrepareStatement (R"(
+  stmt = db.Prepare (R"(
     UPDATE `game_stats`
       SET `won` = `won` + 1
       WHERE `name` = ?1
@@ -515,7 +522,7 @@ ShipsLogic::UpdateStats (const xaya::proto::ChannelMetadata& meta,
   BindStringParam (stmt, 1, winnerName);
   CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
 
-  stmt = PrepareStatement (R"(
+  stmt = db.Prepare (R"(
     UPDATE `game_stats`
       SET `lost` = `lost` + 1
       WHERE `name` = ?2
@@ -525,18 +532,17 @@ ShipsLogic::UpdateStats (const xaya::proto::ChannelMetadata& meta,
 }
 
 Json::Value
-ShipsLogic::GetStateAsJson (sqlite3* db)
+ShipsLogic::GetStateAsJson (const xaya::SQLiteDatabase& db)
 {
-  GameStateJson gsj(*this);
+  GameStateJson gsj(db, boardRules);
   return gsj.GetFullJson ();
 }
 
 void
-ShipsPending::HandleDisputeResolution (const Json::Value& obj)
+ShipsPending::HandleDisputeResolution (xaya::SQLiteDatabase& db,
+                                       const Json::Value& obj)
 {
-  ShipsLogic& game = dynamic_cast<ShipsLogic&> (GetSQLiteGame ());
-
-  xaya::ChannelsTable tbl(game);
+  xaya::ChannelsTable tbl(db);
   xaya::proto::StateProof proof;
   auto h = ParseDisputeResolutionMove (obj, tbl, proof);
   if (h == nullptr)
@@ -549,7 +555,8 @@ ShipsPending::HandleDisputeResolution (const Json::Value& obj)
 }
 
 void
-ShipsPending::AddPendingMoveUnsafe (const Json::Value& mv)
+ShipsPending::AddPendingMoveUnsafe (const xaya::SQLiteDatabase& db,
+                                    const Json::Value& mv)
 {
   CHECK (mv.isObject ()) << "Not an object: " << mv;
 
@@ -564,15 +571,16 @@ ShipsPending::AddPendingMoveUnsafe (const Json::Value& mv)
      processing.  Even if a move is actually invalid, we can still apply
      its pending StateProof in case it is valid.  */
 
-  HandleDisputeResolution (data["d"]);
-  HandleDisputeResolution (data["r"]);
+  auto& mutableDb = const_cast<xaya::SQLiteDatabase&> (db);
+  HandleDisputeResolution (mutableDb, data["d"]);
+  HandleDisputeResolution (mutableDb, data["r"]);
 }
 
 void
 ShipsPending::AddPendingMove (const Json::Value& mv)
 {
   AccessConfirmedState ();
-  AddPendingMoveUnsafe (mv);
+  AddPendingMoveUnsafe (AccessConfirmedState (), mv);
 }
 
 } // namespace ships
