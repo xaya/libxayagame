@@ -40,27 +40,6 @@ private:
   ShipsBoardRules boardRules;
 
   /**
-   * Tries to process a "create channel" move, if the JSON object describes
-   * a valid one.
-   */
-  void HandleCreateChannel (xaya::SQLiteDatabase& db,
-                            const Json::Value& obj, const std::string& name,
-                            const xaya::uint256& txid);
-
-  /**
-   * Tries to process a "join channel" move.
-   */
-  void HandleJoinChannel (xaya::SQLiteDatabase& db,
-                          const Json::Value& obj, const std::string& name,
-                          const xaya::uint256& txid);
-
-  /**
-   * Tries to process an "abort channel" move.
-   */
-  void HandleAbortChannel (xaya::SQLiteDatabase& db,
-                           const Json::Value& obj, const std::string& name);
-
-  /**
    * Tries to process a channel close with winner statement.
    */
   void HandleCloseChannel (xaya::SQLiteDatabase& db,
@@ -84,8 +63,9 @@ private:
    * (remove) the channel itself from the database; it just updates the
    * game_stats table.
    */
-  void UpdateStats (xaya::SQLiteDatabase& db,
-                    const xaya::proto::ChannelMetadata& meta, int winner);
+  static void UpdateStats (xaya::SQLiteDatabase& db,
+                           const xaya::proto::ChannelMetadata& meta,
+                           int winner);
 
   /**
    * Binds a TEXT SQLite parameter to a string.  This is a utility method that
@@ -93,11 +73,6 @@ private:
    */
   static void BindStringParam (sqlite3_stmt* stmt, int ind,
                                const std::string& str);
-
-  /* This class is not test-code, but it is basically a part of the
-     implementation of ShipsLogic itself that is just moved out to a separate
-     file / compilation unit to make the code easier to read.  */
-  friend class GameStateJson;
 
   friend class InMemoryLogicFixture;
   friend class StateUpdateTests;

@@ -65,66 +65,18 @@ ShipsLogic::InitialiseState (xaya::SQLiteDatabase& db)
      yet, and also no channels defined.  */
 }
 
-void
-ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
+namespace
 {
-  const auto& blk = blockData["block"];
-  CHECK (blk.isObject ());
-  const auto& heightVal = blk["height"];
-  CHECK (heightVal.isUInt ());
-  const unsigned height = heightVal.asUInt ();
 
-  const auto& moves = blockData["moves"];
-  CHECK (moves.isArray ());
-  LOG (INFO) << "Processing " << moves.size () << " moves...";
-  for (const auto& mv : moves)
-    {
-      CHECK (mv.isObject ()) << "Not an object: " << mv;
-
-      const auto& nameVal = mv["name"];
-      CHECK (nameVal.isString ());
-      const std::string name = nameVal.asString ();
-
-      const auto& txidVal = mv["txid"];
-      CHECK (txidVal.isString ());
-      xaya::uint256 txid;
-      CHECK (txid.FromHex (txidVal.asString ()));
-
-      const auto& data = mv["move"];
-      if (!data.isObject ())
-        {
-          LOG (WARNING) << "Move by " << name << " is not an object: " << data;
-          continue;
-        }
-
-      /* Some of the possible moves can interact with each other (e.g. joining
-         a channel and filing a dispute immediately).  These interactions
-         are not generally useful, and just complicate things (as we have to
-         ensure that the order remains fixed and they keep working).  Thus
-         let us simply forbid more than one action per move.  */
-      if (data.size () > 1)
-        {
-          LOG (WARNING)
-              << "Move by " << name << " has more than one action: " << data;
-          continue;
-        }
-
-      HandleCreateChannel (db, data["c"], name, txid);
-      HandleJoinChannel (db, data["j"], name, txid);
-      HandleAbortChannel (db, data["a"], name);
-      HandleCloseChannel (db, data["w"]);
-      HandleDisputeResolution (db, data["d"], height, true);
-      HandleDisputeResolution (db, data["r"], height, false);
-    }
-
-  ProcessExpiredDisputes (db, height);
-}
-
+/**
+ * Tries to process a "create channel" move, if the JSON object describes
+ * a valid one.
+ */
 void
-ShipsLogic::HandleCreateChannel (xaya::SQLiteDatabase& db,
-                                 const Json::Value& obj,
-                                 const std::string& name,
-                                 const xaya::uint256& txid)
+HandleCreateChannel (xaya::SQLiteDatabase& db,
+                     const Json::Value& obj,
+                     const std::string& name,
+                     const xaya::uint256& txid)
 {
   if (!obj.isObject ())
     return;
@@ -155,9 +107,6 @@ ShipsLogic::HandleCreateChannel (xaya::SQLiteDatabase& db,
   p->set_address (addr);
   h->Reinitialise (meta, "");
 }
-
-namespace
-{
 
 /**
  * Helper method that tries to extract a channel ID in a move JSON object
@@ -192,12 +141,13 @@ RetrieveChannelFromMove (const Json::Value& obj, xaya::ChannelsTable& tbl)
   return h;
 }
 
-} // anonymous namespace
-
+/**
+ * Tries to process a "join channel" move.
+ */
 void
-ShipsLogic::HandleJoinChannel (xaya::SQLiteDatabase& db,
-                               const Json::Value& obj, const std::string& name,
-                               const xaya::uint256& txid)
+HandleJoinChannel (xaya::SQLiteDatabase& db,
+                   const Json::Value& obj, const std::string& name,
+                   const xaya::uint256& txid)
 {
   if (!obj.isObject ())
     return;
@@ -248,9 +198,12 @@ ShipsLogic::HandleJoinChannel (xaya::SQLiteDatabase& db,
   h->Reinitialise (newMeta, state);
 }
 
+/**
+ * Tries to process an "abort channel" move.
+ */
 void
-ShipsLogic::HandleAbortChannel (xaya::SQLiteDatabase& db,
-                                const Json::Value& obj, const std::string& name)
+HandleAbortChannel (xaya::SQLiteDatabase& db,
+                    const Json::Value& obj, const std::string& name)
 {
   if (!obj.isObject ())
     return;
@@ -288,9 +241,6 @@ ShipsLogic::HandleAbortChannel (xaya::SQLiteDatabase& db,
   h.reset ();
   tbl.DeleteById (id);
 }
-
-namespace
-{
 
 /**
  * Extracts a base64-encoded, serialised proto from a JSON string, if possible.
@@ -529,6 +479,61 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
   )");
   BindStringParam (stmt, 2, loserName);
   CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+}
+
+void
+ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
+{
+  const auto& blk = blockData["block"];
+  CHECK (blk.isObject ());
+  const auto& heightVal = blk["height"];
+  CHECK (heightVal.isUInt ());
+  const unsigned height = heightVal.asUInt ();
+
+  const auto& moves = blockData["moves"];
+  CHECK (moves.isArray ());
+  LOG (INFO) << "Processing " << moves.size () << " moves...";
+  for (const auto& mv : moves)
+    {
+      CHECK (mv.isObject ()) << "Not an object: " << mv;
+
+      const auto& nameVal = mv["name"];
+      CHECK (nameVal.isString ());
+      const std::string name = nameVal.asString ();
+
+      const auto& txidVal = mv["txid"];
+      CHECK (txidVal.isString ());
+      xaya::uint256 txid;
+      CHECK (txid.FromHex (txidVal.asString ()));
+
+      const auto& data = mv["move"];
+      if (!data.isObject ())
+        {
+          LOG (WARNING) << "Move by " << name << " is not an object: " << data;
+          continue;
+        }
+
+      /* Some of the possible moves can interact with each other (e.g. joining
+         a channel and filing a dispute immediately).  These interactions
+         are not generally useful, and just complicate things (as we have to
+         ensure that the order remains fixed and they keep working).  Thus
+         let us simply forbid more than one action per move.  */
+      if (data.size () > 1)
+        {
+          LOG (WARNING)
+              << "Move by " << name << " has more than one action: " << data;
+          continue;
+        }
+
+      HandleCreateChannel (db, data["c"], name, txid);
+      HandleJoinChannel (db, data["j"], name, txid);
+      HandleAbortChannel (db, data["a"], name);
+      HandleCloseChannel (db, data["w"]);
+      HandleDisputeResolution (db, data["d"], height, true);
+      HandleDisputeResolution (db, data["r"], height, false);
+    }
+
+  ProcessExpiredDisputes (db, height);
 }
 
 Json::Value
