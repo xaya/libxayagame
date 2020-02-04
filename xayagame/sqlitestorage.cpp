@@ -102,13 +102,25 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
   const auto mode = GetStringBlob (stmt, 0);
   CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
   if (mode == "wal")
-    LOG (INFO) << "Set database to WAL mode";
+    {
+      LOG (INFO) << "Set database to WAL mode";
+      walMode = true;
+    }
   else
-    LOG (WARNING) << "Failed to set WAL mode, journaling is " << mode;
+    {
+      LOG (WARNING) << "Failed to set WAL mode, journaling is " << mode;
+      walMode = false;
+    }
 }
 
 SQLiteDatabase::~SQLiteDatabase ()
 {
+  if (parent != nullptr)
+    {
+      LOG (INFO) << "Ending snapshot read transaction";
+      CHECK_EQ (sqlite3_step (PrepareRo ("ROLLBACK")), SQLITE_DONE);
+    }
+
   for (const auto& stmt : preparedStatements)
     {
       /* sqlite3_finalize returns the error code corresponding to the last
@@ -121,6 +133,28 @@ SQLiteDatabase::~SQLiteDatabase ()
   const int rc = sqlite3_close (db);
   if (rc != SQLITE_OK)
     LOG (ERROR) << "Failed to close SQLite database";
+
+  if (parent != nullptr)
+    parent->UnrefSnapshot ();
+}
+
+void
+SQLiteDatabase::SetReadonlySnapshot (const SQLiteStorage& p)
+{
+  CHECK (parent == nullptr);
+  parent = &p;
+  LOG (INFO) << "Starting read transaction for snapshot";
+
+  /* There is no way to do an "immediate" read transaction.  Thus we have
+     to start a default deferred one, and then issue some SELECT query
+     that we don't really care about and that is guaranteed to work.  */
+
+  auto* stmt = PrepareRo ("BEGIN");
+  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+
+  stmt = PrepareRo ("SELECT COUNT(*) FROM `sqlite_master`");
+  CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW);
+  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
 }
 
 sqlite3_stmt*
@@ -159,6 +193,12 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
 
 /* ************************************************************************** */
 
+SQLiteStorage::~SQLiteStorage ()
+{
+  if (db != nullptr)
+    CloseDatabase ();
+}
+
 void
 SQLiteStorage::OpenDatabase ()
 {
@@ -167,6 +207,20 @@ SQLiteStorage::OpenDatabase ()
           SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
 
   SetupSchema ();
+}
+
+void
+SQLiteStorage::CloseDatabase ()
+{
+  CHECK (db != nullptr);
+
+  std::unique_lock<std::mutex> lock(mutSnapshots);
+  LOG_IF (INFO, snapshots > 0)
+      << "Waiting for outstanding snapshots to be finished...";
+  while (snapshots > 0)
+    cvSnapshots.wait (lock);
+
+  db.reset ();
 }
 
 SQLiteDatabase&
@@ -181,6 +235,34 @@ SQLiteStorage::GetDatabase () const
 {
   CHECK (db != nullptr);
   return *db;
+}
+
+std::unique_ptr<SQLiteDatabase>
+SQLiteStorage::GetSnapshot () const
+{
+  CHECK (db != nullptr);
+  if (!db->IsWalMode ())
+    {
+      LOG (WARNING) << "Snapshot is not possible for non-WAL database";
+      return nullptr;
+    }
+
+  std::lock_guard<std::mutex> lock(mutSnapshots);
+  ++snapshots;
+
+  auto res = std::make_unique<SQLiteDatabase> (filename, SQLITE_OPEN_READONLY);
+  res->SetReadonlySnapshot (*this);
+
+  return res;
+}
+
+void
+SQLiteStorage::UnrefSnapshot () const
+{
+  std::lock_guard<std::mutex> lock(mutSnapshots);
+  CHECK_GT (snapshots, 0);
+  --snapshots;
+  cvSnapshots.notify_all ();
 }
 
 /**
@@ -224,7 +306,7 @@ SQLiteStorage::Initialise ()
 void
 SQLiteStorage::Clear ()
 {
-  db.reset ();
+  CloseDatabase ();
 
   if (filename == ":memory:")
     LOG (INFO)
