@@ -25,6 +25,46 @@ SQLiteErrorLogger (void* arg, const int errCode, const char* msg)
   LOG (ERROR) << "SQLite error (code " << errCode << "): " << msg;
 }
 
+/**
+ * Binds a BLOB corresponding to an uint256 value to a statement parameter.
+ * The value is bound using SQLITE_STATIC, so the uint256's data must not be
+ * changed until the statement execution has finished.
+ */
+void
+BindUint256 (sqlite3_stmt* stmt, const int ind, const uint256& value)
+{
+  const int rc = sqlite3_bind_blob (stmt, ind,
+                                    value.GetBlob (), uint256::NUM_BYTES,
+                                    SQLITE_STATIC);
+  if (rc != SQLITE_OK)
+    LOG (FATAL) << "Failed to bind uint256 value to parameter: " << rc;
+}
+
+/**
+ * Binds a BLOB parameter to a std::string value.  The value is bound using
+ * SQLITE_STATIC, so the underlying string must remain valid until execution
+ * of the prepared statement is done.
+ */
+void
+BindStringBlob (sqlite3_stmt* stmt, const int ind, const std::string& value)
+{
+  const int rc = sqlite3_bind_blob (stmt, ind, &value[0], value.size (),
+                                    SQLITE_STATIC);
+  if (rc != SQLITE_OK)
+    LOG (FATAL) << "Failed to bind string value to parameter: " << rc;
+}
+
+/**
+ * Retrieves a column value from a BLOB field as std::string.
+ */
+std::string
+GetStringBlob (sqlite3_stmt* stmt, const int ind)
+{
+  const void* blob = sqlite3_column_blob (stmt, ind);
+  const size_t blobSize = sqlite3_column_bytes (stmt, ind);
+  return std::string (static_cast<const char*> (blob), blobSize);
+}
+
 } // anonymous namespace
 
 bool SQLiteDatabase::loggerInitialised = false;
@@ -56,6 +96,15 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
 
   CHECK (db != nullptr);
   LOG (INFO) << "Opened SQLite database successfully: " << file;
+
+  auto* stmt = Prepare ("PRAGMA `journal_mode` = WAL");
+  CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW);
+  const auto mode = GetStringBlob (stmt, 0);
+  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  if (mode == "wal")
+    LOG (INFO) << "Set database to WAL mode";
+  else
+    LOG (WARNING) << "Failed to set WAL mode, journaling is " << mode;
 }
 
 SQLiteDatabase::~SQLiteDatabase ()
@@ -109,51 +158,6 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
 }
 
 /* ************************************************************************** */
-
-namespace
-{
-
-/**
- * Binds a BLOB corresponding to an uint256 value to a statement parameter.
- * The value is bound using SQLITE_STATIC, so the uint256's data must not be
- * changed until the statement execution has finished.
- */
-void
-BindUint256 (sqlite3_stmt* stmt, const int ind, const uint256& value)
-{
-  const int rc = sqlite3_bind_blob (stmt, ind,
-                                    value.GetBlob (), uint256::NUM_BYTES,
-                                    SQLITE_STATIC);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind uint256 value to parameter: " << rc;
-}
-
-/**
- * Binds a BLOB parameter to a std::string value.  The value is bound using
- * SQLITE_STATIC, so the underlying string must remain valid until execution
- * of the prepared statement is done.
- */
-void
-BindStringBlob (sqlite3_stmt* stmt, const int ind, const std::string& value)
-{
-  const int rc = sqlite3_bind_blob (stmt, ind, &value[0], value.size (),
-                                    SQLITE_STATIC);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind string value to parameter: " << rc;
-}
-
-/**
- * Retrieves a column value from a BLOB field as std::string.
- */
-std::string
-GetStringBlob (sqlite3_stmt* stmt, const int ind)
-{
-  const void* blob = sqlite3_column_blob (stmt, ind);
-  const size_t blobSize = sqlite3_column_bytes (stmt, ind);
-  return std::string (static_cast<const char*> (blob), blobSize);
-}
-
-} // anonymous namespace
 
 void
 SQLiteStorage::OpenDatabase ()
