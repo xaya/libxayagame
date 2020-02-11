@@ -1,19 +1,24 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "random.hpp"
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <glog/logging.h>
 
 #include <limits>
+#include <map>
+#include <vector>
 
 namespace xaya
 {
 namespace
 {
+
+using testing::ElementsAre;
 
 /** The seed (as hex string) that we use in tests.  */
 constexpr const char SEED[]
@@ -185,6 +190,53 @@ TEST_F (RandomTests, BranchingOff)
 
   /* Verify the state of the initial Random again.  */
   ASSERT_EQ (rnd.Next<uint32_t> (), 0x67d811d6);
+}
+
+class ShuffleTests : public RandomTests
+{
+
+protected:
+
+  /**
+   * Shuffles a given vector of ints.
+   */
+  std::vector<int>
+  Shuffle (std::vector<int> vec)
+  {
+    rnd.Shuffle (vec.begin (), vec.end ());
+    return vec;
+  }
+
+};
+
+TEST_F (ShuffleTests, Basic)
+{
+  /* Make sure that shuffling an empty or one-element array won't change
+     the state of the random instance.  */
+  EXPECT_THAT (Shuffle ({}), ElementsAre ());
+  EXPECT_THAT (Shuffle ({42}), ElementsAre (42));
+  EXPECT_EQ (rnd.Next<uint32_t> (), 0x7ca22c16);
+
+  /* Do a proper shuffle and compare to expected "golden" data to ensure
+     we are not accidentally changing the algorithm.  */
+  EXPECT_THAT (Shuffle ({-5, 10, 0, 1'024, 20}),
+               ElementsAre (0, 1'024, 20, 10, -5));
+}
+
+TEST_F (ShuffleTests, AllPermutationsPossible)
+{
+  const std::vector<int> input = {0, 1, 2, 3, 4};
+  constexpr unsigned trials = 1'000'000;
+  constexpr unsigned factorial = 1 * 2 * 3 * 4 * 5;
+  constexpr unsigned threshold = 95 * trials / factorial / 100;
+
+  std::map<std::vector<int>, int> found;
+  for (unsigned i = 0; i < trials; ++i)
+    ++found[Shuffle (input)];
+
+  EXPECT_EQ (found.size (), factorial);
+  for (const auto& entry : found)
+    EXPECT_GE (entry.second, threshold);
 }
 
 } // anonymous namespace

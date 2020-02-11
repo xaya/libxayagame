@@ -17,7 +17,7 @@ xayautil_HEADERS = \
   compression.hpp \
   cryptorand.hpp \
   hash.hpp \
-  random.hpp \
+  random.hpp random.tpp \
   uint256.hpp
 noinst_HEADERS = \
   compression_internal.hpp
