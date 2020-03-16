@@ -131,6 +131,7 @@ public:
     LOG (INFO) << "Should fail is now: " << shouldFail;
   }
 
+  using SQLiteGame::GetCustomStateData;
   using SQLiteGame::GetDatabaseForTesting;
 
 };
@@ -501,14 +502,14 @@ TEST_F (GameStateStringTests, InitialWrongHash)
   rules.GetStorage ().CommitTransaction ();
   EXPECT_DEATH (
       rules.GameStateToJson ("initial"),
-      "does not match the game's initial block");
+      "inconsistent to database");
 }
 
 TEST_F (GameStateStringTests, WrongBlockHash)
 {
   EXPECT_DEATH (
       rules.GameStateToJson ("block " + BlockHash (42).ToHex ()),
-      "does not match claimed current game state");
+      "inconsistent to database");
 }
 
 TEST_F (GameStateStringTests, InvalidString)
@@ -848,6 +849,81 @@ TEST_F (MessForDebugTests, UnorderedSelect)
   const auto after = GetUnorderedUsernames (rules->GetDatabaseForTesting ());
 
   EXPECT_NE (before, after);
+}
+
+/* ************************************************************************** */
+
+class UnblockedStateExtractionTests : public PersistenceTests
+{
+
+protected:
+
+  UnblockedStateExtractionTests ()
+  {
+    /* We need to attach a block first so we get a cached height.  If we were
+       to use GetCustomStateData directly with the initial state, then it
+       would fail due to missing RPC client (used to query for the non-cached
+       current block height).  */
+    AttachBlock (game, BlockHash (11), ChatGame::Moves ({{"domob", "old"}}));
+  }
+
+  /**
+   * Queries for the current game state using GetCustomStateData and returns
+   * the last message of the given name.  The function also sleeps for
+   * a given number of milliseconds.
+   */
+  std::string
+  GetLastMessage (const std::string& name, const int msSleep)
+  {
+    const auto jsonState = rules->GetCustomStateData (game, "data",
+        [&] (const SQLiteDatabase& db)
+        {
+          std::this_thread::sleep_for (std::chrono::milliseconds (msSleep));
+          const auto stateMap = ChatGame::GetState (db);
+          return stateMap.at (name);
+        });
+    return jsonState["data"].asString ();
+  }
+
+};
+
+TEST_F (UnblockedStateExtractionTests, UnblockedCallbackOnSnapshot)
+{
+  std::atomic<bool> firstStarted;
+  std::atomic<bool> firstDone;
+  firstStarted = false;
+  firstDone = false;
+
+  std::thread first([&] ()
+    {
+      firstStarted = true;
+      LOG (INFO) << "Long call started";
+      EXPECT_EQ (GetLastMessage ("domob", 100), "old");
+      LOG (INFO) << "Long call done";
+      firstDone = true;
+    });
+
+  while (!firstStarted)
+    std::this_thread::sleep_for (std::chrono::milliseconds (1));
+
+  AttachBlock (game, BlockHash (12), ChatGame::Moves ({{"domob", "new"}}));
+  LOG (INFO) << "Starting short call";
+  EXPECT_EQ (GetLastMessage ("domob", 1), "new");
+  LOG (INFO) << "Short call done";
+
+  EXPECT_FALSE (firstDone);
+  first.join ();
+}
+
+TEST_F (UnblockedStateExtractionTests, UncommittedChanges)
+{
+  /* Add an extra save point, so that the block attach will not be committed
+     yet and thus a snapshot will not be consistent with the expected state.  */
+  auto& db = rules->GetDatabaseForTesting ();
+  CHECK_EQ (sqlite3_step (db.Prepare ("SAVEPOINT `uncommitted`")), SQLITE_DONE);
+
+  AttachBlock (game, BlockHash (12), ChatGame::Moves ({{"domob", "new"}}));
+  EXPECT_EQ (GetLastMessage ("domob", 1), "new");
 }
 
 /* ************************************************************************** */

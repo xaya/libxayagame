@@ -11,12 +11,16 @@
 
 #include <sqlite3.h>
 
+#include <condition_variable>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace xaya
 {
+
+class SQLiteStorage;
 
 /**
  * Wrapper around an SQLite database connection.  This object mostly holds
@@ -39,10 +43,39 @@ private:
   sqlite3* db;
 
   /**
+   * Whether or not we have WAL mode on the database.  This is required
+   * to support snapshots.  It may not be the case if we have an in-memory
+   * database.
+   */
+  bool walMode;
+
+  /** The "parent" storage if this is a read-only snapshot.  */
+  const SQLiteStorage* parent = nullptr;
+
+  /**
    * A cache of prepared statements (mapping from the SQL command to the
    * statement pointer).
    */
   mutable std::map<std::string, sqlite3_stmt*> preparedStatements;
+
+  /**
+   * Marks this is a read-only snapshot (with the given parent storage).  When
+   * called, this starts a read transaction to ensure that the current view is
+   * preserved for all future queries.  It also registers this as outstanding
+   * snapshot with the parent.
+   */
+  void SetReadonlySnapshot (const SQLiteStorage& p);
+
+  /**
+   * Returns whether or not the database is using WAL mode.
+   */
+  bool
+  IsWalMode () const
+  {
+    return walMode;
+  }
+
+  friend class SQLiteStorage;
 
 public:
 
@@ -130,10 +163,33 @@ private:
   bool startedTransaction = false;
 
   /**
+   * Number of outstanding snapshots.  This has to drop to zero before
+   * we can close the database.
+   */
+  mutable unsigned snapshots = 0;
+
+  /** Mutex for the snapshot number.  */
+  mutable std::mutex mutSnapshots;
+  /** Condition variable for waiting for snapshot unrefs.  */
+  mutable std::condition_variable cvSnapshots;
+
+  /**
    * Opens the database at filename into db.  It is an error if the
    * database is already opened.
    */
   void OpenDatabase ();
+
+  /**
+   * Closes the database, making sure to wait for all outstanding snapshots.
+   */
+  void CloseDatabase ();
+
+  /**
+   * Decrements the count of outstanding snapshots.
+   */
+  void UnrefSnapshot () const;
+
+  friend class SQLiteDatabase;
 
 protected:
 
@@ -160,17 +216,34 @@ protected:
   const SQLiteDatabase& GetDatabase () const;
 
   /**
+   * Creates a read-only snapshot of the underlying database and returns
+   * the corresponding SQLiteDatabase instance.  May return NULL if the
+   * underlying database is not using WAL mode (e.g. in-memory).
+   */
+  std::unique_ptr<SQLiteDatabase> GetSnapshot () const;
+
+  /**
    * Steps a given statement and expects no results (i.e. for an update).
    * Can also be used for statements where we expect exactly one result to
    * verify that no more are there.
    */
   static void StepWithNoResult (sqlite3_stmt* stmt);
 
+  /**
+   * Returns the current block hash (if any) for the given database connection.
+   * This method needs to be separated from the instance GetCurrentBlockHash
+   * without database argument so that it can be used with snapshots in
+   * SQLiteGame.
+   */
+  static bool GetCurrentBlockHash (const SQLiteDatabase& db, uint256& hash);
+
 public:
 
   explicit SQLiteStorage (const std::string& f)
     : filename(f)
   {}
+
+  ~SQLiteStorage ();
 
   SQLiteStorage () = delete;
   SQLiteStorage (const SQLiteStorage&) = delete;

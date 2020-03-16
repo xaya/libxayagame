@@ -277,6 +277,15 @@ public:
   static constexpr int WAITFORCHANGE_ALWAYS_BLOCK = 0;
 
   /**
+   * Callback function that retrieves custom state JSON from a game state
+   * and that requires a lock on the Game instance.
+   */
+  using ExtractJsonFromStateWithLock
+    = std::function<Json::Value (const GameStateData& state,
+                                 const uint256& hash, unsigned height,
+                                 std::unique_lock<std::mutex> lock)>;
+
+  /**
    * Callback function that retrieves some custom state JSON from
    * a game state with block height information.
    */
@@ -366,6 +375,20 @@ public:
   {
     mainLoop.Stop ();
   }
+
+  /**
+   * Returns a JSON object that contains information about the current
+   * syncing state and custom information extracted by a callback from the
+   * game state.
+   *
+   * The callback will be provided with a std::unique_lock on the Game
+   * instance, so it has the ability to control the potential for
+   * parallel calls (e.g. if it needs to obtain a database snapshot
+   * before allowing other threads to modify the instance).
+   */
+  Json::Value GetCustomStateData (
+      const std::string& jsonField,
+      const ExtractJsonFromStateWithLock& cb) const;
 
   /**
    * Returns a JSON object that contains information about the current
