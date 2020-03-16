@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,10 +22,12 @@
 #include <glog/logging.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <map>
 #include <sstream>
 #include <string>
+#include <thread>
 
 namespace xaya
 {
@@ -729,6 +731,45 @@ TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
   EXPECT_EQ (state["blockhash"], GAME_GENESIS_HASH);
   EXPECT_EQ (state["height"].asInt (), 42);
   EXPECT_EQ (state["gamestate"]["state"], "");
+}
+
+TEST_F (GetCurrentJsonStateTests, CallbackUnblocked)
+{
+  mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
+                                TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+
+  std::atomic<bool> firstStarted;
+  std::atomic<bool> firstDone;
+  firstStarted = false;
+  firstDone = false;
+
+  std::thread first([&] ()
+    {
+      g.GetCustomStateData ("data",
+          [&] (const GameStateData& state)
+          {
+            LOG (INFO) << "Long callback started";
+            firstStarted = true;
+            std::this_thread::sleep_for (std::chrono::milliseconds (100));
+            LOG (INFO) << "Long callback done";
+            return Json::Value ();
+          });
+      firstDone = true;
+    });
+
+  while (!firstStarted)
+    std::this_thread::sleep_for (std::chrono::milliseconds (1));
+
+  g.GetCustomStateData ("data",
+      [&] (const GameStateData& state)
+      {
+        LOG (INFO) << "Second (short) callback";
+        return Json::Value ();
+      });
+
+  EXPECT_FALSE (firstDone);
+  first.join ();
 }
 
 /* ************************************************************************** */

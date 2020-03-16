@@ -490,8 +490,10 @@ SQLiteGame::GetCustomStateData (
 {
   return game.GetCustomStateData (jsonField,
       [this, &cb] (const GameStateData& state, const uint256& hash,
-                   const unsigned height)
+                   const unsigned height, std::unique_lock<std::mutex> lock)
         {
+          /* Since state does not actually encapsulate the entire state (which
+             is in the global database), we need to keep the lock.  */
           EnsureCurrentState (state);
           return cb (database->GetDatabase (), hash, height);
         });

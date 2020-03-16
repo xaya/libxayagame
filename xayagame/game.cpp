@@ -575,7 +575,7 @@ Game::DetectZmqEndpoint ()
 Json::Value
 Game::GetCustomStateData (
     const std::string& jsonField,
-    const ExtractJsonFromStateWithBlock& cb) const
+    const ExtractJsonFromStateWithLock& cb) const
 {
   std::unique_lock<std::mutex> lock(mut);
 
@@ -586,16 +586,31 @@ Game::GetCustomStateData (
 
   uint256 hash;
   unsigned height;
-  if (storage->GetCurrentBlockHashWithHeight (hash, height))
-    {
-      res["blockhash"] = hash.ToHex ();
-      res["height"] = height;
+  if (!storage->GetCurrentBlockHashWithHeight (hash, height))
+    return res;
 
-      const GameStateData gameState = storage->GetCurrentGameState ();
-      res[jsonField] = cb (gameState, hash, height);
-    }
+  res["blockhash"] = hash.ToHex ();
+  res["height"] = height;
+
+  const GameStateData gameState = storage->GetCurrentGameState ();
+  res[jsonField] = cb (gameState, hash, height, std::move (lock));
 
   return res;
+}
+
+Json::Value
+Game::GetCustomStateData (
+    const std::string& jsonField,
+    const ExtractJsonFromStateWithBlock& cb) const
+{
+  return GetCustomStateData (jsonField,
+    [&cb] (const GameStateData& state, const uint256& hash,
+           const unsigned height,
+           std::unique_lock<std::mutex> lock)
+    {
+      lock.unlock ();
+      return cb (state, hash, height);
+    });
 }
 
 Json::Value
@@ -615,8 +630,15 @@ Json::Value
 Game::GetCurrentJsonState () const
 {
   return GetCustomStateData ("gamestate",
-      [this] (const GameStateData& state)
+      [this] (const GameStateData& state,
+              const uint256& hash, const unsigned height,
+              std::unique_lock<std::mutex> lock)
         {
+          /* We keep the lock for the callback here, since e.g. SQLiteGame
+             requires the state to be locked during GameStateToJson.  This
+             method is not meant for performance critical tasks anyway, in
+             which case specific data should be extracted using
+             GetCustomStateData instead.  */
           return rules->GameStateToJson (state);
         });
 }
