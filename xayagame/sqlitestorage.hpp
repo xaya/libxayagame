@@ -229,6 +229,14 @@ protected:
    */
   static void StepWithNoResult (sqlite3_stmt* stmt);
 
+  /**
+   * Returns the current block hash (if any) for the given database connection.
+   * This method needs to be separated from the instance GetCurrentBlockHash
+   * without database argument so that it can be used with snapshots in
+   * SQLiteGame.
+   */
+  static bool GetCurrentBlockHash (const SQLiteDatabase& db, uint256& hash);
+
 public:
 
   explicit SQLiteStorage (const std::string& f)

@@ -324,9 +324,9 @@ SQLiteStorage::Clear ()
 }
 
 bool
-SQLiteStorage::GetCurrentBlockHash (uint256& hash) const
+SQLiteStorage::GetCurrentBlockHash (const SQLiteDatabase& db, uint256& hash)
 {
-  auto* stmt = db->Prepare (R"(
+  auto* stmt = db.PrepareRo (R"(
     SELECT `value` FROM `xayagame_current` WHERE `key` = 'blockhash'
   )");
 
@@ -344,6 +344,12 @@ SQLiteStorage::GetCurrentBlockHash (uint256& hash) const
 
   StepWithNoResult (stmt);
   return true;
+}
+
+bool
+SQLiteStorage::GetCurrentBlockHash (uint256& hash) const
+{
+  return GetCurrentBlockHash (*db, hash);
 }
 
 GameStateData

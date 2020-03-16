@@ -105,7 +105,7 @@ private:
    * Checks whether the game-state is marked as "initialised" in the
    * internal bookkeeping table.
    */
-  bool IsGameInitialised () const;
+  static bool IsGameInitialised (const SQLiteDatabase& db);
 
   /**
    * Initialises the game state in the database by calling InitialiseState
@@ -115,9 +115,10 @@ private:
 
   /**
    * Verifies that the database state corresponds to the given "current state"
-   * from libxayagame.
+   * from libxayagame.  Returns false if not.
    */
-  void EnsureCurrentState (const GameStateData& state);
+  bool CheckCurrentState (const SQLiteDatabase& db,
+                          const GameStateData& state) const;
 
   friend class SQLiteGame;
 
@@ -170,9 +171,9 @@ public:
 };
 
 bool
-SQLiteGame::Storage::IsGameInitialised () const
+SQLiteGame::Storage::IsGameInitialised (const SQLiteDatabase& db)
 {
-  auto* stmt = GetDatabase ().PrepareRo (R"(
+  auto* stmt = db.PrepareRo (R"(
     SELECT `gamestate_initialised` FROM `xayagame_gamevars`
   )");
 
@@ -187,13 +188,13 @@ SQLiteGame::Storage::IsGameInitialised () const
 void
 SQLiteGame::Storage::InitialiseGame ()
 {
-  if (IsGameInitialised ())
+  auto& db = GetDatabase ();
+
+  if (IsGameInitialised (db))
     {
       VLOG (1) << "Game state is already initialised in the database";
       return;
     }
-
-  auto& db = GetDatabase ();
 
   LOG (INFO) << "Setting initial state in the DB";
   StepWithNoResult (db.Prepare ("SAVEPOINT `xayagame-stateinit`"));
@@ -215,26 +216,35 @@ SQLiteGame::Storage::InitialiseGame ()
     }
 }
 
-void
-SQLiteGame::Storage::EnsureCurrentState (const GameStateData& state)
+bool
+SQLiteGame::Storage::CheckCurrentState (const SQLiteDatabase& db,
+                                        const GameStateData& state) const
 {
-  VLOG (1) << "Ensuring current database matches game state: " << state;
+  VLOG (1) << "Checking if current database matches game state: " << state;
 
   /* In any case, state-based methods of GameLogic are only ever called when
      there is already a "current state" in the storage.  */
   uint256 hash;
-  CHECK (GetCurrentBlockHash (hash));
+  if (!GetCurrentBlockHash (db, hash))
+    {
+      VLOG (1) << "No current block hash in the database";
+      return false;
+    }
   const std::string hashHex = hash.ToHex ();
 
   /* Handle the case of a regular block hash (no initial state).  */
   const size_t prefixLen = std::strlen (BLOCKHASH_STATE);
   if (state.substr (0, prefixLen) == BLOCKHASH_STATE)
     {
-      CHECK (hashHex == state.substr (prefixLen))
-          << "Current best block in the database (" << hashHex
-          << ") does not match claimed current game state";
-      CHECK (IsGameInitialised ());
-      return;
+      if (hashHex != state.substr (prefixLen))
+        {
+          VLOG (1)
+              << "Current best block in the database (" << hashHex
+              << ") does not match claimed current game state";
+          return false;
+        }
+      CHECK (IsGameInitialised (db));
+      return true;
     }
 
   /* Verify initial state.  */
@@ -242,10 +252,15 @@ SQLiteGame::Storage::EnsureCurrentState (const GameStateData& state)
   unsigned height;
   std::string initialHashHex;
   game.GetInitialStateBlock (height, initialHashHex);
-  CHECK (hashHex == initialHashHex)
-      << "Current best block in the database (" << hashHex
-      << ") does not match the game's initial block " << initialHashHex;
-  CHECK (IsGameInitialised ());
+  if (hashHex != initialHashHex)
+    {
+      VLOG (1)
+          << "Current best block in the database (" << hashHex
+          << ") does not match the game's initial block " << initialHashHex;
+      return false;
+    }
+  CHECK (IsGameInitialised (db));
+  return true;
 }
 
 /* ************************************************************************** */
@@ -259,7 +274,8 @@ void
 SQLiteGame::EnsureCurrentState (const GameStateData& state)
 {
   CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
-  database->EnsureCurrentState (state);
+  CHECK (database->CheckCurrentState (database->GetDatabase (), state))
+      << "Game state is inconsistent to database";
 }
 
 void
@@ -492,8 +508,24 @@ SQLiteGame::GetCustomStateData (
       [this, &cb] (const GameStateData& state, const uint256& hash,
                    const unsigned height, std::unique_lock<std::mutex> lock)
         {
-          /* Since state does not actually encapsulate the entire state (which
-             is in the global database), we need to keep the lock.  */
+          CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
+
+          auto snapshot = database->GetSnapshot ();
+          if (snapshot != nullptr
+                && database->CheckCurrentState (*snapshot, state))
+            {
+              /* We have a valid snapshot matching the expected block hash,
+                 so we can release the main lock and extract the custom state
+                 data from the snapshot instead.  */
+              lock.unlock ();
+              return cb (*snapshot, hash, height);
+            }
+
+          /* Otherwise keep the lock and extract from the main database
+             connection instead.  This may be needed e.g. if there are
+             batched and uncommitted changes on the database during initial
+             catching up.  */
+          LOG (WARNING) << "Using main database for GetCustomStateData";
           EnsureCurrentState (state);
           return cb (database->GetDatabase (), hash, height);
         });
