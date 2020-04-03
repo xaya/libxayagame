@@ -1,4 +1,4 @@
-# Copyright (C) 2019 The Xaya developers
+# Copyright (C) 2019-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,7 +7,7 @@ Integration tests running channel daemons in addition to Xaya Core
 on regtest and a GSP.
 """
 
-import rpcbroadcast
+from . import rpcbroadcast
 
 from xayagametest.testcase import XayaGameTest
 

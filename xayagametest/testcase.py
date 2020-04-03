@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2019 The Xaya developers
+# Copyright (C) 2018-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,9 +6,9 @@
 Basic framework for integration tests of Xaya games.
 """
 
-import game
-import premine
-import xaya
+from . import game
+from . import premine
+from . import xaya
 
 import argparse
 import json
