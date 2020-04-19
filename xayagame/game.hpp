@@ -425,6 +425,14 @@ public:
   Json::Value GetCurrentJsonState () const;
 
   /**
+   * Returns a JSON object that just contains basic stats about the game daemon
+   * itself (e.g. syncing state, current block height) but no specific pieces
+   * of data about the game state.  This is useful as the cheapest possible
+   * way to check on the health and connection state of a game daemon.
+   */
+  Json::Value GetNullJsonState () const;
+
+  /**
    * Returns a JSON object that contains data about the current state
    * of pending moves as JSON.
    *

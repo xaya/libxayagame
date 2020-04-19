@@ -315,12 +315,23 @@ class XayaGameTest (object):
 
       if state["state"] == "up-to-date" and state["blockhash"] == bestblk:
         self.assertEqual (state["height"], bestheight)
-        return state[field]
+
+        if field is not None:
+          return state[field]
+        return
 
       self.log.warning (("Game state (%s, %s) does not match"
                             +" the best block (%s), waiting")
           % (state["state"], state["blockhash"], bestblk))
       time.sleep (0.1)
+
+  def syncGame (self):
+    """
+    Waits for the game daemon to sync up to the current Xaya Core
+    blockchain state.
+    """
+
+    self.getCustomState (None, "getnullstate")
 
   def getGameState (self):
     """

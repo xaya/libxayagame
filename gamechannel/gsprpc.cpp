@@ -34,6 +34,13 @@ ChannelGspRpcServer::getcurrentstate ()
 }
 
 Json::Value
+ChannelGspRpcServer::getnullstate ()
+{
+  LOG (INFO) << "RPC method called: getnullstate";
+  return game.GetNullJsonState ();
+}
+
+Json::Value
 ChannelGspRpcServer::getpendingstate ()
 {
   LOG (INFO) << "RPC method called: getpendingstate";

@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -44,6 +44,7 @@ public:
 
   virtual void stop () override;
   virtual Json::Value getcurrentstate () override;
+  virtual Json::Value getnullstate () override;
   virtual Json::Value getpendingstate () override;
   virtual Json::Value getchannel (const std::string& channelId) override;
   virtual std::string waitforchange (const std::string& knownBlock) override;

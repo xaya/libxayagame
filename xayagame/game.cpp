@@ -644,6 +644,18 @@ Game::GetCurrentJsonState () const
 }
 
 Json::Value
+Game::GetNullJsonState () const
+{
+  Json::Value res = GetCustomStateData ("data",
+      [] (const GameStateData& state)
+        {
+          return Json::Value ();
+        });
+  res.removeMember ("data");
+  return res;
+}
+
+Json::Value
 Game::GetPendingJsonState () const
 {
   std::unique_lock<std::mutex> lock(mut);

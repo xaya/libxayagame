@@ -11,6 +11,7 @@ REGTESTS = \
   bind_locally.py \
   catching_up.py \
   dupjsonkeys.py \
+  getnullstate.py \
   pending-disabled.py \
   pending-onesocket.py \
   pending-twosockets.py \
