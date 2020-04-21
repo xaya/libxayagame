@@ -54,7 +54,7 @@ RUN cmake . && make && make install
 
 # The ZMQ C++ bindings need to be installed from source.
 WORKDIR /usr/src/cppzmq
-RUN git clone https://github.com/zeromq/cppzmq .
+RUN git clone -b v4.6.0 https://github.com/zeromq/cppzmq .
 RUN cp zmq.hpp /usr/local/include
 
 # Make sure all installed dependencies are visible.
