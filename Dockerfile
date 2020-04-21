@@ -11,7 +11,6 @@ RUN apt-get update && apt-get install -y \
   libcurl4-openssl-dev \
   libgflags-dev \
   libgoogle-glog-dev \
-  libjsoncpp-dev \
   liblmdb-dev \
   libmicrohttpd-dev \
   libprotobuf-dev \
@@ -35,6 +34,15 @@ RUN apt-get update && apt-get install -y \
   libtool \
   pkg-config \
   protobuf-compiler
+
+# Build and install jsoncpp from source.  This is required at least until
+# a version >= 1.7.5 is part of the base image.  That version includes
+# an important fix for JSON parsing in some GSPs.
+WORKDIR /usr/src/jsoncpp
+RUN git clone -b 1.8.4 https://github.com/open-source-parsers/jsoncpp .
+RUN cmake . \
+  -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF \
+  && make && make install
 
 # We need to install libjson-rpc-cpp from source.
 WORKDIR /usr/src/libjson-rpc-cpp
