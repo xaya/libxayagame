@@ -20,7 +20,8 @@ REGTESTS = \
   pruning.py \
   reorg.py \
   stopped_xayad.py \
-  waitforchange.py
+  waitforchange.py \
+  xayarpcwait.py
 
 # Additional tests which are not run as part of "make check" but can be
 # run manually.  They are resource and time consuming, so that running them

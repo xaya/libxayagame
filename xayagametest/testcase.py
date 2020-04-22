@@ -206,13 +206,13 @@ class XayaGameTest (object):
 
     self.xayanode.stop ()
 
-  def startGameDaemon (self, extraArgs=[]):
+  def startGameDaemon (self, extraArgs=[], wait=True):
     """
     Starts the game daemon (again).  This can be used to test situations where
     the game daemon is restarted and needs to catch up.
     """
 
-    self.gamenode.start (self.xayanode.rpcurl, extraArgs)
+    self.gamenode.start (self.xayanode.rpcurl, extraArgs, wait=wait)
     self.rpc.game = self.gamenode.rpc
 
   def stopGameDaemon (self):

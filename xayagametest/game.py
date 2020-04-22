@@ -57,7 +57,7 @@ class Node ():
 
     self.proc = None
 
-  def start (self, xayarpc, extraArgs=[]):
+  def start (self, xayarpc, extraArgs=[], wait=True):
     if self.proc is not None:
       self.log.error ("Game process is already running, not starting again")
       return
@@ -74,14 +74,15 @@ class Node ():
 
     self.rpc = self.createRpc ()
 
-    self.log.info ("Waiting for the JSON-RPC server to be up...")
-    while True:
-      try:
-        data = self.rpc.getcurrentstate ()
-        self.log.info ("Game daemon is up, chain = %s" % data["chain"])
-        break
-      except:
-        time.sleep (1)
+    if wait:
+      self.log.info ("Waiting for the JSON-RPC server to be up...")
+      while True:
+        try:
+          data = self.rpc.getcurrentstate ()
+          self.log.info ("Game daemon is up, chain = %s" % data["chain"])
+          break
+        except:
+          time.sleep (1)
 
   def stop (self):
     if self.proc is None:

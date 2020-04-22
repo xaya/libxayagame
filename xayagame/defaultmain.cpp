@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,14 +8,19 @@
 #include "lmdbstorage.hpp"
 #include "sqlitestorage.hpp"
 
+#include "rpc-stubs/xayarpcclient.h"
+
 #include <jsonrpccpp/client/connectors/httpclient.h>
+#include <jsonrpccpp/common/exception.h>
 
 #include <glog/logging.h>
 
 #include <experimental/filesystem>
 
+#include <chrono>
 #include <cstdlib>
 #include <exception>
+#include <thread>
 
 namespace xaya
 {
@@ -141,6 +146,31 @@ VerifyXayaVersion (const GameDaemonConfiguration& config, const unsigned v)
     CHECK_LE (v, config.MaxXayaVersion) << "Xaya Core is too new";
 }
 
+/**
+ * Waits for the Xaya Core RPC interface to be available on the given
+ * client connector.
+ */
+void
+WaitForXaya (jsonrpc::IClientConnector& conn)
+{
+  LOG (INFO) << "Waiting for Xaya to be up...";
+
+  XayaRpcClient client(conn, jsonrpc::JSONRPC_CLIENT_V1);
+  while (true)
+    try
+      {
+        client.getnetworkinfo ();
+        LOG (INFO) << "Xaya Core is available now";
+        break;
+      }
+    catch (const jsonrpc::JsonRpcException& exc)
+      {
+        VLOG (1) << exc.what ();
+        LOG (INFO) << "Failed to connect to Xaya Core, waiting...";
+        std::this_thread::sleep_for (std::chrono::seconds (1));
+      }
+}
+
 } // anonymous namespace
 
 int
@@ -160,6 +190,9 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
       CHECK (!config.XayaRpcUrl.empty ()) << "XayaRpcUrl must be configured";
       const std::string jsonRpcUrl(config.XayaRpcUrl);
       jsonrpc::HttpClient httpConnector(jsonRpcUrl);
+
+      if (config.XayaRpcWait)
+        WaitForXaya (httpConnector);
 
       auto game = std::make_unique<Game> (gameId);
       game->ConnectRpcClient (httpConnector);
@@ -230,6 +263,9 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
       CHECK (!config.XayaRpcUrl.empty ()) << "XayaRpcUrl must be configured";
       const std::string jsonRpcUrl(config.XayaRpcUrl);
       jsonrpc::HttpClient httpConnector(jsonRpcUrl);
+
+      if (config.XayaRpcWait)
+        WaitForXaya (httpConnector);
 
       auto game = std::make_unique<Game> (gameId);
       game->ConnectRpcClient (httpConnector);

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -179,6 +179,13 @@ struct GameDaemonConfiguration
    * the old game daemon needs to be updated to work with newer Xaya Core.
    */
   unsigned MaxXayaVersion = 0;
+
+  /**
+   * If true, wait for Xaya Core's JSON-RPC interface to be available.
+   * If false (the default), then we fail immediately if the interface
+   * is not yet available on startup.
+   */
+  bool XayaRpcWait = false;
 
   /**
    * The type of JSON-RPC server that should be started for the game
