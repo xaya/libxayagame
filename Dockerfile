@@ -76,4 +76,5 @@ RUN ./autogen.sh && ./configure && make && make install
 # For the final image, just copy over all built / installed stuff.
 FROM basepackages
 COPY --from=build /usr/local /usr/local
+RUN ldconfig
 LABEL description="Debian-based image that includes libxayagame and dependencies prebuilt and installed."
