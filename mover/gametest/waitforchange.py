@@ -28,19 +28,26 @@ class ForChangeWaiter (threading.Thread):
   blocks until it receives the result.
   """
 
-  def __init__ (self, node, method, getOldVersion):
+  def __init__ (self, test, method, getOldVersion):
     super (ForChangeWaiter, self).__init__ ()
-    self.node = node
+    self.test = test
     self.method = method
-    self.getOldVersion = getOldVersion
+    self.oldVersion = getOldVersion (self.createGameRpc ())
     self.result = None
+    self.exc = None
     self.start ()
     sleepSome ()
 
+  def createGameRpc (self):
+    return self.test.gamenode.createRpc ()
+
   def run (self):
-    rpc = self.node.createRpc ()
-    fcn = getattr (rpc, self.method)
-    self.result = fcn (self.getOldVersion (rpc))
+    fcn = getattr (self.createGameRpc (), self.method)
+    try:
+      self.result = fcn (self.oldVersion)
+    except Exception as exc:
+      self.test.log.exception (exc)
+      self.exc = exc
 
   def shouldBeRunning (self):
     sleepSome ()
@@ -50,8 +57,10 @@ class ForChangeWaiter (threading.Thread):
     sleepSome ()
     assert not self.is_alive ()
     self.join ()
+    if self.exc is not None:
+      raise self.exc
     if expected is not None:
-      assert self.result == expected
+      self.test.assertEqual (self.result, expected)
 
 
 class WaitForChangeTest (MoverTest):
@@ -81,7 +90,7 @@ class WaitForChangeTest (MoverTest):
         return state["blockhash"]
       return ""
 
-    return ForChangeWaiter (self.gamenode, "waitforchange", getOldVersion)
+    return ForChangeWaiter (self, "waitforchange", getOldVersion)
 
   def getPendingChangeWaiter (self):
     """
@@ -94,8 +103,7 @@ class WaitForChangeTest (MoverTest):
         return state["version"]
       return 0
 
-    return ForChangeWaiter (self.gamenode, "waitforpendingchange",
-                            getOldVersion)
+    return ForChangeWaiter (self, "waitforpendingchange", getOldVersion)
 
   def test_attach (self):
     self.mainLogger.info ("Block attaches...")
