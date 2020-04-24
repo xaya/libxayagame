@@ -309,15 +309,13 @@ protected:
   Clear () override
   {
     data = Json::Value (Json::objectValue);
-    data["state"] = GetConfirmedState ();
-    data["height"] = static_cast<int> (GetConfirmedHeight ());
   }
 
   void
   AddPendingMove (const Json::Value& mv) override
   {
     data["state"] = GetConfirmedState ();
-    data["height"] = static_cast<int> (GetConfirmedHeight ());
+    data["height"] = GetConfirmedBlock ()["height"].asInt ();
 
     const std::string nm = mv["name"].asString ();
     const std::string val = mv["move"].asString ();
@@ -782,6 +780,9 @@ protected:
   GetPendingJsonStateTests ()
   {
     EXPECT_CALL (*mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
+    EXPECT_CALL (*mockXayaServer, getrawmempool ())
+        .WillRepeatedly (Return (Json::Value (Json::arrayValue)));
+    SetStartingBlock (TestGame::GenesisBlockHash ());
   }
 
   /**
@@ -841,17 +842,18 @@ TEST_F (GetPendingJsonStateTests, PendingState)
                                 TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
 
+  AttachBlock (g, BlockHash (11), Moves (""));
   CallPendingMove (g, Moves ("ax")[0]);
 
   const auto state = g.GetPendingJsonState ();
   EXPECT_EQ (state["gameid"], GAME_ID);
   EXPECT_EQ (state["chain"], "main");
   EXPECT_EQ (state["state"], "up-to-date");
-  EXPECT_EQ (state["blockhash"], GAME_GENESIS_HASH);
+  EXPECT_EQ (state["blockhash"], BlockHash (11).ToHex ());
   EXPECT_EQ (state["pending"], ParseJson (R"(
     {
       "state": "",
-      "height": 10,
+      "height": 2,
       "a": "x"
     }
   )"));
@@ -1060,9 +1062,6 @@ protected:
 
   WaitForPendingChangeTests ()
   {
-    EXPECT_CALL (*mockXayaServer, getrawmempool ())
-        .WillRepeatedly (Return (Json::Value (Json::arrayValue)));
-
     g.SetPendingMoveProcessor (proc);
     SetStartingBlock (TestGame::GenesisBlockHash ());
 
@@ -1129,6 +1128,7 @@ TEST_F (WaitForPendingChangeTests, NotTrackingPendingMoves)
 {
   SetupZmqEndpoints (false);
   g.Start ();
+  AttachBlock (g, BlockHash (11), Moves (""));
 
   Json::Value out;
   CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
@@ -1143,6 +1143,7 @@ TEST_F (WaitForPendingChangeTests, StopWakesUpWaiters)
 {
   SetupZmqEndpoints (true);
   g.Start ();
+  AttachBlock (g, BlockHash (11), Moves (""));
 
   Json::Value out;
   CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
@@ -1157,6 +1158,7 @@ TEST_F (WaitForPendingChangeTests, OldVersionImmediateReturn)
 {
   SetupZmqEndpoints (true);
   g.Start ();
+  AttachBlock (g, BlockHash (11), Moves (""));
 
   const auto state = g.GetPendingJsonState ();
 
@@ -1170,6 +1172,7 @@ TEST_F (WaitForPendingChangeTests, OldVersionWaiting)
 {
   SetupZmqEndpoints (true);
   g.Start ();
+  AttachBlock (g, BlockHash (11), Moves (""));
 
   const int oldVersion = g.GetPendingJsonState ()["version"].asInt ();
 
@@ -1187,6 +1190,7 @@ TEST_F (WaitForPendingChangeTests, PendingMove)
 {
   SetupZmqEndpoints (true);
   g.Start ();
+  AttachBlock (g, BlockHash (11), Moves (""));
 
   Json::Value out;
   CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
@@ -1199,7 +1203,7 @@ TEST_F (WaitForPendingChangeTests, PendingMove)
   EXPECT_EQ (out["pending"], ParseJson (R"(
     {
       "state": "",
-      "height": 10,
+      "height": 2,
       "a": "x"
     }
   )"));
@@ -1209,6 +1213,7 @@ TEST_F (WaitForPendingChangeTests, AttachedBlock)
 {
   SetupZmqEndpoints (true);
   g.Start ();
+  AttachBlock (g, BlockHash (11), Moves (""));
 
   Json::Value out;
   CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
@@ -1216,22 +1221,18 @@ TEST_F (WaitForPendingChangeTests, AttachedBlock)
   SleepSome ();
   EXPECT_FALSE (waiterDone);
 
-  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  AttachBlock (g, BlockHash (12), Moves ("a0b1"));
   JoinWaiter ();
-  EXPECT_EQ (out["pending"], ParseJson (R"(
-    {
-      "state": "a0b1",
-      "height": 2
-    }
-  )"));
+  EXPECT_EQ (out["pending"], ParseJson ("{}"));
 }
 
 TEST_F (WaitForPendingChangeTests, DetachedBlock)
 {
   SetupZmqEndpoints (true);
   g.Start ();
+  AttachBlock (g, BlockHash (11), Moves (""));
 
-  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  AttachBlock (g, BlockHash (12), Moves ("a0b1"));
 
   Json::Value out;
   CallWaitForPendingChange (Game::WAITFORCHANGE_ALWAYS_BLOCK, out);
@@ -1241,12 +1242,7 @@ TEST_F (WaitForPendingChangeTests, DetachedBlock)
 
   DetachBlock (g);
   JoinWaiter ();
-  EXPECT_EQ (out["pending"], ParseJson (R"(
-    {
-      "state": "",
-      "height": 1
-    }
-  )"));
+  EXPECT_EQ (out["pending"], ParseJson ("{}"));
 }
 
 /* ************************************************************************** */
@@ -1520,6 +1516,7 @@ protected:
   PendingMoveUpdateTests ()
   {
     g.SetPendingMoveProcessor (proc);
+    SetMempool ({});
   }
 
   /**
@@ -1569,13 +1566,15 @@ TEST_F (PendingMoveUpdateTests, CatchingUp)
 
 TEST_F (PendingMoveUpdateTests, PendingMoves)
 {
+  AttachBlock (g, BlockHash (11), Moves (""));
+
   const auto mv = Moves ("axbyaz");
   for (const auto& mv : Moves ("axbyaz"))
     CallPendingMove (g, mv);
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "state": "",
-    "height": 10,
+    "height": 2,
     "a": "z",
     "b": "y"
   })"));
@@ -1601,19 +1600,20 @@ TEST_F (PendingMoveUpdateTests, BlockAttach)
 
 TEST_F (PendingMoveUpdateTests, BlockDetach)
 {
+  AttachBlock (g, BlockHash (11), Moves (""));
   SetMempool ({"x"});
 
-  AttachBlock (g, BlockHash (11), Moves ("ax"));
+  AttachBlock (g, BlockHash (12), Moves ("ax"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
-  ExpectGameState (BlockHash (11), "ax");
+  ExpectGameState (BlockHash (12), "ax");
 
   DetachBlock (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
-  ExpectGameState (TestGame::GenesisBlockHash (), "");
+  ExpectGameState (BlockHash (11), "");
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "state": "",
-    "height": 1,
+    "height": 2,
     "a": "x"
   })"));
 }

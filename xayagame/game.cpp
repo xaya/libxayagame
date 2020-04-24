@@ -269,7 +269,7 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
 
   if (state == State::UP_TO_DATE && pending != nullptr)
     {
-      pending->ProcessAttachedBlock (storage->GetCurrentGameState (), height);
+      pending->ProcessAttachedBlock (storage->GetCurrentGameState (), data);
       NotifyPendingStateChange ();
     }
 }
@@ -365,8 +365,7 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
       const unsigned height = data["block"]["height"].asUInt ();
       CHECK_GT (height, 0);
 
-      pending->ProcessDetachedBlock (storage->GetCurrentGameState (),
-                                     height - 1, data);
+      pending->ProcessDetachedBlock (storage->GetCurrentGameState (), data);
       NotifyPendingStateChange ();
     }
 }
@@ -385,11 +384,10 @@ Game::PendingMove (const std::string& id, const Json::Value& data)
   if (state == State::UP_TO_DATE)
     {
       uint256 hash;
-      unsigned height;
-      CHECK (storage->GetCurrentBlockHashWithHeight (hash, height));
+      CHECK (storage->GetCurrentBlockHash (hash));
 
       CHECK (pending != nullptr);
-      pending->ProcessMove (storage->GetCurrentGameState (), height, data);
+      pending->ProcessMove (storage->GetCurrentGameState (), data);
       NotifyPendingStateChange ();
     }
   else

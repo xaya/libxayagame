@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,6 +12,7 @@
 
 #include <json/json.h>
 
+#include <deque>
 #include <memory>
 #include <map>
 
@@ -39,11 +40,14 @@ private:
     /** The current confirmed game state.  */
     const GameStateData& state;
 
-    /** The number of confirmed blocks on the chain.  */
-    const unsigned height;
+    /**
+     * The last confirmed block's meta data as per the Xaya Core ZMQ
+     * notifications, namely the "block" field.
+     */
+    const Json::Value& block;
 
-    explicit CurrentState (const GameStateData& s, const unsigned h)
-      : state(s), height(h)
+    explicit CurrentState (const GameStateData& s, const Json::Value& blk)
+      : state(s), block(blk)
     {}
 
   };
@@ -59,11 +63,23 @@ private:
   std::unique_ptr<CurrentState> ctx;
 
   /**
-   * Resets the internal state, by clearing and then rebuilding from the
-   * list of pending moves, and syncing them with getrawmempool.  This assumes
-   * that the state context is already set up.
+   * In order to know the current confirmed block metadata, we keep track of
+   * a list of the last attached blocks here.  After a certain number of blocks
+   * are in the queue, we keep dropping the oldest ones.
+   *
+   * In theory it might happen that this queue runs empty, e.g. if a long
+   * reorg happens and/or immediately after starting up.  In this case, we
+   * simply stop processing pending moves temporarily (which is fine as it
+   * will happen only very rarely and is not consensus-relevant anyway).
    */
-  void Reset ();
+  std::deque<Json::Value> blockQueue;
+
+  /**
+   * Resets the internal state, by clearing and then rebuilding from the
+   * list of pending moves, and syncing them with getrawmempool.  This sets
+   * up the state context for the given game state and using our blockQueue.
+   */
+  void Reset (const GameStateData& state);
 
   class ContextSetter;
 
@@ -71,16 +87,18 @@ protected:
 
   /**
    * Returns the currently confirmed on-chain game state.  This must only
-   * be called while a callback (Clear or AddPendingMove) is currently
-   * running.
+   * be called while AddPendingMove is currently running.
    */
   const GameStateData& GetConfirmedState () const;
 
   /**
-   * Returns the number of confirmed blocks on the chain (i.e. the current
-   * block height).  Must only be called while a callback is running.
+   * Returns the JSON data of the last confirmed block as per the ZMQ
+   * notifications.  This contains the notification "block" field, i.e.
+   * the block metadata like height or timestamp.
+   *
+   * The function must only be called wile AddPendingMove is running.
    */
-  unsigned GetConfirmedHeight () const;
+  const Json::Value& GetConfirmedBlock () const;
 
   /**
    * Clears the state, so it corresponds to an empty mempool.  This is called
@@ -114,7 +132,8 @@ public:
    * of Xaya Core and then rebuilds the pending state based on known moves
    * that are still in the mempool.
    */
-  void ProcessAttachedBlock (const GameStateData& state, unsigned h);
+  void ProcessAttachedBlock (const GameStateData& state,
+                             const Json::Value& blockData);
 
   /**
    * Processes a detached block.  This clears the pending state and rebuilds
@@ -124,14 +143,13 @@ public:
    * state must be the confirmed game-state *after* the block has been
    * detached already (i.e. the state before, not "at", the block).
    */
-  void ProcessDetachedBlock (const GameStateData& state, unsigned h,
+  void ProcessDetachedBlock (const GameStateData& state,
                              const Json::Value& blockData);
 
   /**
    * Processes a newly received pending move.
    */
-  void ProcessMove (const GameStateData& state, unsigned h,
-                    const Json::Value& mv);
+  void ProcessMove (const GameStateData& state, const Json::Value& mv);
 
   /**
    * Returns a JSON representation of the current state.  This is exposed

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,14 @@
 
 namespace xaya
 {
+
+namespace
+{
+
+/** Size of the in-memory block queue that is kept.  */
+constexpr size_t BLOCK_QUEUE_SIZE = 100;
+
+} // anonymous namespace
 
 /**
  * Helper class to set/unset the current-state context in a PendingMoveProcessor
@@ -27,11 +35,12 @@ public:
    * Sets the context based on the current state.
    */
   explicit ContextSetter (PendingMoveProcessor& p, const GameStateData& s,
-                          const unsigned h)
+                          const Json::Value& blk)
     : proc(p)
   {
     CHECK (proc.ctx == nullptr);
-    proc.ctx = std::make_unique<CurrentState> (s, h);
+    CHECK (blk.isObject ());
+    proc.ctx = std::make_unique<CurrentState> (s, blk);
   }
 
   /**
@@ -52,22 +61,35 @@ PendingMoveProcessor::GetConfirmedState () const
   return ctx->state;
 }
 
-unsigned
-PendingMoveProcessor::GetConfirmedHeight () const
+const Json::Value&
+PendingMoveProcessor::GetConfirmedBlock () const
 {
   CHECK (ctx != nullptr) << "No callback is running at the moment";
-  return ctx->height;
+  return ctx->block;
 }
 
 void
-PendingMoveProcessor::Reset ()
+PendingMoveProcessor::Reset (const GameStateData& state)
 {
   const auto mempool = GetXayaRpc ().getrawmempool ();
   VLOG (1)
       << "Rebuilding pending move state with " << mempool.size ()
       << " transactions in the (full) mempool...";
 
+  /* We clear the state in any case, even if the blockQueue is empty.  This is
+     fine, as Clear is not supposed to have a context anyway.  And it will
+     ensure that we get at least an empty state if we can't process pending
+     moves due to the blockQueue being empty.  */
   Clear ();
+
+  /* If we do have a block queue, set up a context and use it (later) to
+     process pending moves.  */
+  std::unique_ptr<ContextSetter> setter;
+  if (blockQueue.empty ())
+    LOG (WARNING) << "Block queue is empty, ignoring pending moves for now";
+  else
+    setter = std::make_unique<ContextSetter> (*this, state, blockQueue.back ());
+
   std::map<uint256, Json::Value> newPending;
   for (const auto& txidStr : mempool)
     {
@@ -80,7 +102,8 @@ PendingMoveProcessor::Reset ()
         continue;
 
       newPending.emplace (txid, mit->second);
-      AddPendingMove (mit->second);
+      if (ctx != nullptr)
+        AddPendingMove (mit->second);
     }
 
   VLOG (1)
@@ -111,17 +134,32 @@ GetMoveTxid (const Json::Value& mv)
 
 void
 PendingMoveProcessor::ProcessAttachedBlock (const GameStateData& state,
-                                            const unsigned h)
+                                            const Json::Value& blockData)
 {
   VLOG (1) << "Updating pending state for attached block...";
 
-  ContextSetter setter(*this, state, h);
-  Reset ();
+  const auto& data = blockData["block"];
+  CHECK (data.isObject ());
+
+  /* Game does not call ProcessAttachedBlock for every block it receives,
+     e.g. not during catching-up phase.  Thus we cannot assume that we can
+     keep track of an accurate block queue at all times.  If there is a
+     mismatch with the new block, make sure to clear the bad data.  */
+  if (!blockQueue.empty () && blockQueue.back ()["hash"] != data["parent"])
+    {
+      LOG (WARNING) << "Bad block queue detected, clearing out";
+      blockQueue.clear ();
+    }
+
+  blockQueue.push_back (data);
+  while (blockQueue.size () > BLOCK_QUEUE_SIZE)
+    blockQueue.pop_front ();
+
+  Reset (state);
 }
 
 void
 PendingMoveProcessor::ProcessDetachedBlock (const GameStateData& state,
-                                            const unsigned h,
                                             const Json::Value& blockData)
 {
   /* We want to insert moves from the detached block into our map of
@@ -141,13 +179,25 @@ PendingMoveProcessor::ProcessDetachedBlock (const GameStateData& state,
       << mvArray.size () << " moves unconfirmed";
   VLOG (2) << "Block data: " << blockData;
 
-  ContextSetter setter(*this, state, h);
-  Reset ();
+  /* It is not guaranteed that we receive all attach/detach callbacks from
+     Game.  Thus it may happen that we have inconsistent data, in which case
+     we just clear it.  */
+  if (!blockQueue.empty ())
+    {
+      if (blockQueue.back () == blockData["block"])
+        blockQueue.pop_back ();
+      else
+        {
+          LOG (WARNING) << "Bad block queue detected, clearing out";
+          blockQueue.clear ();
+        }
+    }
+
+  Reset (state);
 }
 
 void
 PendingMoveProcessor::ProcessMove (const GameStateData& state,
-                                   const unsigned h,
                                    const Json::Value& mv)
 {
   const uint256 txid = GetMoveTxid (mv);
@@ -161,8 +211,13 @@ PendingMoveProcessor::ProcessMove (const GameStateData& state,
       return;
     }
 
-  ContextSetter setter(*this, state, h);
-  AddPendingMove (mv);
+  if (blockQueue.empty ())
+    LOG (WARNING) << "Block queue is empty, ignoring pending move for now";
+  else
+    {
+      ContextSetter setter(*this, state, blockQueue.back ());
+      AddPendingMove (mv);
+    }
 }
 
 } // namespace xaya

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -43,8 +43,6 @@ protected:
   Clear () override
   {
     data = Json::Value (Json::objectValue);
-    data["confirmed"] = GetConfirmedState ();
-    data["height"] = static_cast<int> (GetConfirmedHeight ());
     data["names"] = Json::Value (Json::objectValue);
   }
 
@@ -62,7 +60,7 @@ protected:
     names[name].append (msg);
 
     data["confirmed"] = GetConfirmedState ();
-    data["height"] = static_cast<int> (GetConfirmedHeight ());
+    data["height"] = GetConfirmedBlock ()["height"];
   }
 
 public:
@@ -100,14 +98,25 @@ MoveJson (const std::string& nm, const std::string& val)
  * Constructs a block JSON for the given list of moves.
  */
 Json::Value
-BlockJson (const std::vector<Json::Value>& moves)
+BlockJson (const unsigned height, const std::vector<Json::Value>& moves)
 {
   Json::Value mvJson(Json::arrayValue);
   for (const auto& mv : moves)
     mvJson.append (mv);
 
+  std::ostringstream hash;
+  hash << "block " << height;
+  std::ostringstream parent;
+  parent << "block " << (height - 1);
+
+  Json::Value data(Json::objectValue);
+  data["height"] = static_cast<int> (height);
+  data["hash"] = hash.str ();
+  data["parent"] = parent.str ();
+
   Json::Value res(Json::objectValue);
   res["moves"] = mvJson;
+  res["block"] = data;
 
   return res;
 }
@@ -127,6 +136,7 @@ protected:
   {
     proc.InitialiseGameContext (Chain::MAIN, "game id",
                                 &mockXayaServer.GetClient ());
+    SetMempool ({});
   }
 
   /**
@@ -150,11 +160,13 @@ protected:
 
 TEST_F (PendingMovesTests, AddingMoves)
 {
-  proc.ProcessMove ("state", 10, MoveJson ("foo", "bar"));
-  proc.ProcessMove ("state", 10, MoveJson ("foo", "baz"));
-  proc.ProcessMove ("state", 10, MoveJson ("foo", "bar"));
-  proc.ProcessMove ("state", 10, MoveJson ("abc", "def"));
-  proc.ProcessMove ("state", 10, MoveJson ("abc", "def"));
+  proc.ProcessAttachedBlock ("", BlockJson (10, {}));
+
+  proc.ProcessMove ("state", MoveJson ("foo", "bar"));
+  proc.ProcessMove ("state", MoveJson ("foo", "baz"));
+  proc.ProcessMove ("state", MoveJson ("foo", "bar"));
+  proc.ProcessMove ("state", MoveJson ("abc", "def"));
+  proc.ProcessMove ("state", MoveJson ("abc", "def"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "state",
@@ -169,14 +181,16 @@ TEST_F (PendingMovesTests, AddingMoves)
 
 TEST_F (PendingMovesTests, AttachedBlock)
 {
-  proc.ProcessMove ("old", 10, MoveJson ("foo", "c"));
-  proc.ProcessMove ("old", 10, MoveJson ("foo", "b"));
-  proc.ProcessMove ("old", 10, MoveJson ("foo", "a"));
-  proc.ProcessMove ("old", 10, MoveJson ("bar", "x"));
-  proc.ProcessMove ("old", 10, MoveJson ("baz", "y"));
+  proc.ProcessAttachedBlock ("", BlockJson (10, {}));
+
+  proc.ProcessMove ("old", MoveJson ("foo", "c"));
+  proc.ProcessMove ("old", MoveJson ("foo", "b"));
+  proc.ProcessMove ("old", MoveJson ("foo", "a"));
+  proc.ProcessMove ("old", MoveJson ("bar", "x"));
+  proc.ProcessMove ("old", MoveJson ("baz", "y"));
 
   SetMempool ({"b", "c", "y", "z"});
-  proc.ProcessAttachedBlock ("new", 11);
+  proc.ProcessAttachedBlock ("new", BlockJson (11, {}));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "new",
@@ -191,22 +205,25 @@ TEST_F (PendingMovesTests, AttachedBlock)
 
 TEST_F (PendingMovesTests, DetachedBlock)
 {
-  proc.ProcessMove ("new", 10, MoveJson ("foo", "b"));
-  proc.ProcessMove ("new", 10, MoveJson ("bar", "x"));
+  proc.ProcessAttachedBlock ("", BlockJson (10, {}));
+  proc.ProcessAttachedBlock ("", BlockJson (11, {}));
+
+  proc.ProcessMove ("new", MoveJson ("foo", "b"));
+  proc.ProcessMove ("new", MoveJson ("bar", "x"));
 
   SetMempool ({"a", "b", "x", "y", "z"});
-  proc.ProcessDetachedBlock ("old", 9, BlockJson (
+  proc.ProcessDetachedBlock ("old", BlockJson (11,
     {
       MoveJson ("foo", "a"),
       MoveJson ("baz", "y"),
     }));
 
   /* This should be ignored, as we have it already.  */
-  proc.ProcessMove ("old", 9, MoveJson ("foo", "a"));
+  proc.ProcessMove ("old", MoveJson ("foo", "a"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "old",
-    "height": 9,
+    "height": 10,
     "names":
       {
         "foo": ["a", "b"],
@@ -224,22 +241,25 @@ TEST_F (PendingMovesTests, OneBlockReorg)
      pending moves).  While this should be covered by the tests before,
      it makes sense to verify this important situation also explicitly.  */
 
-  proc.ProcessMove ("new 1", 10, MoveJson ("foo", "b"));
-  proc.ProcessMove ("new 1", 10, MoveJson ("bar", "x"));
+  proc.ProcessAttachedBlock ("", BlockJson (10, {}));
+  proc.ProcessAttachedBlock ("", BlockJson (11, {}));
+
+  proc.ProcessMove ("new 1", MoveJson ("foo", "b"));
+  proc.ProcessMove ("new 1", MoveJson ("bar", "x"));
 
   SetMempool ({"a", "b", "x", "y"});
-  proc.ProcessDetachedBlock ("old", 9, BlockJson (
+  proc.ProcessDetachedBlock ("old", BlockJson (11,
     {
       MoveJson ("foo", "a"),
       MoveJson ("baz", "y"),
     }));
 
-  proc.ProcessMove ("old", 9, MoveJson ("foo", "a"));
-  proc.ProcessMove ("baz", 9, MoveJson ("baz", "y"));
+  proc.ProcessMove ("old", MoveJson ("foo", "a"));
+  proc.ProcessMove ("baz", MoveJson ("baz", "y"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "old",
-    "height": 9,
+    "height": 10,
     "names":
       {
         "foo": ["a", "b"],
@@ -249,13 +269,84 @@ TEST_F (PendingMovesTests, OneBlockReorg)
   })"));
 
   SetMempool ({});
-  proc.ProcessAttachedBlock ("new 2", 10);
+  proc.ProcessAttachedBlock ("new 2", BlockJson (11, {}));
+  proc.ProcessMove ("new 2", MoveJson ("foo", "new"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "new 2",
-    "height": 10,
-    "names": {}
+    "height": 11,
+    "names":
+      {
+        "foo": ["new"]
+      }
   })"));
+}
+
+TEST_F (PendingMovesTests, AttachedBlockQueueMismatch)
+{
+  proc.ProcessAttachedBlock ("", BlockJson (10, {}));
+  proc.ProcessAttachedBlock ("", BlockJson (11, {}));
+
+  /* We attach a block that mismatches with the current block queue.  It will
+     still be used fine to process new pendings, but when we detach it, the
+     queue will be empty.  */
+
+  proc.ProcessAttachedBlock ("new", BlockJson (15, {}));
+  proc.ProcessMove ("new", MoveJson ("foo", "a"));
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({
+    "confirmed": "new",
+    "height": 15,
+    "names":
+      {
+        "foo": ["a"]
+      }
+  })"));
+
+  proc.ProcessDetachedBlock ("old", BlockJson (15, {}));
+  proc.ProcessMove ("old", MoveJson ("foo", "a"));
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({"names": {}})"));
+}
+
+TEST_F (PendingMovesTests, DetachedBlockQueueMismatch)
+{
+  proc.ProcessAttachedBlock ("", BlockJson (10, {}));
+  proc.ProcessAttachedBlock ("", BlockJson (11, {}));
+
+  proc.ProcessDetachedBlock ("old", BlockJson (15, {}));
+  proc.ProcessMove ("old", MoveJson ("foo", "a"));
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({"names": {}})"));
+}
+
+TEST_F (PendingMovesTests, BlockQueuePruning)
+{
+  unsigned i = 100;
+  while (i < 1'000)
+    {
+      ++i;
+      proc.ProcessAttachedBlock ("", BlockJson (i, {}));
+    }
+
+  /* Detaching some blocks is fine.  */
+  for (; i > 950; --i)
+    proc.ProcessDetachedBlock ("", BlockJson (i, {}));
+
+  proc.ProcessMove ("state", MoveJson ("foo", "a"));
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({
+    "confirmed": "state",
+    "height": 950,
+    "names":
+      {
+        "foo": ["a"]
+      }
+  })"));
+
+  /* Detaching more blocks than the queue is long is not good, as the initial
+     blocks have been pruned already.  */
+  for (; i > 800; --i)
+    proc.ProcessDetachedBlock ("", BlockJson (i, {}));
+
+  proc.ProcessMove ("state", MoveJson ("foo", "a"));
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({"names": {}})"));
 }
 
 /* ************************************************************************** */
