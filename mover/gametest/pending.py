@@ -55,16 +55,15 @@ class PendingMovesTest (MoverTest):
         }
     })
 
-    # Mine two blocks, which we will detach later and then reorg back to
-    # the chain.  For now, this should clear the mempool.
+    # Mine a block, which we will detach later and then reorg
+    # back to the chain.  For now, this should clear the mempool.
     self.generate (1)
     reorgBlock = self.rpc.xaya.getbestblockhash ()
-    self.generate (1)
     newState = self.getGameState ()
     self.assertEqual (newState, {"players": {
-      "a": {"x": -2, "y": 1, "dir": "left", "steps": 1},
-      "b": {"x": 0, "y": -3, "dir": "down", "steps": 2},
-      "c": {"x": 0, "y": 2},
+      "a": {"x": -1, "y": 1, "dir": "left", "steps": 2},
+      "b": {"x": 0, "y": -2, "dir": "down", "steps": 3},
+      "c": {"x": 0, "y": 1, "dir": "up", "steps": 1},
     }})
     self.assertEqual (self.getPendingState (), {})
 

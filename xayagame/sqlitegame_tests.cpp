@@ -329,10 +329,6 @@ protected:
   Clear () override
   {
     pending = Json::Value (Json::objectValue);
-
-    const auto state = ChatGame::GetState (AccessConfirmedState ());
-    for (const auto& entry : state)
-      pending[entry.first] = Json::Value (Json::arrayValue);
   }
 
   void
@@ -341,6 +337,11 @@ protected:
     const std::string name = mv["name"].asString ();
     if (!pending.isMember (name))
       pending[name] = Json::Value (Json::arrayValue);
+
+    const auto state = ChatGame::GetState (AccessConfirmedState ());
+    for (const auto& entry : state)
+      if (!pending.isMember (entry.first))
+        pending[entry.first] = Json::Value (Json::arrayValue);
 
     for (const auto& val : mv["move"])
       pending[name].append (val.asString ());
@@ -1215,14 +1216,6 @@ TEST_F (SQLitePendingMoveTests, Works)
   AttachBlock (game, BlockHash (11), ChatGame::Moves ({
     {"domob", "new"},
   }));
-
-  /* Verify the initial state is set up correctly based on the database.  */
-  EXPECT_EQ (proc.ToJson (), ParseJson (R"(
-    {
-      "domob": [],
-      "foo": []
-    }
-  )"));
 
   const auto moves = ChatGame::Moves ({
     {"foo", "baz"},
