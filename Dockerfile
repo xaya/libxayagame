@@ -3,19 +3,15 @@
 # that build (and run) e.g. GSPs.
 
 # Start by setting up a base image with Debian packages that we need
-# both for the build but also in the final image.
+# both for the build but also in the final image.  These are the dependencies
+# that are required as dev packages also for using libxayagame.
 FROM debian:buster AS basepackages
 RUN apt-get update && apt-get install -y \
-  build-essential \
-  libargtable2-dev \
-  libcurl4-openssl-dev \
-  libgflags-dev \
   libgoogle-glog-dev \
   liblmdb-dev \
-  libmicrohttpd-dev \
   libprotobuf-dev \
-  libssl-dev \
   libsqlite3-dev \
+  libssl-dev \
   libzmq3-dev \
   python2 \
   python-protobuf \
@@ -25,12 +21,17 @@ RUN apt-get update && apt-get install -y \
 # Create the image that we use to build everything, and install additional
 # packages that are needed only for the build itself.
 FROM basepackages AS build
-RUN apt-get update && apt-get install -y \
+RUN apt-get install -y \
   autoconf \
   autoconf-archive \
   automake \
+  build-essential \
   cmake \
   git \
+  libargtable2-dev \
+  libcurl4-openssl-dev \
+  libgflags-dev \
+  libmicrohttpd-dev \
   libtool \
   pkg-config \
   protobuf-compiler
@@ -41,8 +42,8 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /usr/src/jsoncpp
 RUN git clone -b 1.8.4 https://github.com/open-source-parsers/jsoncpp .
 RUN cmake . \
-  -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF \
-  && make && make install/strip
+  -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF
+RUN make && make install/strip
 
 # We need to install libjson-rpc-cpp from source.
 WORKDIR /usr/src/libjson-rpc-cpp
@@ -50,8 +51,8 @@ RUN git clone https://github.com/cinemast/libjson-rpc-cpp .
 RUN cmake . \
   -DREDIS_SERVER=NO -DREDIS_CLIENT=NO \
   -DCOMPILE_TESTS=NO -DCOMPILE_EXAMPLES=NO \
-  -DWITH_COVERAGE=NO \
-  && make && make install/strip
+  -DWITH_COVERAGE=NO
+RUN make && make install/strip
 
 # We also need to install googletest from source.
 WORKDIR /usr/src/googletest
@@ -66,13 +67,21 @@ RUN cp zmq.hpp /usr/local/include
 # Make sure all installed dependencies are visible.
 RUN ldconfig
 
-# Build and install libxayagame itself.
+# Build and install libxayagame itself.  Make sure to clean out any
+# potential garbage copied over in the build context.
 WORKDIR /usr/src/libxayagame
 COPY . .
+RUN make distclean || true
 RUN ./autogen.sh && ./configure && make && make install-strip
 
-# For the final image, just copy over all built / installed stuff.
+# For the final image, just copy over all built / installed stuff and
+# add in the non-dev libraries needed (where we installed the dev version
+# on the builder package only).
 FROM basepackages
 COPY --from=build /usr/local /usr/local
-RUN ldconfig
+RUN apt-get install -y \
+  libargtable2-0 \
+  libcurl4 \
+  libgflags2.2 \
+  libmicrohttpd12
 LABEL description="Debian-based image that includes libxayagame and dependencies prebuilt and installed."

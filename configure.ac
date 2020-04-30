@@ -33,14 +33,14 @@ AX_PKG_CHECK_MODULES([SQLITE3], [sqlite3], [],
   [SQLITE3_CFLAGS+=" -DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"])
 AX_PKG_CHECK_MODULES([LMDB], [lmdb], [])
 AX_PKG_CHECK_MODULES([PROTOBUF], [protobuf])
+AX_PKG_CHECK_MODULES([GLOG], [libglog])
 
 # Private dependencies of the library itself.
-AX_PKG_CHECK_MODULES([GLOG], [], [libglog])
+AX_PKG_CHECK_MODULES([OPENSSL], [], [openssl])
 # We use deflateGetDictionary from zlib, which was introduced in version
 # 1.2.9.  Since zlib itself recommends using 1.2.11 over .9 and .10, let's
 # make sure we have at least this version.
 AX_PKG_CHECK_MODULES([ZLIB], [], [zlib >= 1.2.11])
-AX_PKG_CHECK_MODULES([OPENSSL], [], [openssl])
 # We use the recv variant taking message_t& over deprecated older functions,
 # which requires at least version 4.3.1.
 AX_PKG_CHECK_MODULES([ZMQ], [], [libzmq >= 4.3.1])
