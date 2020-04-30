@@ -42,23 +42,21 @@ WORKDIR /usr/src/jsoncpp
 RUN git clone -b 1.8.4 https://github.com/open-source-parsers/jsoncpp .
 RUN cmake . \
   -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF \
-  && make && make install
+  && make && make install/strip
 
 # We need to install libjson-rpc-cpp from source.
 WORKDIR /usr/src/libjson-rpc-cpp
-# FIXME: Check out "master" branch instead once
-# https://github.com/cinemast/libjson-rpc-cpp/pull/288 is in it.
-RUN git clone -b develop https://github.com/cinemast/libjson-rpc-cpp .
+RUN git clone https://github.com/cinemast/libjson-rpc-cpp .
 RUN cmake . \
   -DREDIS_SERVER=NO -DREDIS_CLIENT=NO \
   -DCOMPILE_TESTS=NO -DCOMPILE_EXAMPLES=NO \
   -DWITH_COVERAGE=NO \
-  && make && make install
+  && make && make install/strip
 
 # We also need to install googletest from source.
 WORKDIR /usr/src/googletest
 RUN git clone https://github.com/google/googletest .
-RUN cmake . && make && make install
+RUN cmake . && make && make install/strip
 
 # The ZMQ C++ bindings need to be installed from source.
 WORKDIR /usr/src/cppzmq
@@ -71,7 +69,7 @@ RUN ldconfig
 # Build and install libxayagame itself.
 WORKDIR /usr/src/libxayagame
 COPY . .
-RUN ./autogen.sh && ./configure && make && make install
+RUN ./autogen.sh && ./configure && make && make install-strip
 
 # For the final image, just copy over all built / installed stuff.
 FROM basepackages
