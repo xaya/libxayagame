@@ -64,6 +64,14 @@ WORKDIR /usr/src/cppzmq
 RUN git clone -b v4.6.0 https://github.com/zeromq/cppzmq .
 RUN cp zmq.hpp /usr/local/include
 
+# Also add a utility script for copying dynamic libraries needed for
+# a given binary.  This can be used by GSP images based on this one
+# to make them as minimal as possible.
+WORKDIR /usr/src/scripts
+RUN git clone https://github.com/hemanth/futhark .
+RUN cp sh/cpld.bash /usr/local/bin/cpld
+RUN chmod a+x /usr/local/bin/cpld
+
 # Make sure all installed dependencies are visible.
 RUN ldconfig
 
