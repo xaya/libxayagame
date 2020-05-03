@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-# Copyright (C) 2019 The Xaya developers
+#!/usr/bin/env python3
+# Copyright (C) 2019-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -41,7 +41,10 @@ class WaitForChangeUpdater (threading.Thread):
     while True:
       upd = self.rpc.waitforchange (knownVersion)
       with self.lock:
-        self.numCalls += 1
+        # Only update the call counter if this is a real update, and not
+        # just timed out randomly without any change.
+        if upd["version"] != knownVersion:
+          self.numCalls += 1
         self.state = upd
         knownVersion = self.state["version"]
         if self.shouldStop:
@@ -63,13 +66,12 @@ class WaitForChangeUpdater (threading.Thread):
     while True:
       with self.lock:
         assert self.state["version"] <= expected["version"]
-        if self.state["version"] < expected["version"]:
-          self.log.warning ("State not yet up-to-date, waiting...")
-          time.sleep (0.01)
-          continue
+        if self.state["version"] == expected["version"]:
+          assert self.state == expected
+          return
 
-        assert self.state == expected
-        return
+      self.log.warning ("State not yet up-to-date, waiting...")
+      time.sleep (0.01)
 
   def getNumCalls (self):
     """
@@ -145,7 +147,7 @@ class WaitForChangeTest (ShipsTest):
       self.mainLogger.info ("On-chain updates...")
       cnt = waiter.getNumCalls ()
       bar.rpc.filedispute ()
-      time.sleep (0.1)
+      time.sleep (1)
       self.assertEqual (waiter.getNumCalls (), cnt)
       self.generate (1)
       waiter.sync ()
@@ -161,7 +163,6 @@ class WaitForChangeTest (ShipsTest):
         },
       })
       waiter.sync ()
-
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# Copyright (C) 2019 The Xaya developers
+# Copyright (C) 2019-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,9 +6,10 @@
 Utility methods for working with SignedData objects from game channels.
 """
 
-from proto import (metadata_pb2, signatures_pb2)
+from .proto import (metadata_pb2, signatures_pb2)
 
 import base64
+import codecs
 import hashlib
 
 
@@ -26,12 +27,12 @@ def getChannelMessage (channelId, meta, topic, data):
 
   hasher.update (channelId)
   hasher.update (base64.b64encode (meta.reinit))
-  hasher.update ("\0")
-  hasher.update (topic)
-  hasher.update ("\0")
+  hasher.update (b"\0")
+  hasher.update (codecs.encode (topic, "ascii"))
+  hasher.update (b"\0")
   hasher.update (data)
 
-  return hasher.digest ().encode ("hex")
+  return hasher.hexdigest ()
 
 
 def createForChannel (rpc, channel, topic, data):
@@ -49,7 +50,7 @@ def createForChannel (rpc, channel, topic, data):
   res = signatures_pb2.SignedData ()
   res.data = data
 
-  channelId = channel["id"].decode ("hex")
+  channelId = codecs.decode (channel["id"], "hex")
   meta = metadata_pb2.ChannelMetadata ()
   meta.ParseFromString (base64.b64decode (channel["meta"]["proto"]))
   msg = getChannelMessage (channelId, meta, topic, data)

@@ -63,6 +63,10 @@ For the unit tests, also the
 The package included with Debian 10 "Buster" is not fresh enough,
 it should be built and installed from source instead.
 
+For running the integration tests based on Python, install Python3 and
+the [jsonrpclib](https://github.com/tcalmant/jsonrpclib/) library.  On Debian,
+this is `python3-jsonrpclib-pelix`.
+
 ### Docker Image
 
 We also provide a

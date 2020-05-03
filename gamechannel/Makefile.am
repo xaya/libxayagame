@@ -92,7 +92,7 @@ py_PYTHON = \
 pyproto_PYTHON = proto/__init__.py $(PROTOPY)
 
 AM_TESTS_ENVIRONMENT = \
-  PYTHONPATH=$(srcdir)
+  PYTHONPATH=$(top_srcdir)
 
 check_PROGRAMS = tests test_rpcbroadcast
 TESTS = tests $(PYTHONTESTS)

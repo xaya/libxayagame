@@ -1,4 +1,4 @@
-# Copyright (C) 2019 The Xaya developers
+# Copyright (C) 2019-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -75,7 +75,7 @@ class ShipsTest (channeltest.TestCase):
                                               "state", stateBytes)
     res.initial_state.CopyFrom (signedData)
 
-    return base64.b64encode (res.SerializeToString ())
+    return base64.b64encode (res.SerializeToString ()).decode ("ascii")
 
   def getWinnerStatement (self, cid, winner):
     """
@@ -94,7 +94,7 @@ class ShipsTest (channeltest.TestCase):
     sgn = signatures.createForChannel (self.rpc.xaya, channel,
                                        "winnerstatement", data)
 
-    return base64.b64encode (sgn.SerializeToString ())
+    return base64.b64encode (sgn.SerializeToString ()).decode ("ascii")
 
   def expectChannelState (self, cid, phase, disputeHeight):
     """
@@ -128,7 +128,7 @@ class ShipsTest (channeltest.TestCase):
     actualTypes = []
     for p in pending:
       val = json.loads (p["value"])
-      mvKeys = val["g"]["xs"].keys ()
+      mvKeys = list (val["g"]["xs"].keys ())
       self.assertEqual (len (mvKeys), 1)
       actualTypes.append (mvKeys[0])
 

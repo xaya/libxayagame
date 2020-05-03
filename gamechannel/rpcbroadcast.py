@@ -1,4 +1,4 @@
-# Copyright (C) 2019 The Xaya developers
+# Copyright (C) 2019-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -23,14 +23,13 @@ simply removing everything that has not been touched in a while.
 """
 
 import logging
+import socketserver
 import threading
-
-import SocketServer
 
 from jsonrpclib.SimpleJSONRPCServer import SimpleJSONRPCServer
 
 
-class ThreadingJsonRpcServer (SocketServer.ThreadingMixIn, SimpleJSONRPCServer):
+class ThreadingJsonRpcServer (socketserver.ThreadingMixIn, SimpleJSONRPCServer):
   pass
 
 

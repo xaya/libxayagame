@@ -69,7 +69,7 @@ class Daemon ():
     self.proc = subprocess.Popen (args, env=envVars)
 
     self.rpc = self.createRpc ()
-    self.xayaRpc = jsonrpclib.Server (xayarpc)
+    self.xayaRpc = jsonrpclib.ServerProxy (xayarpc)
 
     self.log.info ("Waiting for the JSON-RPC server to be up...")
     while True:
@@ -98,7 +98,7 @@ class Daemon ():
     be used if multiple threads need to send RPCs in parallel.
     """
 
-    return jsonrpclib.Server ("http://localhost:%d" % self.port)
+    return jsonrpclib.ServerProxy ("http://localhost:%d" % self.port)
 
   def getCurrentState (self):
     """

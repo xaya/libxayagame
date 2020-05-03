@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-# Copyright (C) 2019 The Xaya developers
+#!/usr/bin/env python3
+# Copyright (C) 2019-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,8 +19,8 @@ class BindAddressTest (MoverTest):
 
   def run (self):
     port = self.gamenode.port
-    rpc = jsonrpclib.Server ("http://127.0.0.1:%d" % port)
-    alternateRpc = jsonrpclib.Server ("http://127.0.0.2:%d" % port)
+    rpc = jsonrpclib.ServerProxy ("http://127.0.0.1:%d" % port)
+    alternateRpc = jsonrpclib.ServerProxy ("http://127.0.0.2:%d" % port)
 
     # By default, the normal RPC connection to 127.0.0.1 should work.  But the
     # connection to the alternate IP 127.0.0.2 should fail.

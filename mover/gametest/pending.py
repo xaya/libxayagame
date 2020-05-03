@@ -70,7 +70,6 @@ class PendingMovesTest (MoverTest):
     # Detach the last two blocks.  This should put back the moves.
     self.rpc.xaya.invalidateblock (reorgBlock)
     self.expectGameState (oldState)
-    time.sleep (0.1)
     self.assertEqual (self.getPendingState (), oldPending)
 
     # Mine one more block, which should clear the mempool again.
@@ -83,7 +82,6 @@ class PendingMovesTest (MoverTest):
     # fine for now.
     self.rpc.xaya.reconsiderblock (reorgBlock)
     self.expectGameState (newState)
-    time.sleep (0.1)
     self.assertEqual (self.getPendingState (), {})
 
     # Start the game daemon with pending tracking disabled.

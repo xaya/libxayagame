@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2019 The Xaya developers
+# Copyright (C) 2018-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -102,7 +102,7 @@ class Node ():
     be used if multiple threads need to send RPCs in parallel.
     """
 
-    return jsonrpclib.Server (self.rpcurl)
+    return jsonrpclib.ServerProxy (self.rpcurl)
 
   def logMatches (self, expr, times=None):
     """

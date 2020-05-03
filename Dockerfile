@@ -13,9 +13,9 @@ RUN apt-get update && apt-get install -y \
   libsqlite3-dev \
   libssl-dev \
   libzmq3-dev \
-  python2 \
-  python-protobuf \
-  python-jsonrpclib \
+  python3 \
+  python3-jsonrpclib-pelix \
+  python3-protobuf \
   zlib1g-dev
 
 # Create the image that we use to build everything, and install additional

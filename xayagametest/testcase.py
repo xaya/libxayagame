@@ -356,13 +356,7 @@ class XayaGameTest (object):
     ensure this has synced with sent moves.
     """
 
-    state = self.rpc.game.getpendingstate ()
-    self.assertEqual (state["gameid"], self.gameId)
-    self.assertEqual (state["state"], "up-to-date")
-    self.assertEqual (state["blockhash"], self.rpc.xaya.getbestblockhash ())
-    self.assertEqual (state["height"], self.rpc.xaya.getblockcount ())
-
-    return state["pending"]
+    return self.getCustomState ("pending", "getpendingstate")
 
   def assertEqual (self, a, b):
     """
@@ -396,7 +390,7 @@ class XayaGameTest (object):
       raise AssertionError ("expected RPC error was not raised")
     except ProtocolError as exc:
       self.log.info ("Caught expected RPC error: %s" % exc)
-      (c, m) = exc.args[0]
+      (c, m, *_) = exc.args[0]
       self.assertEqual (c, code)
       msgPattern = re.compile (msgRegExp)
       assert msgPattern.match (m)

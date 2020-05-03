@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2019 The Xaya developers
+# Copyright (C) 2018-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -63,7 +63,7 @@ class Node ():
     args.append ("-noprinttoconsole")
     args.append ("-regtest")
     self.proc = subprocess.Popen (args)
-    self.rpc = jsonrpclib.Server (self.rpcurl)
+    self.rpc = jsonrpclib.ServerProxy (self.rpcurl)
 
     self.log.info ("Waiting for the JSON-RPC server to be up...")
     while True:

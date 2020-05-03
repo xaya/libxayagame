@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-# Copyright (C) 2019 The Xaya developers
+#!/usr/bin/env python3
+# Copyright (C) 2019-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,7 +8,7 @@ Integration test for the JSON-RPC broadcast method.  This starts up a local
 server and then runs the test binary pointed to it.
 """
 
-import rpcbroadcast
+from gamechannel import rpcbroadcast
 
 import os
 import os.path

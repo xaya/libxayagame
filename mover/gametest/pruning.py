@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-# Copyright (C) 2018 The Xaya developers
+#!/usr/bin/env python3
+# Copyright (C) 2018-2020 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -78,6 +78,7 @@ class PruningTest (MoverTest):
       "b": {"x": 0, "y": 0},
     }})
     self.rpc.xaya.invalidateblock (blk)
+    self.syncGame ()
 
     self.stopGameDaemon ()
     assert self.gamenode.logMatches (FAILED_GETTING_UNDO)
