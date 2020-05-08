@@ -13,16 +13,17 @@ AC_LANG([C++])
 LT_INIT
 
 AX_CXX_COMPILE_STDCXX([14], [noext])
-AX_CHECK_COMPILE_FLAG([-Wall], [CXXFLAGS+=" -Wall"])
-AX_CHECK_COMPILE_FLAG([-Werror], [CXXFLAGS+=" -Werror"])
-AX_CHECK_COMPILE_FLAG([-pedantic], [CXXFLAGS+=" -pedantic"])
-AX_CHECK_COMPILE_FLAG([-Wno-deprecated], [CXXFLAGS+=" -Wno-deprecated"])
+AX_CHECK_COMPILE_FLAG([-Wall], [CXXFLAGS="${CXXFLAGS} -Wall"])
+AX_CHECK_COMPILE_FLAG([-Werror], [CXXFLAGS="${CXXFLAGS} -Werror"])
+AX_CHECK_COMPILE_FLAG([-pedantic], [CXXFLAGS="${CXXFLAGS} -pedantic"])
+AX_CHECK_COMPILE_FLAG([-Wno-deprecated],
+                      [CXXFLAGS="${CXXFLAGS} -Wno-deprecated"])
 
 # Windows defines ERROR, which requires us to tell glog to not define
 # it as abbreviated log severity (LOG(ERROR) still works, though, and
 # that is all that we actually use in the code).
 # See https://hpc.nih.gov/development/glog.html.
-CXXFLAGS+=" -DGLOG_NO_ABBREVIATED_SEVERITIES"
+CXXFLAGS="${CXXFLAGS} -DGLOG_NO_ABBREVIATED_SEVERITIES"
 
 # Public dependencies (exposed in the headers of libxayagame to
 # users of the library).
@@ -30,7 +31,7 @@ AX_PKG_CHECK_MODULES([JSONCPP], [jsoncpp], [])
 AX_PKG_CHECK_MODULES([JSONRPCCLIENT], [libjsonrpccpp-client], [])
 AX_PKG_CHECK_MODULES([JSONRPCSERVER], [libjsonrpccpp-server], [])
 AX_PKG_CHECK_MODULES([SQLITE3], [sqlite3], [],
-  [SQLITE3_CFLAGS+=" -DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"])
+  [SQLITE3_CFLAGS="${SQLITE3_CFLAGS} -DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"])
 AX_PKG_CHECK_MODULES([LMDB], [lmdb], [])
 AX_PKG_CHECK_MODULES([PROTOBUF], [protobuf])
 AX_PKG_CHECK_MODULES([GLOG], [libglog])
