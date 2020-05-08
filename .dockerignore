@@ -1,4 +1,4 @@
 Dockerfile
 
 .git
-.*.swp
+**/.*.swp

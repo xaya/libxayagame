@@ -7,8 +7,10 @@
 # that are required as dev packages also for using libxayagame.
 FROM debian:buster AS basepackages
 RUN apt-get update && apt-get install -y \
+  libcurl4-openssl-dev \
   libgoogle-glog-dev \
   liblmdb-dev \
+  libmicrohttpd-dev \
   libprotobuf-dev \
   libsqlite3-dev \
   libssl-dev \
@@ -29,9 +31,7 @@ RUN apt-get install -y \
   cmake \
   git \
   libargtable2-dev \
-  libcurl4-openssl-dev \
   libgflags-dev \
-  libmicrohttpd-dev \
   libtool \
   pkg-config \
   protobuf-compiler
@@ -89,7 +89,5 @@ FROM basepackages
 COPY --from=build /usr/local /usr/local
 RUN apt-get install -y \
   libargtable2-0 \
-  libcurl4 \
-  libgflags2.2 \
-  libmicrohttpd12
+  libgflags2.2
 LABEL description="Debian-based image that includes libxayagame and dependencies prebuilt and installed."
