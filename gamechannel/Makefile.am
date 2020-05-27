@@ -56,6 +56,7 @@ libgamechannel_la_SOURCES = \
   schema.cpp \
   signatures.cpp \
   stateproof.cpp \
+  wrapper.cpp \
   $(PROTOSOURCES)
 gamechannel_HEADERS = \
   boardrules.hpp \
@@ -76,7 +77,8 @@ gamechannel_HEADERS = \
   rpcbroadcast.hpp \
   schema.hpp \
   signatures.hpp \
-  stateproof.hpp
+  stateproof.hpp \
+  wrapper.hpp
 rpcstub_HEADERS = $(RPC_STUBS)
 proto_HEADERS = $(PROTOHEADERS)
 
