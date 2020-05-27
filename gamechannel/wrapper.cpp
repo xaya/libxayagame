@@ -4,10 +4,14 @@
 
 #include "wrapper.hpp"
 
+#include "movesender.hpp"
+
 #include <glog/logging.h>
 
 namespace xaya
 {
+
+/* ************************************************************************** */
 
 namespace
 {
@@ -42,6 +46,15 @@ public:
   {
     channelIdHex = GetChannelId ().ToHex ();
     CHECK (GetMetadata ().SerializeToString (&metadataBytes));
+  }
+
+  /**
+   * Returns the actual state.
+   */
+  const BoardState&
+  GetState () const
+  {
+    return state;
   }
 
   bool
@@ -100,5 +113,66 @@ CallbackBoardRules::GetProtoVersion (const proto::ChannelMetadata& meta) const
 {
   return ChannelProtoVersion::ORIGINAL;
 }
+
+/* ************************************************************************** */
+
+Json::Value
+CallbackOpenChannel::ResolutionMove (const uint256& channelId,
+                                     const proto::StateProof& proof) const
+{
+  std::string proofBytes;
+  CHECK (proof.SerializeToString (&proofBytes));
+  return cb.ResolutionMove (channelId.ToHex (), proofBytes);
+}
+
+Json::Value
+CallbackOpenChannel::DisputeMove (const uint256& channelId,
+                                  const proto::StateProof& proof) const
+{
+  std::string proofBytes;
+  CHECK (proof.SerializeToString (&proofBytes));
+  return cb.DisputeMove (channelId.ToHex (), proofBytes);
+}
+
+namespace
+{
+
+/**
+ * Extracts and returns the underlying state, assuming the instance
+ * is from a CallbackBoardRules.
+ */
+const BoardState&
+ExtractBoardState (const ParsedBoardState& state)
+{
+  return dynamic_cast<const CallbackParsedState&> (state).GetState ();
+}
+
+} // anonymous namespace
+
+bool
+CallbackOpenChannel::MaybeAutoMove (const ParsedBoardState& state,
+                                    BoardMove& mv)
+{
+  std::string meta;
+  CHECK (state.GetMetadata ().SerializeToString (&meta));
+
+  return cb.MaybeAutoMove (state.GetChannelId ().ToHex (), meta, playerName,
+                           ExtractBoardState (state), priv, mv);
+}
+
+void
+CallbackOpenChannel::MaybeOnChainMove (const ParsedBoardState& state,
+                                       MoveSender& sender)
+{
+  std::string meta;
+  CHECK (state.GetMetadata ().SerializeToString (&meta));
+
+  Json::Value mv;
+  if (cb.MaybeOnChainMove (state.GetChannelId ().ToHex (), meta, playerName,
+                           ExtractBoardState (state), priv, mv))
+    sender.SendMove (mv);
+}
+
+/* ************************************************************************** */
 
 } // namespace xaya

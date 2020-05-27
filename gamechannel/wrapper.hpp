@@ -6,6 +6,7 @@
 #define GAMECHANNEL_WRAPPER_HPP
 
 #include "boardrules.hpp"
+#include "openchannel.hpp"
 
 #include "proto/metadata.pb.h"
 
@@ -18,6 +19,8 @@
 
 namespace xaya
 {
+
+/* ************************************************************************** */
 
 /**
  * A struct with function pointers that define all the logic required
@@ -96,6 +99,100 @@ public:
       const proto::ChannelMetadata& meta) const override;
 
 };
+
+/* ************************************************************************** */
+
+/** Private data of a channel in a user-specific encoded format.  */
+using PrivateState = std::string;
+
+/**
+ * Callbacks implementing OpenChannel behaviour.  They handle the
+ * game-specific move formats for disputes and resolutions, as well as
+ * automatic on-chain and channel moves.
+ *
+ * The channel ID is passed as hex string, and state proofs are passed as
+ * binary-serialised protocol buffer.
+ */
+struct OpenChannelCallbacks
+{
+
+  /**
+   * Constructs the game-specific move format (without game-ID envelope)
+   * for a resolution.
+   */
+  Json::Value (*ResolutionMove) (const std::string& channelId,
+                                 const std::string& proof);
+
+  /**
+   * Constructs the game-specific move format (without game-ID envelope)
+   * for a dispute.
+   */
+  Json::Value (*DisputeMove) (const std::string& channelId,
+                              const std::string& proof);
+
+  /**
+   * Checks if an automatic move can be made right now for the given game
+   * state, assuming it is the current player's turn.
+   */
+  bool (*MaybeAutoMove) (const std::string& channelId, const std::string& meta,
+                         const std::string& playerName,
+                         const BoardState& state, const PrivateState& priv,
+                         BoardMove& mv);
+
+  /**
+   * Checks if an on-chain transaction should be made.  If this returns true,
+   * then a move is sent by the player name with the given JSON data (wrapped
+   * up together with the game ID).
+   */
+  bool (*MaybeOnChainMove) (const std::string& channelId,
+                            const std::string& meta,
+                            const std::string& playerName,
+                            const BoardState& state, const PrivateState& priv,
+                            Json::Value& mv);
+
+};
+
+/**
+ * Implementation of OpenChannel based on a set of callbacks.  It holds
+ * also a user-defined private state as string of arbitrary bytes, which
+ * can be used by the OpenChannel callbacks in a game-specific way.
+ *
+ * This class must only be used together with CallbackBoardRules, as it
+ * assumes the underlying type of ParsedBoardState!
+ */
+class CallbackOpenChannel : public OpenChannel
+{
+
+private:
+
+  /** The callbacks used for the implementation.  */
+  const OpenChannelCallbacks cb;
+
+  /** The name of the user playing this channel.  */
+  const std::string playerName;
+
+  /** The current private state of the channel.  */
+  PrivateState priv;
+
+public:
+
+  explicit CallbackOpenChannel (const OpenChannelCallbacks& c,
+                                const std::string& nm, const PrivateState& ps)
+    : cb(c), playerName(nm), priv(ps)
+  {}
+
+  Json::Value ResolutionMove (const uint256& channelId,
+                              const proto::StateProof& proof) const override;
+  Json::Value DisputeMove (const uint256& channelId,
+                           const proto::StateProof& proof) const override;
+
+  bool MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv) override;
+  void MaybeOnChainMove (const ParsedBoardState& state,
+                         MoveSender& sender) override;
+
+};
+
+/* ************************************************************************** */
 
 } // namespace xaya
 
