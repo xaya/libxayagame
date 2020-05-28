@@ -4,7 +4,9 @@
 
 #include "wrapper.hpp"
 
+#include "daemon.hpp"
 #include "movesender.hpp"
+#include "rpcbroadcast.hpp"
 
 #include <glog/logging.h>
 
@@ -171,6 +173,30 @@ CallbackOpenChannel::MaybeOnChainMove (const ParsedBoardState& state,
   if (cb.MaybeOnChainMove (state.GetChannelId ().ToHex (), meta, playerName,
                            ExtractBoardState (state), priv, mv))
     sender.SendMove (mv);
+}
+
+/* ************************************************************************** */
+
+void
+RunCallbackChannel (const CallbackChannelConfig& cfg)
+{
+  uint256 channelId;
+  CHECK (channelId.FromHex (cfg.ChannelId))
+      << "Invalid channel ID: " << cfg.ChannelId;
+
+  CHECK (!cfg.PlayerName.empty ()) << "No player name specified";
+
+  CallbackBoardRules rules(cfg.RuleCallbacks);
+  CallbackOpenChannel channel(cfg.ChannelCallbacks, cfg.PlayerName, "");
+
+  ChannelDaemon daemon(cfg.GameId, channelId, cfg.PlayerName, rules, channel);
+  daemon.ConnectXayaRpc (cfg.XayaRpcUrl);
+  daemon.ConnectGspRpc (cfg.GspRpcUrl);
+
+  RpcBroadcast bc(cfg.BroadcastRpcUrl, daemon.GetChannelManager ());
+  daemon.SetOffChainBroadcast (bc);
+
+  daemon.Run ();
 }
 
 /* ************************************************************************** */

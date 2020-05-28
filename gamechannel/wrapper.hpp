@@ -194,6 +194,52 @@ public:
 
 /* ************************************************************************** */
 
+/**
+ * Configuration data for running a callback-based channel.
+ */
+struct CallbackChannelConfig
+{
+
+  /** The BoardRules callbacks.  */
+  BoardRulesCallbacks RuleCallbacks;
+
+  /** The OpenChannel callbacks.  */
+  OpenChannelCallbacks ChannelCallbacks;
+
+  /** The game ID.  */
+  std::string GameId;
+
+  /** The channel ID as hex string.  */
+  std::string ChannelId;
+
+  /** The local player's name.  */
+  std::string PlayerName;
+
+  /** The RPC URL for Xaya Core and the local wallet.  */
+  std::string XayaRpcUrl;
+
+  /** The RPC URL for the game-channel GSP.  */
+  std::string GspRpcUrl;
+
+  /** The RPC URL for the broadcast server.  */
+  std::string BroadcastRpcUrl;
+
+  /** The local port for running the channel daemon's RPC server.  */
+  unsigned ChannelRpcPort;
+
+};
+
+/**
+ * Starts a callback-based channel daemon with the given Xaya Core and GSP
+ * RPC connections, and providing a JSON-RPC interface on the given port.
+ *
+ * The method will block while the channel is running and return once
+ * it has been shut down via RPC.
+ */
+void RunCallbackChannel (const CallbackChannelConfig& cfg);
+
+/* ************************************************************************** */
+
 } // namespace xaya
 
 #endif // GAMECHANNEL_WRAPPER_HPP
