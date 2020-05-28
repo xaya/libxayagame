@@ -6,6 +6,8 @@ protodir = $(gamechanneldir)/proto
 pydir = $(pythondir)/gamechannel
 pyprotodir = $(pydir)/proto
 
+pkgconfig_DATA = gamechannel.pc
+
 RPC_STUBS = \
   rpc-stubs/channelgsprpcclient.h \
   rpc-stubs/channelgsprpcserverstub.h \

@@ -72,6 +72,7 @@ AC_CONFIG_FILES([
   xayagametest/Makefile \
   xayautil/Makefile \
   \
+  gamechannel/gamechannel.pc \
   xayagame/libxayagame.pc \
   xayautil/libxayautil.pc
 ])
