@@ -8,6 +8,11 @@
 #include "movesender.hpp"
 #include "rpcbroadcast.hpp"
 
+#include "rpc-stubs/wrappedchannelserverstub.h"
+
+#include <jsonrpccpp/server.h>
+#include <jsonrpccpp/server/connectors/httpserver.h>
+
 #include <glog/logging.h>
 
 namespace xaya
@@ -177,6 +182,104 @@ CallbackOpenChannel::MaybeOnChainMove (const ParsedBoardState& state,
 
 /* ************************************************************************** */
 
+namespace
+{
+
+/**
+ * The JSON-RPC server implementation for the callback-based channel daemon.
+ */
+class WrappedChannelRpcServer : public WrappedChannelServerStub
+{
+
+private:
+
+  /** The underlying channel for RPC processing.  */
+  CallbackOpenChannel& channel;
+
+  /** The ChannelDaemon instance (including its ChannelManager).  */
+  ChannelDaemon& daemon;
+
+  /**
+   * Extends a given state JSON by the private state from channel.
+   */
+  Json::Value ExtendStateJson (Json::Value&& state) const;
+
+public:
+
+  explicit WrappedChannelRpcServer (CallbackOpenChannel& c, ChannelDaemon& d,
+                                    jsonrpc::AbstractServerConnector& conn)
+    : WrappedChannelServerStub(conn), channel(c), daemon(d)
+  {}
+
+  void stop () override;
+  Json::Value getcurrentstate () override;
+  Json::Value waitforchange (int knownVersion) override;
+
+  void sendlocalmove (const std::string& mv) override;
+  void setprivatestate (const std::string& ps) override;
+
+  std::string filedispute () override;
+
+};
+
+Json::Value
+WrappedChannelRpcServer::ExtendStateJson (Json::Value&& state) const
+{
+  state["private"] = channel.GetPrivateState ();
+  return state;
+}
+
+void
+WrappedChannelRpcServer::stop ()
+{
+  LOG (INFO) << "Channel RPC method called: stop";
+  daemon.RequestStop ();
+}
+
+Json::Value
+WrappedChannelRpcServer::getcurrentstate ()
+{
+  LOG (INFO) << "Channel RPC method called: getcurrentstate";
+  return ExtendStateJson (daemon.GetChannelManager ().ToJson ());
+}
+
+Json::Value
+WrappedChannelRpcServer::waitforchange (const int knownVersion)
+{
+  LOG (INFO) << "Channel RPC method called: waitforchange " << knownVersion;
+  Json::Value state = daemon.GetChannelManager ().WaitForChange (knownVersion);
+  return ExtendStateJson (std::move (state));
+}
+
+void
+WrappedChannelRpcServer::sendlocalmove (const std::string& mv)
+{
+  LOG (INFO) << "Channel RPC method called: sendlocalmove " << mv;
+  daemon.GetChannelManager ().ProcessLocalMove (mv);
+}
+
+void
+WrappedChannelRpcServer::setprivatestate (const std::string& ps)
+{
+  LOG (INFO) << "Channel RPC method called: setprivatestate " << ps;
+  channel.SetPrivateState (ps);
+  daemon.GetChannelManager ().TriggerAutoMoves ();
+}
+
+std::string
+WrappedChannelRpcServer::filedispute ()
+{
+  LOG (INFO) << "Channel RPC method called: filedispute";
+  const uint256 txid = daemon.GetChannelManager ().FileDispute ();
+
+  if (txid.IsNull ())
+    return "";
+
+  return txid.ToHex ();
+}
+
+} // anonymous namespace
+
 void
 RunCallbackChannel (const CallbackChannelConfig& cfg)
 {
@@ -196,7 +299,28 @@ RunCallbackChannel (const CallbackChannelConfig& cfg)
   RpcBroadcast bc(cfg.BroadcastRpcUrl, daemon.GetChannelManager ());
   daemon.SetOffChainBroadcast (bc);
 
+  std::unique_ptr<jsonrpc::AbstractServerConnector> serverConnector;
+  if (cfg.ChannelRpcPort != 0)
+    {
+      auto srv = std::make_unique<jsonrpc::HttpServer> (cfg.ChannelRpcPort);
+      srv->BindLocalhost ();
+      serverConnector = std::move (srv);
+    }
+
+  std::unique_ptr<WrappedChannelRpcServer> rpcServer;
+  if (serverConnector != nullptr)
+    {
+      rpcServer = std::make_unique<WrappedChannelRpcServer> (
+                      channel, daemon, *serverConnector);
+      rpcServer->StartListening ();
+    }
+  else
+    LOG (WARNING) << "Channel daemon has no JSON-RPC interface";
+
   daemon.Run ();
+
+  if (rpcServer != nullptr)
+    rpcServer->StopListening ();
 }
 
 /* ************************************************************************** */

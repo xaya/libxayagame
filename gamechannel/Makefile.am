@@ -9,7 +9,8 @@ pyprotodir = $(pydir)/proto
 RPC_STUBS = \
   rpc-stubs/channelgsprpcclient.h \
   rpc-stubs/channelgsprpcserverstub.h \
-  rpc-stubs/rpcbroadcastclient.h
+  rpc-stubs/rpcbroadcastclient.h \
+  rpc-stubs/wrappedchannelserverstub.h
 
 PROTOS = \
   proto/broadcast.proto \
@@ -24,6 +25,7 @@ PROTOPY = $(PROTOS:.proto=_pb2.py)
 EXTRA_DIST = $(PROTOS) \
   rpc-stubs/gsp.json \
   rpc-stubs/rpcbroadcast.json \
+  rpc-stubs/wrappedchannel.json \
   schema.sql schema_head.cpp schema_tail.cpp
 
 BUILT_SOURCES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOPY)
@@ -157,6 +159,11 @@ rpc-stubs/channelgsprpcserverstub.h: $(srcdir)/rpc-stubs/gsp.json
 
 rpc-stubs/rpcbroadcastclient.h: $(srcdir)/rpc-stubs/rpcbroadcast.json
 	jsonrpcstub "$<" --cpp-client=RpcBroadcastClient --cpp-client-file="$@"
+
+rpc-stubs/wrappedchannelserverstub.h: $(srcdir)/rpc-stubs/wrappedchannel.json
+	jsonrpcstub "$<" \
+          --cpp-server=WrappedChannelServerStub \
+          --cpp-server-file="$@"
 
 proto/%.pb.h proto/%.pb.cc: $(top_srcdir)/gamechannel/proto/%.proto
 	protoc -I$(top_srcdir) --cpp_out=$(top_builddir) "$<"

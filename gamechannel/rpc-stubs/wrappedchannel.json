@@ -1,0 +1,31 @@
+[
+  {
+    "name": "stop",
+    "params": {}
+  },
+  {
+    "name": "getcurrentstate",
+    "params": {},
+    "returns": {}
+  },
+  {
+    "name": "waitforchange",
+    "params": [42],
+    "returns": {}
+  },
+
+  {
+    "name": "sendlocalmove",
+    "params": ["move"]
+  },
+  {
+    "name": "setprivatestate",
+    "params": ["state"]
+  },
+
+  {
+    "name": "filedispute",
+    "params": {},
+    "returns": "txid"
+  }
+]

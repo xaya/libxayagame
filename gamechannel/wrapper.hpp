@@ -15,6 +15,7 @@
 #include <json/json.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace xaya
@@ -171,6 +172,9 @@ private:
   /** The name of the user playing this channel.  */
   const std::string playerName;
 
+  /** Mutex for access to the private state.  */
+  mutable std::mutex mut;
+
   /** The current private state of the channel.  */
   PrivateState priv;
 
@@ -189,6 +193,26 @@ public:
   bool MaybeAutoMove (const ParsedBoardState& state, BoardMove& mv) override;
   void MaybeOnChainMove (const ParsedBoardState& state,
                          MoveSender& sender) override;
+
+  /**
+   * Returns the private state in a thread-safe way.
+   */
+  PrivateState
+  GetPrivateState () const
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    return priv;
+  }
+
+  /**
+   * Sets the private state (in a thread-safe way).
+   */
+  void
+  SetPrivateState (const PrivateState& ps)
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    priv = ps;
+  }
 
 };
 
