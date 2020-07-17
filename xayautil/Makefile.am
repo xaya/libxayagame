@@ -3,8 +3,10 @@ xayautildir = $(includedir)/xayautil
 
 pkgconfig_DATA = libxayautil.pc
 
-libxayautil_la_CXXFLAGS = $(ZLIB_CFLAGS) $(OPENSSL_CFLAGS) $(GLOG_CFLAGS)
-libxayautil_la_LIBADD = $(ZLIB_LIBS) $(OPENSSL_LIBS) $(GLOG_LIBS)
+libxayautil_la_CXXFLAGS = \
+  $(JSONCPP_CFLAGS) $(ZLIB_CFLAGS) $(OPENSSL_CFLAGS) $(GLOG_CFLAGS)
+libxayautil_la_LIBADD = \
+  $(JSONCPP_LIBS) $(ZLIB_LIBS) $(OPENSSL_LIBS) $(GLOG_LIBS)
 libxayautil_la_SOURCES = \
   base64.cpp \
   compression.cpp \
@@ -25,9 +27,9 @@ noinst_HEADERS = \
 check_PROGRAMS = tests
 TESTS = tests
 
-tests_CXXFLAGS = $(ZLIB_CFLAGS) $(GLOG_CFLAGS) $(GTEST_CFLAGS)
+tests_CXXFLAGS = $(JSONCPP_CFLAGS) $(ZLIB_CFLAGS) $(GLOG_CFLAGS) $(GTEST_CFLAGS)
 tests_LDADD = $(builddir)/libxayautil.la \
-  $(ZLIB_LIBS) $(GLOG_LIBS) $(GTEST_LIBS)
+  $(JSONCPP_LIBS) $(ZLIB_LIBS) $(GLOG_LIBS) $(GTEST_LIBS)
 tests_SOURCES = \
   base64_tests.cpp \
   compression_tests.cpp \

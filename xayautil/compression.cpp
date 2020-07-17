@@ -1,11 +1,15 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "compression_internal.hpp"
 
+#include "base64.hpp"
+
 namespace xaya
 {
+
+/* ************************************************************************** */
 
 namespace
 {
@@ -94,5 +98,73 @@ UncompressData (const std::string& input, const size_t maxOutputSize,
   InflateStream uncompressor;
   return uncompressor.Uncompress (input, maxOutputSize, output);
 }
+
+/* ************************************************************************** */
+
+bool
+CompressJson (const Json::Value& val,
+              std::string& encoded, std::string& uncompressed)
+{
+  Json::StreamWriterBuilder wbuilder;
+  wbuilder["commentStyle"] = "None";
+  wbuilder["indentation"] = "";
+  wbuilder["enableYAMLCompatibility"] = false;
+  wbuilder["dropNullPlaceholders"] = false;
+  wbuilder["useSpecialFloats"] = false;
+
+  if (!val.isObject () && !val.isArray ())
+    {
+      LOG (WARNING) << "CompressJson expects object or array: " << val;
+      return false;
+    }
+
+  uncompressed = Json::writeString (wbuilder, val);
+  encoded = EncodeBase64 (CompressData (uncompressed));
+
+  return true;
+}
+
+bool
+UncompressJson (const std::string& input,
+                const size_t maxOutputSize, const unsigned stackLimit,
+                Json::Value& output, std::string& uncompressed)
+{
+  Json::CharReaderBuilder rbuilder;
+  rbuilder["allowComments"] = false;
+  /* Without strictRoot, versions of jsoncpp before
+     https://github.com/open-source-parsers/jsoncpp/pull/1014 did not
+     properly enforce failIfExtra (which we want).  */
+  rbuilder["strictRoot"] = true;
+  rbuilder["allowDroppedNullPlaceholders"] = false;
+  rbuilder["allowNumericKeys"] = false;
+  rbuilder["allowSingleQuotes"] = false;
+  rbuilder["stackLimit"] = stackLimit;
+  rbuilder["failIfExtra"] = true;
+  rbuilder["rejectDupKeys"] = true;
+  rbuilder["allowSpecialFloats"] = false;
+
+  std::string compressed;
+  if (!DecodeBase64 (input, compressed))
+    return false;
+
+  if (!UncompressData (compressed, maxOutputSize, uncompressed))
+    return false;
+
+  std::string parseErrs;
+  std::istringstream in(uncompressed);
+  try
+    {
+      if (!Json::parseFromStream (rbuilder, in, &output, &parseErrs))
+        return false;
+    }
+  catch (const Json::Exception& exc)
+    {
+      return false;
+    }
+
+  return output.isObject () || output.isArray ();
+}
+
+/* ************************************************************************** */
 
 } // namespace xaya

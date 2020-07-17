@@ -27,7 +27,11 @@ CXXFLAGS="${CXXFLAGS} -DGLOG_NO_ABBREVIATED_SEVERITIES"
 
 # Public dependencies (exposed in the headers of libxayagame to
 # users of the library).
-AX_PKG_CHECK_MODULES([JSONCPP], [jsoncpp], [])
+# jsoncpp 1.7.5 first included a fix for
+# https://github.com/open-source-parsers/jsoncpp/issues/511.  We need this,
+# since we use it to enforce rules on when uncompressing JSON values with
+# xayautil.
+AX_PKG_CHECK_MODULES([JSONCPP], [jsoncpp >= 1.7.5], [])
 AX_PKG_CHECK_MODULES([JSONRPCCLIENT], [libjsonrpccpp-client], [])
 AX_PKG_CHECK_MODULES([JSONRPCSERVER], [libjsonrpccpp-server], [])
 AX_PKG_CHECK_MODULES([SQLITE3], [sqlite3], [],

@@ -1,17 +1,22 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "compression_internal.hpp"
 
+#include "base64.hpp"
+
 #include <gtest/gtest.h>
 
+#include <sstream>
 #include <vector>
 
 namespace xaya
 {
 namespace
 {
+
+/* ************************************************************************** */
 
 class CompressionTests : public testing::Test
 {
@@ -133,6 +138,184 @@ TEST_F (CompressionTests, GzipFormat)
 
   ExpectInvalidUncompress (compressed, input.size ());
 }
+
+/* ************************************************************************** */
+
+class JsonCompressionTests : public testing::Test
+{
+
+protected:
+
+  /**
+   * Parses a given string into JSON.
+   */
+  static Json::Value
+  ParseJson (const std::string& str)
+  {
+    std::istringstream in(str);
+    Json::Value res;
+    in >> res;
+    return res;
+  }
+
+};
+
+TEST_F (JsonCompressionTests, Roundtrip)
+{
+  const std::string tests[] =
+    {
+      "{}",
+      "[]",
+      "[1, 2, 3]",
+      R"({
+        "foo":
+          {
+            "bar": 10,
+            "x": true,
+            "y": null,
+            "z": [1, "", 5]
+          },
+        "z": 1.5
+      })",
+    };
+
+  for (const auto& t : tests)
+    {
+      const auto input = ParseJson (t);
+
+      std::string encoded;
+      std::string uncompressed;
+      ASSERT_TRUE (CompressJson (input, encoded, uncompressed));
+      EXPECT_EQ (ParseJson (uncompressed), input);
+
+      Json::Value output = "dummy is overwritten";
+      std::string uncompressed2;
+      ASSERT_TRUE (UncompressJson (encoded, 100, 10, output, uncompressed2));
+      EXPECT_EQ (output, input);
+      EXPECT_EQ (uncompressed2, uncompressed);
+    }
+}
+
+TEST_F (JsonCompressionTests, SerialisedJsonFormat)
+{
+  const auto input = ParseJson (R"(
+    {
+      "foo": "bar",
+      "baz": null
+    }
+  )");
+  const std::string expectedString = R"({"baz":null,"foo":"bar"})";
+
+  std::string encoded;
+  std::string uncompressed;
+  ASSERT_TRUE (CompressJson (input, encoded, uncompressed));
+  EXPECT_EQ (uncompressed, expectedString);
+}
+
+TEST_F (JsonCompressionTests, NotObjectOrArray)
+{
+  std::string encoded;
+  std::string uncompressed;
+  EXPECT_FALSE (CompressJson (ParseJson ("null"), encoded, uncompressed));
+  EXPECT_FALSE (CompressJson (ParseJson ("42"), encoded, uncompressed));
+  EXPECT_FALSE (CompressJson (ParseJson ("\"foobar\""), encoded, uncompressed));
+}
+
+TEST_F (JsonCompressionTests, MaxOutputSize)
+{
+  const auto input = ParseJson (R"(["foobar"])");
+
+  std::string encoded;
+  std::string uncompressed;
+  ASSERT_TRUE (CompressJson (input, encoded, uncompressed));
+
+  Json::Value output;
+  std::string uncompressed2;
+  EXPECT_FALSE (UncompressJson (encoded, uncompressed.size () - 1, 10,
+                                output, uncompressed2));
+  ASSERT_TRUE (UncompressJson (encoded, uncompressed.size (), 10,
+                               output, uncompressed2));
+  EXPECT_EQ (output, input);
+}
+
+TEST_F (JsonCompressionTests, StackLimit)
+{
+  const auto input = ParseJson (R"([[[[{}]]]])");
+
+  std::string encoded;
+  std::string uncompressed;
+  ASSERT_TRUE (CompressJson (input, encoded, uncompressed));
+
+  Json::Value output;
+  std::string uncompressed2;
+  EXPECT_FALSE (UncompressJson (encoded, 100, 4, output, uncompressed2));
+  ASSERT_TRUE (UncompressJson (encoded, 100, 5, output, uncompressed2));
+  EXPECT_EQ (output, input);
+}
+
+TEST_F (JsonCompressionTests, InvalidBase64)
+{
+  Json::Value output;
+  std::string uncompressed2;
+  EXPECT_FALSE (UncompressJson ("invalid base64", 100, 10,
+                                output, uncompressed2));
+}
+
+TEST_F (JsonCompressionTests, InvalidCompressedData)
+{
+  const std::string encoded = EncodeBase64 ("invalid compressed data");
+
+  Json::Value output;
+  std::string uncompressed2;
+  EXPECT_FALSE (UncompressJson (encoded, 100, 10, output, uncompressed2));
+}
+
+TEST_F (JsonCompressionTests, WhitespaceOk)
+{
+  const std::string serialised = R"(
+    {
+      "value": "with trailing whitespace"
+    }
+  )";
+
+  const std::string encoded = EncodeBase64 (CompressData (serialised));
+
+  Json::Value output;
+  std::string uncompressed2;
+  ASSERT_TRUE (UncompressJson (encoded, 100, 10, output, uncompressed2));
+  EXPECT_EQ (output, ParseJson (serialised));
+  EXPECT_EQ (uncompressed2, serialised);
+}
+
+TEST_F (JsonCompressionTests, InvalidSerialisedJson)
+{
+  const std::string tests[] =
+    {
+      "",
+      "\"string\"",
+      "42",
+      "null",
+      "true",
+      "{1: 2}",
+      R"({"foo": NaN})",
+      R"({"foo": 0, "foo": 1})",
+      R"({"foo": 'single quotes'})",
+      "junk {}",
+      "{} junk",
+      "{} 42",
+    };
+
+  for (const auto& t : tests)
+    {
+      const std::string encoded = EncodeBase64 (CompressData (t));
+
+      Json::Value output;
+      std::string uncompressed2;
+      EXPECT_FALSE (UncompressJson (encoded, 100, 10, output, uncompressed2));
+    }
+}
+
+/* ************************************************************************** */
 
 } // anonymous namespace
 } // namespace xaya
