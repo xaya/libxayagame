@@ -60,7 +60,9 @@ RUN make && make install/strip
 # Install glog from source.
 WORKDIR /usr/src/glog
 RUN git clone https://github.com/google/glog .
-RUN cmake . && make && make install/strip
+RUN cmake . \
+  -DBUILD_SHARED_LIBS=ON
+RUN make && make install/strip
 
 # We also need to install googletest from source.
 WORKDIR /usr/src/googletest
@@ -94,7 +96,6 @@ RUN chmod a+x /usr/local/bin/cpld
 # Make sure all installed dependencies are visible.
 ENV PKG_CONFIG_PATH "/usr/local/lib64/pkgconfig"
 ENV LD_LIBRARY_PATH "/usr/local/lib:/usr/local/lib64"
-RUN echo $LD_LIBRARY_PATH
 
 # Build and install libxayagame itself.  Make sure to clean out any
 # potential garbage copied over in the build context.
