@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2020 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -50,6 +50,30 @@ DecodeBase64 (const std::string& encoded, std::string& data)
       return false;
     }
 
+  /* EVP_DecodeBlock is quite lenient with respect to padding
+     characters.  We want strict rules here, namely only accept 0-3
+     padding characters at the very end of the input string.  */
+  size_t padding = 0;
+  for (const char c : encoded)
+    {
+      if (c != '=')
+        {
+          if (padding > 0)
+            {
+              LOG (ERROR) << "Padding in the middle of base64 data";
+              return false;
+            }
+          continue;
+        }
+
+      ++padding;
+    }
+  if (padding >= 4)
+    {
+      LOG (ERROR) << "Too many padding characters in base64 data";
+      return false;
+    }
+
   /* The output data will have a length of three bytes for every four input
      characters.  */
   const size_t outputSize = encoded.size () / 4 * 3;
@@ -67,21 +91,13 @@ DecodeBase64 (const std::string& encoded, std::string& data)
   CHECK_EQ (n, outputSize);
 
   /* Strip the zero padding bytes off the end.  There will be as many padding
-     bytes as there are "=" signs at the end of the encoded data.  */
-  if (!encoded.empty ())
+     bytes as there were "=" characters at the end of encoded.  */
+  if (n == 0)
+    CHECK_EQ (padding, 0);
+  else
     {
-      size_t paddings = 0;
-      while (true)
-        {
-          CHECK_LT (paddings, encoded.size ());
-          if (encoded[encoded.size () - paddings - 1] != '=')
-            break;
-
-          ++paddings;
-          if (paddings == encoded.size ())
-            return false;
-        }
-      data.resize (data.size () - paddings);
+      CHECK_LT (padding, data.size ());
+      data.resize (data.size () - padding);
     }
 
   return true;
