@@ -11,6 +11,7 @@ from . import premine
 from . import xaya
 
 import argparse
+import copy
 import json
 import logging
 import os.path
@@ -278,7 +279,7 @@ class XayaGameTest (object):
       self.log.info ("name_update for %s failed, trying name_register" % name)
       return self.rpc.xaya.name_register (name, value, options)
 
-  def sendMove (self, name, move, options={}):
+  def sendMove (self, name, move, options={}, burn=0):
     """
     Sends a given move for the name.  This calls name_register or name_update,
     depending on whether the name exists already.  It also builds up the
@@ -286,7 +287,17 @@ class XayaGameTest (object):
     """
 
     value = json.dumps ({"g": {self.gameId: move}})
-    return self.registerOrUpdateName ("p/" + name, value, options)
+
+    opt = copy.deepcopy (options)
+
+    if burn > 0:
+      if "burn" not in opt:
+        opt["burn"] = {}
+      key = "g/%s" % self.gameId
+      assert key not in opt["burn"]
+      opt["burn"][key] = burn
+
+    return self.registerOrUpdateName ("p/" + name, value, opt)
 
   def adminCommand (self, cmd, options={}):
     """
