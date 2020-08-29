@@ -55,9 +55,9 @@ GetGameDirectory (const GameDaemonConfiguration& config,
 {
   CHECK (!config.DataDirectory.empty ()) << "DataDirectory has not been set";
   const fs::path gameDir
-      = fs::path (config.DataDirectory)
-          / fs::path (gameId)
-          / fs::path (ChainToString (chain));
+      = fs::u8path (config.DataDirectory)
+          / fs::u8path (gameId)
+          / fs::u8path (ChainToString (chain));
 
   if (fs::is_directory (gameDir))
     LOG (INFO) << "Using existing data directory: " << gameDir;
@@ -96,7 +96,7 @@ CreateStorage (const GameDaemonConfiguration& config,
   if (config.StorageType == "sqlite")
     {
       const fs::path dbFile = gameDir / fs::path ("storage.sqlite");
-      return std::make_unique<SQLiteStorage> (dbFile.string ());
+      return std::make_unique<SQLiteStorage> (dbFile.u8string ());
     }
 
   LOG (FATAL) << "Invalid storage type selected: " << config.StorageType;
@@ -276,7 +276,7 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
                                                  game->GetChain ());
       const fs::path dbFile = gameDir / fs::path ("storage.sqlite");
 
-      rules.Initialise (dbFile.string ());
+      rules.Initialise (dbFile.u8string ());
       game->SetStorage (rules.GetStorage ());
 
       game->SetGameLogic (rules);
