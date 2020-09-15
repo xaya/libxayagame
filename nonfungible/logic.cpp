@@ -4,6 +4,8 @@
 
 #include "logic.hpp"
 
+#include "schema.hpp"
+
 #include <glog/logging.h>
 
 namespace nf
@@ -12,7 +14,7 @@ namespace nf
 void
 NonFungibleLogic::SetupSchema (xaya::SQLiteDatabase& db)
 {
-  LOG (WARNING) << "No database schema";
+  SetupDatabaseSchema (*db);
 }
 
 void

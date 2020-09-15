@@ -1,6 +1,11 @@
 noinst_LTLIBRARIES = libnonfungible.la
 bin_PROGRAMS = nonfungibled
 
+EXTRA_DIST = \
+  schema.sql schema_head.cpp schema_tail.cpp
+
+CLEANFILES = schema.cpp
+
 libnonfungible_la_CXXFLAGS = \
   -I$(top_srcdir) \
   $(JSONCPP_CFLAGS) $(SQLITE_CFLAGS) $(GLOG_CFLAGS)
@@ -9,9 +14,11 @@ libnonfungible_la_LIBADD = \
   $(top_builddir)/xayagame/libxayagame.la \
   $(JSONCPP_LIBS) $(SQLITE_LIBS) $(GLOG_LIBS)
 libnonfungible_la_SOURCES = \
-  logic.cpp
+  logic.cpp \
+  schema.cpp
 noinst_HEADERS = \
-  logic.hpp
+  logic.hpp \
+  schema.hpp
 
 nonfungibled_CXXFLAGS = \
   -I$(top_srcdir) \
@@ -23,3 +30,26 @@ nonfungibled_LDADD = \
   $(top_builddir)/xayagame/libxayagame.la \
   $(GLOG_LIBS) $(GFLAGS_LIBS)
 nonfungibled_SOURCES = main.cpp
+
+check_PROGRAMS = tests
+TESTS = tests
+
+tests_CXXFLAGS = \
+  -I$(top_srcdir) \
+  $(GTEST_CFLAGS) \
+  $(JSONCPP_CFLAGS) $(SQLITE_CFLAGS) $(GLOG_CFLAGS)
+tests_LDADD = \
+  $(builddir)/libnonfungible.la \
+  $(top_builddir)/xayautil/libxayautil.la \
+  $(top_builddir)/xayagame/libxayagame.la \
+  $(GTEST_LIBS) \
+  $(JSONCPP_LIBS) $(SQLITE_LIBS) $(GLOG_LIBS)
+tests_SOURCES = \
+  schema_tests.cpp \
+  \
+  testutils.cpp
+check_HEADERS = \
+  testutils.hpp
+
+schema.cpp: schema_head.cpp schema.sql schema_tail.cpp
+	cat $^ >$@
