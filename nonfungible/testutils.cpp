@@ -4,12 +4,24 @@
 
 #include "testutils.hpp"
 
+#include "dbutils.hpp"
 #include "schema.hpp"
 
 #include <glog/logging.h>
 
+#include <sstream>
+
 namespace nf
 {
+
+Json::Value
+ParseJson (const std::string& val)
+{
+  std::istringstream in(val);
+  Json::Value res;
+  in >> res;
+  return res;
+}
 
 DBTest::DBTest ()
   : db("test", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_MEMORY)

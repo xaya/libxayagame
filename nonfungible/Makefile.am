@@ -14,9 +14,13 @@ libnonfungible_la_LIBADD = \
   $(top_builddir)/xayagame/libxayagame.la \
   $(JSONCPP_LIBS) $(SQLITE_LIBS) $(GLOG_LIBS)
 libnonfungible_la_SOURCES = \
+  assets.cpp \
+  dbutils.cpp \
   logic.cpp \
   schema.cpp
 noinst_HEADERS = \
+  assets.hpp \
+  dbutils.hpp \
   logic.hpp \
   schema.hpp
 
@@ -45,6 +49,7 @@ tests_LDADD = \
   $(GTEST_LIBS) \
   $(JSONCPP_LIBS) $(SQLITE_LIBS) $(GLOG_LIBS)
 tests_SOURCES = \
+  assets_tests.cpp \
   schema_tests.cpp \
   \
   testutils.cpp

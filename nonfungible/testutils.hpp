@@ -11,8 +11,15 @@
 
 #include <sqlite3.h>
 
+#include <json/json.h>
+
 namespace nf
 {
+
+/**
+ * Parses JSON from a string.
+ */
+Json::Value ParseJson (const std::string& val);
 
 /**
  * Test fixture with a temporary, in-memory SQLite database and our
