@@ -5,6 +5,8 @@
 #ifndef NONFUNGIBLE_TESTUTILS_HPP
 #define NONFUNGIBLE_TESTUTILS_HPP
 
+#include "assets.hpp"
+
 #include "xayagame/sqlitestorage.hpp"
 
 #include <gtest/gtest.h>
@@ -12,6 +14,8 @@
 #include <sqlite3.h>
 
 #include <json/json.h>
+
+#include <string>
 
 namespace nf
 {
@@ -53,6 +57,18 @@ protected:
   {
     return db;
   }
+
+  /**
+   * Inserts an asset into the database for testing purposes.  If data is
+   * "null" (as literal string), then no data will be placed, otherwise the
+   * given string.
+   */
+  void InsertAsset (const Asset& a, const std::string& data);
+
+  /**
+   * Inserts a balance entry into the database for testing purposes.
+   */
+  void InsertBalance (const Asset& a, const std::string& name, Amount num);
 
 };
 

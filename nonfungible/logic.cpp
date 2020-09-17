@@ -4,6 +4,7 @@
 
 #include "logic.hpp"
 
+#include "moveprocessor.hpp"
 #include "schema.hpp"
 
 #include <glog/logging.h>
@@ -58,7 +59,8 @@ void
 NonFungibleLogic::UpdateState (xaya::SQLiteDatabase& db,
                                const Json::Value& blockData)
 {
-  LOG (WARNING) << "Implement state update";
+  MoveProcessor proc(db);
+  proc.ProcessAll (blockData["moves"]);
 }
 
 Json::Value

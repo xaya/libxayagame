@@ -17,11 +17,15 @@ libnonfungible_la_SOURCES = \
   assets.cpp \
   dbutils.cpp \
   logic.cpp \
+  moveparser.cpp \
+  moveprocessor.cpp \
   schema.cpp
 noinst_HEADERS = \
   assets.hpp \
   dbutils.hpp \
   logic.hpp \
+  moveparser.hpp \
+  moveprocessor.hpp \
   schema.hpp
 
 nonfungibled_CXXFLAGS = \
@@ -50,6 +54,7 @@ tests_LDADD = \
   $(JSONCPP_LIBS) $(SQLITE_LIBS) $(GLOG_LIBS)
 tests_SOURCES = \
   assets_tests.cpp \
+  moveprocessor_tests.cpp \
   schema_tests.cpp \
   \
   testutils.cpp
