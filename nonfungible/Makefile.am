@@ -19,6 +19,7 @@ libnonfungible_la_SOURCES = \
   logic.cpp \
   moveparser.cpp \
   moveprocessor.cpp \
+  pending.cpp \
   schema.cpp
 noinst_HEADERS = \
   assets.hpp \
@@ -26,6 +27,7 @@ noinst_HEADERS = \
   logic.hpp \
   moveparser.hpp \
   moveprocessor.hpp \
+  pending.hpp \
   schema.hpp
 
 nonfungibled_CXXFLAGS = \
@@ -55,6 +57,7 @@ tests_LDADD = \
 tests_SOURCES = \
   assets_tests.cpp \
   moveprocessor_tests.cpp \
+  pending_tests.cpp \
   schema_tests.cpp \
   \
   testutils.cpp

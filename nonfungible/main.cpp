@@ -5,6 +5,7 @@
 #include "config.h"
 
 #include "logic.hpp"
+#include "pending.hpp"
 
 #include "xayagame/defaultmain.hpp"
 
@@ -35,6 +36,9 @@ DEFINE_int32 (enable_pruning, -1,
 DEFINE_string (datadir, "",
                "base data directory for state data"
                " (will be extended by 'nf' and the chain)");
+
+DEFINE_bool (pending_moves, true,
+             "whether or not pending moves should be tracked");
 
 } // anonymous namespace
 
@@ -71,5 +75,9 @@ main (int argc, char** argv)
   config.DataDirectory = FLAGS_datadir;
 
   nf::NonFungibleLogic rules;
+  nf::PendingMoves pending(rules);
+  if (FLAGS_pending_moves)
+    config.PendingMoves = &pending;
+
   return xaya::SQLiteMain (config, "nf", rules);
 }
