@@ -6,6 +6,8 @@
 
 #include "dbutils.hpp"
 
+#include "xayautil/jsonutils.hpp"
+
 namespace nf
 {
 
@@ -18,7 +20,7 @@ AmountToJson (const Amount n)
 bool
 AmountFromJson (const Json::Value& val, Amount& n)
 {
-  if (!val.isInt64 ())
+  if (!xaya::IsIntegerValue (val) || !val.isInt64 ())
     return false;
 
   n = val.asInt64 ();

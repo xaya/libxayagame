@@ -34,7 +34,7 @@ TEST_F (AssetsTests, InvalidAmountFromJson)
 {
   Amount a;
   ASSERT_FALSE (AmountFromJson (Json::Value (MAX_AMOUNT + 1), a));
-  for (const std::string str : {"-5", "42.5", "null", "false", "\"10\"",
+  for (const std::string str : {"-5", "42.0", "1e5", "null", "false", "\"10\"",
                                 "[1]", "{\"foo\":\"bar\"}"})
     ASSERT_FALSE (AmountFromJson (ParseJson (str), a)) << str;
 }
@@ -43,11 +43,11 @@ TEST_F (AssetsTests, ValidAmountFromJson)
 {
   Amount a;
 
-  ASSERT_TRUE (AmountFromJson (ParseJson ("42.0"), a));
+  ASSERT_TRUE (AmountFromJson (ParseJson ("42"), a));
   EXPECT_EQ (a, 42);
 
-  ASSERT_TRUE (AmountFromJson (ParseJson ("1.5e1"), a));
-  EXPECT_EQ (a, 15);
+  ASSERT_TRUE (AmountFromJson (ParseJson ("1"), a));
+  EXPECT_EQ (a, 1);
 
   ASSERT_TRUE (AmountFromJson (ParseJson ("-0"), a));
   EXPECT_EQ (a, 0);

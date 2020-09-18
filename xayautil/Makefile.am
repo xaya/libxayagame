@@ -12,6 +12,7 @@ libxayautil_la_SOURCES = \
   compression.cpp \
   cryptorand.cpp \
   hash.cpp \
+  jsonutils.cpp \
   random.cpp \
   uint256.cpp
 xayautil_HEADERS = \
@@ -19,6 +20,7 @@ xayautil_HEADERS = \
   compression.hpp \
   cryptorand.hpp \
   hash.hpp \
+  jsonutils.hpp \
   random.hpp random.tpp \
   uint256.hpp
 noinst_HEADERS = \
@@ -35,5 +37,6 @@ tests_SOURCES = \
   compression_tests.cpp \
   cryptorand_tests.cpp \
   hash_tests.cpp \
+  jsonutils_tests.cpp \
   random_tests.cpp \
   uint256_tests.cpp
