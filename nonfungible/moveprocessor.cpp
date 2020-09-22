@@ -37,7 +37,7 @@ MoveProcessor::UpdateBalance (const Asset& a, const std::string& name,
       )");
       BindParam (stmt, 1, name);
       a.BindToParams (stmt, 2, 3);
-      CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+      CHECK (!StepStatement (stmt));
     }
   else
     {
@@ -49,7 +49,7 @@ MoveProcessor::UpdateBalance (const Asset& a, const std::string& name,
       BindParam (stmt, 1, name);
       a.BindToParams (stmt, 2, 3);
       BindParam (stmt, 4, newBalance);
-      CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+      CHECK (!StepStatement (stmt));
     }
 }
 
@@ -67,7 +67,7 @@ MoveProcessor::ProcessMint (const Asset& a, const Amount supply,
     BindParam (stmt, 3, *data);
   else
     BindNullParam (stmt, 3);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  CHECK (!StepStatement (stmt));
 
   if (supply > 0)
     UpdateBalance (a, a.GetMinter (), supply);

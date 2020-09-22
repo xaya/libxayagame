@@ -37,12 +37,14 @@ DBTest::InsertAsset (const Asset& a, const std::string& data)
       (`minter`, `asset`, `data`)
       VALUES (?1, ?2, ?3)
   )");
+
   a.BindToParams (stmt, 1, 2);
   if (data == "null")
     BindNullParam (stmt, 3);
   else
     BindParam (stmt, 3, data);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+
+  CHECK (!StepStatement (stmt));
 }
 
 void
@@ -54,10 +56,12 @@ DBTest::InsertBalance (const Asset& a, const std::string& name,
       (`name`, `minter`, `asset`, `balance`)
       VALUES (?1, ?2, ?3, ?4)
   )");
+
   BindParam (stmt, 1, name);
   a.BindToParams (stmt, 2, 3);
   BindParam (stmt, 4, num);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+
+  CHECK (!StepStatement (stmt));
 }
 
 } // namespace nf

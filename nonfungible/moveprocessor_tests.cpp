@@ -40,13 +40,8 @@ ExpectAssets (const xaya::SQLiteDatabase& db, const AllAssets& expected)
   )");
 
   AllAssets actual;
-  while (true)
+  while (StepStatement (stmt))
     {
-      const int rc = sqlite3_step (stmt);
-      if (rc == SQLITE_DONE)
-        break;
-      CHECK_EQ (rc, SQLITE_ROW);
-
       const auto a = Asset::FromColumns (stmt, 0, 1);
       std::string data;
       if (ColumnIsNull (stmt, 2))
@@ -80,13 +75,8 @@ ExpectBalances (const xaya::SQLiteDatabase& db, const AllBalances& expected)
   )");
 
   AllBalances actual;
-  while (true)
+  while (StepStatement (stmt))
     {
-      const int rc = sqlite3_step (stmt);
-      if (rc == SQLITE_DONE)
-        break;
-      CHECK_EQ (rc, SQLITE_ROW);
-
       const auto name = ColumnExtract<std::string> (stmt, 0);
       const auto a = Asset::FromColumns (stmt, 1, 2);
       const auto num = ColumnExtract<int64_t> (stmt, 3);

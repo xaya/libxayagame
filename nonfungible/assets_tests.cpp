@@ -4,6 +4,7 @@
 
 #include "assets.hpp"
 
+#include "dbutils.hpp"
 #include "testutils.hpp"
 
 #include <glog/logging.h>
@@ -65,16 +66,16 @@ TEST_F (AssetsTests, DatabaseRoundtrip)
       VALUES (?1, ?2)
   )");
   a.BindToParams (stmt, 1, 2);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  CHECK (!StepStatement (stmt));
 
   stmt = GetDb ().PrepareRo (R"(
     SELECT `minter`, `asset` FROM `assets`
   )");
 
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW);
+  CHECK (StepStatement (stmt));
   const Asset recovered = Asset::FromColumns (stmt, 0, 1);
   EXPECT_EQ (recovered, a);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  CHECK (!StepStatement (stmt));
 }
 
 TEST_F (AssetsTests, IsValidName)

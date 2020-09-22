@@ -55,4 +55,15 @@ ColumnIsNull (sqlite3_stmt* stmt, const int num)
   return sqlite3_column_type (stmt, num) == SQLITE_NULL;
 }
 
+bool
+StepStatement (sqlite3_stmt* stmt)
+{
+  const int rc = sqlite3_step (stmt);
+  if (rc == SQLITE_DONE)
+    return false;
+
+  CHECK_EQ (rc, SQLITE_ROW);
+  return true;
+}
+
 } // namespace nf

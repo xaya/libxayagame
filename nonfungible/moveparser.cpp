@@ -6,8 +6,6 @@
 
 #include "dbutils.hpp"
 
-#include <sqlite3.h>
-
 #include <glog/logging.h>
 
 namespace nf
@@ -23,9 +21,9 @@ MoveParser::AssetExists (const Asset& a) const
   )");
   a.BindToParams (stmt, 1, 2);
 
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW);
+  CHECK (StepStatement (stmt));
   const auto count = ColumnExtract<int64_t> (stmt, 0);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  CHECK (!StepStatement (stmt));
 
   CHECK_GE (count, 0);
   CHECK_LE (count, 1);
@@ -44,13 +42,11 @@ MoveParser::GetBalance (const Asset& a, const std::string& name) const
   BindParam (stmt, 1, name);
   a.BindToParams (stmt, 2, 3);
 
-  const int rc = sqlite3_step (stmt);
-  if (rc == SQLITE_DONE)
+  if (!StepStatement (stmt))
     return 0;
 
-  CHECK_EQ (rc, SQLITE_ROW);
   const Amount res = ColumnExtract<int64_t> (stmt, 0);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  CHECK (!StepStatement (stmt));
 
   return res;
 }
