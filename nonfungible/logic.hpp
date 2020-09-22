@@ -5,11 +5,14 @@
 #ifndef NONFUNGIBLE_LOGIC_HPP
 #define NONFUNGIBLE_LOGIC_HPP
 
+#include "statejson.hpp"
+
 #include <xayagame/sqlitegame.hpp>
 #include <xayagame/sqlitestorage.hpp>
 
 #include <json/json.h>
 
+#include <functional>
 #include <string>
 
 namespace nf
@@ -36,10 +39,24 @@ protected:
 
 public:
 
+  /**
+   * Type for a callback that extracts custom JSON from the game state
+   * (through a StateJsonExtractor instance).
+   */
+  using StateCallback
+      = std::function<Json::Value (const StateJsonExtractor& ext)>;
+
   NonFungibleLogic () = default;
 
   NonFungibleLogic (const NonFungibleLogic&) = delete;
   void operator= (const NonFungibleLogic&) = delete;
+
+  /**
+   * Extracts some custom JSON from the current game-state database, using
+   * the provided extractor callback, which can then operate through a
+   * StateJsonExtractor instance.
+   */
+  Json::Value GetCustomStateData (xaya::Game& game, const StateCallback& cb);
 
 };
 

@@ -6,6 +6,7 @@
 
 #include "logic.hpp"
 #include "pending.hpp"
+#include "rpcserver.hpp"
 
 #include "xayagame/defaultmain.hpp"
 
@@ -39,6 +40,34 @@ DEFINE_string (datadir, "",
 
 DEFINE_bool (pending_moves, true,
              "whether or not pending moves should be tracked");
+
+class NFInstanceFactory : public xaya::CustomisedInstanceFactory
+{
+
+private:
+
+  /**
+   * Reference to the NonFungibleLogic instance.  This is needed to construct
+   * the RPC server.
+   */
+  nf::NonFungibleLogic& logic;
+
+public:
+
+  explicit NFInstanceFactory (nf::NonFungibleLogic& l)
+    : logic(l)
+  {}
+
+  std::unique_ptr<xaya::RpcServerInterface>
+  BuildRpcServer (xaya::Game& game,
+                  jsonrpc::AbstractServerConnector& conn) override
+  {
+    std::unique_ptr<xaya::RpcServerInterface> res;
+    res.reset (new xaya::WrappedRpcServer<nf::RpcServer> (game, logic, conn));
+    return res;
+  }
+
+};
 
 } // anonymous namespace
 
@@ -74,10 +103,14 @@ main (int argc, char** argv)
   config.EnablePruning = FLAGS_enable_pruning;
   config.DataDirectory = FLAGS_datadir;
 
-  nf::NonFungibleLogic rules;
-  nf::PendingMoves pending(rules);
+  nf::NonFungibleLogic logic;
+
+  NFInstanceFactory fact(logic);
+  config.InstanceFactory = &fact;
+
+  nf::PendingMoves pending(logic);
   if (FLAGS_pending_moves)
     config.PendingMoves = &pending;
 
-  return xaya::SQLiteMain (config, "nf", rules);
+  return xaya::SQLiteMain (config, "nf", logic);
 }

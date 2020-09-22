@@ -6,7 +6,6 @@
 
 #include "moveprocessor.hpp"
 #include "schema.hpp"
-#include "statejson.hpp"
 
 #include <glog/logging.h>
 
@@ -68,6 +67,17 @@ Json::Value
 NonFungibleLogic::GetStateAsJson (const xaya::SQLiteDatabase& db)
 {
   return StateJsonExtractor (db).FullState ();
+}
+
+Json::Value
+NonFungibleLogic::GetCustomStateData (xaya::Game& game, const StateCallback& cb)
+{
+  return SQLiteGame::GetCustomStateData (game, "data",
+      [this, &cb] (const xaya::SQLiteDatabase& db)
+        {
+          const StateJsonExtractor ext(db);
+          return cb(ext);
+        });
 }
 
 } // namespace nf

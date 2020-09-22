@@ -2,9 +2,12 @@ noinst_LTLIBRARIES = libnonfungible.la
 bin_PROGRAMS = nonfungibled
 
 EXTRA_DIST = \
+  rpc-stubs/nf.json \
   schema.sql schema_head.cpp schema_tail.cpp
 
-CLEANFILES = schema.cpp
+RPC_STUBS = rpc-stubs/nfrpcserverstub.h
+BUILT_SOURCES = $(RPC_STUBS)
+CLEANFILES = schema.cpp $(RPC_STUBS)
 
 libnonfungible_la_CXXFLAGS = \
   -I$(top_srcdir) \
@@ -22,7 +25,7 @@ libnonfungible_la_SOURCES = \
   pending.cpp \
   schema.cpp \
   statejson.cpp
-noinst_HEADERS = \
+libnonfungibleheaders = \
   assets.hpp \
   dbutils.hpp \
   logic.hpp \
@@ -41,7 +44,14 @@ nonfungibled_LDADD = \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
   $(GLOG_LIBS) $(GFLAGS_LIBS)
-nonfungibled_SOURCES = main.cpp
+nonfungibled_SOURCES = main.cpp \
+  rpcserver.cpp
+nonfungibledheaders = \
+  rpcserver.hpp \
+  \
+  rpc-stubs/nfrpcserverstub.h
+
+noinst_HEADERS = $(libnonfungibleheaders) $(nonfungibledheaders)
 
 check_PROGRAMS = tests
 TESTS = tests
@@ -69,3 +79,6 @@ check_HEADERS = \
 
 schema.cpp: schema_head.cpp schema.sql schema_tail.cpp
 	cat $^ >$@
+
+rpc-stubs/nfrpcserverstub.h: $(srcdir)/rpc-stubs/nf.json
+	jsonrpcstub "$<" --cpp-server=NFRpcServerStub --cpp-server-file="$@"
