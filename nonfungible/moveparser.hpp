@@ -17,6 +17,13 @@ namespace nf
 {
 
 /**
+ * Extracts the balance of a given asset and user from the database.
+ * Returns 0 if there is no entry.
+ */
+Amount GetDbBalance (const xaya::SQLiteDatabase& db, const Asset& a,
+                     const std::string& name);
+
+/**
  * Core implementation of parsing and validating moves received either
  * in new blocks or as pending transactions.  The actual processing of them
  * (i.e. updating the game-state database or pending state) is done by

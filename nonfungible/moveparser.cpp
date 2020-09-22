@@ -11,6 +11,27 @@
 namespace nf
 {
 
+Amount
+GetDbBalance (const xaya::SQLiteDatabase& db, const Asset& a,
+              const std::string& name)
+{
+  auto* stmt = db.PrepareRo (R"(
+    SELECT `balance`
+      FROM `balances`
+      WHERE `name` = ?1 AND `minter` = ?2 AND `asset` = ?3
+  )");
+  BindParam (stmt, 1, name);
+  a.BindToParams (stmt, 2, 3);
+
+  if (!StepStatement (stmt))
+    return 0;
+
+  const Amount res = ColumnExtract<int64_t> (stmt, 0);
+  CHECK (!StepStatement (stmt));
+
+  return res;
+}
+
 bool
 MoveParser::AssetExists (const Asset& a) const
 {
@@ -34,21 +55,7 @@ MoveParser::AssetExists (const Asset& a) const
 Amount
 MoveParser::GetBalance (const Asset& a, const std::string& name) const
 {
-  auto* stmt = db.PrepareRo (R"(
-    SELECT `balance`
-      FROM `balances`
-      WHERE `name` = ?1 AND `minter` = ?2 AND `asset` = ?3
-  )");
-  BindParam (stmt, 1, name);
-  a.BindToParams (stmt, 2, 3);
-
-  if (!StepStatement (stmt))
-    return 0;
-
-  const Amount res = ColumnExtract<int64_t> (stmt, 0);
-  CHECK (!StepStatement (stmt));
-
-  return res;
+  return GetDbBalance (db, a, name);
 }
 
 void

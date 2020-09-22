@@ -20,7 +20,8 @@ libnonfungible_la_SOURCES = \
   moveparser.cpp \
   moveprocessor.cpp \
   pending.cpp \
-  schema.cpp
+  schema.cpp \
+  statejson.cpp
 noinst_HEADERS = \
   assets.hpp \
   dbutils.hpp \
@@ -28,7 +29,8 @@ noinst_HEADERS = \
   moveparser.hpp \
   moveprocessor.hpp \
   pending.hpp \
-  schema.hpp
+  schema.hpp \
+  statejson.hpp
 
 nonfungibled_CXXFLAGS = \
   -I$(top_srcdir) \
@@ -59,6 +61,7 @@ tests_SOURCES = \
   moveprocessor_tests.cpp \
   pending_tests.cpp \
   schema_tests.cpp \
+  statejson_tests.cpp \
   \
   testutils.cpp
 check_HEADERS = \

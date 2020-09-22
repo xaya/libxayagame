@@ -6,6 +6,7 @@
 
 #include "moveprocessor.hpp"
 #include "schema.hpp"
+#include "statejson.hpp"
 
 #include <glog/logging.h>
 
@@ -66,8 +67,7 @@ NonFungibleLogic::UpdateState (xaya::SQLiteDatabase& db,
 Json::Value
 NonFungibleLogic::GetStateAsJson (const xaya::SQLiteDatabase& db)
 {
-  LOG (WARNING) << "Implement state JSON";
-  return Json::Value ();
+  return StateJsonExtractor (db).FullState ();
 }
 
 } // namespace nf
