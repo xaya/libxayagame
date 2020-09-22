@@ -61,6 +61,7 @@ AC_CONFIG_FILES([
   mover/Makefile \
   mover/gametest/Makefile \
   nonfungible/Makefile \
+  nonfungible/gametest/Makefile \
   ships/Makefile \
   ships/channeltest/Makefile \
   ships/gametest/Makefile \

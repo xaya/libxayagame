@@ -1,3 +1,5 @@
+SUBDIRS = gametest
+
 noinst_LTLIBRARIES = libnonfungible.la
 bin_PROGRAMS = nonfungibled
 
