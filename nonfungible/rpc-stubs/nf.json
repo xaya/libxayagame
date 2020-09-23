@@ -1,0 +1,56 @@
+[
+  {
+    "name": "stop",
+    "params": {}
+  },
+  {
+    "name": "getcurrentstate",
+    "params": {},
+    "returns": {}
+  },
+  {
+    "name": "getnullstate",
+    "params": {},
+    "returns": {}
+  },
+  {
+    "name": "getpendingstate",
+    "params": {},
+    "returns": {}
+  },
+  {
+    "name": "waitforchange",
+    "params": ["known block"],
+    "returns": ""
+  },
+  {
+    "name": "waitforpendingchange",
+    "params": [42],
+    "returns": {}
+  },
+
+  {
+    "name": "listassets",
+    "params": [],
+    "returns": {}
+  },
+  {
+    "name": "getassetdetails",
+    "params": [{"m": "domob", "a": "foo"}],
+    "returns": {}
+  },
+  {
+    "name": "getbalance",
+    "params":
+      {
+        "asset": {},
+        "name": "daniel"
+      },
+    "returns": {}
+  },
+  {
+    "name": "getuserbalances",
+    "params": ["daniel"],
+    "returns": {}
+  }
+]

@@ -60,6 +60,8 @@ AC_CONFIG_FILES([
   gamechannel/Makefile \
   mover/Makefile \
   mover/gametest/Makefile \
+  nonfungible/Makefile \
+  nonfungible/gametest/Makefile \
   ships/Makefile \
   ships/channeltest/Makefile \
   ships/gametest/Makefile \

@@ -1,3 +1,3 @@
 ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS} -Im4
 
-SUBDIRS = xayautil xayagame xayagametest mover gamechannel ships
+SUBDIRS = xayautil xayagame xayagametest mover nonfungible gamechannel ships
