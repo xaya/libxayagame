@@ -3,6 +3,7 @@ AM_INIT_AUTOMAKE([subdir-objects])
 
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([config.h])
+AM_SILENT_RULES([yes])
 
 AC_PROG_CXX
 AM_PROG_AR
