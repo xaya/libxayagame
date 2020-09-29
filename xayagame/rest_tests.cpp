@@ -14,6 +14,8 @@ class RestApiTests : public testing::Test
 
 protected:
 
+  using SuccessResult = RestApi::SuccessResult;
+
   static bool
   MatchEndpoint (const std::string& path, const std::string& endpoint,
                  std::string& remainder)
@@ -40,6 +42,16 @@ TEST_F (RestApiTests, MatchEndpoint)
 
   ASSERT_TRUE (MatchEndpoint ("/foo/bla", "/foo/", remainder));
   EXPECT_EQ (remainder, "bla");
+}
+
+TEST_F (RestApiTests, Compression)
+{
+  /* We do not yet have any decompression methods, so we just verify that
+     "it works" to compress some data.  */
+  const SuccessResult original("text/plain", std::string (1 << 20, 'x'));
+  const auto compressed = original.Gzip ();
+  EXPECT_EQ (compressed.GetType (), "text/plain+gzip");
+  EXPECT_LT (compressed.GetPayload ().size (), original.GetPayload ().size ());
 }
 
 } // anonymous namespace

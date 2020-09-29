@@ -6,7 +6,13 @@
 
 #include <microhttpd.h>
 
+#include <zlib.h>
+
 #include <glog/logging.h>
+
+#include <unistd.h>
+
+#include <thread>
 
 namespace xaya
 {
@@ -24,6 +30,56 @@ RestApi::SuccessResult::SuccessResult (const Json::Value& val)
   wbuilder["useSpecialFloats"] = false;
 
   payload = Json::writeString (wbuilder, val);
+}
+
+RestApi::SuccessResult
+RestApi::SuccessResult::Gzip () const
+{
+  SuccessResult res;
+  res.type = type + "+gzip";
+
+  /* Unfortunately, it seems zlib supports the gzip format mainly through
+     a wrapper around files / file descriptors.  Thus we can't just encode
+     a buffer in gzip format, but have to serve it through such a descriptor.
+     We use a local pipe to get around this.  */
+
+  int fd[2];
+  CHECK_EQ (pipe (fd), 0);
+
+  std::thread writer([&] ()
+    {
+      gzFile gz = gzdopen (fd[1], "wb9");
+
+      const char* buf = payload.data ();
+      size_t len = payload.size ();
+      while (len > 0)
+        {
+          const int n = gzwrite (gz, buf, len);
+          CHECK_GT (n, 0) << "gzwrite failed";
+          CHECK_LE (n, len);
+          buf += n;
+          len -= n;
+        }
+
+      CHECK_EQ (gzclose (gz), Z_OK);
+    });
+
+  static constexpr size_t BUF_SIZE = 4'096;
+  char buf[BUF_SIZE];
+  while (true)
+    {
+      const int n = read (fd[0], buf, BUF_SIZE);
+      CHECK_GE (n, 0);
+      if (n == 0)
+        break;
+
+      res.payload += std::string (buf, n);
+    }
+
+  writer.join ();
+  CHECK_EQ (close (fd[0]), 0);
+
+  return res;
 }
 
 /* ************************************************************************** */

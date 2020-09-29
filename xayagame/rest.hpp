@@ -101,6 +101,8 @@ private:
   /** The raw payload data.  */
   std::string payload;
 
+  SuccessResult () = default;
+
 public:
 
   explicit SuccessResult (const std::string& t, const std::string& p)
@@ -108,6 +110,18 @@ public:
   {}
 
   explicit SuccessResult (const Json::Value& val);
+
+  SuccessResult (SuccessResult&&) = default;
+  SuccessResult (const SuccessResult&) = default;
+
+  SuccessResult& operator= (const SuccessResult&) = default;
+  SuccessResult& operator= (SuccessResult&&) = default;
+
+  /**
+   * Compresses the existing result with gzip format and turns it into
+   * a new result.
+   */
+  SuccessResult Gzip () const;
 
   const std::string&
   GetType () const
