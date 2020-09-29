@@ -20,12 +20,12 @@ libxayagame_la_CXXFLAGS = \
   -I$(top_srcdir) \
   $(OPENSSL_CFLAGS) \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
-  $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
+  $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS) $(MHD_CFLAGS)
 libxayagame_la_LIBADD = \
   $(top_builddir)/xayautil/libxayautil.la \
   $(OPENSSL_LIBS) \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(GLOG_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS) \
+  $(GLOG_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS) $(MHD_LIBS) \
   -lstdc++fs
 libxayagame_la_SOURCES = \
   defaultmain.cpp \
@@ -37,6 +37,7 @@ libxayagame_la_SOURCES = \
   mainloop.cpp \
   pendingmoves.cpp \
   pruningqueue.cpp \
+  rest.cpp \
   signatures.cpp \
   sqlitegame.cpp \
   sqlitestorage.cpp \
@@ -53,6 +54,7 @@ xayagame_HEADERS = \
   mainloop.hpp \
   pendingmoves.hpp \
   pruningqueue.hpp \
+  rest.hpp \
   signatures.hpp \
   sqlitegame.hpp \
   sqlitestorage.hpp \
@@ -96,6 +98,7 @@ tests_SOURCES = \
   mainloop_tests.cpp \
   pendingmoves_tests.cpp \
   pruningqueue_tests.cpp \
+  rest_tests.cpp \
   signatures_tests.cpp \
   sqlitegame_tests.cpp \
   sqlitestorage_tests.cpp \

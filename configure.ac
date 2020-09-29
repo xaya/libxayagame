@@ -43,6 +43,7 @@ AX_PKG_CHECK_MODULES([GLOG], [libglog])
 
 # Private dependencies of the library itself.
 AX_PKG_CHECK_MODULES([OPENSSL], [], [openssl])
+AX_PKG_CHECK_MODULES([MHD], [], [libmicrohttpd])
 # We use deflateGetDictionary from zlib, which was introduced in version
 # 1.2.9.  Since zlib itself recommends using 1.2.11 over .9 and .10, let's
 # make sure we have at least this version.
