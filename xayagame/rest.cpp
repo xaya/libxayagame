@@ -17,6 +17,14 @@
 namespace xaya
 {
 
+namespace
+{
+
+/** Buffer size for IO with internal pipes (to use zlib's gzip interface).  */
+constexpr size_t PIPE_BUF_SIZE = 4'096;
+
+} // anonymous namespace
+
 /* ************************************************************************** */
 
 RestApi::SuccessResult::SuccessResult (const Json::Value& val)
@@ -49,6 +57,7 @@ RestApi::SuccessResult::Gzip () const
   std::thread writer([&] ()
     {
       gzFile gz = gzdopen (fd[1], "wb9");
+      CHECK (gz != nullptr);
 
       const char* buf = payload.data ();
       size_t len = payload.size ();
@@ -64,11 +73,10 @@ RestApi::SuccessResult::Gzip () const
       CHECK_EQ (gzclose (gz), Z_OK);
     });
 
-  static constexpr size_t BUF_SIZE = 4'096;
-  char buf[BUF_SIZE];
+  char buf[PIPE_BUF_SIZE];
   while (true)
     {
-      const int n = read (fd[0], buf, BUF_SIZE);
+      const int n = read (fd[0], buf, PIPE_BUF_SIZE);
       CHECK_GE (n, 0);
       if (n == 0)
         break;
@@ -340,8 +348,82 @@ RestClient::Request::Send (const std::string& path)
 bool
 RestClient::Request::ProcessData ()
 {
+  if (!ProcessGzip ())
+    return false;
+
   if (!ProcessJson ())
     return false;
+
+  return true;
+}
+
+bool
+RestClient::Request::ProcessGzip ()
+{
+  const std::string suffix = "+gzip";
+  if (type.size () < suffix.size ())
+    return true;
+  if (type.substr (type.size () - suffix.size (), suffix.size ()) != suffix)
+    return true;
+  type = type.substr (0, type.size () - suffix.size ());
+
+  /* As before, we use a pipe for zlib's gzip interface.  */
+
+  int fd[2];
+  CHECK_EQ (pipe (fd), 0);
+
+  std::thread writer([&] ()
+    {
+      const char* buf = data.data ();
+      size_t len = data.size ();
+      while (len > 0)
+        {
+          const int n = write (fd[1], buf, len);
+          CHECK_GE (n, 0) << "write failed";
+          CHECK_LE (n, len);
+          buf += n;
+          len -= n;
+        }
+
+      CHECK_EQ (close (fd[1]), 0);
+    });
+
+  gzFile gz = gzdopen (fd[0], "rb");
+  CHECK (gz != nullptr);
+
+  std::string uncompressed;
+  char buf[PIPE_BUF_SIZE];
+  while (true)
+    {
+      const int n = gzread (gz, buf, PIPE_BUF_SIZE);
+      if (n == -1)
+        {
+          int err;
+          error << "gzip error: " << gzerror (gz, &err);
+          error << " (code " << err << ")";
+
+          gzclose (gz);
+          return false;
+        }
+
+      uncompressed.append (buf, n);
+
+      if (n < static_cast<int> (PIPE_BUF_SIZE))
+        break;
+      CHECK_EQ (n, PIPE_BUF_SIZE);
+    }
+
+  writer.join ();
+
+  const int rc = gzclose (gz);
+  if (rc == Z_BUF_ERROR)
+    {
+      error << "incomplete gzip stream";
+      return false;
+    }
+  CHECK_EQ (rc, Z_OK);
+
+  data = std::move (uncompressed);
 
   return true;
 }

@@ -44,7 +44,7 @@ private:
                               const char* upload, size_t* uploadSize,
                               void** connData);
 
-  friend class RestApiTests;
+  friend class RestTests;
 
 protected:
 
@@ -250,6 +250,11 @@ private:
   bool ProcessData ();
 
   /**
+   * Tries to uncompress the data if the content-type indicates +gzip.
+   */
+  bool ProcessGzip ();
+
+  /**
    * Tries to parse data if the content-type is JSON.  Returns true if the
    * data is not JSON or parsing was fine, and false if the data claims to
    * be JSON but failed to parse.
@@ -279,6 +284,10 @@ public:
   /**
    * Start a request to the given path (relative to the client's endpoint).
    * Returns true on success and false if something went wrong.
+   *
+   * This transparently handles processing of the received data, for instance
+   * gzip decompression if the content-type indicates it, or parsing of
+   * the data as JSON if the content-type is application/json.
    */
   bool Send (const std::string& path);
 
