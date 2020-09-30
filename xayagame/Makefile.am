@@ -20,13 +20,13 @@ libxayagame_la_CXXFLAGS = \
   -I$(top_srcdir) \
   $(OPENSSL_CFLAGS) \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
-  $(ZLIB_CFLAGS) $(MHD_CFLAGS) \
+  $(ZLIB_CFLAGS) $(CURL_CFLAGS) $(MHD_CFLAGS) \
   $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
 libxayagame_la_LIBADD = \
   $(top_builddir)/xayautil/libxayautil.la \
   $(OPENSSL_LIBS) \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(ZLIB_LIBS) $(MHD_LIBS) \
+  $(ZLIB_LIBS) $(CURL_LIBS) $(MHD_LIBS) \
   $(GLOG_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS) \
   -lstdc++fs
 libxayagame_la_SOURCES = \

@@ -7,6 +7,8 @@
 
 #include "defaultmain.hpp"
 
+#include <curl/curl.h>
+
 #include <json/json.h>
 
 #include <stdexcept>
@@ -16,6 +18,8 @@ struct MHD_Daemon;
 
 namespace xaya
 {
+
+/* ************************************************************************** */
 
 /**
  * HTTP server providing a (read-only) REST API for a GSP.
@@ -165,6 +169,159 @@ public:
   }
 
 };
+
+/* ************************************************************************** */
+
+/**
+ * REST client handler.  This holds basic data for doing requests, like
+ * the TLS certificates or base endpoint to use.
+ */
+class RestClient
+{
+
+private:
+
+  /** The base API endpoint.  */
+  std::string endpoint;
+
+  /** If set, the CA file to use for TLS verification.  */
+  std::string caFile;
+
+public:
+
+  class Request;
+
+  /**
+   * Constructs a client with the given endpoint.  Also initialises the cURL
+   * library internally.
+   */
+  explicit RestClient (const std::string& url);
+
+  RestClient (const RestClient&) = delete;
+  void operator= (const RestClient&) = delete;
+
+  /**
+   * Sets the CA file to use.
+   */
+  void
+  SetCaFile (const std::string& f)
+  {
+    caFile = f;
+  }
+
+};
+
+/**
+ * Utility class to send a request to a REST API.  It mostly is just a wrapper
+ * around cURL easy for doing requests, but can also handle some processing
+ * of the received data (e.g. gzip-decompression and JSON parsing).
+ */
+class RestClient::Request
+{
+
+private:
+
+  /** The client this belongs to.  */
+  const RestClient& client;
+
+  /** The underlying cURL handle.  */
+  CURL* handle;
+
+  /** Error buffer.  */
+  std::string errBuffer;
+
+  /** Actual error message (from cURL or us).  */
+  std::ostringstream error;
+
+  /** Content type of the response.  */
+  std::string type;
+
+  /** Buffer into which the response data is saved.  */
+  std::string data;
+
+  /** Parsed JSON value, if the response is application/json.  */
+  Json::Value jsonData;
+
+  /**
+   * Performs any post-request processing of the raw payload data.  Returns
+   * false if something went wrong, e.g. the data claims to be JSON but
+   * fails to parse.
+   */
+  bool ProcessData ();
+
+  /**
+   * Tries to parse data if the content-type is JSON.  Returns true if the
+   * data is not JSON or parsing was fine, and false if the data claims to
+   * be JSON but failed to parse.
+   */
+  bool ProcessJson ();
+
+  /**
+   * cURL write callback that saves the bytes into our data string.
+   */
+  static size_t WriteCallback (const char* ptr, size_t sz, size_t n,
+                               Request* self);
+
+public:
+
+  explicit Request (const RestClient& c);
+  ~Request ();
+
+  Request () = delete;
+  Request (const Request&) = delete;
+  void operator= (const Request&) = delete;
+
+  /**
+   * Performs URL encoding of a string.
+   */
+  std::string UrlEncode (const std::string& str) const;
+
+  /**
+   * Start a request to the given path (relative to the client's endpoint).
+   * Returns true on success and false if something went wrong.
+   */
+  bool Send (const std::string& path);
+
+  /**
+   * Returns the raw payload data in case of success.
+   */
+  const std::string&
+  GetData () const
+  {
+    return data;
+  }
+
+  /**
+   * If this is JSON (application/json), returns the payload data as
+   * JSON value.
+   */
+  const Json::Value&
+  GetJson () const
+  {
+    return jsonData;
+  }
+
+  /**
+   * Returns the content type of the response.
+   */
+  const std::string&
+  GetType () const
+  {
+    return type;
+  }
+
+  /**
+   * Returns the error message in case of an error.
+   */
+  std::string
+  GetError () const
+  {
+    return error.str ();
+  }
+
+};
+
+/* ************************************************************************** */
 
 } // namespace xaya
 
