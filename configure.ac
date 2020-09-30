@@ -3,6 +3,7 @@ AM_INIT_AUTOMAKE([subdir-objects])
 
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS([config.h])
+AM_SILENT_RULES([yes])
 
 AC_PROG_CXX
 AM_PROG_AR
@@ -34,6 +35,7 @@ CXXFLAGS="${CXXFLAGS} -DGLOG_NO_ABBREVIATED_SEVERITIES"
 AX_PKG_CHECK_MODULES([JSONCPP], [jsoncpp >= 1.7.5], [])
 AX_PKG_CHECK_MODULES([JSONRPCCLIENT], [libjsonrpccpp-client], [])
 AX_PKG_CHECK_MODULES([JSONRPCSERVER], [libjsonrpccpp-server], [])
+AX_PKG_CHECK_MODULES([CURL], [libcurl], [])
 AX_PKG_CHECK_MODULES([SQLITE3], [sqlite3], [],
   [SQLITE3_CFLAGS="${SQLITE3_CFLAGS} -DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"])
 AX_PKG_CHECK_MODULES([LMDB], [lmdb], [])
@@ -42,6 +44,7 @@ AX_PKG_CHECK_MODULES([GLOG], [libglog])
 
 # Private dependencies of the library itself.
 AX_PKG_CHECK_MODULES([OPENSSL], [], [openssl])
+AX_PKG_CHECK_MODULES([MHD], [], [libmicrohttpd])
 # We use deflateGetDictionary from zlib, which was introduced in version
 # 1.2.9.  Since zlib itself recommends using 1.2.11 over .9 and .10, let's
 # make sure we have at least this version.
