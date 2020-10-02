@@ -10,9 +10,8 @@
 
 #include <glog/logging.h>
 
-#include <unistd.h>
-
-#include <thread>
+#include <cstdio>
+#include <cstring>
 
 namespace xaya
 {
@@ -20,8 +19,45 @@ namespace xaya
 namespace
 {
 
-/** Buffer size for IO with internal pipes (to use zlib's gzip interface).  */
-constexpr size_t PIPE_BUF_SIZE = 4'096;
+/** Buffer size for IO with temporary files (to use zlib's gzip interface).  */
+constexpr size_t TEMP_BUF_SIZE = 4'096;
+
+/**
+ * RAII helper that generates the name for a temporary file and removes the
+ * file again on destruction.
+ */
+class TempFileName
+{
+
+private:
+
+  /** The name of the temporary file.  */
+  std::string name;
+
+public:
+
+  TempFileName ()
+  {
+    name.resize (L_tmpnam);
+    CHECK (std::tmpnam (&name[0]) == name.data ());
+    name.resize (std::strlen (name.data ()));
+  }
+
+  ~TempFileName ()
+  {
+    /* Just optimistically try to delete the file, and ignore any
+       potential errors (e.g. because the file hasn't actually been
+       created by the calling code).  */
+    std::remove (name.c_str ());
+  }
+
+  const std::string&
+  GetName () const
+  {
+    return name;
+  }
+
+};
 
 } // anonymous namespace
 
@@ -49,43 +85,45 @@ RestApi::SuccessResult::Gzip () const
   /* Unfortunately, it seems zlib supports the gzip format mainly through
      a wrapper around files / file descriptors.  Thus we can't just encode
      a buffer in gzip format, but have to serve it through such a descriptor.
-     We use a local pipe to get around this.  */
+     We use a temporary file for this.  */
+  TempFileName file;
 
-  int fd[2];
-  CHECK_EQ (pipe (fd), 0);
+  {
+    gzFile gz = gzopen (file.GetName ().c_str (), "wb9");
+    CHECK (gz != nullptr);
 
-  std::thread writer([&] ()
-    {
-      gzFile gz = gzdopen (fd[1], "wb9");
-      CHECK (gz != nullptr);
+    const char* data = payload.data ();
+    size_t len = payload.size ();
+    while (len > 0)
+      {
+        const int n = gzwrite (gz, data, len);
+        CHECK_GT (n, 0) << "gzwrite failed";
+        CHECK_LE (n, len);
+        data += n;
+        len -= n;
+      }
 
-      const char* buf = payload.data ();
-      size_t len = payload.size ();
-      while (len > 0)
-        {
-          const int n = gzwrite (gz, buf, len);
-          CHECK_GT (n, 0) << "gzwrite failed";
-          CHECK_LE (n, len);
-          buf += n;
-          len -= n;
-        }
+    CHECK_EQ (gzclose (gz), Z_OK);
+  }
 
-      CHECK_EQ (gzclose (gz), Z_OK);
-    });
+  {
+    FILE* f = std::fopen (file.GetName ().c_str (), "rb");
+    CHECK (f != nullptr);
 
-  char buf[PIPE_BUF_SIZE];
-  while (true)
-    {
-      const int n = read (fd[0], buf, PIPE_BUF_SIZE);
-      CHECK_GE (n, 0);
-      if (n == 0)
-        break;
+    while (true)
+      {
+        char buf[TEMP_BUF_SIZE];
+        const int n = std::fread (buf, 1, TEMP_BUF_SIZE, f);
+        CHECK_GE (n, 0);
+        res.payload.append (buf, n);
 
-      res.payload += std::string (buf, n);
-    }
+        if (std::feof (f))
+          break;
+        CHECK_EQ (n, TEMP_BUF_SIZE);
+      }
 
-  writer.join ();
-  CHECK_EQ (close (fd[0]), 0);
+    CHECK_EQ (std::fclose (f), 0);
+  }
 
   return res;
 }
@@ -367,63 +405,54 @@ RestClient::Request::ProcessGzip ()
     return true;
   type = type.substr (0, type.size () - suffix.size ());
 
-  /* As before, we use a pipe for zlib's gzip interface.  */
+  /* As before, we use a temporary for zlib's gzip interface.  */
+  TempFileName file;
 
-  int fd[2];
-  CHECK_EQ (pipe (fd), 0);
+  {
+    FILE* f = std::fopen (file.GetName ().c_str (), "wb");
+    CHECK (f != nullptr);
 
-  std::thread writer([&] ()
-    {
-      const char* buf = data.data ();
-      size_t len = data.size ();
-      while (len > 0)
-        {
-          const int n = write (fd[1], buf, len);
-          CHECK_GE (n, 0) << "write failed";
-          CHECK_LE (n, len);
-          buf += n;
-          len -= n;
-        }
+    const int n = std::fwrite (data.data (), 1, data.size (), f);
+    CHECK_EQ (n, data.size ());
 
-      CHECK_EQ (close (fd[1]), 0);
-    });
+    CHECK_EQ (std::fclose (f), 0);
+  }
 
-  gzFile gz = gzdopen (fd[0], "rb");
-  CHECK (gz != nullptr);
+  {
+    gzFile gz = gzopen (file.GetName ().c_str (), "rb");
+    CHECK (gz != nullptr);
 
-  std::string uncompressed;
-  char buf[PIPE_BUF_SIZE];
-  while (true)
-    {
-      const int n = gzread (gz, buf, PIPE_BUF_SIZE);
-      if (n == -1)
-        {
-          int err;
-          error << "gzip error: " << gzerror (gz, &err);
-          error << " (code " << err << ")";
+    std::string uncompressed;
+    char buf[TEMP_BUF_SIZE];
+    while (true)
+      {
+        const int n = gzread (gz, buf, TEMP_BUF_SIZE);
+        if (n == -1)
+          {
+            int err;
+            error << "gzip error: " << gzerror (gz, &err);
+            error << " (code " << err << ")";
 
-          gzclose (gz);
-          return false;
-        }
+            gzclose (gz);
+            return false;
+          }
+        CHECK_GE (n, 0);
 
-      uncompressed.append (buf, n);
+        uncompressed.append (buf, n);
+        if (n == 0)
+          break;
+      }
 
-      if (n < static_cast<int> (PIPE_BUF_SIZE))
-        break;
-      CHECK_EQ (n, PIPE_BUF_SIZE);
-    }
+    const int rc = gzclose (gz);
+    if (rc == Z_BUF_ERROR)
+      {
+        error << "incomplete gzip stream";
+        return false;
+      }
+    CHECK_EQ (rc, Z_OK);
 
-  writer.join ();
-
-  const int rc = gzclose (gz);
-  if (rc == Z_BUF_ERROR)
-    {
-      error << "incomplete gzip stream";
-      return false;
-    }
-  CHECK_EQ (rc, Z_OK);
-
-  data = std::move (uncompressed);
+    data = std::move (uncompressed);
+  }
 
   return true;
 }
