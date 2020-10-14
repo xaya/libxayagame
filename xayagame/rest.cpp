@@ -108,7 +108,9 @@ RestApi::SuccessResult::Gzip () const
 
   {
     FILE* f = std::fopen (file.GetName ().c_str (), "rb");
-    CHECK (f != nullptr);
+    CHECK (f != nullptr)
+        << "Failed to open " << file.GetName () << " for reading: "
+        << std::strerror (errno);
 
     while (true)
       {
@@ -410,7 +412,9 @@ RestClient::Request::ProcessGzip ()
 
   {
     FILE* f = std::fopen (file.GetName ().c_str (), "wb");
-    CHECK (f != nullptr);
+    CHECK (f != nullptr)
+        << "Failed to open " << file.GetName () << " for writing: "
+        << std::strerror (errno);
 
     const int n = std::fwrite (data.data (), 1, data.size (), f);
     CHECK_EQ (n, data.size ());
