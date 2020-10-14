@@ -4,11 +4,15 @@
 
 #include "rest.hpp"
 
+#include "xayautil/cryptorand.hpp"
+
 #include <microhttpd.h>
 
 #include <zlib.h>
 
 #include <glog/logging.h>
+
+#include <experimental/filesystem>
 
 #include <cstdio>
 #include <cstring>
@@ -18,6 +22,8 @@ namespace xaya
 
 namespace
 {
+
+namespace fs = std::experimental::filesystem;
 
 /** Buffer size for IO with temporary files (to use zlib's gzip interface).  */
 constexpr size_t TEMP_BUF_SIZE = 4'096;
@@ -38,9 +44,13 @@ public:
 
   TempFileName ()
   {
-    name.resize (L_tmpnam);
-    CHECK (std::tmpnam (&name[0]) == name.data ());
-    name.resize (std::strlen (name.data ()));
+    const uint256 val = CryptoRand ().Get<uint256> ();
+
+    std::ostringstream suffix;
+    suffix << "xaya" << val.ToHex ().substr (0, 8);
+
+    name = (fs::temp_directory_path () / suffix.str ()).string ();
+    LOG (INFO) << "Filename: " << name;
   }
 
   ~TempFileName ()
