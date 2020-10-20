@@ -14,6 +14,8 @@
 
 #include <zlib.h>
 
+#include <memory>
+
 namespace xaya
 {
 
@@ -32,8 +34,16 @@ class BasicZlibStream
 
 private:
 
-  /** Value to hold the output data.  */
-  std::string output;
+  /**
+   * Buffer for the output data.  We allocate it up to the maximum size,
+   * which might be a lot bigger than what we really need.  Thus we avoid
+   * using std::string here, which would unnecessarily fill the buffer up
+   * with zeros of that larger length.
+   */
+  std::unique_ptr<char[]> output;
+
+  /** Size of the allocated buffer.  */
+  size_t outputSize;
 
 protected:
 
@@ -77,9 +87,10 @@ protected:
   void
   SetOutputSize (const size_t sz)
   {
-    output.resize (sz);
-    stream.next_out = reinterpret_cast<Bytef*> (&output[0]);
-    stream.avail_out = output.size ();
+    outputSize = sz;
+    output.reset (new char[outputSize]);
+    stream.next_out = reinterpret_cast<Bytef*> (output.get ());
+    stream.avail_out = outputSize;
   }
 
   /**
@@ -87,14 +98,10 @@ protected:
    * as a string.
    */
   std::string
-  ExtractOutput ()
+  ExtractOutput () const
   {
-    CHECK_LE (stream.total_out, output.size ());
-
-    std::string res = std::move (output);
-    res.resize (stream.total_out);
-
-    return res;
+    CHECK_LE (stream.total_out, outputSize);
+    return std::string (output.get (), stream.total_out);
   }
 
 };
@@ -166,7 +173,7 @@ public:
         << "Deflate error " << res << ": " << GetError ();
     CHECK_EQ (stream.total_in, dictLength + data.size ());
 
-    std::string output = ExtractOutput ();
+    const std::string output = ExtractOutput ();
     VLOG (2) << "Compressed " << data.size () << " bytes to " << output.size ();
 
     return output;
