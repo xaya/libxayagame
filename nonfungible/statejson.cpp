@@ -15,15 +15,15 @@ namespace nf
 Json::Value
 StateJsonExtractor::ListAssets () const
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT `minter`, `asset`
       FROM `assets`
       ORDER BY `minter`, `asset`
   )");
 
   Json::Value res(Json::arrayValue);
-  while (StepStatement (stmt))
-    res.append (Asset::FromColumns (stmt, 0, 1).ToJson ());
+  while (stmt.Step ())
+    res.append (Asset::FromColumns (*stmt, 0, 1).ToJson ());
 
   return res;
 }
@@ -31,21 +31,21 @@ StateJsonExtractor::ListAssets () const
 Json::Value
 StateJsonExtractor::GetAssetDetails (const Asset& a) const
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT `data`
       FROM `assets`
       WHERE `minter` = ?1 AND `asset` = ?2
   )");
-  a.BindToParams (stmt, 1, 2);
+  a.BindToParams (*stmt, 1, 2);
 
-  if (!StepStatement (stmt))
+  if (!stmt.Step ())
     return Json::Value ();
 
   Json::Value data;
-  if (!ColumnIsNull (stmt, 0))
-    data = ColumnExtract<std::string> (stmt, 0);
+  if (!ColumnIsNull (*stmt, 0))
+    data = ColumnExtract<std::string> (*stmt, 0);
 
-  CHECK (!StepStatement (stmt));
+  CHECK (!stmt.Step ());
 
   stmt = db.PrepareRo (R"(
     SELECT `name`, `balance`
@@ -53,14 +53,14 @@ StateJsonExtractor::GetAssetDetails (const Asset& a) const
       WHERE `minter` = ?1 AND `asset` = ?2
       ORDER BY `name`
   )");
-  a.BindToParams (stmt, 1, 2);
+  a.BindToParams (*stmt, 1, 2);
 
   Json::Value balances(Json::objectValue);
   Amount total = 0;
-  while (StepStatement (stmt))
+  while (stmt.Step ())
     {
-      const auto name = ColumnExtract<std::string> (stmt, 0);
-      const Amount val = ColumnExtract<int64_t> (stmt, 1);
+      const auto name = ColumnExtract<std::string> (*stmt, 0);
+      const Amount val = ColumnExtract<int64_t> (*stmt, 1);
 
       CHECK_GT (val, 0);
       CHECK (!balances.isMember (name)) << "Duplicate user: " << name;
@@ -87,19 +87,19 @@ StateJsonExtractor::GetBalance (const Asset& a, const std::string& name) const
 Json::Value
 StateJsonExtractor::GetUserBalances (const std::string& name) const
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT `minter`, `asset`, `balance`
       FROM `balances`
       WHERE `name` = ?1
       ORDER BY `minter`, `asset`
   )");
-  BindParam (stmt, 1, name);
+  BindParam (*stmt, 1, name);
 
   Json::Value res(Json::arrayValue);
-  while (StepStatement (stmt))
+  while (stmt.Step ())
     {
-      const auto asset = Asset::FromColumns (stmt, 0, 1);
-      const Amount balance = ColumnExtract<int64_t> (stmt, 2);
+      const auto asset = Asset::FromColumns (*stmt, 0, 1);
+      const Amount balance = ColumnExtract<int64_t> (*stmt, 2);
 
       Json::Value cur(Json::objectValue);
       cur["asset"] = asset.ToJson ();
@@ -114,16 +114,16 @@ StateJsonExtractor::GetUserBalances (const std::string& name) const
 Json::Value
 StateJsonExtractor::FullState () const
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT `minter`, `asset`
       FROM `assets`
       ORDER BY `minter`, `asset`
   )");
 
   Json::Value res(Json::arrayValue);
-  while (StepStatement (stmt))
+  while (stmt.Step ())
     {
-      const auto asset = Asset::FromColumns (stmt, 0, 1);
+      const auto asset = Asset::FromColumns (*stmt, 0, 1);
       res.append (GetAssetDetails (asset));
     }
 

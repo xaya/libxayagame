@@ -15,19 +15,19 @@ Amount
 GetDbBalance (const xaya::SQLiteDatabase& db, const Asset& a,
               const std::string& name)
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT `balance`
       FROM `balances`
       WHERE `name` = ?1 AND `minter` = ?2 AND `asset` = ?3
   )");
-  BindParam (stmt, 1, name);
-  a.BindToParams (stmt, 2, 3);
+  BindParam (*stmt, 1, name);
+  a.BindToParams (*stmt, 2, 3);
 
-  if (!StepStatement (stmt))
+  if (!stmt.Step ())
     return 0;
 
-  const Amount res = ColumnExtract<int64_t> (stmt, 0);
-  CHECK (!StepStatement (stmt));
+  const Amount res = ColumnExtract<int64_t> (*stmt, 0);
+  CHECK (!stmt.Step ());
 
   return res;
 }
@@ -35,16 +35,16 @@ GetDbBalance (const xaya::SQLiteDatabase& db, const Asset& a,
 bool
 MoveParser::AssetExists (const Asset& a) const
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT COUNT(*)
       FROM `assets`
       WHERE `minter` = ?1 AND `asset` = ?2
   )");
-  a.BindToParams (stmt, 1, 2);
+  a.BindToParams (*stmt, 1, 2);
 
-  CHECK (StepStatement (stmt));
-  const auto count = ColumnExtract<int64_t> (stmt, 0);
-  CHECK (!StepStatement (stmt));
+  CHECK (stmt.Step ());
+  const auto count = ColumnExtract<int64_t> (*stmt, 0);
+  CHECK (!stmt.Step ());
 
   CHECK_GE (count, 0);
   CHECK_LE (count, 1);

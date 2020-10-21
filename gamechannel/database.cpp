@@ -126,27 +126,27 @@ ChannelData::~ChannelData ()
 
   LOG (INFO) << "ChannelData " << id.ToHex () << " is dirty, updating...";
 
-  auto* stmt = db.Prepare (R"(
+  auto stmt = db.Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_game_channels`
       (`id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`)
       VALUES (?1, ?2, ?3, ?4, ?5)
   )");
 
-  BindBlobUint256 (stmt, 1, id);
-  BindBlobProto (stmt, 2, metadata);
-  BindBlobString (stmt, 3, reinit);
+  BindBlobUint256 (*stmt, 1, id);
+  BindBlobProto (*stmt, 2, metadata);
+  BindBlobString (*stmt, 3, reinit);
 
   if (GetLatestState () == reinit)
-    CHECK_EQ (sqlite3_bind_null (stmt, 4), SQLITE_OK);
+    CHECK_EQ (sqlite3_bind_null (*stmt, 4), SQLITE_OK);
   else
-    BindBlobProto (stmt, 4, proof);
+    BindBlobProto (*stmt, 4, proof);
 
   if (disputeHeight == 0)
-    CHECK_EQ (sqlite3_bind_null (stmt, 5), SQLITE_OK);
+    CHECK_EQ (sqlite3_bind_null (*stmt, 5), SQLITE_OK);
   else
-    CHECK_EQ (sqlite3_bind_int64 (stmt, 5, disputeHeight), SQLITE_OK);
+    CHECK_EQ (sqlite3_bind_int64 (*stmt, 5, disputeHeight), SQLITE_OK);
 
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  stmt.Execute ();
 }
 
 const proto::ChannelMetadata&
@@ -229,21 +229,19 @@ ChannelsTable::GetFromResult (sqlite3_stmt* row)
 ChannelsTable::Handle
 ChannelsTable::GetById (const uint256& id)
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT `id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`
       FROM `xayagame_game_channels`
       WHERE `id` = ?1
   )");
 
-  BindBlobUint256 (stmt, 1, id);
+  BindBlobUint256 (*stmt, 1, id);
 
-  const int rc = sqlite3_step (stmt);
-  if (rc == SQLITE_DONE)
+  if (!stmt.Step ())
     return nullptr;
-  CHECK_EQ (rc, SQLITE_ROW);
 
-  auto h = GetFromResult (stmt);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  auto h = GetFromResult (*stmt);
+  CHECK (!stmt.Step ());
 
   return h;
 }
@@ -257,15 +255,15 @@ ChannelsTable::CreateNew (const uint256& id)
 void
 ChannelsTable::DeleteById (const uint256& id)
 {
-  auto* stmt = db.Prepare (R"(
+  auto stmt = db.Prepare (R"(
     DELETE FROM `xayagame_game_channels`
       WHERE `id` = ?1
   )");
-  BindBlobUint256 (stmt, 1, id);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  BindBlobUint256 (*stmt, 1, id);
+  stmt.Execute ();
 }
 
-sqlite3_stmt*
+SQLiteDatabase::Statement
 ChannelsTable::QueryAll ()
 {
   return db.PrepareRo (R"(
@@ -275,17 +273,17 @@ ChannelsTable::QueryAll ()
   )");
 }
 
-sqlite3_stmt*
+SQLiteDatabase::Statement
 ChannelsTable::QueryForDisputeHeight (const unsigned height)
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT `id`, `metadata`, `reinit`, `stateproof`, `disputeHeight`
       FROM `xayagame_game_channels`
       WHERE `disputeHeight` <= ?1
       ORDER BY `id`
   )");
 
-  CHECK_EQ (sqlite3_bind_int64 (stmt, 1, height), SQLITE_OK);
+  CHECK_EQ (sqlite3_bind_int64 (*stmt, 1, height), SQLITE_OK);
 
   return stmt;
 }

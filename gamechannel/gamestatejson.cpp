@@ -81,15 +81,10 @@ Json::Value
 AllChannelsGameStateJson (ChannelsTable& tbl, const BoardRules& r)
 {
   Json::Value res(Json::objectValue);
-  auto* stmt = tbl.QueryAll ();
-  while (true)
+  auto stmt = tbl.QueryAll ();
+  while (stmt.Step ())
     {
-      const int rc = sqlite3_step (stmt);
-      if (rc == SQLITE_DONE)
-        break;
-      CHECK_EQ (rc, SQLITE_ROW);
-
-      auto h = tbl.GetFromResult (stmt);
+      auto h = tbl.GetFromResult (*stmt);
       res[h->GetId ().ToHex ()] = ChannelToGameStateJson (*h, r);
     }
 

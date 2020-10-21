@@ -175,13 +175,13 @@ public:
    * Queries for all game channels.  The returned sqlite3_stmt can be walked
    * through and used with GetFromResult, but should not be freed.
    */
-  sqlite3_stmt* QueryAll ();
+  SQLiteDatabase::Statement QueryAll ();
 
   /**
    * Queries for all game channels which have a dispute height less than or
    * equal to the given height.
    */
-  sqlite3_stmt* QueryForDisputeHeight (unsigned height);
+  SQLiteDatabase::Statement QueryForDisputeHeight (unsigned height);
 
 };
 

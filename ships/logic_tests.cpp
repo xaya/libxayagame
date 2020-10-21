@@ -68,16 +68,9 @@ protected:
   ExpectNumberOfChannels (const unsigned expected)
   {
     unsigned actual = 0;
-    sqlite3_stmt* stmt = tbl.QueryAll ();
-    while (true)
-      {
-        const int rc = sqlite3_step (stmt);
-        if (rc == SQLITE_DONE)
-          break;
-
-        ASSERT_EQ (rc, SQLITE_ROW);
-        ++actual;
-      }
+    auto stmt = tbl.QueryAll ();
+    while (stmt.Step ())
+      ++actual;
 
     EXPECT_EQ (actual, expected);
   }
@@ -110,14 +103,14 @@ protected:
   void
   AddStatsRow (const std::string& name, const int won, const int lost)
   {
-    auto* stmt = GetDb ().Prepare (R"(
+    auto stmt = GetDb ().Prepare (R"(
       INSERT INTO `game_stats`
         (`name`, `won`, `lost`) VALUES (?1, ?2, ?3)
     )");
-    ShipsLogic::BindStringParam (stmt, 1, name);
-    CHECK_EQ (sqlite3_bind_int (stmt, 2, won), SQLITE_OK);
-    CHECK_EQ (sqlite3_bind_int (stmt, 3, lost), SQLITE_OK);
-    CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+    ShipsLogic::BindStringParam (*stmt, 1, name);
+    CHECK_EQ (sqlite3_bind_int (*stmt, 2, won), SQLITE_OK);
+    CHECK_EQ (sqlite3_bind_int (*stmt, 3, lost), SQLITE_OK);
+    stmt.Execute ();
   }
 
   /**
@@ -126,18 +119,18 @@ protected:
   void
   ExpectStatsRow (const std::string& name, const int won, const int lost)
   {
-    auto* stmt = GetDb ().Prepare (R"(
+    auto stmt = GetDb ().Prepare (R"(
       SELECT `won`, `lost`
         FROM `game_stats`
         WHERE `name` = ?1
     )");
-    ShipsLogic::BindStringParam (stmt, 1, name);
+    ShipsLogic::BindStringParam (*stmt, 1, name);
 
-    CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW) << "No stats row for: " << name;
-    EXPECT_EQ (sqlite3_column_int (stmt, 0), won);
-    EXPECT_EQ (sqlite3_column_int (stmt, 1), lost);
+    CHECK (stmt.Step ()) << "No stats row for: " << name;
+    EXPECT_EQ (sqlite3_column_int (*stmt, 0), won);
+    EXPECT_EQ (sqlite3_column_int (*stmt, 1), lost);
 
-    CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+    CHECK (!stmt.Step ());
   }
 
 };

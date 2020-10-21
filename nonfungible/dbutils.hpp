@@ -35,12 +35,6 @@ template <typename T>
  */
 bool ColumnIsNull (sqlite3_stmt* stmt, int num);
 
-/**
- * Executes / advances the sqlite3_stmt, asserting that no error happened.
- * Returns true if there are columns to extract, and false if not (SQLITE_DONE).
- */
-bool StepStatement (sqlite3_stmt* stmt);
-
 } // namespace nf
 
 #endif // NONFUNGIBLE_DBUTILS_HPP

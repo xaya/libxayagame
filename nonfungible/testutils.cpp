@@ -32,36 +32,36 @@ DBTest::DBTest ()
 void
 DBTest::InsertAsset (const Asset& a, const std::string& data)
 {
-  auto* stmt = db.Prepare (R"(
+  auto stmt = db.Prepare (R"(
     INSERT INTO `assets`
       (`minter`, `asset`, `data`)
       VALUES (?1, ?2, ?3)
   )");
 
-  a.BindToParams (stmt, 1, 2);
+  a.BindToParams (*stmt, 1, 2);
   if (data == "null")
-    BindNullParam (stmt, 3);
+    BindNullParam (*stmt, 3);
   else
-    BindParam (stmt, 3, data);
+    BindParam (*stmt, 3, data);
 
-  CHECK (!StepStatement (stmt));
+  stmt.Execute ();
 }
 
 void
 DBTest::InsertBalance (const Asset& a, const std::string& name,
                        const Amount num)
 {
-  auto* stmt = db.Prepare (R"(
+  auto stmt = db.Prepare (R"(
     INSERT INTO `balances`
       (`name`, `minter`, `asset`, `balance`)
       VALUES (?1, ?2, ?3, ?4)
   )");
 
-  BindParam (stmt, 1, name);
-  a.BindToParams (stmt, 2, 3);
-  BindParam (stmt, 4, num);
+  BindParam (*stmt, 1, name);
+  a.BindToParams (*stmt, 2, 3);
+  BindParam (*stmt, 4, num);
 
-  CHECK (!StepStatement (stmt));
+  stmt.Execute ();
 }
 
 } // namespace nf

@@ -31,25 +31,25 @@ MoveProcessor::UpdateBalance (const Asset& a, const std::string& name,
 
   if (newBalance == 0)
     {
-      auto* stmt = MutableDb ().Prepare (R"(
+      auto stmt = MutableDb ().Prepare (R"(
         DELETE FROM `balances`
           WHERE `name` = ?1 AND `minter` = ?2 AND `asset` = ?3
       )");
-      BindParam (stmt, 1, name);
-      a.BindToParams (stmt, 2, 3);
-      CHECK (!StepStatement (stmt));
+      BindParam (*stmt, 1, name);
+      a.BindToParams (*stmt, 2, 3);
+      stmt.Execute ();
     }
   else
     {
-      auto* stmt = MutableDb ().Prepare (R"(
+      auto stmt = MutableDb ().Prepare (R"(
         INSERT OR REPLACE INTO `balances`
             (`name`, `minter`, `asset`, `balance`)
             VALUES (?1, ?2, ?3, ?4)
       )");
-      BindParam (stmt, 1, name);
-      a.BindToParams (stmt, 2, 3);
-      BindParam (stmt, 4, newBalance);
-      CHECK (!StepStatement (stmt));
+      BindParam (*stmt, 1, name);
+      a.BindToParams (*stmt, 2, 3);
+      BindParam (*stmt, 4, newBalance);
+      stmt.Execute ();
     }
 }
 
@@ -57,17 +57,17 @@ void
 MoveProcessor::ProcessMint (const Asset& a, const Amount supply,
                             const std::string* data)
 {
-  auto* stmt = MutableDb ().Prepare (R"(
+  auto stmt = MutableDb ().Prepare (R"(
     INSERT INTO `assets`
       (`minter`, `asset`, `data`)
       VALUES (?1, ?2, ?3)
   )");
-  a.BindToParams (stmt, 1, 2);
+  a.BindToParams (*stmt, 1, 2);
   if (data != nullptr)
-    BindParam (stmt, 3, *data);
+    BindParam (*stmt, 3, *data);
   else
-    BindNullParam (stmt, 3);
-  CHECK (!StepStatement (stmt));
+    BindNullParam (*stmt, 3);
+  stmt.Execute ();
 
   if (supply > 0)
     UpdateBalance (a, a.GetMinter (), supply);
