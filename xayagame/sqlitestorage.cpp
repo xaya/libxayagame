@@ -67,12 +67,12 @@ GetStringBlob (sqlite3_stmt* stmt, const int ind)
 
 } // anonymous namespace
 
-bool SQLiteDatabase::loggerInitialised = false;
+bool SQLiteDatabase::sqliteInitialised = false;
 
 SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
   : db(nullptr)
 {
-  if (!loggerInitialised)
+  if (!sqliteInitialised)
     {
       LOG (INFO)
           << "Using SQLite version " << SQLITE_VERSION
@@ -87,7 +87,10 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
       else
         LOG (INFO) << "Configured SQLite error handler";
 
-      loggerInitialised = true;
+      CHECK_EQ (sqlite3_config (SQLITE_CONFIG_SERIALIZED, nullptr), SQLITE_OK)
+          << "Failed to enable serialised mode for SQLite";
+
+      sqliteInitialised = true;
     }
 
   const int rc = sqlite3_open_v2 (file.c_str (), &db, flags, nullptr);

@@ -32,8 +32,8 @@ class SQLiteDatabase
 
 private:
 
-  /** Whether or not we have already set the SQLite logger.  */
-  static bool loggerInitialised;
+  /** Whether or not we have already initialised SQLite.  */
+  static bool sqliteInitialised;
 
   /**
    * The SQLite database handle, which is owned and managed by the
