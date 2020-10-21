@@ -161,11 +161,7 @@ public:
   /**
    * Exposes the underlying SQLite handle.
    */
-  sqlite3_stmt*
-  operator* ()
-  {
-    return stmt;
-  }
+  sqlite3_stmt* operator* ();
 
   /**
    * Executes the statement without expecting any results (i.e. for anything
@@ -184,6 +180,24 @@ public:
    * Resets the statement without clearing the parameter bindings.
    */
   void Reset ();
+
+  /**
+   * Binds a numbered parameter to NULL.
+   */
+  void BindNull (int ind);
+
+  /**
+   * Binds a typed value to a numbered parameter.  Concrete implementations
+   * exist for (u)int64_t, (unsigned) int, bool, uint256 and std::string
+   * (binding as text).
+   */
+  template <typename T>
+    void Bind (int ind, const T& val);
+
+  /**
+   * Binds a numbered parameter to a byte string as BLOB.
+   */
+  void BindBlob (int ind, const std::string& val);
 
 };
 

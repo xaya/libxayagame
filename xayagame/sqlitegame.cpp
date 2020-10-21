@@ -552,31 +552,12 @@ SQLiteGame::GetDatabaseForTesting ()
 
 /* ************************************************************************** */
 
-namespace
-{
-
-/**
- * Binds a TEXT parameter to a std::string value.  The value is bound using
- * SQLITE_STATIC, so the underlying string must remain valid until execution
- * of the prepared statement is done.
- */
-void
-BindString (sqlite3_stmt* stmt, const int ind, const std::string& value)
-{
-  const int rc = sqlite3_bind_text (stmt, ind, &value[0], value.size (),
-                                    SQLITE_STATIC);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind string value to parameter: " << rc;
-}
-
-} // anonymous namespace
-
 SQLiteGame::AutoId::AutoId (SQLiteGame& game, const std::string& key)
 {
   auto stmt = game.database->GetDatabase ().Prepare (R"(
     SELECT `nextid` FROM `xayagame_autoids` WHERE `key` = ?1
   )");
-  BindString (*stmt, 1, key);
+  stmt.Bind (1, key);
 
   if (stmt.Step ())
     {
@@ -612,8 +593,8 @@ SQLiteGame::AutoId::Sync (SQLiteGame& game, const std::string& key)
     INSERT OR REPLACE INTO `xayagame_autoids`
       (`key`, `nextid`) VALUES (?1, ?2)
   )");
-  BindString (*stmt, 1, key);
-  CHECK_EQ (sqlite3_bind_int (*stmt, 2, nextValue), SQLITE_OK);
+  stmt.Bind (1, key);
+  stmt.Bind (2, nextValue);
   stmt.Execute ();
 
   LOG (INFO) << "Synced AutoId " << key << " to database";

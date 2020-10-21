@@ -20,8 +20,8 @@ GetDbBalance (const xaya::SQLiteDatabase& db, const Asset& a,
       FROM `balances`
       WHERE `name` = ?1 AND `minter` = ?2 AND `asset` = ?3
   )");
-  BindParam (*stmt, 1, name);
-  a.BindToParams (*stmt, 2, 3);
+  stmt.Bind (1, name);
+  a.BindToParams (stmt, 2, 3);
 
   if (!stmt.Step ())
     return 0;
@@ -40,7 +40,7 @@ MoveParser::AssetExists (const Asset& a) const
       FROM `assets`
       WHERE `minter` = ?1 AND `asset` = ?2
   )");
-  a.BindToParams (*stmt, 1, 2);
+  a.BindToParams (stmt, 1, 2);
 
   CHECK (stmt.Step ());
   const auto count = ColumnExtract<int64_t> (*stmt, 0);

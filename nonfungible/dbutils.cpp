@@ -10,29 +10,6 @@ namespace nf
 {
 
 template <>
-  void
-  BindParam<std::string> (sqlite3_stmt* stmt, const int num,
-                          const std::string& val)
-{
-  CHECK_EQ (sqlite3_bind_text (stmt, num, &val[0], val.size (),
-                               SQLITE_TRANSIENT),
-            SQLITE_OK);
-}
-
-template <>
-  void
-  BindParam<int64_t> (sqlite3_stmt* stmt, const int num, const int64_t& val)
-{
-  CHECK_EQ (sqlite3_bind_int64 (stmt, num, val), SQLITE_OK);
-}
-
-void
-BindNullParam (sqlite3_stmt* stmt, const int num)
-{
-  CHECK_EQ (sqlite3_bind_null (stmt, num), SQLITE_OK);
-}
-
-template <>
   std::string
   ColumnExtract<std::string> (sqlite3_stmt* stmt, const int num)
 {

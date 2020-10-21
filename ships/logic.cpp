@@ -430,15 +430,6 @@ ShipsLogic::ProcessExpiredDisputes (xaya::SQLiteDatabase& db,
 }
 
 void
-ShipsLogic::BindStringParam (sqlite3_stmt* stmt, const int ind,
-                             const std::string& str)
-{
-  CHECK_EQ (sqlite3_bind_text (stmt, ind, &str[0], str.size (),
-                               SQLITE_TRANSIENT),
-            SQLITE_OK);
-}
-
-void
 ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
                          const xaya::proto::ChannelMetadata& meta,
                          const int winner)
@@ -455,8 +446,8 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
     INSERT OR IGNORE INTO `game_stats`
       (`name`, `won`, `lost`) VALUES (?1, 0, 0), (?2, 0, 0)
   )");
-  BindStringParam (*stmt, 1, winnerName);
-  BindStringParam (*stmt, 2, loserName);
+  stmt.Bind (1, winnerName);
+  stmt.Bind (2, loserName);
   stmt.Execute ();
 
   stmt = db.Prepare (R"(
@@ -464,7 +455,7 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
       SET `won` = `won` + 1
       WHERE `name` = ?1
   )");
-  BindStringParam (*stmt, 1, winnerName);
+  stmt.Bind (1, winnerName);
   stmt.Execute ();
 
   stmt = db.Prepare (R"(
@@ -472,7 +463,7 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
       SET `lost` = `lost` + 1
       WHERE `name` = ?2
   )");
-  BindStringParam (*stmt, 2, loserName);
+  stmt.Bind (2, loserName);
   stmt.Execute ();
 }
 

@@ -67,13 +67,6 @@ private:
                            const xaya::proto::ChannelMetadata& meta,
                            int winner);
 
-  /**
-   * Binds a TEXT SQLite parameter to a string.  This is a utility method that
-   * is also used for tests, and thus exposed here.
-   */
-  static void BindStringParam (sqlite3_stmt* stmt, int ind,
-                               const std::string& str);
-
   friend class InMemoryLogicFixture;
   friend class StateUpdateTests;
   friend class SchemaTests;

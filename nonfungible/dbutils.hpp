@@ -14,17 +14,6 @@ namespace nf
 {
 
 /**
- * Binds a value (of string or integer type) to an SQLite parameter.
- */
-template <typename T>
-  void BindParam (sqlite3_stmt* stmt, int num, const T& val);
-
-/**
- * Binds a null value to an SQLite parameter.
- */
-void BindNullParam (sqlite3_stmt* stmt, int num);
-
-/**
  * Extracts a string or integer value from a result column.
  */
 template <typename T>

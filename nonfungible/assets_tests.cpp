@@ -65,7 +65,7 @@ TEST_F (AssetsTests, DatabaseRoundtrip)
       (`minter`, `asset`)
       VALUES (?1, ?2)
   )");
-  a.BindToParams (*stmt, 1, 2);
+  a.BindToParams (stmt, 1, 2);
   stmt.Execute ();
 
   stmt = GetDb ().PrepareRo (R"(

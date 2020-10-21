@@ -35,8 +35,8 @@ MoveProcessor::UpdateBalance (const Asset& a, const std::string& name,
         DELETE FROM `balances`
           WHERE `name` = ?1 AND `minter` = ?2 AND `asset` = ?3
       )");
-      BindParam (*stmt, 1, name);
-      a.BindToParams (*stmt, 2, 3);
+      stmt.Bind (1, name);
+      a.BindToParams (stmt, 2, 3);
       stmt.Execute ();
     }
   else
@@ -46,9 +46,9 @@ MoveProcessor::UpdateBalance (const Asset& a, const std::string& name,
             (`name`, `minter`, `asset`, `balance`)
             VALUES (?1, ?2, ?3, ?4)
       )");
-      BindParam (*stmt, 1, name);
-      a.BindToParams (*stmt, 2, 3);
-      BindParam (*stmt, 4, newBalance);
+      stmt.Bind (1, name);
+      a.BindToParams (stmt, 2, 3);
+      stmt.Bind (4, newBalance);
       stmt.Execute ();
     }
 }
@@ -62,11 +62,11 @@ MoveProcessor::ProcessMint (const Asset& a, const Amount supply,
       (`minter`, `asset`, `data`)
       VALUES (?1, ?2, ?3)
   )");
-  a.BindToParams (*stmt, 1, 2);
+  a.BindToParams (stmt, 1, 2);
   if (data != nullptr)
-    BindParam (*stmt, 3, *data);
+    stmt.Bind (3, *data);
   else
-    BindNullParam (*stmt, 3);
+    stmt.BindNull (3);
   stmt.Execute ();
 
   if (supply > 0)

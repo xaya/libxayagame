@@ -28,11 +28,11 @@ AmountFromJson (const Json::Value& val, Amount& n)
 }
 
 void
-Asset::BindToParams (sqlite3_stmt* stmt,
+Asset::BindToParams (xaya::SQLiteDatabase::Statement& stmt,
                      const int indMinter, const int indName) const
 {
-  BindParam (stmt, indMinter, minter);
-  BindParam (stmt, indName, name);
+  stmt.Bind (indMinter, minter);
+  stmt.Bind (indName, name);
 }
 
 Json::Value

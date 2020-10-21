@@ -5,7 +5,7 @@
 #ifndef NONFUNGIBLE_ASSETS_HPP
 #define NONFUNGIBLE_ASSETS_HPP
 
-#include <sqlite3.h>
+#include "xayagame/sqlitestorage.hpp"
 
 #include <json/json.h>
 
@@ -66,7 +66,8 @@ public:
   /**
    * Binds an asset to two parameters in the SQLite statement.
    */
-  void BindToParams (sqlite3_stmt* stmt, int indMinter, int indName) const;
+  void BindToParams (xaya::SQLiteDatabase::Statement& stmt,
+                     int indMinter, int indName) const;
 
   /**
    * Converts the asset to a JSON value.

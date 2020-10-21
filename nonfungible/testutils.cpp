@@ -38,11 +38,11 @@ DBTest::InsertAsset (const Asset& a, const std::string& data)
       VALUES (?1, ?2, ?3)
   )");
 
-  a.BindToParams (*stmt, 1, 2);
+  a.BindToParams (stmt, 1, 2);
   if (data == "null")
-    BindNullParam (*stmt, 3);
+    stmt.BindNull (3);
   else
-    BindParam (*stmt, 3, data);
+    stmt.Bind (3, data);
 
   stmt.Execute ();
 }
@@ -57,9 +57,9 @@ DBTest::InsertBalance (const Asset& a, const std::string& name,
       VALUES (?1, ?2, ?3, ?4)
   )");
 
-  BindParam (*stmt, 1, name);
-  a.BindToParams (*stmt, 2, 3);
-  BindParam (*stmt, 4, num);
+  stmt.Bind (1, name);
+  a.BindToParams (stmt, 2, 3);
+  stmt.Bind (4, num);
 
   stmt.Execute ();
 }

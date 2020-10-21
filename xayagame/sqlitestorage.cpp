@@ -7,11 +7,19 @@
 #include <glog/logging.h>
 
 #include <cstdio>
+#include <limits>
 
 namespace xaya
 {
 
 /* ************************************************************************** */
+
+sqlite3_stmt*
+SQLiteDatabase::Statement::operator* ()
+{
+  CHECK (stmt != nullptr) << "Statement is empty";
+  return stmt;
+}
 
 void
 SQLiteDatabase::Statement::Execute ()
@@ -22,8 +30,7 @@ SQLiteDatabase::Statement::Execute ()
 bool
 SQLiteDatabase::Statement::Step ()
 {
-  CHECK (stmt != nullptr) << "Stepping empty statement";
-  const int rc = sqlite3_step (stmt);
+  const int rc = sqlite3_step (**this);
   switch (rc)
     {
     case SQLITE_ROW:
@@ -43,6 +50,75 @@ SQLiteDatabase::Statement::Reset ()
   sqlite3_reset (stmt);
 }
 
+void
+SQLiteDatabase::Statement::BindNull (const int ind)
+{
+  CHECK_EQ (sqlite3_bind_null (**this, ind), SQLITE_OK);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<int64_t> (const int ind, const int64_t& val)
+{
+  CHECK_EQ (sqlite3_bind_int64 (**this, ind, val), SQLITE_OK);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<uint64_t> (const int ind, const uint64_t& val)
+{
+  CHECK_LE (val, std::numeric_limits<int64_t>::max ());
+  Bind<int64_t> (ind, val);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<int> (const int ind, const int& val)
+{
+  Bind<int64_t> (ind, val);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<unsigned> (const int ind, const unsigned& val)
+{
+  Bind<uint64_t> (ind, val);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<bool> (const int ind, const bool& val)
+{
+  Bind<int> (ind, val);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<uint256> (const int ind, const uint256& val)
+{
+  CHECK_EQ (sqlite3_bind_blob (**this, ind, val.GetBlob (), uint256::NUM_BYTES,
+                               SQLITE_TRANSIENT),
+            SQLITE_OK);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<std::string> (const int ind,
+                                                const std::string& val)
+{
+  CHECK_EQ (sqlite3_bind_text (**this, ind, val.data (), val.size (),
+                               SQLITE_TRANSIENT),
+            SQLITE_OK);
+}
+
+void
+SQLiteDatabase::Statement::BindBlob (const int ind, const std::string& val)
+{
+  CHECK_EQ (sqlite3_bind_blob (**this, ind, val.data (), val.size (),
+                               SQLITE_TRANSIENT),
+            SQLITE_OK);
+}
+
 /* ************************************************************************** */
 
 namespace
@@ -55,35 +131,6 @@ void
 SQLiteErrorLogger (void* arg, const int errCode, const char* msg)
 {
   LOG (ERROR) << "SQLite error (code " << errCode << "): " << msg;
-}
-
-/**
- * Binds a BLOB corresponding to an uint256 value to a statement parameter.
- * The value is bound using SQLITE_STATIC, so the uint256's data must not be
- * changed until the statement execution has finished.
- */
-void
-BindUint256 (sqlite3_stmt* stmt, const int ind, const uint256& value)
-{
-  const int rc = sqlite3_bind_blob (stmt, ind,
-                                    value.GetBlob (), uint256::NUM_BYTES,
-                                    SQLITE_STATIC);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind uint256 value to parameter: " << rc;
-}
-
-/**
- * Binds a BLOB parameter to a std::string value.  The value is bound using
- * SQLITE_STATIC, so the underlying string must remain valid until execution
- * of the prepared statement is done.
- */
-void
-BindStringBlob (sqlite3_stmt* stmt, const int ind, const std::string& value)
-{
-  const int rc = sqlite3_bind_blob (stmt, ind, &value[0], value.size (),
-                                    SQLITE_STATIC);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind string value to parameter: " << rc;
 }
 
 /**
@@ -398,14 +445,14 @@ SQLiteStorage::SetCurrentGameState (const uint256& hash,
     INSERT OR REPLACE INTO `xayagame_current` (`key`, `value`)
       VALUES ('blockhash', ?1)
   )");
-  BindUint256 (*stmt, 1, hash);
+  stmt.Bind (1, hash);
   stmt.Execute ();
 
   stmt = db->Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_current` (`key`, `value`)
       VALUES ('gamestate', ?1)
   )");
-  BindStringBlob (*stmt, 1, data);
+  stmt.BindBlob (1, data);
   stmt.Execute ();
 
   db->Prepare ("RELEASE `xayagame-setcurrentstate`").Execute ();
@@ -419,7 +466,7 @@ SQLiteStorage::GetUndoData (const uint256& hash, UndoData& data) const
       FROM `xayagame_undo`
       WHERE `hash` = ?1
   )");
-  BindUint256 (*stmt, 1, hash);
+  stmt.Bind (1, hash);
 
   if (!stmt.Step ())
     return false;
@@ -441,10 +488,9 @@ SQLiteStorage::AddUndoData (const uint256& hash,
       VALUES (?1, ?2, ?3)
   )");
 
-  BindUint256 (*stmt, 1, hash);
-  BindStringBlob (*stmt, 2, data);
-
-  CHECK_EQ (sqlite3_bind_int (*stmt, 3, height), SQLITE_OK);
+  stmt.Bind (1, hash);
+  stmt.BindBlob (2, data);
+  stmt.Bind (3, height);
 
   stmt.Execute ();
 }
@@ -459,7 +505,7 @@ SQLiteStorage::ReleaseUndoData (const uint256& hash)
       WHERE `hash` = ?1
   )");
 
-  BindUint256 (*stmt, 1, hash);
+  stmt.Bind (1, hash);
   stmt.Execute ();
 }
 
@@ -472,8 +518,7 @@ SQLiteStorage::PruneUndoData (const unsigned height)
     DELETE FROM `xayagame_undo`
       WHERE `height` <= ?1
   )");
-
-  CHECK_EQ (sqlite3_bind_int (*stmt, 1, height), SQLITE_OK);
+  stmt.Bind (1, height);
 
   stmt.Execute ();
 }

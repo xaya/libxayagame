@@ -107,9 +107,9 @@ protected:
       INSERT INTO `game_stats`
         (`name`, `won`, `lost`) VALUES (?1, ?2, ?3)
     )");
-    ShipsLogic::BindStringParam (*stmt, 1, name);
-    CHECK_EQ (sqlite3_bind_int (*stmt, 2, won), SQLITE_OK);
-    CHECK_EQ (sqlite3_bind_int (*stmt, 3, lost), SQLITE_OK);
+    stmt.Bind (1, name);
+    stmt.Bind (2, won);
+    stmt.Bind (3, lost);
     stmt.Execute ();
   }
 
@@ -124,7 +124,7 @@ protected:
         FROM `game_stats`
         WHERE `name` = ?1
     )");
-    ShipsLogic::BindStringParam (*stmt, 1, name);
+    stmt.Bind (1, name);
 
     CHECK (stmt.Step ()) << "No stats row for: " << name;
     EXPECT_EQ (sqlite3_column_int (*stmt, 0), won);

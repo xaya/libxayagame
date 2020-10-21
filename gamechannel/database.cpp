@@ -36,37 +36,16 @@ ExtractBlobString (sqlite3_stmt* stmt, const int ind)
 }
 
 /**
- * Binds a binary string to a BLOB parameter.
- */
-void
-BindBlobString (sqlite3_stmt* stmt, const int ind, const std::string& str)
-{
-  CHECK_EQ (sqlite3_bind_blob (stmt, ind, &str[0], str.size (),
-                               SQLITE_TRANSIENT),
-            SQLITE_OK);
-}
-
-/**
- * Binds an uint256 value to a BLOB parameter.
- */
-void
-BindBlobUint256 (sqlite3_stmt* stmt, const int ind, const uint256& val)
-{
-  CHECK_EQ (sqlite3_bind_blob (stmt, ind, val.GetBlob (), uint256::NUM_BYTES,
-                               SQLITE_TRANSIENT),
-            SQLITE_OK);
-}
-
-/**
  * Binds a protocol buffer message to a BLOB parameter.
  */
 template <typename Proto>
   void
-  BindBlobProto (sqlite3_stmt* stmt, const int ind, const Proto& msg)
+  BindBlobProto (SQLiteDatabase::Statement& stmt, const int ind,
+                 const Proto& msg)
 {
   std::string serialised;
   CHECK (msg.SerializeToString (&serialised));
-  BindBlobString (stmt, ind, serialised);
+  stmt.BindBlob (ind, serialised);
 }
 
 /**
@@ -132,19 +111,19 @@ ChannelData::~ChannelData ()
       VALUES (?1, ?2, ?3, ?4, ?5)
   )");
 
-  BindBlobUint256 (*stmt, 1, id);
-  BindBlobProto (*stmt, 2, metadata);
-  BindBlobString (*stmt, 3, reinit);
+  stmt.Bind (1, id);
+  BindBlobProto (stmt, 2, metadata);
+  stmt.Bind (3, reinit);
 
   if (GetLatestState () == reinit)
-    CHECK_EQ (sqlite3_bind_null (*stmt, 4), SQLITE_OK);
+    stmt.BindNull (4);
   else
-    BindBlobProto (*stmt, 4, proof);
+    BindBlobProto (stmt, 4, proof);
 
   if (disputeHeight == 0)
-    CHECK_EQ (sqlite3_bind_null (*stmt, 5), SQLITE_OK);
+    stmt.BindNull (5);
   else
-    CHECK_EQ (sqlite3_bind_int64 (*stmt, 5, disputeHeight), SQLITE_OK);
+    stmt.Bind (5, disputeHeight);
 
   stmt.Execute ();
 }
@@ -235,7 +214,7 @@ ChannelsTable::GetById (const uint256& id)
       WHERE `id` = ?1
   )");
 
-  BindBlobUint256 (*stmt, 1, id);
+  stmt.Bind (1, id);
 
   if (!stmt.Step ())
     return nullptr;
@@ -259,7 +238,7 @@ ChannelsTable::DeleteById (const uint256& id)
     DELETE FROM `xayagame_game_channels`
       WHERE `id` = ?1
   )");
-  BindBlobUint256 (*stmt, 1, id);
+  stmt.Bind (1, id);
   stmt.Execute ();
 }
 
@@ -283,7 +262,7 @@ ChannelsTable::QueryForDisputeHeight (const unsigned height)
       ORDER BY `id`
   )");
 
-  CHECK_EQ (sqlite3_bind_int64 (*stmt, 1, height), SQLITE_OK);
+  stmt.Bind (1, height);
 
   return stmt;
 }

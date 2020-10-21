@@ -36,7 +36,7 @@ StateJsonExtractor::GetAssetDetails (const Asset& a) const
       FROM `assets`
       WHERE `minter` = ?1 AND `asset` = ?2
   )");
-  a.BindToParams (*stmt, 1, 2);
+  a.BindToParams (stmt, 1, 2);
 
   if (!stmt.Step ())
     return Json::Value ();
@@ -53,7 +53,7 @@ StateJsonExtractor::GetAssetDetails (const Asset& a) const
       WHERE `minter` = ?1 AND `asset` = ?2
       ORDER BY `name`
   )");
-  a.BindToParams (*stmt, 1, 2);
+  a.BindToParams (stmt, 1, 2);
 
   Json::Value balances(Json::objectValue);
   Amount total = 0;
@@ -93,7 +93,7 @@ StateJsonExtractor::GetUserBalances (const std::string& name) const
       WHERE `name` = ?1
       ORDER BY `minter`, `asset`
   )");
-  BindParam (*stmt, 1, name);
+  stmt.Bind (1, name);
 
   Json::Value res(Json::arrayValue);
   while (stmt.Step ())
