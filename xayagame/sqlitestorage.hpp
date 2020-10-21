@@ -30,6 +30,10 @@ class SQLiteStorage;
 class SQLiteDatabase
 {
 
+public:
+
+  class Statement;
+
 private:
 
   /** Whether or not we have already initialised SQLite.  */
@@ -112,18 +116,74 @@ public:
   /**
    * Prepares an SQL statement given as string and stores it in the cache,
    * or retrieves the existing statement from the cache.  The prepared statement
-   * is also reset, so that it can be reused right away.
-   *
-   * The returned statement is managed (and, in particular, finalised) by the
-   * SQLiteDatabase object, not by the caller.
+   * is also reset, so that it can be reused right away.  The cache takes
+   * care of transparently giving out and releasing statements.
    */
-  sqlite3_stmt* Prepare (const std::string& sql);
+  Statement Prepare (const std::string& sql);
 
   /**
    * Prepares an SQL statement given as string like Prepare.  This method
    * is meant for statements that are read-only, i.e. SELECT.
    */
-  sqlite3_stmt* PrepareRo (const std::string& sql) const;
+  Statement PrepareRo (const std::string& sql) const;
+
+};
+
+/**
+ * Abstraction around an SQLite prepared statement.  It provides some
+ * basic utility methods that make working with it easier, and also enables
+ * RAII semantics for acquiring / releasing prepared statements from the
+ * built-in statement cache.
+ */
+class SQLiteDatabase::Statement
+{
+
+private:
+
+  /** The underlying handle.  */
+  sqlite3_stmt* stmt = nullptr;
+
+  explicit Statement (sqlite3_stmt* s)
+    : stmt(s)
+  {}
+
+  friend class SQLiteDatabase;
+
+public:
+
+  Statement () = default;
+  Statement (Statement&&) = default;
+  Statement& operator= (Statement&&) = default;
+
+  Statement (const Statement&) = delete;
+  void operator= (const Statement&) = delete;
+
+  /**
+   * Exposes the underlying SQLite handle.
+   */
+  sqlite3_stmt*
+  operator* ()
+  {
+    return stmt;
+  }
+
+  /**
+   * Executes the statement without expecting any results (i.e. for anything
+   * that is not SELECT).
+   */
+  void Execute ();
+
+  /**
+   * Steps the statement.  This asserts that no error is returned.  It returns
+   * true if there are more rows (i.e. sqlite3_step returns SQLITE_ROW) and
+   * false if not (SQLITE_DONE).
+   */
+  bool Step ();
+
+  /**
+   * Resets the statement without clearing the parameter bindings.
+   */
+  void Reset ();
 
 };
 
@@ -221,13 +281,6 @@ protected:
    * underlying database is not using WAL mode (e.g. in-memory).
    */
   std::unique_ptr<SQLiteDatabase> GetSnapshot () const;
-
-  /**
-   * Steps a given statement and expects no results (i.e. for an update).
-   * Can also be used for statements where we expect exactly one result to
-   * verify that no more are there.
-   */
-  static void StepWithNoResult (sqlite3_stmt* stmt);
 
   /**
    * Returns the current block hash (if any) for the given database connection.

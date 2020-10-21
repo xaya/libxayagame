@@ -921,7 +921,7 @@ TEST_F (UnblockedStateExtractionTests, UncommittedChanges)
   /* Add an extra save point, so that the block attach will not be committed
      yet and thus a snapshot will not be consistent with the expected state.  */
   auto& db = rules->GetDatabaseForTesting ();
-  CHECK_EQ (sqlite3_step (db.Prepare ("SAVEPOINT `uncommitted`")), SQLITE_DONE);
+  db.Prepare ("SAVEPOINT `uncommitted`").Execute ();
 
   AttachBlock (game, BlockHash (12), ChatGame::Moves ({{"domob", "new"}}));
   EXPECT_EQ (GetLastMessage ("domob", 1), "new");

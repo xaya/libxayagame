@@ -155,24 +155,22 @@ protected:
   void
   ExpectDatabaseState (const SQLiteDatabase& db, const std::string& value)
   {
-    auto* stmt = db.PrepareRo (R"(
+    auto stmt = db.PrepareRo (R"(
       SELECT `value`
         FROM `xayagame_current`
         WHERE `key` = 'gamestate'
     )");
 
-    const int rc = sqlite3_step (stmt);
-    if (rc == SQLITE_DONE)
+    if (!stmt.Step ())
       {
         EXPECT_EQ (value, "") << "No state in the database, expected " << value;
         return;
       }
-    CHECK_EQ (rc, SQLITE_ROW);
 
-    const unsigned char* data = sqlite3_column_text (stmt, 0);
+    const unsigned char* data = sqlite3_column_text (*stmt, 0);
     EXPECT_EQ (std::string (reinterpret_cast<const char*> (data)), value);
 
-    CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+    CHECK (!stmt.Step ());
   }
 
 };
@@ -192,11 +190,11 @@ TEST_F (SQLiteStorageSnapshotTests, SnapshotsAreReadonly)
 
   auto snapshot = storage.GetSnapshot ();
   ASSERT_NE (snapshot, nullptr);
-  auto* stmt = snapshot->Prepare (R"(
+  auto stmt = snapshot->Prepare (R"(
     INSERT INTO `xayagame_current`
       (`key`, `value`) VALUES ('foo', 'bar')
   )");
-  EXPECT_EQ (sqlite3_step (stmt), SQLITE_READONLY);
+  EXPECT_EQ (sqlite3_step (*stmt), SQLITE_READONLY);
 }
 
 TEST_F (SQLiteStorageSnapshotTests, MultipleSnapshots)

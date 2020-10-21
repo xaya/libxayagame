@@ -13,6 +13,38 @@ namespace xaya
 
 /* ************************************************************************** */
 
+void
+SQLiteDatabase::Statement::Execute ()
+{
+  CHECK (!Step ());
+}
+
+bool
+SQLiteDatabase::Statement::Step ()
+{
+  CHECK (stmt != nullptr) << "Stepping empty statement";
+  const int rc = sqlite3_step (stmt);
+  switch (rc)
+    {
+    case SQLITE_ROW:
+      return true;
+    case SQLITE_DONE:
+      return false;
+    default:
+      LOG (FATAL) << "Unexpected SQLite step result: " << rc;
+    }
+}
+
+void
+SQLiteDatabase::Statement::Reset ()
+{
+  /* sqlite3_reset returns an error code if the last execution of the
+     statement had an error.  We don't care about that here.  */
+  sqlite3_reset (stmt);
+}
+
+/* ************************************************************************** */
+
 namespace
 {
 
@@ -100,10 +132,10 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
   CHECK (db != nullptr);
   LOG (INFO) << "Opened SQLite database successfully: " << file;
 
-  auto* stmt = Prepare ("PRAGMA `journal_mode` = WAL");
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW);
-  const auto mode = GetStringBlob (stmt, 0);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  auto stmt = Prepare ("PRAGMA `journal_mode` = WAL");
+  CHECK (stmt.Step ());
+  const auto mode = GetStringBlob (*stmt, 0);
+  CHECK (!stmt.Step ());
   if (mode == "wal")
     {
       LOG (INFO) << "Set database to WAL mode";
@@ -121,7 +153,7 @@ SQLiteDatabase::~SQLiteDatabase ()
   if (parent != nullptr)
     {
       LOG (INFO) << "Ending snapshot read transaction";
-      CHECK_EQ (sqlite3_step (PrepareRo ("ROLLBACK")), SQLITE_DONE);
+      PrepareRo ("ROLLBACK").Execute ();
     }
 
   for (const auto& stmt : preparedStatements)
@@ -152,36 +184,32 @@ SQLiteDatabase::SetReadonlySnapshot (const SQLiteStorage& p)
      to start a default deferred one, and then issue some SELECT query
      that we don't really care about and that is guaranteed to work.  */
 
-  auto* stmt = PrepareRo ("BEGIN");
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  PrepareRo ("BEGIN").Execute ();
 
-  stmt = PrepareRo ("SELECT COUNT(*) FROM `sqlite_master`");
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  auto stmt = PrepareRo ("SELECT COUNT(*) FROM `sqlite_master`");
+  CHECK (stmt.Step ());
+  CHECK (!stmt.Step ());
 }
 
-sqlite3_stmt*
+SQLiteDatabase::Statement
 SQLiteDatabase::Prepare (const std::string& sql)
 {
   return PrepareRo (sql);
 }
 
-sqlite3_stmt*
+SQLiteDatabase::Statement
 SQLiteDatabase::PrepareRo (const std::string& sql) const
 {
   CHECK (db != nullptr);
   const auto mit = preparedStatements.find (sql);
   if (mit != preparedStatements.end ())
     {
-      /* sqlite3_reset returns an error code if the last execution of the
-         statement had an error.  We don't care about that here.  */
-      sqlite3_reset (mit->second);
+      CHECK_EQ (sqlite3_clear_bindings (mit->second), SQLITE_OK);
 
-      const int rc = sqlite3_clear_bindings (mit->second);
-      if (rc != SQLITE_OK)
-        LOG (ERROR) << "Failed to reset bindings for statement: " << rc;
+      auto res = Statement (mit->second);
+      res.Reset ();
 
-      return mit->second;
+      return res;
     }
 
   sqlite3_stmt* res = nullptr;
@@ -191,7 +219,7 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
     LOG (FATAL) << "Failed to prepare SQL statement: " << rc;
 
   preparedStatements.emplace (sql, res);
-  return res;
+  return Statement (res);
 }
 
 /* ************************************************************************** */
@@ -268,19 +296,6 @@ SQLiteStorage::UnrefSnapshot () const
   cvSnapshots.notify_all ();
 }
 
-/**
- * Steps a given statement and expects no results (i.e. for an update).
- * Can also be used for statements where we expect exactly one result to
- * verify that no more are there.
- */
-void
-SQLiteStorage::StepWithNoResult (sqlite3_stmt* stmt)
-{
-  const int rc = sqlite3_step (stmt);
-  if (rc != SQLITE_DONE)
-    LOG (FATAL) << "Expected SQLITE_DONE, got: " << rc;
-}
-
 void
 SQLiteStorage::SetupSchema ()
 {
@@ -329,23 +344,22 @@ SQLiteStorage::Clear ()
 bool
 SQLiteStorage::GetCurrentBlockHash (const SQLiteDatabase& db, uint256& hash)
 {
-  auto* stmt = db.PrepareRo (R"(
-    SELECT `value` FROM `xayagame_current` WHERE `key` = 'blockhash'
+  auto stmt = db.PrepareRo (R"(
+    SELECT `value`
+      FROM `xayagame_current`
+      WHERE `key` = 'blockhash'
   )");
 
-  const int rc = sqlite3_step (stmt);
-  if (rc == SQLITE_DONE)
+  if (!stmt.Step ())
     return false;
-  if (rc != SQLITE_ROW)
-    LOG (FATAL) << "Failed to fetch current block hash: " << rc;
 
-  const void* blob = sqlite3_column_blob (stmt, 0);
-  const size_t blobSize = sqlite3_column_bytes (stmt, 0);
+  const void* blob = sqlite3_column_blob (*stmt, 0);
+  const size_t blobSize = sqlite3_column_bytes (*stmt, 0);
   CHECK_EQ (blobSize, uint256::NUM_BYTES)
       << "Invalid uint256 value stored in database";
   hash.FromBlob (static_cast<const unsigned char*> (blob));
 
-  StepWithNoResult (stmt);
+  CHECK (!stmt.Step ());
   return true;
 }
 
@@ -358,17 +372,17 @@ SQLiteStorage::GetCurrentBlockHash (uint256& hash) const
 GameStateData
 SQLiteStorage::GetCurrentGameState () const
 {
-  auto* stmt = db->Prepare (R"(
-    SELECT `value` FROM `xayagame_current` WHERE `key` = 'gamestate'
+  auto stmt = db->Prepare (R"(
+    SELECT `value`
+      FROM `xayagame_current`
+      WHERE `key` = 'gamestate'
   )");
 
-  const int rc = sqlite3_step (stmt);
-  if (rc != SQLITE_ROW)
-    LOG (FATAL) << "Failed to fetch current game state: " << rc;
+  CHECK (stmt.Step ()) << "Failed to fetch current game state";
 
-  const GameStateData res = GetStringBlob (stmt, 0);
+  const GameStateData res = GetStringBlob (*stmt, 0);
 
-  StepWithNoResult (stmt);
+  CHECK (!stmt.Step ());
   return res;
 }
 
@@ -378,44 +392,41 @@ SQLiteStorage::SetCurrentGameState (const uint256& hash,
 {
   CHECK (startedTransaction);
 
-  StepWithNoResult (db->Prepare ("SAVEPOINT `xayagame-setcurrentstate`"));
+  db->Prepare ("SAVEPOINT `xayagame-setcurrentstate`").Execute ();
 
-  sqlite3_stmt* stmt = db->Prepare (R"(
+  auto stmt = db->Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_current` (`key`, `value`)
       VALUES ('blockhash', ?1)
   )");
-  BindUint256 (stmt, 1, hash);
-  StepWithNoResult (stmt);
+  BindUint256 (*stmt, 1, hash);
+  stmt.Execute ();
 
   stmt = db->Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_current` (`key`, `value`)
       VALUES ('gamestate', ?1)
   )");
-  BindStringBlob (stmt, 1, data);
-  StepWithNoResult (stmt);
+  BindStringBlob (*stmt, 1, data);
+  stmt.Execute ();
 
-  StepWithNoResult (db->Prepare (R"(
-    RELEASE `xayagame-setcurrentstate`
-  )"));
+  db->Prepare ("RELEASE `xayagame-setcurrentstate`").Execute ();
 }
 
 bool
 SQLiteStorage::GetUndoData (const uint256& hash, UndoData& data) const
 {
-  auto* stmt = db->Prepare (R"(
-    SELECT `data` FROM `xayagame_undo` WHERE `hash` = ?1
+  auto stmt = db->Prepare (R"(
+    SELECT `data`
+      FROM `xayagame_undo`
+      WHERE `hash` = ?1
   )");
-  BindUint256 (stmt, 1, hash);
+  BindUint256 (*stmt, 1, hash);
 
-  const int rc = sqlite3_step (stmt);
-  if (rc == SQLITE_DONE)
+  if (!stmt.Step ())
     return false;
-  if (rc != SQLITE_ROW)
-    LOG (FATAL) << "Failed to fetch undo data: " << rc;
 
-  data = GetStringBlob (stmt, 0);
+  data = GetStringBlob (*stmt, 0);
 
-  StepWithNoResult (stmt);
+  CHECK (!stmt.Step ());
   return true;
 }
 
@@ -425,19 +436,17 @@ SQLiteStorage::AddUndoData (const uint256& hash,
 {
   CHECK (startedTransaction);
 
-  auto* stmt = db->Prepare (R"(
+  auto stmt = db->Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_undo` (`hash`, `data`, `height`)
       VALUES (?1, ?2, ?3)
   )");
 
-  BindUint256 (stmt, 1, hash);
-  BindStringBlob (stmt, 2, data);
+  BindUint256 (*stmt, 1, hash);
+  BindStringBlob (*stmt, 2, data);
 
-  const int rc = sqlite3_bind_int (stmt, 3, height);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind block height value: " << rc;
+  CHECK_EQ (sqlite3_bind_int (*stmt, 3, height), SQLITE_OK);
 
-  StepWithNoResult (stmt);
+  stmt.Execute ();
 }
 
 void
@@ -445,12 +454,13 @@ SQLiteStorage::ReleaseUndoData (const uint256& hash)
 {
   CHECK (startedTransaction);
 
-  auto* stmt = db->Prepare (R"(
-    DELETE FROM `xayagame_undo` WHERE `hash` = ?1
+  auto stmt = db->Prepare (R"(
+    DELETE FROM `xayagame_undo`
+      WHERE `hash` = ?1
   )");
 
-  BindUint256 (stmt, 1, hash);
-  StepWithNoResult (stmt);
+  BindUint256 (*stmt, 1, hash);
+  stmt.Execute ();
 }
 
 void
@@ -458,15 +468,14 @@ SQLiteStorage::PruneUndoData (const unsigned height)
 {
   CHECK (startedTransaction);
 
-  auto* stmt = db->Prepare (R"(
-    DELETE FROM `xayagame_undo` WHERE `height` <= ?1
+  auto stmt = db->Prepare (R"(
+    DELETE FROM `xayagame_undo`
+      WHERE `height` <= ?1
   )");
 
-  const int rc = sqlite3_bind_int (stmt, 1, height);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind block height value: " << rc;
+  CHECK_EQ (sqlite3_bind_int (*stmt, 1, height), SQLITE_OK);
 
-  StepWithNoResult (stmt);
+  stmt.Execute ();
 }
 
 void
@@ -474,13 +483,13 @@ SQLiteStorage::BeginTransaction ()
 {
   CHECK (!startedTransaction);
   startedTransaction = true;
-  StepWithNoResult (db->Prepare ("SAVEPOINT `xayagame-sqlitegame`"));
+  db->Prepare ("SAVEPOINT `xayagame-sqlitegame`").Execute ();
 }
 
 void
 SQLiteStorage::CommitTransaction ()
 {
-  StepWithNoResult (db->Prepare ("RELEASE `xayagame-sqlitegame`"));
+  db->Prepare ("RELEASE `xayagame-sqlitegame`").Execute ();
   CHECK (startedTransaction);
   startedTransaction = false;
 }
@@ -488,7 +497,7 @@ SQLiteStorage::CommitTransaction ()
 void
 SQLiteStorage::RollbackTransaction ()
 {
-  StepWithNoResult (db->Prepare ("ROLLBACK TO `xayagame-sqlitegame`"));
+  db->Prepare ("ROLLBACK TO `xayagame-sqlitegame`").Execute ();
   CHECK (startedTransaction);
   startedTransaction = false;
 }

@@ -173,14 +173,14 @@ public:
 bool
 SQLiteGame::Storage::IsGameInitialised (const SQLiteDatabase& db)
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT `gamestate_initialised` FROM `xayagame_gamevars`
   )");
 
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW)
+  CHECK (stmt.Step ())
       << "Failed to fetch result for from xayagame_gamevars";
-  const int initialised = sqlite3_column_int (stmt, 0);
-  StepWithNoResult (stmt);
+  const int initialised = sqlite3_column_int (*stmt, 0);
+  CHECK (!stmt.Step ());
 
   return initialised;
 }
@@ -197,21 +197,21 @@ SQLiteGame::Storage::InitialiseGame ()
     }
 
   LOG (INFO) << "Setting initial state in the DB";
-  StepWithNoResult (db.Prepare ("SAVEPOINT `xayagame-stateinit`"));
+  db.Prepare ("SAVEPOINT `xayagame-stateinit`").Execute ();
   try
     {
       ActiveAutoIds ids(game);
       game.InitialiseState (db);
-      StepWithNoResult (db.Prepare (R"(
+      db.Prepare (R"(
         UPDATE `xayagame_gamevars` SET `gamestate_initialised` = 1
-      )"));
-      StepWithNoResult (db.Prepare ("RELEASE `xayagame-stateinit`"));
+      )").Execute ();
+      db.Prepare ("RELEASE `xayagame-stateinit`").Execute ();
       LOG (INFO) << "Initialised the DB state successfully";
     }
   catch (...)
     {
       LOG (ERROR) << "Initialising state failed, rolling back the DB change";
-      StepWithNoResult (db.Prepare ("ROLLBACK TO `xayagame-stateinit`"));
+      db.Prepare ("ROLLBACK TO `xayagame-stateinit`").Execute ();
       throw;
     }
 }
@@ -573,26 +573,23 @@ BindString (sqlite3_stmt* stmt, const int ind, const std::string& value)
 
 SQLiteGame::AutoId::AutoId (SQLiteGame& game, const std::string& key)
 {
-  auto* stmt = game.database->GetDatabase ().Prepare (R"(
+  auto stmt = game.database->GetDatabase ().Prepare (R"(
     SELECT `nextid` FROM `xayagame_autoids` WHERE `key` = ?1
   )");
-  BindString (stmt, 1, key);
+  BindString (*stmt, 1, key);
 
-  const int rc = sqlite3_step (stmt);
-  if (rc == SQLITE_DONE)
+  if (stmt.Step ())
+    {
+      nextValue = sqlite3_column_int (*stmt, 0);
+      dbValue = nextValue;
+      LOG (INFO) << "Fetched next value " << nextValue << " for AutoId " << key;
+      CHECK (!stmt.Step ());
+    }
+  else
     {
       LOG (INFO) << "No next value for AutoId " << key;
       nextValue = 1;
     }
-  else if (rc == SQLITE_ROW)
-    {
-      nextValue = sqlite3_column_int (stmt, 0);
-      dbValue = nextValue;
-      LOG (INFO) << "Fetched next value " << nextValue << " for AutoId " << key;
-      SQLiteStorage::StepWithNoResult (stmt);
-    }
-  else
-    LOG (FATAL) << "Error initialising AutoId " << key;
 
   CHECK_NE (nextValue, EMPTY_ID);
 }
@@ -611,14 +608,13 @@ SQLiteGame::AutoId::Sync (SQLiteGame& game, const std::string& key)
       return;
     }
 
-  auto* stmt = game.database->GetDatabase ().Prepare (R"(
+  auto stmt = game.database->GetDatabase ().Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_autoids`
       (`key`, `nextid`) VALUES (?1, ?2)
   )");
-  BindString (stmt, 1, key);
-  CHECK_EQ (sqlite3_bind_int (stmt, 2, nextValue), SQLITE_OK);
-
-  SQLiteStorage::StepWithNoResult (stmt);
+  BindString (*stmt, 1, key);
+  CHECK_EQ (sqlite3_bind_int (*stmt, 2, nextValue), SQLITE_OK);
+  stmt.Execute ();
 
   LOG (INFO) << "Synced AutoId " << key << " to database";
   dbValue = nextValue;
