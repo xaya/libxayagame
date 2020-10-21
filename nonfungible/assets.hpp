@@ -77,7 +77,8 @@ public:
   /**
    * Extracts an Asset value from a database result.
    */
-  static Asset FromColumns (sqlite3_stmt* stmt, int indMinter, int indName);
+  static Asset FromColumns (const xaya::SQLiteDatabase::Statement& stmt,
+                            int indMinter, int indName);
 
   /**
    * Checks if the given string as a valid asset name.

@@ -21,6 +21,13 @@ SQLiteDatabase::Statement::operator* ()
   return stmt;
 }
 
+sqlite3_stmt*
+SQLiteDatabase::Statement::ro () const
+{
+  CHECK (stmt != nullptr) << "Statement is empty";
+  return stmt;
+}
+
 void
 SQLiteDatabase::Statement::Execute ()
 {
@@ -119,6 +126,95 @@ SQLiteDatabase::Statement::BindBlob (const int ind, const std::string& val)
             SQLITE_OK);
 }
 
+bool
+SQLiteDatabase::Statement::IsNull (const int ind) const
+{
+  return sqlite3_column_type (ro (), ind) == SQLITE_NULL;
+}
+
+template <>
+  int64_t
+  SQLiteDatabase::Statement::Get<int64_t> (const int ind) const
+{
+  return sqlite3_column_int64 (ro (), ind);
+}
+
+template <>
+  uint64_t
+  SQLiteDatabase::Statement::Get<uint64_t> (const int ind) const
+{
+  const int64_t val = Get<int64_t> (ind);
+  CHECK_GE (val, 0);
+  return val;
+}
+
+template <>
+  int
+  SQLiteDatabase::Statement::Get<int> (const int ind) const
+{
+  const int64_t val = Get<int64_t> (ind);
+  CHECK_LE (val, std::numeric_limits<int>::max ());
+  CHECK_GE (val, std::numeric_limits<int>::min ());
+  return val;
+}
+
+template <>
+  unsigned
+  SQLiteDatabase::Statement::Get<unsigned> (const int ind) const
+{
+  const int val = Get<int> (ind);
+  CHECK_GE (val, 0);
+  return val;
+}
+
+template <>
+  bool
+  SQLiteDatabase::Statement::Get<bool> (const int ind) const
+{
+  const int val = Get<int> (ind);
+  CHECK (val == 0 || val == 1);
+  return val != 0;
+}
+
+template <>
+  uint256
+  SQLiteDatabase::Statement::Get<uint256> (const int ind) const
+{
+  const int len = sqlite3_column_bytes (ro (), ind);
+  CHECK_EQ (len, uint256::NUM_BYTES);
+  const void* data = sqlite3_column_blob (ro (), ind);
+
+  uint256 res;
+  res.FromBlob (static_cast<const unsigned char*> (data));
+
+  return res;
+}
+
+template <>
+  std::string
+  SQLiteDatabase::Statement::Get<std::string> (const int ind) const
+{
+  const int len = sqlite3_column_bytes (ro (), ind);
+  if (len == 0)
+    return std::string ();
+
+  const unsigned char* str = sqlite3_column_text (ro (), ind);
+  CHECK (str != nullptr);
+  return std::string (reinterpret_cast<const char*> (str), len);
+}
+
+std::string
+SQLiteDatabase::Statement::GetBlob (const int ind) const
+{
+  const int len = sqlite3_column_bytes (ro (), ind);
+  if (len == 0)
+    return std::string ();
+
+  const void* data = sqlite3_column_blob (ro (), ind);
+  CHECK (data != nullptr);
+  return std::string (reinterpret_cast<const char*> (data), len);
+}
+
 /* ************************************************************************** */
 
 namespace
@@ -131,17 +227,6 @@ void
 SQLiteErrorLogger (void* arg, const int errCode, const char* msg)
 {
   LOG (ERROR) << "SQLite error (code " << errCode << "): " << msg;
-}
-
-/**
- * Retrieves a column value from a BLOB field as std::string.
- */
-std::string
-GetStringBlob (sqlite3_stmt* stmt, const int ind)
-{
-  const void* blob = sqlite3_column_blob (stmt, ind);
-  const size_t blobSize = sqlite3_column_bytes (stmt, ind);
-  return std::string (static_cast<const char*> (blob), blobSize);
 }
 
 } // anonymous namespace
@@ -181,7 +266,7 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
 
   auto stmt = Prepare ("PRAGMA `journal_mode` = WAL");
   CHECK (stmt.Step ());
-  const auto mode = GetStringBlob (*stmt, 0);
+  const auto mode = stmt.Get<std::string> (0);
   CHECK (!stmt.Step ());
   if (mode == "wal")
     {
@@ -350,11 +435,11 @@ SQLiteStorage::SetupSchema ()
   const int rc = sqlite3_exec (**db, R"(
     CREATE TABLE IF NOT EXISTS `xayagame_current`
         (`key` TEXT PRIMARY KEY,
-         `value` BLOB);
+         `value` BLOB NOT NULL);
     CREATE TABLE IF NOT EXISTS `xayagame_undo`
         (`hash` BLOB PRIMARY KEY,
-         `data` BLOB,
-         `height` INTEGER);
+         `data` BLOB NOT NULL,
+         `height` INTEGER NOT NULL);
   )", nullptr, nullptr, nullptr);
   if (rc != SQLITE_OK)
     LOG (FATAL) << "Failed to set up database schema: " << rc;
@@ -400,13 +485,9 @@ SQLiteStorage::GetCurrentBlockHash (const SQLiteDatabase& db, uint256& hash)
   if (!stmt.Step ())
     return false;
 
-  const void* blob = sqlite3_column_blob (*stmt, 0);
-  const size_t blobSize = sqlite3_column_bytes (*stmt, 0);
-  CHECK_EQ (blobSize, uint256::NUM_BYTES)
-      << "Invalid uint256 value stored in database";
-  hash.FromBlob (static_cast<const unsigned char*> (blob));
-
+  hash = stmt.Get<uint256> (0);
   CHECK (!stmt.Step ());
+
   return true;
 }
 
@@ -427,9 +508,9 @@ SQLiteStorage::GetCurrentGameState () const
 
   CHECK (stmt.Step ()) << "Failed to fetch current game state";
 
-  const GameStateData res = GetStringBlob (*stmt, 0);
-
+  const GameStateData res = stmt.GetBlob (0);
   CHECK (!stmt.Step ());
+
   return res;
 }
 
@@ -471,9 +552,9 @@ SQLiteStorage::GetUndoData (const uint256& hash, UndoData& data) const
   if (!stmt.Step ())
     return false;
 
-  data = GetStringBlob (*stmt, 0);
-
+  data = stmt.GetBlob (0);
   CHECK (!stmt.Step ());
+
   return true;
 }
 

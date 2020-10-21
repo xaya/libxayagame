@@ -4,8 +4,6 @@
 
 #include "moveprocessor.hpp"
 
-#include "dbutils.hpp"
-
 #include <glog/logging.h>
 
 namespace nf

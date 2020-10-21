@@ -174,15 +174,16 @@ bool
 SQLiteGame::Storage::IsGameInitialised (const SQLiteDatabase& db)
 {
   auto stmt = db.PrepareRo (R"(
-    SELECT `gamestate_initialised` FROM `xayagame_gamevars`
+    SELECT `gamestate_initialised`
+      FROM `xayagame_gamevars`
   )");
 
   CHECK (stmt.Step ())
       << "Failed to fetch result for from xayagame_gamevars";
-  const int initialised = sqlite3_column_int (*stmt, 0);
+  const bool res = stmt.Get<bool> (0);
   CHECK (!stmt.Step ());
 
-  return initialised;
+  return res;
 }
 
 void
@@ -203,7 +204,8 @@ SQLiteGame::Storage::InitialiseGame ()
       ActiveAutoIds ids(game);
       game.InitialiseState (db);
       db.Prepare (R"(
-        UPDATE `xayagame_gamevars` SET `gamestate_initialised` = 1
+        UPDATE `xayagame_gamevars`
+          SET `gamestate_initialised` = 1
       )").Execute ();
       db.Prepare ("RELEASE `xayagame-stateinit`").Execute ();
       LOG (INFO) << "Initialised the DB state successfully";
@@ -561,7 +563,7 @@ SQLiteGame::AutoId::AutoId (SQLiteGame& game, const std::string& key)
 
   if (stmt.Step ())
     {
-      nextValue = sqlite3_column_int (*stmt, 0);
+      nextValue = stmt.Get<int64_t> (0);
       dbValue = nextValue;
       LOG (INFO) << "Fetched next value " << nextValue << " for AutoId " << key;
       CHECK (!stmt.Step ());

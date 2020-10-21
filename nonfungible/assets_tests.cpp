@@ -4,7 +4,6 @@
 
 #include "assets.hpp"
 
-#include "dbutils.hpp"
 #include "testutils.hpp"
 
 #include <glog/logging.h>
@@ -73,7 +72,7 @@ TEST_F (AssetsTests, DatabaseRoundtrip)
   )");
 
   CHECK (stmt.Step ());
-  const Asset recovered = Asset::FromColumns (*stmt, 0, 1);
+  const Asset recovered = Asset::FromColumns (stmt, 0, 1);
   EXPECT_EQ (recovered, a);
   CHECK (!stmt.Step ());
 }

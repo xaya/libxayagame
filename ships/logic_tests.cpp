@@ -127,8 +127,8 @@ protected:
     stmt.Bind (1, name);
 
     CHECK (stmt.Step ()) << "No stats row for: " << name;
-    EXPECT_EQ (sqlite3_column_int (*stmt, 0), won);
-    EXPECT_EQ (sqlite3_column_int (*stmt, 1), lost);
+    EXPECT_EQ (stmt.Get<int> (0), won);
+    EXPECT_EQ (stmt.Get<int> (1), lost);
 
     CHECK (!stmt.Step ());
   }

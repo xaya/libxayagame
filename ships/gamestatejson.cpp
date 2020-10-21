@@ -7,8 +7,6 @@
 #include <gamechannel/database.hpp>
 #include <gamechannel/gamestatejson.hpp>
 
-#include <sqlite3.h>
-
 #include <glog/logging.h>
 
 namespace ships
@@ -24,13 +22,11 @@ GameStateJson::GetFullJson () const
   )");
   while (stmt.Step ())
     {
-      const int len = sqlite3_column_bytes (*stmt, 0);
-      const unsigned char* bytes = sqlite3_column_text (*stmt, 0);
-      const std::string name(reinterpret_cast<const char*> (bytes), len);
+      const auto name = stmt.Get<std::string> (0);
 
       Json::Value cur(Json::objectValue);
-      cur["won"] = sqlite3_column_int (*stmt, 1);
-      cur["lost"] = sqlite3_column_int (*stmt, 2);
+      cur["won"] = static_cast<Json::Int64> (stmt.Get<int64_t> (1));
+      cur["lost"] = static_cast<Json::Int64> (stmt.Get<int64_t> (2));
 
       stats[name] = cur;
     }

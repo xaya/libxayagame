@@ -4,8 +4,6 @@
 
 #include "moveparser.hpp"
 
-#include "dbutils.hpp"
-
 #include <glog/logging.h>
 
 namespace nf
@@ -26,7 +24,7 @@ GetDbBalance (const xaya::SQLiteDatabase& db, const Asset& a,
   if (!stmt.Step ())
     return 0;
 
-  const Amount res = ColumnExtract<int64_t> (*stmt, 0);
+  const Amount res = stmt.Get<int64_t> (0);
   CHECK (!stmt.Step ());
 
   return res;
@@ -43,7 +41,7 @@ MoveParser::AssetExists (const Asset& a) const
   a.BindToParams (stmt, 1, 2);
 
   CHECK (stmt.Step ());
-  const auto count = ColumnExtract<int64_t> (*stmt, 0);
+  const auto count = stmt.Get<int64_t> (0);
   CHECK (!stmt.Step ());
 
   CHECK_GE (count, 0);

@@ -398,7 +398,7 @@ ShipsLogic::ProcessExpiredDisputes (xaya::SQLiteDatabase& db,
   auto stmt = tbl.QueryForDisputeHeight (height - DISPUTE_BLOCKS);
   while (stmt.Step ())
     {
-      auto h = tbl.GetFromResult (*stmt);
+      auto h = tbl.GetFromResult (stmt);
       const auto id = h->GetId ();
       const auto& meta = h->GetMetadata ();
 

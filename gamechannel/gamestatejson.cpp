@@ -6,8 +6,6 @@
 
 #include <glog/logging.h>
 
-#include <sqlite3.h>
-
 namespace xaya
 {
 
@@ -84,7 +82,7 @@ AllChannelsGameStateJson (ChannelsTable& tbl, const BoardRules& r)
   auto stmt = tbl.QueryAll ();
   while (stmt.Step ())
     {
-      auto h = tbl.GetFromResult (*stmt);
+      auto h = tbl.GetFromResult (stmt);
       res[h->GetId ().ToHex ()] = ChannelToGameStateJson (*h, r);
     }
 

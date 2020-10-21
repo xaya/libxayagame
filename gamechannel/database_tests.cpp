@@ -178,9 +178,9 @@ TEST_F (ChannelDbTests, QueryAll)
 
   auto stmt = tbl.QueryAll ();
   ASSERT_TRUE (stmt.Step ());
-  EXPECT_EQ (tbl.GetFromResult (*stmt)->GetId (), id2);
+  EXPECT_EQ (tbl.GetFromResult (stmt)->GetId (), id2);
   ASSERT_TRUE (stmt.Step ());
-  EXPECT_EQ (tbl.GetFromResult (*stmt)->GetId (), id1);
+  EXPECT_EQ (tbl.GetFromResult (stmt)->GetId (), id1);
   EXPECT_FALSE (stmt.Step ());
 }
 
@@ -214,9 +214,9 @@ TEST_F (ChannelDbTests, QueryForDisputeHeight)
 
   auto stmt = tbl.QueryForDisputeHeight (15);
   ASSERT_TRUE (stmt.Step ());
-  EXPECT_EQ (tbl.GetFromResult (*stmt)->GetId (), id2);
+  EXPECT_EQ (tbl.GetFromResult (stmt)->GetId (), id2);
   ASSERT_TRUE (stmt.Step ());
-  EXPECT_EQ (tbl.GetFromResult (*stmt)->GetId (), id1);
+  EXPECT_EQ (tbl.GetFromResult (stmt)->GetId (), id1);
   EXPECT_FALSE (stmt.Step ());
 }
 

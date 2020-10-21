@@ -4,7 +4,6 @@
 
 #include "testutils.hpp"
 
-#include "dbutils.hpp"
 #include "schema.hpp"
 
 #include <glog/logging.h>

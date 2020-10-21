@@ -167,9 +167,7 @@ protected:
         return;
       }
 
-    const unsigned char* data = sqlite3_column_text (*stmt, 0);
-    EXPECT_EQ (std::string (reinterpret_cast<const char*> (data)), value);
-
+    EXPECT_EQ (stmt.Get<std::string> (0), value);
     CHECK (!stmt.Step ());
   }
 

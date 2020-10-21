@@ -24,18 +24,6 @@ constexpr int COLUMN_STATEPROOF = 3;
 constexpr int COLUMN_DISPUTEHEIGHT = 4;
 
 /**
- * Extracts a binary string from a BLOB column.
- */
-std::string
-ExtractBlobString (sqlite3_stmt* stmt, const int ind)
-{
-  const int len = sqlite3_column_bytes (stmt, ind);
-  const void* data = sqlite3_column_blob (stmt, ind);
-
-  return std::string (static_cast<const char*> (data), len);
-}
-
-/**
  * Binds a protocol buffer message to a BLOB parameter.
  */
 template <typename Proto>
@@ -66,28 +54,26 @@ ChannelData::ChannelData (SQLiteDatabase& d, const uint256& i)
   LOG (INFO) << "Created new ChannelData instance for ID " << id.ToHex ();
 }
 
-ChannelData::ChannelData (SQLiteDatabase& d, sqlite3_stmt* row)
+ChannelData::ChannelData (SQLiteDatabase& d,
+                          const SQLiteDatabase::Statement& row)
   : db(d), initialised(true), dirty(false)
 {
-  const int len = sqlite3_column_bytes (row, COLUMN_ID);
-  CHECK_EQ (len, uint256::NUM_BYTES);
-  const void* data = sqlite3_column_blob (row, COLUMN_ID);
-  id.FromBlob (static_cast<const unsigned char*> (data));
+  id = row.Get<uint256> (COLUMN_ID);
 
-  CHECK (metadata.ParseFromString (ExtractBlobString (row, COLUMN_METADATA)));
-  reinit = ExtractBlobString (row, COLUMN_REINIT);
+  CHECK (metadata.ParseFromString (row.GetBlob (COLUMN_METADATA)));
+  reinit = row.GetBlob (COLUMN_REINIT);
 
   /* See if there is an explicit state proof in the database.  If not, we just
      set it to one based on the reinit state.  */
-  if (sqlite3_column_type (row, COLUMN_STATEPROOF) == SQLITE_NULL)
+  if (row.IsNull (COLUMN_STATEPROOF))
     StateProofFromReinit (reinit, proof);
   else
-    CHECK (proof.ParseFromString (ExtractBlobString (row, COLUMN_STATEPROOF)));
+    CHECK (proof.ParseFromString (row.GetBlob (COLUMN_STATEPROOF)));
 
-  if (sqlite3_column_type (row, COLUMN_DISPUTEHEIGHT) == SQLITE_NULL)
+  if (row.IsNull (COLUMN_DISPUTEHEIGHT))
     disputeHeight = 0;
   else
-    disputeHeight = sqlite3_column_int64 (row, COLUMN_DISPUTEHEIGHT);
+    disputeHeight = row.Get<int64_t> (COLUMN_DISPUTEHEIGHT);
 
   LOG (INFO)
       << "Created ChannelData instance from result row, ID " << id.ToHex ();
@@ -200,7 +186,7 @@ ChannelData::SetDisputeHeight (const unsigned h)
 }
 
 ChannelsTable::Handle
-ChannelsTable::GetFromResult (sqlite3_stmt* row)
+ChannelsTable::GetFromResult (const SQLiteDatabase::Statement& row)
 {
   return Handle (new ChannelData (db, row));
 }
@@ -219,7 +205,7 @@ ChannelsTable::GetById (const uint256& id)
   if (!stmt.Step ())
     return nullptr;
 
-  auto h = GetFromResult (*stmt);
+  auto h = GetFromResult (stmt);
   CHECK (!stmt.Step ());
 
   return h;

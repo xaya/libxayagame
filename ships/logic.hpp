@@ -15,8 +15,6 @@
 
 #include <json/json.h>
 
-#include <sqlite3.h>
-
 #include <string>
 
 namespace ships

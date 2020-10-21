@@ -14,8 +14,6 @@
 #include <jsonrpccpp/common/errors.h>
 #include <jsonrpccpp/common/exception.h>
 
-#include <sqlite3.h>
-
 namespace xaya
 {
 

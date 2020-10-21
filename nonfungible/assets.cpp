@@ -4,8 +4,6 @@
 
 #include "assets.hpp"
 
-#include "dbutils.hpp"
-
 #include "xayautil/jsonutils.hpp"
 
 namespace nf
@@ -45,10 +43,11 @@ Asset::ToJson () const
 }
 
 Asset
-Asset::FromColumns (sqlite3_stmt* stmt, const int indMinter, const int indName)
+Asset::FromColumns (const xaya::SQLiteDatabase::Statement& stmt,
+                    const int indMinter, const int indName)
 {
-  return Asset (ColumnExtract<std::string> (stmt, indMinter),
-                ColumnExtract<std::string> (stmt, indName));
+  return Asset (stmt.Get<std::string> (indMinter),
+                stmt.Get<std::string> (indName));
 }
 
 bool

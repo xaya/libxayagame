@@ -4,7 +4,6 @@
 
 #include "statejson.hpp"
 
-#include "dbutils.hpp"
 #include "moveparser.hpp"
 
 #include <glog/logging.h>
@@ -23,7 +22,7 @@ StateJsonExtractor::ListAssets () const
 
   Json::Value res(Json::arrayValue);
   while (stmt.Step ())
-    res.append (Asset::FromColumns (*stmt, 0, 1).ToJson ());
+    res.append (Asset::FromColumns (stmt, 0, 1).ToJson ());
 
   return res;
 }
@@ -42,8 +41,8 @@ StateJsonExtractor::GetAssetDetails (const Asset& a) const
     return Json::Value ();
 
   Json::Value data;
-  if (!ColumnIsNull (*stmt, 0))
-    data = ColumnExtract<std::string> (*stmt, 0);
+  if (!stmt.IsNull (0))
+    data = stmt.Get<std::string> (0);
 
   CHECK (!stmt.Step ());
 
@@ -59,8 +58,8 @@ StateJsonExtractor::GetAssetDetails (const Asset& a) const
   Amount total = 0;
   while (stmt.Step ())
     {
-      const auto name = ColumnExtract<std::string> (*stmt, 0);
-      const Amount val = ColumnExtract<int64_t> (*stmt, 1);
+      const auto name = stmt.Get<std::string> (0);
+      const Amount val = stmt.Get<int64_t> (1);
 
       CHECK_GT (val, 0);
       CHECK (!balances.isMember (name)) << "Duplicate user: " << name;
@@ -98,8 +97,8 @@ StateJsonExtractor::GetUserBalances (const std::string& name) const
   Json::Value res(Json::arrayValue);
   while (stmt.Step ())
     {
-      const auto asset = Asset::FromColumns (*stmt, 0, 1);
-      const Amount balance = ColumnExtract<int64_t> (*stmt, 2);
+      const auto asset = Asset::FromColumns (stmt, 0, 1);
+      const Amount balance = stmt.Get<int64_t> (2);
 
       Json::Value cur(Json::objectValue);
       cur["asset"] = asset.ToJson ();
@@ -123,7 +122,7 @@ StateJsonExtractor::FullState () const
   Json::Value res(Json::arrayValue);
   while (stmt.Step ())
     {
-      const auto asset = Asset::FromColumns (*stmt, 0, 1);
+      const auto asset = Asset::FromColumns (stmt, 0, 1);
       res.append (GetAssetDetails (asset));
     }
 

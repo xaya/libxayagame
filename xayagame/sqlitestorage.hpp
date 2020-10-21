@@ -164,6 +164,12 @@ public:
   sqlite3_stmt* operator* ();
 
   /**
+   * Returns the underlying sqlite3_stmt handle for const operations
+   * (like extracting column values).
+   */
+  sqlite3_stmt* ro () const;
+
+  /**
    * Executes the statement without expecting any results (i.e. for anything
    * that is not SELECT).
    */
@@ -198,6 +204,24 @@ public:
    * Binds a numbered parameter to a byte string as BLOB.
    */
   void BindBlob (int ind, const std::string& val);
+
+  /**
+   * Checks if the numbered column is NULL in the current row.
+   */
+  bool IsNull (int ind) const;
+
+  /**
+   * Extracts a typed value from the column with the given index in the
+   * current row.  Works with int64_t, int, bool, uint256 and
+   * std::string (as text).
+   */
+  template <typename T>
+    T Get (int ind) const;
+
+  /**
+   * Extracts a byte string as BLOB from a column of the current row.
+   */
+  std::string GetBlob (int ind) const;
 
 };
 
