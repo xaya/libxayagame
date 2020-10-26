@@ -14,18 +14,49 @@ namespace xaya
 
 /* ************************************************************************** */
 
+SQLiteDatabase::Statement::Statement (Statement&& o)
+{
+  *this = std::move (o);
+}
+
+SQLiteDatabase::Statement&
+SQLiteDatabase::Statement::operator= (Statement&& o)
+{
+  Clear ();
+
+  entry = o.entry;
+  o.entry = nullptr;
+
+  return *this;
+}
+
+SQLiteDatabase::Statement::~Statement ()
+{
+  Clear ();
+}
+
+void
+SQLiteDatabase::Statement::Clear ()
+{
+  if (entry != nullptr)
+    {
+      VLOG (2) << "Releasing cached SQL statement at " << entry;
+      entry->used.clear ();
+    }
+}
+
 sqlite3_stmt*
 SQLiteDatabase::Statement::operator* ()
 {
-  CHECK (stmt != nullptr) << "Statement is empty";
-  return stmt;
+  CHECK (entry != nullptr) << "Statement is empty";
+  return entry->stmt;
 }
 
 sqlite3_stmt*
 SQLiteDatabase::Statement::ro () const
 {
-  CHECK (stmt != nullptr) << "Statement is empty";
-  return stmt;
+  CHECK (entry != nullptr) << "Statement is empty";
+  return entry->stmt;
 }
 
 void
@@ -54,7 +85,7 @@ SQLiteDatabase::Statement::Reset ()
 {
   /* sqlite3_reset returns an error code if the last execution of the
      statement had an error.  We don't care about that here.  */
-  sqlite3_reset (stmt);
+  sqlite3_reset (**this);
 }
 
 void
@@ -288,13 +319,7 @@ SQLiteDatabase::~SQLiteDatabase ()
       PrepareRo ("ROLLBACK").Execute ();
     }
 
-  for (const auto& stmt : preparedStatements)
-    {
-      /* sqlite3_finalize returns the error code corresponding to the last
-         evaluation of the statement, not an error code "about" finalising it.
-         Thus we want to ignore it here.  */
-      sqlite3_finalize (stmt.second);
-    }
+  preparedStatements.clear ();
 
   CHECK (db != nullptr);
   const int rc = sqlite3_close (db);
@@ -303,6 +328,16 @@ SQLiteDatabase::~SQLiteDatabase ()
 
   if (parent != nullptr)
     parent->UnrefSnapshot ();
+}
+
+SQLiteDatabase::CachedStatement::~CachedStatement ()
+{
+  CHECK (!used.test_and_set ()) << "Cached statement is still in use";
+
+  /* sqlite3_finalize returns the error code corresponding to the last
+     evaluation of the statement, not an error code "about" finalising it.
+     Thus we want to ignore it here.  */
+  sqlite3_finalize (stmt);
 }
 
 void
@@ -333,25 +368,47 @@ SQLiteDatabase::Statement
 SQLiteDatabase::PrepareRo (const std::string& sql) const
 {
   CHECK (db != nullptr);
-  const auto mit = preparedStatements.find (sql);
-  if (mit != preparedStatements.end ())
-    {
-      CHECK_EQ (sqlite3_clear_bindings (mit->second), SQLITE_OK);
 
-      auto res = Statement (mit->second);
-      res.Reset ();
+  /* First see if there is already an entry in our cache that
+     we are free to use (because it is not yet in use).  */
+  {
+    std::lock_guard<std::mutex> lock(mutPreparedStatements);
+    auto range = preparedStatements.equal_range (sql);
+    for (auto it = range.first; it != range.second; ++it)
+      if (!it->second->used.test_and_set ())
+        {
+          VLOG (2) << "Reusing cached SQL statement at " << it->second.get ();
+          CHECK_EQ (sqlite3_clear_bindings (it->second->stmt), SQLITE_OK);
 
-      return res;
-    }
+          auto res = Statement (*it->second);
+          res.Reset ();
 
-  sqlite3_stmt* res = nullptr;
-  const int rc = sqlite3_prepare_v2 (db, sql.c_str (), sql.size () + 1,
-                                     &res, nullptr);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to prepare SQL statement: " << rc;
+          return res;
+        }
+  }
 
-  preparedStatements.emplace (sql, res);
-  return Statement (res);
+  /* If there was no matching (or free) statement, create a new one.  We can
+     prepare it without holding mutPreparedStatements (but we need to lock
+     before inserting into the map of course).  */
+
+  sqlite3_stmt* stmt = nullptr;
+  CHECK_EQ (sqlite3_prepare_v2 (db, sql.c_str (), sql.size () + 1,
+                                &stmt, nullptr),
+            SQLITE_OK)
+      << "Failed to prepare SQL statement";
+
+  auto entry = std::make_unique<CachedStatement> (stmt);
+  entry->used.test_and_set ();
+  Statement res(*entry);
+
+  VLOG (2)
+      << "Created new SQL statement cache entry " << entry.get ()
+      << " for:\n" << sql;
+
+  std::lock_guard<std::mutex> lock(mutPreparedStatements);
+  preparedStatements.emplace (sql, std::move (entry));
+
+  return res;
 }
 
 /* ************************************************************************** */

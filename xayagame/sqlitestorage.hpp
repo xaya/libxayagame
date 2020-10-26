@@ -11,6 +11,7 @@
 
 #include <sqlite3.h>
 
+#include <atomic>
 #include <condition_variable>
 #include <map>
 #include <memory>
@@ -36,6 +37,8 @@ public:
 
 private:
 
+  struct CachedStatement;
+
   /** Whether or not we have already initialised SQLite.  */
   static bool sqliteInitialised;
 
@@ -57,10 +60,18 @@ private:
   const SQLiteStorage* parent = nullptr;
 
   /**
-   * A cache of prepared statements (mapping from the SQL command to the
-   * statement pointer).
+   * Mutex protecting the statement cache (but not the statements
+   * themselves inside, which have their own locks).
    */
-  mutable std::map<std::string, sqlite3_stmt*> preparedStatements;
+  mutable std::mutex mutPreparedStatements;
+
+  /**
+   * A cache of prepared statements (mapping from the SQL command to the
+   * statement plus lock).  One SQL string may point to multiple cached
+   * entries, in case some of them are currently in use.
+   */
+  mutable std::multimap<std::string, std::unique_ptr<CachedStatement>>
+      preparedStatements;
 
   /**
    * Marks this is a read-only snapshot (with the given parent storage).  When
@@ -130,6 +141,38 @@ public:
 };
 
 /**
+ * An entry into the cache of prepared statements.  It handles cleanup
+ * of the sqlite3_stmt, and also holds a flag so that statements can be
+ * "acquired" and "released" by threads that work concurrently.
+ */
+struct SQLiteDatabase::CachedStatement
+{
+
+  /** The underlying SQLite statement.  */
+  sqlite3_stmt* const stmt;
+
+  /** Whether or not this statement is currently in use.  */
+  std::atomic_flag used;
+
+  /**
+   * Constructs an instance taking over an existing SQLite statement.
+   */
+  explicit CachedStatement (sqlite3_stmt* s)
+    : stmt(s), used(false)
+  {}
+
+  CachedStatement () = delete;
+  CachedStatement (const CachedStatement&) = delete;
+  void operator= (const CachedStatement&) = delete;
+
+  /**
+   * Cleans up the SQLite statement and ensures the statement is not in use.
+   */
+  ~CachedStatement ();
+
+};
+
+/**
  * Abstraction around an SQLite prepared statement.  It provides some
  * basic utility methods that make working with it easier, and also enables
  * RAII semantics for acquiring / releasing prepared statements from the
@@ -140,20 +183,35 @@ class SQLiteDatabase::Statement
 
 private:
 
-  /** The underlying handle.  */
-  sqlite3_stmt* stmt = nullptr;
+  /**
+   * The underlying cached statement.  The lock is released when this
+   * instance goes out of scope.
+   */
+  CachedStatement* entry = nullptr;
 
-  explicit Statement (sqlite3_stmt* s)
-    : stmt(s)
+  /**
+   * Constructs a statement instance based on the cache entry.  The entry's
+   * used flag must already be set by the caller, but will be cleared after this
+   * instance goes out of scope.
+   */
+  explicit Statement (CachedStatement& s)
+    : entry(&s)
   {}
+
+  /**
+   * Releases the statement referred to and sets it to null.
+   */
+  void Clear ();
 
   friend class SQLiteDatabase;
 
 public:
 
   Statement () = default;
-  Statement (Statement&&) = default;
-  Statement& operator= (Statement&&) = default;
+  Statement (Statement&&);
+  Statement& operator= (Statement&&);
+
+  ~Statement ();
 
   Statement (const Statement&) = delete;
   void operator= (const Statement&) = delete;

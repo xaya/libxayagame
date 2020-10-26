@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <limits>
 #include <memory>
@@ -213,6 +214,64 @@ TEST_F (SQLiteStatementTests, Reset)
   ASSERT_TRUE (stmt.Step ());
   EXPECT_EQ (stmt.Get<std::string> (0), "baz");
   ASSERT_FALSE (stmt.Step ());
+}
+
+TEST_F (SQLiteStatementTests, ConcurrentStatementUse)
+{
+  /* In this test, we ensure that the statement cache is able to handle
+     both concurrent threads accessing the database and also a single
+     thread using a single statement twice at the same time (which should
+     yield two independent sqlite3_stmt's).  */
+
+  constexpr unsigned numThreads = 10;
+
+  auto stmt = db.Prepare (R"(
+    INSERT INTO `test`
+      (`int`)
+      VALUES (1), (2), (3)
+  )");
+  stmt.Execute ();
+
+  const std::string sql = R"(
+    SELECT `int`
+      FROM `test`
+      ORDER BY `int`
+  )";
+
+  constexpr auto waitTime = std::chrono::milliseconds (100);
+  using Clock = std::chrono::steady_clock;
+  const auto before = Clock::now ();
+
+  std::vector<std::thread> threads;
+  for (unsigned i = 0; i < numThreads; ++i)
+    threads.emplace_back ([this, waitTime, &sql] ()
+      {
+        auto stmt1 = db.PrepareRo (sql);
+        ASSERT_TRUE (stmt1.Step ());
+        ASSERT_EQ (stmt1.Get<int64_t> (0), 1);
+
+        auto stmt2 = db.PrepareRo (sql);
+        for (int j = 1; j <= 3; ++j)
+          {
+            ASSERT_TRUE (stmt2.Step ());
+            ASSERT_EQ (stmt2.Get<int64_t> (0), j);
+          }
+
+        std::this_thread::sleep_for (waitTime);
+
+        ASSERT_TRUE (stmt1.Step ());
+        ASSERT_EQ (stmt1.Get<int64_t> (0), 2);
+        ASSERT_TRUE (stmt1.Step ());
+        ASSERT_EQ (stmt1.Get<int64_t> (0), 3);
+
+        ASSERT_FALSE (stmt1.Step ());
+        ASSERT_FALSE (stmt2.Step ());
+      });
+  for (auto& t : threads)
+    t.join ();
+
+  const auto after = Clock::now ();
+  CHECK (after - before < 2 * waitTime);
 }
 
 /* ************************************************************************** */
@@ -420,6 +479,27 @@ TEST_F (SQLiteStorageSnapshotTests, CloseWaitsForOutstandingSnapshots)
   clearJob->join ();
 
   ExpectDatabaseState (storage.GetDatabase (), "");
+}
+
+TEST_F (SQLiteStorageSnapshotTests, StatementsMustAllBeDestructed)
+{
+  Storage storage(filename);
+  storage.Initialise ();
+
+  storage.BeginTransaction ();
+  storage.SetCurrentGameState (hash, "state");
+  storage.CommitTransaction ();
+
+  auto s = storage.GetSnapshot ();
+  auto stmt = s->PrepareRo (R"(
+    SELECT *
+      FROM `xayagame_current`
+  )");
+
+  /* Destructing the database while the statement is still around
+     should CHECK fail.  At the end of the test scope, the statement
+     will be destructed before the snapshot, which is fine.  */
+  EXPECT_DEATH (s.reset (), "statement is still in use");
 }
 
 /* ************************************************************************** */
