@@ -10,8 +10,6 @@
 #include "pendingmoves.hpp"
 #include "sqlitestorage.hpp"
 
-#include <sqlite3.h>
-
 #include <json/json.h>
 
 #include <cstdint>

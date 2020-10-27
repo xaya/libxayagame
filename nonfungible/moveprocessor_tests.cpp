@@ -4,7 +4,6 @@
 
 #include "moveprocessor.hpp"
 
-#include "dbutils.hpp"
 #include "testutils.hpp"
 
 #include <glog/logging.h>
@@ -34,20 +33,20 @@ using AllAssets = std::map<Asset, std::string>;
 void
 ExpectAssets (const xaya::SQLiteDatabase& db, const AllAssets& expected)
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT `minter`, `asset`, `data`
       FROM `assets`
   )");
 
   AllAssets actual;
-  while (StepStatement (stmt))
+  while (stmt.Step ())
     {
       const auto a = Asset::FromColumns (stmt, 0, 1);
       std::string data;
-      if (ColumnIsNull (stmt, 2))
+      if (stmt.IsNull (2))
         data = "null";
       else
-        data = ColumnExtract<std::string> (stmt, 2);
+        data = stmt.Get<std::string> (2);
 
       const auto ins = actual.emplace (a, data);
       CHECK (ins.second) << "Already had entry for " << a;
@@ -69,17 +68,17 @@ using AllBalances = std::map<std::string, std::map<Asset, Amount>>;
 void
 ExpectBalances (const xaya::SQLiteDatabase& db, const AllBalances& expected)
 {
-  auto* stmt = db.PrepareRo (R"(
+  auto stmt = db.PrepareRo (R"(
     SELECT `name`, `minter`, `asset`, `balance`
       FROM `balances`
   )");
 
   AllBalances actual;
-  while (StepStatement (stmt))
+  while (stmt.Step ())
     {
-      const auto name = ColumnExtract<std::string> (stmt, 0);
+      const auto name = stmt.Get<std::string> (0);
       const auto a = Asset::FromColumns (stmt, 1, 2);
-      const auto num = ColumnExtract<int64_t> (stmt, 3);
+      const auto num = stmt.Get<int64_t> (3);
 
       auto& nameEntry = actual[name];
       const auto ins = nameEntry.emplace (a, num);

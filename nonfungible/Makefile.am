@@ -20,7 +20,6 @@ libnonfungible_la_LIBADD = \
   $(JSONCPP_LIBS) $(SQLITE_LIBS) $(GLOG_LIBS)
 libnonfungible_la_SOURCES = \
   assets.cpp \
-  dbutils.cpp \
   logic.cpp \
   moveparser.cpp \
   moveprocessor.cpp \
@@ -29,7 +28,6 @@ libnonfungible_la_SOURCES = \
   statejson.cpp
 libnonfungibleheaders = \
   assets.hpp \
-  dbutils.hpp \
   logic.hpp \
   moveparser.hpp \
   moveprocessor.hpp \

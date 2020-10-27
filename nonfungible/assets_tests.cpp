@@ -4,7 +4,6 @@
 
 #include "assets.hpp"
 
-#include "dbutils.hpp"
 #include "testutils.hpp"
 
 #include <glog/logging.h>
@@ -60,22 +59,22 @@ TEST_F (AssetsTests, DatabaseRoundtrip)
      matter here, and makes sure that the DB logic can handle it.  */
   const Asset a(std::string (u8"äöü\0foo", 10), std::string ("bar\0baz", 7));
 
-  auto* stmt = GetDb ().Prepare (R"(
+  auto stmt = GetDb ().Prepare (R"(
     INSERT INTO `assets`
       (`minter`, `asset`)
       VALUES (?1, ?2)
   )");
   a.BindToParams (stmt, 1, 2);
-  CHECK (!StepStatement (stmt));
+  stmt.Execute ();
 
   stmt = GetDb ().PrepareRo (R"(
     SELECT `minter`, `asset` FROM `assets`
   )");
 
-  CHECK (StepStatement (stmt));
+  CHECK (stmt.Step ());
   const Asset recovered = Asset::FromColumns (stmt, 0, 1);
   EXPECT_EQ (recovered, a);
-  CHECK (!StepStatement (stmt));
+  CHECK (!stmt.Step ());
 }
 
 TEST_F (AssetsTests, IsValidName)

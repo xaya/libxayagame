@@ -26,7 +26,7 @@ void
 ShipsLogic::SetupSchema (xaya::SQLiteDatabase& db)
 {
   SetupGameChannelsSchema (db);
-  SetupShipsSchema (*db);
+  SetupShipsSchema (db);
 }
 
 void
@@ -395,14 +395,9 @@ ShipsLogic::ProcessExpiredDisputes (xaya::SQLiteDatabase& db,
   LOG (INFO) << "Processing expired disputes for height " << height << "...";
 
   xaya::ChannelsTable tbl(db);
-  auto* stmt = tbl.QueryForDisputeHeight (height - DISPUTE_BLOCKS);
-  while (true)
+  auto stmt = tbl.QueryForDisputeHeight (height - DISPUTE_BLOCKS);
+  while (stmt.Step ())
     {
-      const int rc = sqlite3_step (stmt);
-      if (rc == SQLITE_DONE)
-        break;
-      CHECK_EQ (rc, SQLITE_ROW);
-
       auto h = tbl.GetFromResult (stmt);
       const auto id = h->GetId ();
       const auto& meta = h->GetMetadata ();
@@ -435,15 +430,6 @@ ShipsLogic::ProcessExpiredDisputes (xaya::SQLiteDatabase& db,
 }
 
 void
-ShipsLogic::BindStringParam (sqlite3_stmt* stmt, const int ind,
-                             const std::string& str)
-{
-  CHECK_EQ (sqlite3_bind_text (stmt, ind, &str[0], str.size (),
-                               SQLITE_TRANSIENT),
-            SQLITE_OK);
-}
-
-void
 ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
                          const xaya::proto::ChannelMetadata& meta,
                          const int winner)
@@ -456,29 +442,29 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
   const std::string& winnerName = meta.participants (winner).name ();
   const std::string& loserName = meta.participants (loser).name ();
 
-  auto* stmt = db.Prepare (R"(
+  auto stmt = db.Prepare (R"(
     INSERT OR IGNORE INTO `game_stats`
       (`name`, `won`, `lost`) VALUES (?1, 0, 0), (?2, 0, 0)
   )");
-  BindStringParam (stmt, 1, winnerName);
-  BindStringParam (stmt, 2, loserName);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  stmt.Bind (1, winnerName);
+  stmt.Bind (2, loserName);
+  stmt.Execute ();
 
   stmt = db.Prepare (R"(
     UPDATE `game_stats`
       SET `won` = `won` + 1
       WHERE `name` = ?1
   )");
-  BindStringParam (stmt, 1, winnerName);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  stmt.Bind (1, winnerName);
+  stmt.Execute ();
 
   stmt = db.Prepare (R"(
     UPDATE `game_stats`
       SET `lost` = `lost` + 1
       WHERE `name` = ?2
   )");
-  BindStringParam (stmt, 2, loserName);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  stmt.Bind (2, loserName);
+  stmt.Execute ();
 }
 
 void

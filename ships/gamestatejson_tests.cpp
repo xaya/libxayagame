@@ -54,10 +54,10 @@ protected:
 
 TEST_F (GameStateJsonTests, GameStats)
 {
-  CHECK_EQ (sqlite3_exec (*GetDb (), R"(
+  GetDb ().Execute (R"(
     INSERT INTO `game_stats`
       (`name`, `won`, `lost`) VALUES ('foo', 10, 2), ('bar', 5, 5)
-  )", nullptr, nullptr, nullptr), SQLITE_OK);
+  )");
 
   EXPECT_EQ (gsj.GetFullJson (), ParseJson (R"(
     {

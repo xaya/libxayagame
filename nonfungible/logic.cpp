@@ -15,7 +15,7 @@ namespace nf
 void
 NonFungibleLogic::SetupSchema (xaya::SQLiteDatabase& db)
 {
-  SetupDatabaseSchema (*db);
+  SetupDatabaseSchema (db);
 }
 
 void

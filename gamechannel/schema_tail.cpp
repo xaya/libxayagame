@@ -3,11 +3,10 @@
 } // anonymous namespace
 
 void
-InternalSetupGameChannelsSchema (sqlite3* db)
+InternalSetupGameChannelsSchema (SQLiteDatabase& db)
 {
   LOG (INFO) << "Setting up the database schema for game channels...";
-  CHECK_EQ (sqlite3_exec (db, SCHEMA_SQL, nullptr, nullptr, nullptr),
-            SQLITE_OK);
+  db.Execute (SCHEMA_SQL);
 }
 
 } // namespace xaya

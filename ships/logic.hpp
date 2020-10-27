@@ -15,8 +15,6 @@
 
 #include <json/json.h>
 
-#include <sqlite3.h>
-
 #include <string>
 
 namespace ships
@@ -66,13 +64,6 @@ private:
   static void UpdateStats (xaya::SQLiteDatabase& db,
                            const xaya::proto::ChannelMetadata& meta,
                            int winner);
-
-  /**
-   * Binds a TEXT SQLite parameter to a string.  This is a utility method that
-   * is also used for tests, and thus exposed here.
-   */
-  static void BindStringParam (sqlite3_stmt* stmt, int ind,
-                               const std::string& str);
 
   friend class InMemoryLogicFixture;
   friend class StateUpdateTests;

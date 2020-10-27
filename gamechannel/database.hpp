@@ -13,8 +13,6 @@
 #include <xayagame/sqlitestorage.hpp>
 #include <xayautil/uint256.hpp>
 
-#include <sqlite3.h>
-
 #include <memory>
 
 namespace xaya
@@ -69,7 +67,8 @@ private:
   /**
    * Constructs an instance based on the given result row.
    */
-  explicit ChannelData (SQLiteDatabase& db, sqlite3_stmt* row);
+  explicit ChannelData (SQLiteDatabase& db,
+                        const SQLiteDatabase::Statement& row);
 
   friend class ChannelsTable;
 
@@ -153,7 +152,7 @@ public:
   /**
    * Returns a handle for the instance based on the result row.
    */
-  Handle GetFromResult (sqlite3_stmt* row);
+  Handle GetFromResult (const SQLiteDatabase::Statement& row);
 
   /**
    * Returns a handle by ID of the channel.  Returns null if no such channel
@@ -172,16 +171,16 @@ public:
   void DeleteById (const uint256& id);
 
   /**
-   * Queries for all game channels.  The returned sqlite3_stmt can be walked
+   * Queries for all game channels.  The returned statement can be walked
    * through and used with GetFromResult, but should not be freed.
    */
-  sqlite3_stmt* QueryAll ();
+  SQLiteDatabase::Statement QueryAll ();
 
   /**
    * Queries for all game channels which have a dispute height less than or
    * equal to the given height.
    */
-  sqlite3_stmt* QueryForDisputeHeight (unsigned height);
+  SQLiteDatabase::Statement QueryForDisputeHeight (unsigned height);
 
 };
 

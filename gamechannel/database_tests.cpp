@@ -176,12 +176,12 @@ TEST_F (ChannelDbTests, QueryAll)
   tbl.CreateNew (id1)->Reinitialise (meta, "foo");
   tbl.CreateNew (id2)->Reinitialise (meta, "bar");
 
-  auto* stmt = tbl.QueryAll ();
-  ASSERT_EQ (sqlite3_step (stmt), SQLITE_ROW);
+  auto stmt = tbl.QueryAll ();
+  ASSERT_TRUE (stmt.Step ());
   EXPECT_EQ (tbl.GetFromResult (stmt)->GetId (), id2);
-  ASSERT_EQ (sqlite3_step (stmt), SQLITE_ROW);
+  ASSERT_TRUE (stmt.Step ());
   EXPECT_EQ (tbl.GetFromResult (stmt)->GetId (), id1);
-  EXPECT_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  EXPECT_FALSE (stmt.Step ());
 }
 
 TEST_F (ChannelDbTests, QueryForDisputeHeight)
@@ -212,12 +212,12 @@ TEST_F (ChannelDbTests, QueryForDisputeHeight)
   h->ClearDispute ();
   h.reset ();
 
-  auto* stmt = tbl.QueryForDisputeHeight (15);
-  ASSERT_EQ (sqlite3_step (stmt), SQLITE_ROW);
+  auto stmt = tbl.QueryForDisputeHeight (15);
+  ASSERT_TRUE (stmt.Step ());
   EXPECT_EQ (tbl.GetFromResult (stmt)->GetId (), id2);
-  ASSERT_EQ (sqlite3_step (stmt), SQLITE_ROW);
+  ASSERT_TRUE (stmt.Step ());
   EXPECT_EQ (tbl.GetFromResult (stmt)->GetId (), id1);
-  EXPECT_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  EXPECT_FALSE (stmt.Step ());
 }
 
 } // anonymous namespace

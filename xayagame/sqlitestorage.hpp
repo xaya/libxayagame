@@ -11,6 +11,7 @@
 
 #include <sqlite3.h>
 
+#include <atomic>
 #include <condition_variable>
 #include <map>
 #include <memory>
@@ -30,10 +31,24 @@ class SQLiteStorage;
 class SQLiteDatabase
 {
 
+public:
+
+  class Statement;
+
 private:
 
-  /** Whether or not we have already set the SQLite logger.  */
-  static bool loggerInitialised;
+  struct CachedStatement;
+
+  /** Whether or not we have already initialised SQLite.  */
+  static bool sqliteInitialised;
+
+  /**
+   * Mutex for access to db itself.  We configure the database to be in
+   * multi-thread mode (rather than serialised) since statements are
+   * created for single-thread use anyway, and thus have to explicitly
+   * synchronise any direct access to db.
+   */
+  mutable std::mutex mutDb;
 
   /**
    * The SQLite database handle, which is owned and managed by the
@@ -53,10 +68,18 @@ private:
   const SQLiteStorage* parent = nullptr;
 
   /**
-   * A cache of prepared statements (mapping from the SQL command to the
-   * statement pointer).
+   * Mutex protecting the statement cache (but not the statements
+   * themselves inside, which have their own locks).
    */
-  mutable std::map<std::string, sqlite3_stmt*> preparedStatements;
+  mutable std::mutex mutPreparedStatements;
+
+  /**
+   * A cache of prepared statements (mapping from the SQL command to the
+   * statement plus lock).  One SQL string may point to multiple cached
+   * entries, in case some of them are currently in use.
+   */
+  mutable std::multimap<std::string, std::unique_ptr<CachedStatement>>
+      preparedStatements;
 
   /**
    * Marks this is a read-only snapshot (with the given parent storage).  When
@@ -91,39 +114,198 @@ public:
   ~SQLiteDatabase ();
 
   /**
-   * Returns the raw handle of the SQLite database.
+   * Executes a given callback with access to the raw database handle, ensuring
+   * necessary locking.  This should typically only be used for select use
+   * cases; most operations should go through Prepare instead.
    */
-  sqlite3*
-  operator* ()
+  template <typename Fcn>
+    void
+    AccessDatabase (const Fcn& cb)
   {
-    return db;
+    std::lock_guard<std::mutex> lock(mutDb);
+    cb (db);
   }
 
   /**
-   * Returns the raw handle, like operator*.  This function is meant
-   * for code that then only does read operations and no writes.
+   * Executes a callback with the raw handle, similar to AccessDatabase.
+   * This function is meant for code that then only does read operations
+   * and no writes.
    */
-  sqlite3*
-  ro () const
+  template <typename Fcn>
+    void
+    ReadDatabase (const Fcn& cb) const
   {
-    return db;
+    std::lock_guard<std::mutex> lock(mutDb);
+    cb (db);
   }
+
+  /**
+   * Directly runs a particular SQL statement on the database, without
+   * going through a prepared statement.  This can be useful for things like
+   * setting up the schema.
+   */
+  void Execute (const std::string& sql);
 
   /**
    * Prepares an SQL statement given as string and stores it in the cache,
    * or retrieves the existing statement from the cache.  The prepared statement
-   * is also reset, so that it can be reused right away.
+   * is also reset, so that it can be reused right away.  The cache takes
+   * care of transparently giving out and releasing statements.
    *
-   * The returned statement is managed (and, in particular, finalised) by the
-   * SQLiteDatabase object, not by the caller.
+   * Note that the returned statement is not thread-safe by itself; but it is
+   * fine for multiple threads to concurrently call this method to obtain
+   * instances that they can then use.
    */
-  sqlite3_stmt* Prepare (const std::string& sql);
+  Statement Prepare (const std::string& sql);
 
   /**
    * Prepares an SQL statement given as string like Prepare.  This method
    * is meant for statements that are read-only, i.e. SELECT.
    */
-  sqlite3_stmt* PrepareRo (const std::string& sql) const;
+  Statement PrepareRo (const std::string& sql) const;
+
+};
+
+/**
+ * An entry into the cache of prepared statements.  It handles cleanup
+ * of the sqlite3_stmt, and also holds a flag so that statements can be
+ * "acquired" and "released" by threads that work concurrently.
+ */
+struct SQLiteDatabase::CachedStatement
+{
+
+  /** The underlying SQLite statement.  */
+  sqlite3_stmt* const stmt;
+
+  /** Whether or not this statement is currently in use.  */
+  std::atomic_flag used;
+
+  /**
+   * Constructs an instance taking over an existing SQLite statement.
+   */
+  explicit CachedStatement (sqlite3_stmt* s)
+    : stmt(s), used(false)
+  {}
+
+  CachedStatement () = delete;
+  CachedStatement (const CachedStatement&) = delete;
+  void operator= (const CachedStatement&) = delete;
+
+  /**
+   * Cleans up the SQLite statement and ensures the statement is not in use.
+   */
+  ~CachedStatement ();
+
+};
+
+/**
+ * Abstraction around an SQLite prepared statement.  It provides some
+ * basic utility methods that make working with it easier, and also enables
+ * RAII semantics for acquiring / releasing prepared statements from the
+ * built-in statement cache.
+ */
+class SQLiteDatabase::Statement
+{
+
+private:
+
+  /**
+   * The underlying cached statement.  The lock is released when this
+   * instance goes out of scope.
+   */
+  CachedStatement* entry = nullptr;
+
+  /**
+   * Constructs a statement instance based on the cache entry.  The entry's
+   * used flag must already be set by the caller, but will be cleared after this
+   * instance goes out of scope.
+   */
+  explicit Statement (CachedStatement& s)
+    : entry(&s)
+  {}
+
+  /**
+   * Releases the statement referred to and sets it to null.
+   */
+  void Clear ();
+
+  friend class SQLiteDatabase;
+
+public:
+
+  Statement () = default;
+  Statement (Statement&&);
+  Statement& operator= (Statement&&);
+
+  ~Statement ();
+
+  Statement (const Statement&) = delete;
+  void operator= (const Statement&) = delete;
+
+  /**
+   * Exposes the underlying SQLite handle.
+   */
+  sqlite3_stmt* operator* ();
+
+  /**
+   * Returns the underlying sqlite3_stmt handle for const operations
+   * (like extracting column values).
+   */
+  sqlite3_stmt* ro () const;
+
+  /**
+   * Executes the statement without expecting any results (i.e. for anything
+   * that is not SELECT).
+   */
+  void Execute ();
+
+  /**
+   * Steps the statement.  This asserts that no error is returned.  It returns
+   * true if there are more rows (i.e. sqlite3_step returns SQLITE_ROW) and
+   * false if not (SQLITE_DONE).
+   */
+  bool Step ();
+
+  /**
+   * Resets the statement without clearing the parameter bindings.
+   */
+  void Reset ();
+
+  /**
+   * Binds a numbered parameter to NULL.
+   */
+  void BindNull (int ind);
+
+  /**
+   * Binds a typed value to a numbered parameter.  Concrete implementations
+   * exist for (u)int64_t, (unsigned) int, bool, uint256 and std::string
+   * (binding as text).
+   */
+  template <typename T>
+    void Bind (int ind, const T& val);
+
+  /**
+   * Binds a numbered parameter to a byte string as BLOB.
+   */
+  void BindBlob (int ind, const std::string& val);
+
+  /**
+   * Checks if the numbered column is NULL in the current row.
+   */
+  bool IsNull (int ind) const;
+
+  /**
+   * Extracts a typed value from the column with the given index in the
+   * current row.  Works with int64_t, int, bool, uint256 and
+   * std::string (as text).
+   */
+  template <typename T>
+    T Get (int ind) const;
+
+  /**
+   * Extracts a byte string as BLOB from a column of the current row.
+   */
+  std::string GetBlob (int ind) const;
 
 };
 
@@ -221,13 +403,6 @@ protected:
    * underlying database is not using WAL mode (e.g. in-memory).
    */
   std::unique_ptr<SQLiteDatabase> GetSnapshot () const;
-
-  /**
-   * Steps a given statement and expects no results (i.e. for an update).
-   * Can also be used for statements where we expect exactly one result to
-   * verify that no more are there.
-   */
-  static void StepWithNoResult (sqlite3_stmt* stmt);
 
   /**
    * Returns the current block hash (if any) for the given database connection.

@@ -7,9 +7,244 @@
 #include <glog/logging.h>
 
 #include <cstdio>
+#include <limits>
 
 namespace xaya
 {
+
+/* ************************************************************************** */
+
+SQLiteDatabase::Statement::Statement (Statement&& o)
+{
+  *this = std::move (o);
+}
+
+SQLiteDatabase::Statement&
+SQLiteDatabase::Statement::operator= (Statement&& o)
+{
+  Clear ();
+
+  entry = o.entry;
+  o.entry = nullptr;
+
+  return *this;
+}
+
+SQLiteDatabase::Statement::~Statement ()
+{
+  Clear ();
+}
+
+void
+SQLiteDatabase::Statement::Clear ()
+{
+  if (entry != nullptr)
+    {
+      VLOG (2) << "Releasing cached SQL statement at " << entry;
+      entry->used.clear ();
+    }
+}
+
+sqlite3_stmt*
+SQLiteDatabase::Statement::operator* ()
+{
+  CHECK (entry != nullptr) << "Statement is empty";
+  return entry->stmt;
+}
+
+sqlite3_stmt*
+SQLiteDatabase::Statement::ro () const
+{
+  CHECK (entry != nullptr) << "Statement is empty";
+  return entry->stmt;
+}
+
+void
+SQLiteDatabase::Statement::Execute ()
+{
+  CHECK (!Step ());
+}
+
+bool
+SQLiteDatabase::Statement::Step ()
+{
+  const int rc = sqlite3_step (**this);
+  switch (rc)
+    {
+    case SQLITE_ROW:
+      return true;
+    case SQLITE_DONE:
+      return false;
+    default:
+      LOG (FATAL) << "Unexpected SQLite step result: " << rc;
+    }
+}
+
+void
+SQLiteDatabase::Statement::Reset ()
+{
+  /* sqlite3_reset returns an error code if the last execution of the
+     statement had an error.  We don't care about that here.  */
+  sqlite3_reset (**this);
+}
+
+void
+SQLiteDatabase::Statement::BindNull (const int ind)
+{
+  CHECK_EQ (sqlite3_bind_null (**this, ind), SQLITE_OK);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<int64_t> (const int ind, const int64_t& val)
+{
+  CHECK_EQ (sqlite3_bind_int64 (**this, ind, val), SQLITE_OK);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<uint64_t> (const int ind, const uint64_t& val)
+{
+  CHECK_LE (val, std::numeric_limits<int64_t>::max ());
+  Bind<int64_t> (ind, val);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<int> (const int ind, const int& val)
+{
+  Bind<int64_t> (ind, val);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<unsigned> (const int ind, const unsigned& val)
+{
+  Bind<uint64_t> (ind, val);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<bool> (const int ind, const bool& val)
+{
+  Bind<int> (ind, val);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<uint256> (const int ind, const uint256& val)
+{
+  CHECK_EQ (sqlite3_bind_blob (**this, ind, val.GetBlob (), uint256::NUM_BYTES,
+                               SQLITE_TRANSIENT),
+            SQLITE_OK);
+}
+
+template <>
+  void
+  SQLiteDatabase::Statement::Bind<std::string> (const int ind,
+                                                const std::string& val)
+{
+  CHECK_EQ (sqlite3_bind_text (**this, ind, val.data (), val.size (),
+                               SQLITE_TRANSIENT),
+            SQLITE_OK);
+}
+
+void
+SQLiteDatabase::Statement::BindBlob (const int ind, const std::string& val)
+{
+  CHECK_EQ (sqlite3_bind_blob (**this, ind, val.data (), val.size (),
+                               SQLITE_TRANSIENT),
+            SQLITE_OK);
+}
+
+bool
+SQLiteDatabase::Statement::IsNull (const int ind) const
+{
+  return sqlite3_column_type (ro (), ind) == SQLITE_NULL;
+}
+
+template <>
+  int64_t
+  SQLiteDatabase::Statement::Get<int64_t> (const int ind) const
+{
+  return sqlite3_column_int64 (ro (), ind);
+}
+
+template <>
+  uint64_t
+  SQLiteDatabase::Statement::Get<uint64_t> (const int ind) const
+{
+  const int64_t val = Get<int64_t> (ind);
+  CHECK_GE (val, 0);
+  return val;
+}
+
+template <>
+  int
+  SQLiteDatabase::Statement::Get<int> (const int ind) const
+{
+  const int64_t val = Get<int64_t> (ind);
+  CHECK_LE (val, std::numeric_limits<int>::max ());
+  CHECK_GE (val, std::numeric_limits<int>::min ());
+  return val;
+}
+
+template <>
+  unsigned
+  SQLiteDatabase::Statement::Get<unsigned> (const int ind) const
+{
+  const int val = Get<int> (ind);
+  CHECK_GE (val, 0);
+  return val;
+}
+
+template <>
+  bool
+  SQLiteDatabase::Statement::Get<bool> (const int ind) const
+{
+  const int val = Get<int> (ind);
+  CHECK (val == 0 || val == 1);
+  return val != 0;
+}
+
+template <>
+  uint256
+  SQLiteDatabase::Statement::Get<uint256> (const int ind) const
+{
+  const int len = sqlite3_column_bytes (ro (), ind);
+  CHECK_EQ (len, uint256::NUM_BYTES);
+  const void* data = sqlite3_column_blob (ro (), ind);
+
+  uint256 res;
+  res.FromBlob (static_cast<const unsigned char*> (data));
+
+  return res;
+}
+
+template <>
+  std::string
+  SQLiteDatabase::Statement::Get<std::string> (const int ind) const
+{
+  const int len = sqlite3_column_bytes (ro (), ind);
+  if (len == 0)
+    return std::string ();
+
+  const unsigned char* str = sqlite3_column_text (ro (), ind);
+  CHECK (str != nullptr);
+  return std::string (reinterpret_cast<const char*> (str), len);
+}
+
+std::string
+SQLiteDatabase::Statement::GetBlob (const int ind) const
+{
+  const int len = sqlite3_column_bytes (ro (), ind);
+  if (len == 0)
+    return std::string ();
+
+  const void* data = sqlite3_column_blob (ro (), ind);
+  CHECK (data != nullptr);
+  return std::string (reinterpret_cast<const char*> (data), len);
+}
 
 /* ************************************************************************** */
 
@@ -25,54 +260,14 @@ SQLiteErrorLogger (void* arg, const int errCode, const char* msg)
   LOG (ERROR) << "SQLite error (code " << errCode << "): " << msg;
 }
 
-/**
- * Binds a BLOB corresponding to an uint256 value to a statement parameter.
- * The value is bound using SQLITE_STATIC, so the uint256's data must not be
- * changed until the statement execution has finished.
- */
-void
-BindUint256 (sqlite3_stmt* stmt, const int ind, const uint256& value)
-{
-  const int rc = sqlite3_bind_blob (stmt, ind,
-                                    value.GetBlob (), uint256::NUM_BYTES,
-                                    SQLITE_STATIC);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind uint256 value to parameter: " << rc;
-}
-
-/**
- * Binds a BLOB parameter to a std::string value.  The value is bound using
- * SQLITE_STATIC, so the underlying string must remain valid until execution
- * of the prepared statement is done.
- */
-void
-BindStringBlob (sqlite3_stmt* stmt, const int ind, const std::string& value)
-{
-  const int rc = sqlite3_bind_blob (stmt, ind, &value[0], value.size (),
-                                    SQLITE_STATIC);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind string value to parameter: " << rc;
-}
-
-/**
- * Retrieves a column value from a BLOB field as std::string.
- */
-std::string
-GetStringBlob (sqlite3_stmt* stmt, const int ind)
-{
-  const void* blob = sqlite3_column_blob (stmt, ind);
-  const size_t blobSize = sqlite3_column_bytes (stmt, ind);
-  return std::string (static_cast<const char*> (blob), blobSize);
-}
-
 } // anonymous namespace
 
-bool SQLiteDatabase::loggerInitialised = false;
+bool SQLiteDatabase::sqliteInitialised = false;
 
 SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
   : db(nullptr)
 {
-  if (!loggerInitialised)
+  if (!sqliteInitialised)
     {
       LOG (INFO)
           << "Using SQLite version " << SQLITE_VERSION
@@ -87,7 +282,10 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
       else
         LOG (INFO) << "Configured SQLite error handler";
 
-      loggerInitialised = true;
+      CHECK_EQ (sqlite3_config (SQLITE_CONFIG_MULTITHREAD, nullptr), SQLITE_OK)
+          << "Failed to enable multi-threaded mode for SQLite";
+
+      sqliteInitialised = true;
     }
 
   const int rc = sqlite3_open_v2 (file.c_str (), &db, flags, nullptr);
@@ -97,10 +295,10 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
   CHECK (db != nullptr);
   LOG (INFO) << "Opened SQLite database successfully: " << file;
 
-  auto* stmt = Prepare ("PRAGMA `journal_mode` = WAL");
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW);
-  const auto mode = GetStringBlob (stmt, 0);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  auto stmt = Prepare ("PRAGMA `journal_mode` = WAL");
+  CHECK (stmt.Step ());
+  const auto mode = stmt.Get<std::string> (0);
+  CHECK (!stmt.Step ());
   if (mode == "wal")
     {
       LOG (INFO) << "Set database to WAL mode";
@@ -118,17 +316,12 @@ SQLiteDatabase::~SQLiteDatabase ()
   if (parent != nullptr)
     {
       LOG (INFO) << "Ending snapshot read transaction";
-      CHECK_EQ (sqlite3_step (PrepareRo ("ROLLBACK")), SQLITE_DONE);
+      PrepareRo ("ROLLBACK").Execute ();
     }
 
-  for (const auto& stmt : preparedStatements)
-    {
-      /* sqlite3_finalize returns the error code corresponding to the last
-         evaluation of the statement, not an error code "about" finalising it.
-         Thus we want to ignore it here.  */
-      sqlite3_finalize (stmt.second);
-    }
+  preparedStatements.clear ();
 
+  std::lock_guard<std::mutex> lock(mutDb);
   CHECK (db != nullptr);
   const int rc = sqlite3_close (db);
   if (rc != SQLITE_OK)
@@ -136,6 +329,16 @@ SQLiteDatabase::~SQLiteDatabase ()
 
   if (parent != nullptr)
     parent->UnrefSnapshot ();
+}
+
+SQLiteDatabase::CachedStatement::~CachedStatement ()
+{
+  CHECK (!used.test_and_set ()) << "Cached statement is still in use";
+
+  /* sqlite3_finalize returns the error code corresponding to the last
+     evaluation of the statement, not an error code "about" finalising it.
+     Thus we want to ignore it here.  */
+  sqlite3_finalize (stmt);
 }
 
 void
@@ -149,45 +352,91 @@ SQLiteDatabase::SetReadonlySnapshot (const SQLiteStorage& p)
      to start a default deferred one, and then issue some SELECT query
      that we don't really care about and that is guaranteed to work.  */
 
-  auto* stmt = PrepareRo ("BEGIN");
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  PrepareRo ("BEGIN").Execute ();
 
-  stmt = PrepareRo ("SELECT COUNT(*) FROM `sqlite_master`");
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_ROW);
-  CHECK_EQ (sqlite3_step (stmt), SQLITE_DONE);
+  auto stmt = PrepareRo ("SELECT COUNT(*) FROM `sqlite_master`");
+  CHECK (stmt.Step ());
+  CHECK (!stmt.Step ());
 }
 
-sqlite3_stmt*
+namespace
+{
+
+/**
+ * Callback for sqlite3_exec that expects not to be called.
+ */
+int
+ExpectNoResult (void* data, int columns, char** strs, char** names)
+{
+  LOG (FATAL) << "Expected no result from DB query";
+}
+
+} // anonymous namespace
+
+void
+SQLiteDatabase::Execute (const std::string& sql)
+{
+  AccessDatabase ([&sql] (sqlite3* h)
+    {
+      CHECK_EQ (sqlite3_exec (h, sql.c_str (), &ExpectNoResult,
+                              nullptr, nullptr),
+                SQLITE_OK);
+    });
+}
+
+SQLiteDatabase::Statement
 SQLiteDatabase::Prepare (const std::string& sql)
 {
   return PrepareRo (sql);
 }
 
-sqlite3_stmt*
+SQLiteDatabase::Statement
 SQLiteDatabase::PrepareRo (const std::string& sql) const
 {
   CHECK (db != nullptr);
-  const auto mit = preparedStatements.find (sql);
-  if (mit != preparedStatements.end ())
+
+  /* First see if there is already an entry in our cache that
+     we are free to use (because it is not yet in use).  */
+  {
+    std::lock_guard<std::mutex> lock(mutPreparedStatements);
+    auto range = preparedStatements.equal_range (sql);
+    for (auto it = range.first; it != range.second; ++it)
+      if (!it->second->used.test_and_set ())
+        {
+          VLOG (2) << "Reusing cached SQL statement at " << it->second.get ();
+          CHECK_EQ (sqlite3_clear_bindings (it->second->stmt), SQLITE_OK);
+
+          auto res = Statement (*it->second);
+          res.Reset ();
+
+          return res;
+        }
+  }
+
+  /* If there was no matching (or free) statement, create a new one.  We can
+     prepare it without holding mutPreparedStatements (but we need to lock
+     before inserting into the map of course).  */
+
+  sqlite3_stmt* stmt = nullptr;
+  ReadDatabase ([&stmt, &sql] (sqlite3* h)
     {
-      /* sqlite3_reset returns an error code if the last execution of the
-         statement had an error.  We don't care about that here.  */
-      sqlite3_reset (mit->second);
+      CHECK_EQ (sqlite3_prepare_v2 (h, sql.c_str (), sql.size () + 1,
+                                    &stmt, nullptr),
+                SQLITE_OK)
+          << "Failed to prepare SQL statement";
+    });
 
-      const int rc = sqlite3_clear_bindings (mit->second);
-      if (rc != SQLITE_OK)
-        LOG (ERROR) << "Failed to reset bindings for statement: " << rc;
+  auto entry = std::make_unique<CachedStatement> (stmt);
+  entry->used.test_and_set ();
+  Statement res(*entry);
 
-      return mit->second;
-    }
+  VLOG (2)
+      << "Created new SQL statement cache entry " << entry.get ()
+      << " for:\n" << sql;
 
-  sqlite3_stmt* res = nullptr;
-  const int rc = sqlite3_prepare_v2 (db, sql.c_str (), sql.size () + 1,
-                                     &res, nullptr);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to prepare SQL statement: " << rc;
+  std::lock_guard<std::mutex> lock(mutPreparedStatements);
+  preparedStatements.emplace (sql, std::move (entry));
 
-  preparedStatements.emplace (sql, res);
   return res;
 }
 
@@ -265,34 +514,19 @@ SQLiteStorage::UnrefSnapshot () const
   cvSnapshots.notify_all ();
 }
 
-/**
- * Steps a given statement and expects no results (i.e. for an update).
- * Can also be used for statements where we expect exactly one result to
- * verify that no more are there.
- */
-void
-SQLiteStorage::StepWithNoResult (sqlite3_stmt* stmt)
-{
-  const int rc = sqlite3_step (stmt);
-  if (rc != SQLITE_DONE)
-    LOG (FATAL) << "Expected SQLITE_DONE, got: " << rc;
-}
-
 void
 SQLiteStorage::SetupSchema ()
 {
   LOG (INFO) << "Setting up database schema if it does not exist yet";
-  const int rc = sqlite3_exec (**db, R"(
+  db->Execute (R"(
     CREATE TABLE IF NOT EXISTS `xayagame_current`
         (`key` TEXT PRIMARY KEY,
-         `value` BLOB);
+         `value` BLOB NOT NULL);
     CREATE TABLE IF NOT EXISTS `xayagame_undo`
         (`hash` BLOB PRIMARY KEY,
-         `data` BLOB,
-         `height` INTEGER);
-  )", nullptr, nullptr, nullptr);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to set up database schema: " << rc;
+         `data` BLOB NOT NULL,
+         `height` INTEGER NOT NULL);
+  )");
 }
 
 void
@@ -326,23 +560,18 @@ SQLiteStorage::Clear ()
 bool
 SQLiteStorage::GetCurrentBlockHash (const SQLiteDatabase& db, uint256& hash)
 {
-  auto* stmt = db.PrepareRo (R"(
-    SELECT `value` FROM `xayagame_current` WHERE `key` = 'blockhash'
+  auto stmt = db.PrepareRo (R"(
+    SELECT `value`
+      FROM `xayagame_current`
+      WHERE `key` = 'blockhash'
   )");
 
-  const int rc = sqlite3_step (stmt);
-  if (rc == SQLITE_DONE)
+  if (!stmt.Step ())
     return false;
-  if (rc != SQLITE_ROW)
-    LOG (FATAL) << "Failed to fetch current block hash: " << rc;
 
-  const void* blob = sqlite3_column_blob (stmt, 0);
-  const size_t blobSize = sqlite3_column_bytes (stmt, 0);
-  CHECK_EQ (blobSize, uint256::NUM_BYTES)
-      << "Invalid uint256 value stored in database";
-  hash.FromBlob (static_cast<const unsigned char*> (blob));
+  hash = stmt.Get<uint256> (0);
+  CHECK (!stmt.Step ());
 
-  StepWithNoResult (stmt);
   return true;
 }
 
@@ -355,17 +584,17 @@ SQLiteStorage::GetCurrentBlockHash (uint256& hash) const
 GameStateData
 SQLiteStorage::GetCurrentGameState () const
 {
-  auto* stmt = db->Prepare (R"(
-    SELECT `value` FROM `xayagame_current` WHERE `key` = 'gamestate'
+  auto stmt = db->Prepare (R"(
+    SELECT `value`
+      FROM `xayagame_current`
+      WHERE `key` = 'gamestate'
   )");
 
-  const int rc = sqlite3_step (stmt);
-  if (rc != SQLITE_ROW)
-    LOG (FATAL) << "Failed to fetch current game state: " << rc;
+  CHECK (stmt.Step ()) << "Failed to fetch current game state";
 
-  const GameStateData res = GetStringBlob (stmt, 0);
+  const GameStateData res = stmt.GetBlob (0);
+  CHECK (!stmt.Step ());
 
-  StepWithNoResult (stmt);
   return res;
 }
 
@@ -375,44 +604,41 @@ SQLiteStorage::SetCurrentGameState (const uint256& hash,
 {
   CHECK (startedTransaction);
 
-  StepWithNoResult (db->Prepare ("SAVEPOINT `xayagame-setcurrentstate`"));
+  db->Prepare ("SAVEPOINT `xayagame-setcurrentstate`").Execute ();
 
-  sqlite3_stmt* stmt = db->Prepare (R"(
+  auto stmt = db->Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_current` (`key`, `value`)
       VALUES ('blockhash', ?1)
   )");
-  BindUint256 (stmt, 1, hash);
-  StepWithNoResult (stmt);
+  stmt.Bind (1, hash);
+  stmt.Execute ();
 
   stmt = db->Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_current` (`key`, `value`)
       VALUES ('gamestate', ?1)
   )");
-  BindStringBlob (stmt, 1, data);
-  StepWithNoResult (stmt);
+  stmt.BindBlob (1, data);
+  stmt.Execute ();
 
-  StepWithNoResult (db->Prepare (R"(
-    RELEASE `xayagame-setcurrentstate`
-  )"));
+  db->Prepare ("RELEASE `xayagame-setcurrentstate`").Execute ();
 }
 
 bool
 SQLiteStorage::GetUndoData (const uint256& hash, UndoData& data) const
 {
-  auto* stmt = db->Prepare (R"(
-    SELECT `data` FROM `xayagame_undo` WHERE `hash` = ?1
+  auto stmt = db->Prepare (R"(
+    SELECT `data`
+      FROM `xayagame_undo`
+      WHERE `hash` = ?1
   )");
-  BindUint256 (stmt, 1, hash);
+  stmt.Bind (1, hash);
 
-  const int rc = sqlite3_step (stmt);
-  if (rc == SQLITE_DONE)
+  if (!stmt.Step ())
     return false;
-  if (rc != SQLITE_ROW)
-    LOG (FATAL) << "Failed to fetch undo data: " << rc;
 
-  data = GetStringBlob (stmt, 0);
+  data = stmt.GetBlob (0);
+  CHECK (!stmt.Step ());
 
-  StepWithNoResult (stmt);
   return true;
 }
 
@@ -422,19 +648,16 @@ SQLiteStorage::AddUndoData (const uint256& hash,
 {
   CHECK (startedTransaction);
 
-  auto* stmt = db->Prepare (R"(
+  auto stmt = db->Prepare (R"(
     INSERT OR REPLACE INTO `xayagame_undo` (`hash`, `data`, `height`)
       VALUES (?1, ?2, ?3)
   )");
 
-  BindUint256 (stmt, 1, hash);
-  BindStringBlob (stmt, 2, data);
+  stmt.Bind (1, hash);
+  stmt.BindBlob (2, data);
+  stmt.Bind (3, height);
 
-  const int rc = sqlite3_bind_int (stmt, 3, height);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind block height value: " << rc;
-
-  StepWithNoResult (stmt);
+  stmt.Execute ();
 }
 
 void
@@ -442,12 +665,13 @@ SQLiteStorage::ReleaseUndoData (const uint256& hash)
 {
   CHECK (startedTransaction);
 
-  auto* stmt = db->Prepare (R"(
-    DELETE FROM `xayagame_undo` WHERE `hash` = ?1
+  auto stmt = db->Prepare (R"(
+    DELETE FROM `xayagame_undo`
+      WHERE `hash` = ?1
   )");
 
-  BindUint256 (stmt, 1, hash);
-  StepWithNoResult (stmt);
+  stmt.Bind (1, hash);
+  stmt.Execute ();
 }
 
 void
@@ -455,15 +679,13 @@ SQLiteStorage::PruneUndoData (const unsigned height)
 {
   CHECK (startedTransaction);
 
-  auto* stmt = db->Prepare (R"(
-    DELETE FROM `xayagame_undo` WHERE `height` <= ?1
+  auto stmt = db->Prepare (R"(
+    DELETE FROM `xayagame_undo`
+      WHERE `height` <= ?1
   )");
+  stmt.Bind (1, height);
 
-  const int rc = sqlite3_bind_int (stmt, 1, height);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to bind block height value: " << rc;
-
-  StepWithNoResult (stmt);
+  stmt.Execute ();
 }
 
 void
@@ -471,13 +693,13 @@ SQLiteStorage::BeginTransaction ()
 {
   CHECK (!startedTransaction);
   startedTransaction = true;
-  StepWithNoResult (db->Prepare ("SAVEPOINT `xayagame-sqlitegame`"));
+  db->Prepare ("SAVEPOINT `xayagame-sqlitegame`").Execute ();
 }
 
 void
 SQLiteStorage::CommitTransaction ()
 {
-  StepWithNoResult (db->Prepare ("RELEASE `xayagame-sqlitegame`"));
+  db->Prepare ("RELEASE `xayagame-sqlitegame`").Execute ();
   CHECK (startedTransaction);
   startedTransaction = false;
 }
@@ -485,7 +707,7 @@ SQLiteStorage::CommitTransaction ()
 void
 SQLiteStorage::RollbackTransaction ()
 {
-  StepWithNoResult (db->Prepare ("ROLLBACK TO `xayagame-sqlitegame`"));
+  db->Prepare ("ROLLBACK TO `xayagame-sqlitegame`").Execute ();
   CHECK (startedTransaction);
   startedTransaction = false;
 }
