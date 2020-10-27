@@ -5,7 +5,7 @@
 #ifndef NONFUNGIBLE_SCHEMA_HPP
 #define NONFUNGIBLE_SCHEMA_HPP
 
-#include <sqlite3.h>
+#include "xayagame/sqlitestorage.hpp"
 
 namespace nf
 {
@@ -14,7 +14,7 @@ namespace nf
  * Sets up the database schema (if it is not already present) on the given
  * SQLite connection.
  */
-void SetupDatabaseSchema (sqlite3* db);
+void SetupDatabaseSchema (xaya::SQLiteDatabase& db);
 
 } // namespace xid
 

@@ -282,8 +282,8 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
       else
         LOG (INFO) << "Configured SQLite error handler";
 
-      CHECK_EQ (sqlite3_config (SQLITE_CONFIG_SERIALIZED, nullptr), SQLITE_OK)
-          << "Failed to enable serialised mode for SQLite";
+      CHECK_EQ (sqlite3_config (SQLITE_CONFIG_MULTITHREAD, nullptr), SQLITE_OK)
+          << "Failed to enable multi-threaded mode for SQLite";
 
       sqliteInitialised = true;
     }
@@ -321,6 +321,7 @@ SQLiteDatabase::~SQLiteDatabase ()
 
   preparedStatements.clear ();
 
+  std::lock_guard<std::mutex> lock(mutDb);
   CHECK (db != nullptr);
   const int rc = sqlite3_close (db);
   if (rc != SQLITE_OK)
@@ -358,6 +359,31 @@ SQLiteDatabase::SetReadonlySnapshot (const SQLiteStorage& p)
   CHECK (!stmt.Step ());
 }
 
+namespace
+{
+
+/**
+ * Callback for sqlite3_exec that expects not to be called.
+ */
+int
+ExpectNoResult (void* data, int columns, char** strs, char** names)
+{
+  LOG (FATAL) << "Expected no result from DB query";
+}
+
+} // anonymous namespace
+
+void
+SQLiteDatabase::Execute (const std::string& sql)
+{
+  AccessDatabase ([&sql] (sqlite3* h)
+    {
+      CHECK_EQ (sqlite3_exec (h, sql.c_str (), &ExpectNoResult,
+                              nullptr, nullptr),
+                SQLITE_OK);
+    });
+}
+
 SQLiteDatabase::Statement
 SQLiteDatabase::Prepare (const std::string& sql)
 {
@@ -392,10 +418,13 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
      before inserting into the map of course).  */
 
   sqlite3_stmt* stmt = nullptr;
-  CHECK_EQ (sqlite3_prepare_v2 (db, sql.c_str (), sql.size () + 1,
-                                &stmt, nullptr),
-            SQLITE_OK)
-      << "Failed to prepare SQL statement";
+  ReadDatabase ([&stmt, &sql] (sqlite3* h)
+    {
+      CHECK_EQ (sqlite3_prepare_v2 (h, sql.c_str (), sql.size () + 1,
+                                    &stmt, nullptr),
+                SQLITE_OK)
+          << "Failed to prepare SQL statement";
+    });
 
   auto entry = std::make_unique<CachedStatement> (stmt);
   entry->used.test_and_set ();
@@ -489,7 +518,7 @@ void
 SQLiteStorage::SetupSchema ()
 {
   LOG (INFO) << "Setting up database schema if it does not exist yet";
-  const int rc = sqlite3_exec (**db, R"(
+  db->Execute (R"(
     CREATE TABLE IF NOT EXISTS `xayagame_current`
         (`key` TEXT PRIMARY KEY,
          `value` BLOB NOT NULL);
@@ -497,9 +526,7 @@ SQLiteStorage::SetupSchema ()
         (`hash` BLOB PRIMARY KEY,
          `data` BLOB NOT NULL,
          `height` INTEGER NOT NULL);
-  )", nullptr, nullptr, nullptr);
-  if (rc != SQLITE_OK)
-    LOG (FATAL) << "Failed to set up database schema: " << rc;
+  )");
 }
 
 void

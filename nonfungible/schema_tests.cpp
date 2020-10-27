@@ -22,8 +22,8 @@ TEST_F (SchemaTests, Valid)
 
 TEST_F (SchemaTests, MultipleTimesIsOk)
 {
-  SetupDatabaseSchema (GetHandle ());
-  SetupDatabaseSchema (GetHandle ());
+  SetupDatabaseSchema (GetDb ());
+  SetupDatabaseSchema (GetDb ());
 }
 
 } // anonymous namespace

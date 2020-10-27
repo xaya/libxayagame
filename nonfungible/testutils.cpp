@@ -25,7 +25,7 @@ ParseJson (const std::string& val)
 DBTest::DBTest ()
   : db("test", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_MEMORY)
 {
-  SetupDatabaseSchema (GetHandle ());
+  SetupDatabaseSchema (GetDb ());
 }
 
 void

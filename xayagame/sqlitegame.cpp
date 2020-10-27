@@ -130,7 +130,7 @@ protected:
     SQLiteStorage::SetupSchema ();
 
     auto& db = GetDatabase ();
-    const int rc = sqlite3_exec (*db, R"(
+    db.Execute (R"(
       CREATE TABLE IF NOT EXISTS `xayagame_gamevars`
           (`onlyonerow` INTEGER PRIMARY KEY,
            `gamestate_initialised` INTEGER);
@@ -141,20 +141,22 @@ protected:
           `key` TEXT PRIMARY KEY,
           `nextid` INTEGER
       );
-    )", nullptr, nullptr, nullptr);
-    CHECK_EQ (rc, SQLITE_OK) << "Failed to set up SQLiteGame's database schema";
+    )");
 
     /* Since we use the session extension to handle rollbacks, only the main
        database should be used.  To enforce this (at least partially), disallow
        any attached databases.  */
-    sqlite3_limit (*db, SQLITE_LIMIT_ATTACHED, 0);
-    LOG (INFO) << "Set allowed number of attached databases to zero";
+    db.AccessDatabase ([] (sqlite3* h)
+      {
+        sqlite3_limit (h, SQLITE_LIMIT_ATTACHED, 0);
+        LOG (INFO) << "Set allowed number of attached databases to zero";
+      });
 
     if (game.messForDebug)
       {
-        CHECK_EQ (sqlite3_exec (*db, R"(
+        db.Execute (R"(
           PRAGMA `reverse_unordered_selects` = 1;
-        )", nullptr, nullptr, nullptr), SQLITE_OK);
+        )");
         LOG (INFO) << "Enabled mess-for-debug in the database";
       }
 
@@ -390,12 +392,16 @@ SQLiteGame::ProcessForwardInternal (const GameStateData& oldState,
   EnsureCurrentState (oldState);
 
   auto& db = database->GetDatabase ();
-  SQLiteSession session(*db);
+  std::unique_ptr<SQLiteSession> session;
+  db.AccessDatabase ([&session] (sqlite3* h)
+    {
+      session = std::make_unique<SQLiteSession> (h);
+    });
   {
     ActiveAutoIds ids(*this);
     UpdateState (db, blockData);
   }
-  undo = session.ExtractChangeset ();
+  undo = session->ExtractChangeset ();
 
   return BLOCKHASH_STATE + blockData["block"]["hash"].asString ();
 }
@@ -481,7 +487,10 @@ SQLiteGame::ProcessBackwardsInternal (const GameStateData& newState,
      only when actually needed.  */
 
   InvertedChangeset changeset(undo);
-  changeset.Apply (*database->GetDatabase ());
+  database->GetDatabase ().AccessDatabase ([&changeset] (sqlite3* h)
+    {
+      changeset.Apply (h);
+    });
 
   return BLOCKHASH_STATE + blockData["block"]["parent"].asString ();
 }

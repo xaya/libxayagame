@@ -26,7 +26,7 @@ void
 ShipsLogic::SetupSchema (xaya::SQLiteDatabase& db)
 {
   SetupGameChannelsSchema (db);
-  SetupShipsSchema (*db);
+  SetupShipsSchema (db);
 }
 
 void

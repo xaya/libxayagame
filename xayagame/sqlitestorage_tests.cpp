@@ -59,12 +59,12 @@ protected:
   SQLiteStatementTests ()
     : db("foo", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_MEMORY)
   {
-    CHECK_EQ (sqlite3_exec (*db, R"(
+    db.Execute (R"(
       CREATE TABLE `test`
         (`int` INTEGER NULL,
          `text` TEXT NULL,
          `blob` BLOB NULL);
-    )", nullptr, nullptr, nullptr), SQLITE_OK);
+    )");
   }
 
   /**

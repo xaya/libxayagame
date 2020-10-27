@@ -69,27 +69,6 @@ public:
 };
 
 /**
- * Callback for sqlite3_exec that expects not to be called.
- */
-static int
-ExpectNoResult (void* data, int columns, char** strs, char** names)
-{
-  LOG (FATAL) << "Expected no result from DB query";
-}
-
-/**
- * Executes the given SQL statement on the database, expecting no results.
- * If there are results or there is any error, CHECK-fails.
- */
-static void
-ExecuteWithNoResult (sqlite3* db, const std::string& sql)
-{
-  const int rc = sqlite3_exec (db, sql.c_str (),
-                               &ExpectNoResult, nullptr, nullptr);
-  CHECK_EQ (rc, SQLITE_OK) << "Failed to query database";
-}
-
-/**
  * Basic SQLite game template for the test games that we use.  It implements
  * common functionality, like the initial hash/height (which can be the same
  * for all test games) and the "request to fail" flag.
@@ -171,7 +150,7 @@ protected:
   void
   SetupSchema (SQLiteDatabase& db) override
   {
-    ExecuteWithNoResult (*db, R"(
+    db.Execute (R"(
       CREATE TABLE IF NOT EXISTS `chat`
           (`user` TEXT PRIMARY KEY,
            `msg` TEXT);
@@ -184,14 +163,14 @@ protected:
     /* To verify proper intialisation, the initial state of the chat game is
        not empty but has predefined starting messages.  */
 
-    ExecuteWithNoResult (*db, R"(
+    db.Execute (R"(
       INSERT INTO `chat` (`user`, `msg`) VALUES ('domob', 'hello world')
     )");
 
     if (shouldFail)
       throw Failure ();
 
-    ExecuteWithNoResult (*db, R"(
+    db.Execute (R"(
       INSERT INTO `chat` (`user`, `msg`) VALUES ('foo', 'bar')
     )");
   }
@@ -205,7 +184,7 @@ protected:
         for (const auto& v : m["move"])
           {
             const std::string value = v.asString ();
-            ExecuteWithNoResult (*db, R"(
+            db.Execute (R"(
               INSERT OR REPLACE INTO `chat` (`user`, `msg`) VALUES
             (')" + name + "', '" + value + "')");
           }
@@ -294,10 +273,13 @@ public:
   GetState (const SQLiteDatabase& db)
   {
     State data;
-    const int rc = sqlite3_exec (db.ro (), R"(
-      SELECT `user`, `msg` FROM `chat`
-    )", &SaveToMap, &data, nullptr);
-    CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve current state from DB";
+    db.ReadDatabase ([&data] (sqlite3* h)
+      {
+        const int rc = sqlite3_exec (h, R"(
+          SELECT `user`, `msg` FROM `chat`
+        )", &SaveToMap, &data, nullptr);
+        CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve current state from DB";
+      });
 
     return data;
   }
@@ -653,7 +635,7 @@ protected:
   void
   SetupSchema (SQLiteDatabase& db) override
   {
-    ExecuteWithNoResult (*db, R"(
+    db.Execute (R"(
       CREATE TABLE IF NOT EXISTS `chat`
           (`user` TEXT PRIMARY KEY,
            `msg` TEXT,
@@ -670,10 +652,10 @@ protected:
         for (const auto& v : m["move"])
           {
             const std::string msg = v.asString ();
-            ExecuteWithNoResult (*db, R"(
+            db.Execute (R"(
               DELETE FROM `chat`
                 WHERE `msg` = ')" + msg + "'");
-            ExecuteWithNoResult (*db, R"(
+            db.Execute (R"(
               INSERT OR REPLACE INTO `chat` (`user`, `msg`) VALUES
             (')" + name + "', '" + msg + "')");
           }
@@ -825,11 +807,13 @@ protected:
   GetUnorderedUsernames (SQLiteDatabase& db)
   {
     UserArray res;
-
-    const int rc = sqlite3_exec (*db, R"(
-      SELECT `user` FROM `chat`
-    )", &SaveUserToArray, &res, nullptr);
-    CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve chat users from DB";
+    db.ReadDatabase ([&res] (sqlite3* h)
+      {
+        const int rc = sqlite3_exec (h, R"(
+          SELECT `user` FROM `chat`
+        )", &SaveUserToArray, &res, nullptr);
+        CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve chat users from DB";
+      });
 
     return res;
   }
@@ -964,7 +948,7 @@ protected:
   void
   SetupSchema (SQLiteDatabase& db) override
   {
-    ExecuteWithNoResult (*db, R"(
+    db.Execute (R"(
       CREATE TABLE IF NOT EXISTS `first` (
           `id` INTEGER PRIMARY KEY,
           `name` TEXT
@@ -985,7 +969,7 @@ protected:
     /* To verify proper intialisation, the initial state is not empty but
        has some pre-existing data and IDs.  */
 
-    ExecuteWithNoResult (*db, R"(
+    db.Execute (R"(
       INSERT INTO `first` (`id`, `name`) VALUES (2, 'domob');
       INSERT INTO `second` (`id`, `name`) VALUES (5, 'domob');
     )");
@@ -1013,10 +997,10 @@ protected:
         std::ostringstream secondId;
         secondId << Ids ("second").GetNext ();
 
-        ExecuteWithNoResult (*db, R"(
+        db.Execute (R"(
           INSERT INTO `first` (`id`, `name`) VALUES
         ()" + firstId.str () + ", '" + name + "')");
-        ExecuteWithNoResult (*db, R"(
+        db.Execute (R"(
           INSERT INTO `second` (`id`, `name`) VALUES
         ()" + secondId.str () + ", '" + name + "')");
       }
@@ -1028,17 +1012,19 @@ protected:
   Json::Value
   GetStateAsJson (const SQLiteDatabase& db) override
   {
-    Map first;
-    int rc = sqlite3_exec (db.ro (), R"(
-      SELECT `id`, `name` FROM `first`
-    )", &SaveToMap, &first, nullptr);
-    CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve first table";
+    Map first, second;
+    db.ReadDatabase ([&first, &second] (sqlite3* h)
+      {
+        int rc = sqlite3_exec (h, R"(
+          SELECT `id`, `name` FROM `first`
+        )", &SaveToMap, &first, nullptr);
+        CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve first table";
 
-    Map second;
-    rc = sqlite3_exec (db.ro (), R"(
-      SELECT `id`, `name` FROM `second`
-    )", &SaveToMap, &second, nullptr);
-    CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve second table";
+        rc = sqlite3_exec (h, R"(
+          SELECT `id`, `name` FROM `second`
+        )", &SaveToMap, &second, nullptr);
+        CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve second table";
+      });
     CHECK_EQ (first.size (), second.size ());
 
     Json::Value res(Json::objectValue);

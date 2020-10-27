@@ -43,6 +43,14 @@ private:
   static bool sqliteInitialised;
 
   /**
+   * Mutex for access to db itself.  We configure the database to be in
+   * multi-thread mode (rather than serialised) since statements are
+   * created for single-thread use anyway, and thus have to explicitly
+   * synchronise any direct access to db.
+   */
+  mutable std::mutex mutDb;
+
+  /**
    * The SQLite database handle, which is owned and managed by the
    * current instance.  It will be opened in the constructor, and
    * finalised in the destructor.
@@ -106,29 +114,47 @@ public:
   ~SQLiteDatabase ();
 
   /**
-   * Returns the raw handle of the SQLite database.
+   * Executes a given callback with access to the raw database handle, ensuring
+   * necessary locking.  This should typically only be used for select use
+   * cases; most operations should go through Prepare instead.
    */
-  sqlite3*
-  operator* ()
+  template <typename Fcn>
+    void
+    AccessDatabase (const Fcn& cb)
   {
-    return db;
+    std::lock_guard<std::mutex> lock(mutDb);
+    cb (db);
   }
 
   /**
-   * Returns the raw handle, like operator*.  This function is meant
-   * for code that then only does read operations and no writes.
+   * Executes a callback with the raw handle, similar to AccessDatabase.
+   * This function is meant for code that then only does read operations
+   * and no writes.
    */
-  sqlite3*
-  ro () const
+  template <typename Fcn>
+    void
+    ReadDatabase (const Fcn& cb) const
   {
-    return db;
+    std::lock_guard<std::mutex> lock(mutDb);
+    cb (db);
   }
+
+  /**
+   * Directly runs a particular SQL statement on the database, without
+   * going through a prepared statement.  This can be useful for things like
+   * setting up the schema.
+   */
+  void Execute (const std::string& sql);
 
   /**
    * Prepares an SQL statement given as string and stores it in the cache,
    * or retrieves the existing statement from the cache.  The prepared statement
    * is also reset, so that it can be reused right away.  The cache takes
    * care of transparently giving out and releasing statements.
+   *
+   * Note that the returned statement is not thread-safe by itself; but it is
+   * fine for multiple threads to concurrently call this method to obtain
+   * instances that they can then use.
    */
   Statement Prepare (const std::string& sql);
 

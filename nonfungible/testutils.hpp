@@ -41,15 +41,6 @@ protected:
   DBTest ();
 
   /**
-   * Returns the underlying database handle for SQLite.
-   */
-  sqlite3*
-  GetHandle ()
-  {
-    return *db;
-  }
-
-  /**
    * Returns a Database instance for the test.
    */
   xaya::SQLiteDatabase&

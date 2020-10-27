@@ -4,8 +4,6 @@
 
 #include "schema.hpp"
 
-#include <glog/logging.h>
-
 namespace nf
 {
 namespace

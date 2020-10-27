@@ -19,7 +19,7 @@ namespace xaya
 void
 ChannelGame::SetupGameChannelsSchema (SQLiteDatabase& db)
 {
-  InternalSetupGameChannelsSchema (*db);
+  InternalSetupGameChannelsSchema (db);
 }
 
 bool

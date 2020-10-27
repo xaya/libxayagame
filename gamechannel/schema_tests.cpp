@@ -24,8 +24,8 @@ TEST_F (SchemaTests, Valid)
 
 TEST_F (SchemaTests, TwiceOk)
 {
-  InternalSetupGameChannelsSchema (*GetDb ());
-  InternalSetupGameChannelsSchema (*GetDb ());
+  InternalSetupGameChannelsSchema (GetDb ());
+  InternalSetupGameChannelsSchema (GetDb ());
 }
 
 } // anonymous namespace
