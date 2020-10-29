@@ -209,6 +209,9 @@ class SQLiteDatabase::Statement
 
 private:
 
+  /** The database this is associated to.  */
+  const SQLiteDatabase* db = nullptr;
+
   /**
    * The underlying cached statement.  The lock is released when this
    * instance goes out of scope.
@@ -220,8 +223,8 @@ private:
    * used flag must already be set by the caller, but will be cleared after this
    * instance goes out of scope.
    */
-  explicit Statement (CachedStatement& s)
-    : entry(&s)
+  explicit Statement (const SQLiteDatabase& d, CachedStatement& s)
+    : db(&d), entry(&s)
   {}
 
   /**

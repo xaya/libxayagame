@@ -24,6 +24,9 @@ SQLiteDatabase::Statement::operator= (Statement&& o)
 {
   Clear ();
 
+  db = o.db;
+  o.db = nullptr;
+
   entry = o.entry;
   o.entry = nullptr;
 
@@ -68,6 +71,9 @@ SQLiteDatabase::Statement::Execute ()
 bool
 SQLiteDatabase::Statement::Step ()
 {
+  CHECK (db != nullptr) << "Statement has no associated database";
+  std::lock_guard<std::mutex> lock(db->mutDb);
+
   const int rc = sqlite3_step (**this);
   switch (rc)
     {
@@ -406,7 +412,7 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
           VLOG (2) << "Reusing cached SQL statement at " << it->second.get ();
           CHECK_EQ (sqlite3_clear_bindings (it->second->stmt), SQLITE_OK);
 
-          auto res = Statement (*it->second);
+          auto res = Statement (*this, *it->second);
           res.Reset ();
 
           return res;
@@ -428,7 +434,7 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
 
   auto entry = std::make_unique<CachedStatement> (stmt);
   entry->used.test_and_set ();
-  Statement res(*entry);
+  Statement res(*this, *entry);
 
   VLOG (2)
       << "Created new SQL statement cache entry " << entry.get ()
