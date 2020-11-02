@@ -32,7 +32,6 @@ class Node ():
       "rpcpassword": "xayagametest",
       "rpcport": rpcPort,
       "fallbackfee": 0.001,
-      "wallet": "",
       "zmqpubgameblocks": "tcp://127.0.0.1:%d" % zmqPorts["blocks"],
     }
     if "pending" in zmqPorts:
@@ -74,6 +73,12 @@ class Node ():
         break
       except:
         time.sleep (1)
+
+    # Make sure we have a default wallet.
+    wallets = self.rpc.listwallets ()
+    if "" not in wallets:
+      self.log.info ("Creating default wallet in Xaya Core...")
+      self.rpc.createwallet ("")
 
   def stop (self):
     if self.proc is None:
