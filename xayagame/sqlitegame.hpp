@@ -157,6 +157,23 @@ protected:
   AutoId& Ids (const std::string& key);
 
   /**
+   * Returns the current "version" of the database schema in use.  The version
+   * is a custom string, which can be interpreted and set by the specific
+   * game to handle seemless updates of the database (e.g. for forks).
+   * By default, i.e. before any version is set, "" is returned.
+   *
+   * This method can be used e.g. in SetupSchema (together with
+   * SetSchemaVersion) to check the current database and upgrade it as needed
+   * if the version is not matching the newest one expected by the game.
+   */
+  std::string GetSchemaVersion () const;
+
+  /**
+   * Sets the game-specific schema version.
+   */
+  void SetSchemaVersion (const std::string& version);
+
+  /**
    * Extracts custom state data from the database (as done by a callback
    * that queries the data).  This calls GetCustomStateData on the Game
    * instance and provides a callback that handles the "game state" string

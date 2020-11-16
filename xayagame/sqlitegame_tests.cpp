@@ -692,6 +692,38 @@ TEST_F (UniqueConstraintTests, Undo)
 
 /* ************************************************************************** */
 
+/**
+ * Custom ChatGame instance that reads and updates the schema version.
+ */
+class ChatWithSchemaVersion : public ChatGame
+{
+
+protected:
+
+  void
+  SetupSchema (SQLiteDatabase& db) override
+  {
+    ChatGame::SetupSchema (db);
+    if (GetSchemaVersion () != "schema")
+      SetSchemaVersion ("schema");
+  }
+
+public:
+
+  using SQLiteGame::GetSchemaVersion;
+  using SQLiteGame::SetSchemaVersion;
+
+};
+
+using SchemaVersionTests = SQLiteGameTests<ChatWithSchemaVersion>;
+
+TEST_F (SchemaVersionTests, VersionSet)
+{
+  EXPECT_EQ (rules.GetSchemaVersion (), "schema");
+}
+
+/* ************************************************************************** */
+
 class PersistenceTests : public GameTestWithBlockchain
 {
 

@@ -114,6 +114,16 @@ private:
   void InitialiseGame ();
 
   /**
+   * Returns the schema version from the database.
+   */
+  std::string GetSchemaVersion () const;
+
+  /**
+   * Sets the schema version in the database.
+   */
+  void SetSchemaVersion (const std::string& version);
+
+  /**
    * Verifies that the database state corresponds to the given "current state"
    * from libxayagame.  Returns false if not.
    */
@@ -133,15 +143,33 @@ protected:
     db.Execute (R"(
       CREATE TABLE IF NOT EXISTS `xayagame_gamevars`
           (`onlyonerow` INTEGER PRIMARY KEY,
-           `gamestate_initialised` INTEGER);
+           `gamestate_initialised` INTEGER NOT NULL);
       INSERT OR IGNORE INTO `xayagame_gamevars`
           (`onlyonerow`, `gamestate_initialised`) VALUES (1, 0);
 
       CREATE TABLE IF NOT EXISTS `xayagame_autoids` (
           `key` TEXT PRIMARY KEY,
-          `nextid` INTEGER
+          `nextid` INTEGER NOT NULL
       );
     )");
+
+    /* If the `schema_version` volumn is missing from `xayagame_gamevars`,
+       add it in with the initial version value of "".  We do this here in
+       a separate step rather than directly in the SQL above, so that it
+       also works with databases created in previous versions of libxayagame
+       (and just adds it to them as well now).  */
+    auto stmt = db.PrepareRo (R"(
+      SELECT `name`
+        FROM pragma_table_info ('xayagame_gamevars')
+        WHERE `name` = 'schema_version'
+    )");
+    if (stmt.Step ())
+      CHECK (!stmt.Step ());
+    else
+      db.Execute (R"(
+        ALTER TABLE `xayagame_gamevars`
+          ADD COLUMN `schema_version` TEXT NOT NULL DEFAULT ''
+      )");
 
     /* Since we use the session extension to handle rollbacks, only the main
        database should be used.  To enforce this (at least partially), disallow
@@ -181,7 +209,7 @@ SQLiteGame::Storage::IsGameInitialised (const SQLiteDatabase& db)
   )");
 
   CHECK (stmt.Step ())
-      << "Failed to fetch result for from xayagame_gamevars";
+      << "Failed to fetch result from xayagame_gamevars";
   const bool res = stmt.Get<bool> (0);
   CHECK (!stmt.Step ());
 
@@ -218,6 +246,34 @@ SQLiteGame::Storage::InitialiseGame ()
       db.Prepare ("ROLLBACK TO `xayagame-stateinit`").Execute ();
       throw;
     }
+}
+
+std::string
+SQLiteGame::Storage::GetSchemaVersion () const
+{
+  auto stmt = GetDatabase ().PrepareRo (R"(
+    SELECT `schema_version`
+      FROM `xayagame_gamevars`
+  )");
+
+  CHECK (stmt.Step ())
+      << "Failed to fetch result from xayagame_gamevars";
+  const auto res = stmt.Get<std::string> (0);
+  CHECK (!stmt.Step ());
+
+  return res;
+}
+
+void
+SQLiteGame::Storage::SetSchemaVersion (const std::string& version)
+{
+  LOG (INFO) << "Setting schema version to " << version;
+  auto stmt = GetDatabase ().Prepare (R"(
+    UPDATE `xayagame_gamevars`
+      SET `schema_version` = ?1
+  )");
+  stmt.Bind (1, version);
+  stmt.Execute ();
 }
 
 bool
@@ -277,7 +333,7 @@ SQLiteGame::~SQLiteGame () = default;
 void
 SQLiteGame::EnsureCurrentState (const GameStateData& state)
 {
-  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
+  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
   CHECK (database->CheckCurrentState (database->GetDatabase (), state))
       << "Game state is inconsistent to database";
 }
@@ -299,7 +355,7 @@ SQLiteGame::SetupSchema (SQLiteDatabase& db)
 StorageInterface&
 SQLiteGame::GetStorage ()
 {
-  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
+  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
   return *database;
 }
 
@@ -308,7 +364,7 @@ SQLiteGame::GetInitialStateInternal (unsigned& height, std::string& hashHex)
 {
   GetInitialStateBlock (height, hashHex);
 
-  CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
+  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
   database->InitialiseGame ();
 
   return INITIAL_STATE;
@@ -503,6 +559,20 @@ SQLiteGame::Ids (const std::string& key)
   return activeIds->Get (key);
 }
 
+std::string
+SQLiteGame::GetSchemaVersion () const
+{
+  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
+  return database->GetSchemaVersion ();
+}
+
+void
+SQLiteGame::SetSchemaVersion (const std::string& version)
+{
+  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
+  database->SetSchemaVersion (version);
+}
+
 Json::Value
 SQLiteGame::GameStateToJson (const GameStateData& state)
 {
@@ -519,7 +589,7 @@ SQLiteGame::GetCustomStateData (
       [this, &cb] (const GameStateData& state, const uint256& hash,
                    const unsigned height, std::unique_lock<std::mutex> lock)
         {
-          CHECK (database != nullptr) << "SQLiteGame has not bee initialised";
+          CHECK (database != nullptr) << "SQLiteGame has not been initialised";
 
           auto snapshot = database->GetSnapshot ();
           if (snapshot != nullptr
