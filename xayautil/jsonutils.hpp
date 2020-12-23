@@ -7,6 +7,8 @@
 
 #include <json/json.h>
 
+#include <cstdint>
+
 namespace xaya
 {
 
@@ -20,6 +22,21 @@ namespace xaya
  * if we want to enforce that they are passed as integer literals.
  */
 bool IsIntegerValue (const Json::Value& val);
+
+/**
+ * Tries to parse a (non-negative) CHI amount from JSON, e.g. from what the
+ * block data contains for moves, or even Xaya Core's RPC interface directly.
+ * Returns true on success and fills in the amount as number of satoshis in
+ * this case.  If the value is invalid (e.g. larger than the actual CHI
+ * supply), false is returned instead.
+ */
+bool ChiAmountFromJson (const Json::Value& val, int64_t& sat);
+
+/**
+ * Converts a CHI amount given as number of satoshis to a JSON value,
+ * e.g. for interacting with Xaya Core's JSON-RPC interface.
+ */
+Json::Value ChiAmountToJson (int64_t sat);
 
 } // namespace xaya
 
