@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2020 The Xaya developers
+# Copyright (C) 2018-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -37,7 +37,7 @@ class Node ():
     if "pending" in zmqPorts:
       zmqPending = "tcp://127.0.0.1:%d" % zmqPorts["pending"]
       self.config["zmqpubgamepending"] = zmqPending
-    self.rpcurl = ("http://%s:%s@localhost:%d"
+    self.baseRpcUrl = ("http://%s:%s@localhost:%d"
         % (self.config["rpcuser"], self.config["rpcpassword"],
            self.config["rpcport"]))
 
@@ -63,22 +63,31 @@ class Node ():
     args.append ("-noprinttoconsole")
     args.append ("-regtest")
     self.proc = subprocess.Popen (args)
-    self.rpc = jsonrpclib.ServerProxy (self.rpcurl)
+
+    # Start with a temporary RPC connection without wallet, which we
+    # use to make sure the default wallet is created / loaded.
+    rpc = jsonrpclib.ServerProxy (self.baseRpcUrl)
 
     self.log.info ("Waiting for the JSON-RPC server to be up...")
     while True:
       try:
-        data = self.rpc.getnetworkinfo ()
+        data = rpc.getnetworkinfo ()
         self.log.info ("Daemon %s is up" % data["subversion"])
         break
       except:
         time.sleep (1)
 
     # Make sure we have a default wallet.
-    wallets = self.rpc.listwallets ()
+    wallets = rpc.listwallets ()
     if "" not in wallets:
       self.log.info ("Creating default wallet in Xaya Core...")
-      self.rpc.createwallet ("")
+      rpc.createwallet ("")
+
+    # We need to explicitly close the client connection, or else
+    # Xaya Core will wait for it when shutting down.
+    rpc ("close") ()
+
+    self.rpcurl, self.rpc = self.getWalletRpc ("")
 
   def stop (self):
     if self.proc is None:
@@ -91,3 +100,12 @@ class Node ():
     self.log.info ("Waiting for Xaya process to stop...")
     self.proc.wait ()
     self.proc = None
+
+  def getWalletRpc (self, wallet):
+    """
+    Returns the RPC URL to use for a particular wallet as well as
+    a ServerProxy instance.
+    """
+
+    url = "%s/wallet/%s" % (self.baseRpcUrl, wallet)
+    return url, jsonrpclib.ServerProxy (url)
