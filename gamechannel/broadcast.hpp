@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -47,8 +47,17 @@ class OffChainBroadcast
 
 private:
 
-  /** The ChannelManager instance that is updated with received messges.  */
-  ChannelManager& manager;
+  /**
+   * The ChannelManager instance that is updated with received messges.
+   *
+   * For testing purposes it can be null, in which case the channel ID
+   * is directly set and we require that FeedMessage is overridden
+   * in a subclass to handle the messages directly.
+   */
+  ChannelManager* manager;
+
+  /** The corresponding channel ID.  */
+  const uint256 id;
 
   /**
    * The list of channel participants (names without p/ prefix).  This is
@@ -78,9 +87,19 @@ private:
 
 protected:
 
-  explicit OffChainBroadcast (ChannelManager& cm)
-    : manager(cm)
-  {}
+  /**
+   * Constructs an instance for normal use.  It will feed messages into
+   * the given ChannelManager.
+   */
+  explicit OffChainBroadcast (ChannelManager& cm);
+
+  /**
+   * Constructs an instance without a ChannelManager but the given explicit
+   * channel ID.  This can be used for testing broadcast implementations;
+   * in those tests, the FeedMessage method must be overridden to handle
+   * messages directly.
+   */
+  explicit OffChainBroadcast (const uint256& i);
 
   /**
    * Returns the current list of participants.  This may be used by
@@ -98,7 +117,11 @@ protected:
    * Returns the ID of the channel for which this is.  Can be used by
    * implementations if they need it.
    */
-  const uint256& GetChannelId () const;
+  const uint256&
+  GetChannelId () const
+  {
+    return id;
+  }
 
   /**
    * Sends a given encoded message to all participants in the channel.
@@ -108,9 +131,12 @@ protected:
   virtual void SendMessage (const std::string& msg) = 0;
 
   /**
-   * Processes a message retrieved through the broadcast channel.
+   * Processes a message retrieved through the broadcast channel.  If the
+   * instance has been created with a channel ID and not a ChannelManager
+   * (for testing), then subclasses must explicitly override this method
+   * to handle messages themselves.
    */
-  void FeedMessage (const std::string& msg);
+  virtual void FeedMessage (const std::string& msg);
 
   /**
    * Tries to retrieve more messages from the underlying communication system,

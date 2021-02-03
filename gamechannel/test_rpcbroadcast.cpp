@@ -1,14 +1,11 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "config.h"
 
-#include "channelmanager.hpp"
 #include "rpcbroadcast.hpp"
 
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/hash.hpp>
 #include <xayautil/uint256.hpp>
 
@@ -17,10 +14,11 @@
 
 #include <google/protobuf/stubs/common.h>
 
+#include <condition_variable>
 #include <cstdlib>
 #include <iostream>
+#include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace
@@ -28,18 +26,6 @@ namespace
 
 DEFINE_string (rpc_url, "",
                "URL at which the broadcast server's RPC interface is");
-
-/**
- * Returns a fake reference to an instance of the given type.  The value
- * will be a nullptr.  This is used to quickly stub out dependencies for
- * ChannelManager that are not actually accessed in our tests here.
- */
-template <typename T>
-  T&
-  NullReference ()
-{
-  return *static_cast<T*> (nullptr);
-}
 
 } // anonymous namespace
 
@@ -62,79 +48,60 @@ namespace xaya
 {
 
 /**
- * Broadcast channel with faked ChannelManager.  The main test uses multiple
+ * Broadcast channel based on the RpcBroadcast, but without a ChannelManager
+ * and recording the received messages.  The main test uses multiple
  * of them connected to the same server to send messages and test receiving
  * of them as expected.
  */
-class TestRpcBroadcast
+class TestRpcBroadcast : public RpcBroadcast
 {
 
 private:
 
-  /** The faked ChannelManager.  */
-  ChannelManager cm;
+  /** Lock for the received messages.  */
+  std::mutex mut;
 
-  /** The broadcast channel itself.  */
-  RpcBroadcast bc;
+  /** Condition variable signalled when a new message is received.  */
+  std::condition_variable cv;
 
-  /** Thread running a pending call to GetMessages.  */
-  std::unique_ptr<std::thread> runningCall;
-
-  /** The result of the last GetMessages call.  */
+  /** The received and not yet "expected" messages.  */
   std::vector<std::string> messages;
+
+protected:
+
+  void
+  FeedMessage (const std::string& msg) override
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    messages.push_back (msg);
+    cv.notify_one ();
+  }
 
 public:
 
   explicit TestRpcBroadcast (const std::string& rpcUrl, const uint256& id)
-    : cm(NullReference<BoardRules> (), NullReference<OpenChannel> (),
-         NullReference<XayaRpcClient> (),
-         NullReference<XayaWalletRpcClient> (), id, "player name"),
-      bc(rpcUrl, cm)
+    : RpcBroadcast(rpcUrl, id)
   {
-    /* We do not want to run the broadcast's event loop (as that would mess
-       up our custom calls to SendMessage and GetMessages).  We still need
-       to initialise the sequence number, though, just like Start() would
-       do in a real usage situation.  */
-    bc.InitialiseSequence ();
+    Start ();
   }
 
   ~TestRpcBroadcast ()
   {
-    cm.StopUpdates ();
+    Stop ();
+    CHECK (messages.empty ()) << "Unexpected messages: " << messages;
   }
 
   /**
-   * Sends a message on the channel.
-   */
-  void
-  Send (const std::string& msg)
-  {
-    bc.SendMessage (msg);
-  }
-
-  /**
-   * Starts a new call to GetMessages in a new thread.
-   */
-  void
-  StartReceive ()
-  {
-    CHECK (runningCall == nullptr);
-    runningCall = std::make_unique<std::thread> ([this] ()
-      {
-        messages = bc.GetMessages ();
-      });
-  }
-
-  /**
-   * Waits for the last call to GetMessages to finish and checks that
-   * the received messages match the expectations.
+   * Expects that the received messages match the given list.  Waits for
+   * more if necessary.
    */
   void
   ExpectResult (const std::vector<std::string>& expected)
   {
-    CHECK (runningCall != nullptr);
-    runningCall->join ();
-    runningCall.reset ();
+    std::unique_lock<std::mutex> lock(mut);
+    while (messages.size () < expected.size ())
+      cv.wait (lock);
+
     if (messages != expected)
       {
         LOG (FATAL)
@@ -142,7 +109,10 @@ public:
                "\nActual: " << messages
             << "\nExpected: " << expected;
       }
+    messages.clear ();
   }
+
+  using RpcBroadcast::SendMessage;
 
 };
 
@@ -170,27 +140,22 @@ main (int argc, char** argv)
   using xaya::TestRpcBroadcast;
 
   TestRpcBroadcast bc1(FLAGS_rpc_url, id1);
-  bc1.Send ("foo");
-  bc1.StartReceive ();
+  bc1.SendMessage ("foo");
   bc1.ExpectResult ({"foo"});
 
   TestRpcBroadcast bc2(FLAGS_rpc_url, id2);
-  bc2.StartReceive ();
-  bc2.Send ("bar");
+  bc2.SendMessage ("bar");
   bc2.ExpectResult ({"bar"});
 
-  bc1.Send ("baz");
+  bc1.SendMessage ("baz");
   TestRpcBroadcast bc3(FLAGS_rpc_url, id1);
-  bc3.Send ("abc");
-  bc1.StartReceive ();
+  bc3.SendMessage ("abc");
   bc1.ExpectResult ({"baz", "abc"});
-  bc3.StartReceive ();
   bc3.ExpectResult ({"abc"});
 
   /* Test a string that is not valid UTF-8.  */
   const std::string weirdStr("abc\0def\xFF", 8);
-  bc2.Send (weirdStr);
-  bc2.StartReceive ();
+  bc2.SendMessage (weirdStr);
   bc2.ExpectResult ({weirdStr});
 
   google::protobuf::ShutdownProtobufLibrary ();

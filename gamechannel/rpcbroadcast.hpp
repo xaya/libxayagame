@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -68,6 +68,8 @@ private:
   friend class TestRpcBroadcast;
 
 protected:
+
+  explicit RpcBroadcast (const std::string& rpcUrl, const uint256& id);
 
   void SendMessage (const std::string& msg) override;
   std::vector<std::string> GetMessages () override;

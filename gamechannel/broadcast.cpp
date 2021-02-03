@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,15 +16,21 @@
 namespace xaya
 {
 
+OffChainBroadcast::OffChainBroadcast (ChannelManager& cm)
+  : manager(&cm), id(manager->GetChannelId ())
+{}
+
+OffChainBroadcast::OffChainBroadcast (const uint256& i)
+  : manager(nullptr), id(i)
+{
+  LOG_FIRST_N (WARNING, 1)
+      << "Using OffChainBroadcast without ChannelManager,"
+         " this should only happen in tests";
+}
+
 OffChainBroadcast::~OffChainBroadcast ()
 {
   Stop ();
-}
-
-const uint256&
-OffChainBroadcast::GetChannelId () const
-{
-  return manager.GetChannelId ();
 }
 
 void
@@ -116,6 +122,8 @@ OffChainBroadcast::SendNewState (const std::string& reinitId,
 void
 OffChainBroadcast::FeedMessage (const std::string& msg)
 {
+  CHECK (manager != nullptr)
+      << "Without ChannelManager, FeedMessage must be overridden";
   VLOG (1) << "Processing received broadcast message...";
 
   proto::BroadcastMessage pb;
@@ -126,7 +134,7 @@ OffChainBroadcast::FeedMessage (const std::string& msg)
       return;
     }
 
-  manager.ProcessOffChain (pb.reinit (), pb.proof ());
+  manager->ProcessOffChain (pb.reinit (), pb.proof ());
 }
 
 } // namespace xaya

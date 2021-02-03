@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -24,6 +24,7 @@ class DetachedBroadcastServer (threading.Thread):
   def __init__ (self):
     super (DetachedBroadcastServer, self).__init__ ()
     self.server = rpcbroadcast.Server ("localhost", self.PORT)
+    self.server.RECEIVE_TIMEOUT = 0.1
 
   def run (self):
     self.server.serve ()
