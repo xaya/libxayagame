@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2020 The Xaya developers
+# Copyright (C) 2018-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -386,7 +386,7 @@ class XayaGameTest (object):
     """
 
     addr = self.rpc.xaya.getnewaddress ()
-    self.rpc.xaya.generatetoaddress (n, addr)
+    return self.rpc.xaya.generatetoaddress (n, addr)
 
   def expectError (self, code, msgRegExp, method, *args, **kwargs):
     """
