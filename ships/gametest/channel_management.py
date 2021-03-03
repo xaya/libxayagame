@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 from shipstest import ShipsTest
 
 """
-Tests basic management of channels, i.e. creating / joining / aborting them.
-The more sophisticated situations (which deal with protos and signatures)
-are left for other tests.
+Tests basic management of channels, i.e. creating / joining / aborting them
+as well as declaring loss to close a channel in agreement.
+
+Disputes and resolutions (which deal with protos and signatures) are left
+for another test.
 """
 
 
@@ -77,6 +79,18 @@ class ChannelManagementTest (ShipsTest):
     self.assertEqual (ch1["state"]["parsed"]["phase"], "first commitment")
 
     assert id2 not in channels
+
+    # Declare loss in the channel.
+    self.mainLogger.info ("Declaring loss in a game to close the channel...")
+    self.sendMove ("foo", {"l": {"id": id1}})
+    self.generate (1)
+
+    state = self.getGameState ()
+    self.assertEqual (state["channels"], {})
+    self.assertEqual (state["gamestats"], {
+      "foo": {"lost": 1, "won": 0},
+      "baz": {"lost": 0, "won": 1},
+    })
 
 
 if __name__ == "__main__":

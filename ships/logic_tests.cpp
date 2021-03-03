@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -543,7 +543,7 @@ TEST_F (AbortChannelTests, SuccessfulAbort)
 
 /* ************************************************************************** */
 
-class CloseChannelTests : public StateUpdateTests
+class DeclareLossTests : public StateUpdateTests
 {
 
 protected:
@@ -562,7 +562,7 @@ protected:
   /** Txid for use with the move.  */
   const xaya::uint256 txid = xaya::SHA256::Hash ("txid");
 
-  CloseChannelTests ()
+  DeclareLossTests ()
   {
     CHECK (TextFormat::ParseFromString (R"(
       participants:
@@ -585,6 +585,117 @@ protected:
     h->Reinitialise (meta, SerialisedState ("turn: 0"));
     h.reset ();
   }
+
+  /**
+   * Constructs a JSON move for declaring loss in the given channel.
+   */
+  Json::Value
+  LossMove (const std::string& name, const xaya::uint256& channelId) const
+  {
+    Json::Value data(Json::objectValue);
+    data["l"] = Json::Value (Json::objectValue);
+    data["l"]["id"] = channelId.ToHex ();
+
+    return Move (name, txid, data);
+  }
+
+};
+
+TEST_F (DeclareLossTests, UpdateStats)
+{
+  AddStatsRow ("foo", 10, 5);
+  AddStatsRow ("bar", 1, 2);
+  ExpectStatsRow ("foo", 10, 5);
+  ExpectStatsRow ("bar", 1, 2);
+
+  xaya::proto::ChannelMetadata meta;
+  meta.add_participants ()->set_name ("foo");
+  meta.add_participants ()->set_name ("baz");
+
+  UpdateStats (meta, 0);
+  ExpectStatsRow ("foo", 11, 5);
+  ExpectStatsRow ("bar", 1, 2);
+  ExpectStatsRow ("baz", 0, 1);
+
+  UpdateStats (meta, 1);
+  ExpectStatsRow ("foo", 11, 6);
+  ExpectStatsRow ("bar", 1, 2);
+  ExpectStatsRow ("baz", 1, 1);
+}
+
+TEST_F (DeclareLossTests, Malformed)
+{
+  std::vector<Json::Value> moves;
+  for (const std::string& create : {"42", "null", "{}",
+                                    R"({"id": 100})",
+                                    R"({"id": "00"})",
+                                    R"({"id": "00", "x": 5})"})
+    {
+      Json::Value data(Json::objectValue);
+      data["l"] = ParseJson (create);
+      moves.push_back (Move ("xyz", txid, data));
+    }
+  UpdateState (10, moves);
+
+  ExpectNumberOfChannels (2);
+  ExpectChannel (channelId);
+  ExpectChannel (otherId);
+}
+
+TEST_F (DeclareLossTests, NonExistantChannel)
+{
+  UpdateState (10, {LossMove ("foo", xaya::SHA256::Hash ("does not exist"))});
+
+  ExpectNumberOfChannels (2);
+  ExpectChannel (channelId);
+  ExpectChannel (otherId);
+}
+
+TEST_F (DeclareLossTests, WrongNumberOfParticipants)
+{
+  auto h = ExpectChannel (channelId);
+  xaya::proto::ChannelMetadata meta = h->GetMetadata ();
+  meta.mutable_participants ()->RemoveLast ();
+  meta.set_reinit ("init 2");
+  h->Reinitialise (meta, "");
+  h.reset ();
+
+  UpdateState (10, {LossMove ("name 0", channelId)});
+
+  ExpectNumberOfChannels (2);
+  ExpectChannel (channelId);
+  ExpectChannel (otherId);
+}
+
+TEST_F (DeclareLossTests, NotAParticipant)
+{
+  UpdateState (10, {LossMove ("foo", channelId)});
+
+  ExpectNumberOfChannels (2);
+  ExpectChannel (channelId);
+  ExpectChannel (otherId);
+}
+
+TEST_F (DeclareLossTests, Valid)
+{
+  UpdateState (10, {LossMove ("name 0", channelId)});
+  ExpectNumberOfChannels (1);
+  ExpectChannel (otherId);
+  ExpectStatsRow ("name 0", 0, 1);
+  ExpectStatsRow ("name 1", 1, 0);
+
+  UpdateState (10, {LossMove ("name 1", otherId)});
+  ExpectNumberOfChannels (0);
+  ExpectStatsRow ("name 0", 1, 1);
+  ExpectStatsRow ("name 1", 1, 1);
+}
+
+/* ************************************************************************** */
+
+class CloseChannelTests : public DeclareLossTests
+{
+
+protected:
 
   /**
    * Expects a signature validation call on the mock RPC server for a winner
@@ -642,28 +753,6 @@ protected:
   }
 
 };
-
-TEST_F (CloseChannelTests, UpdateStats)
-{
-  AddStatsRow ("foo", 10, 5);
-  AddStatsRow ("bar", 1, 2);
-  ExpectStatsRow ("foo", 10, 5);
-  ExpectStatsRow ("bar", 1, 2);
-
-  xaya::proto::ChannelMetadata meta;
-  meta.add_participants ()->set_name ("foo");
-  meta.add_participants ()->set_name ("baz");
-
-  UpdateStats (meta, 0);
-  ExpectStatsRow ("foo", 11, 5);
-  ExpectStatsRow ("bar", 1, 2);
-  ExpectStatsRow ("baz", 0, 1);
-
-  UpdateStats (meta, 1);
-  ExpectStatsRow ("foo", 11, 6);
-  ExpectStatsRow ("bar", 1, 2);
-  ExpectStatsRow ("baz", 1, 1);
-}
 
 TEST_F (CloseChannelTests, Malformed)
 {

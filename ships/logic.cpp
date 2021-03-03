@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -319,6 +319,66 @@ ShipsLogic::HandleCloseChannel (xaya::SQLiteDatabase& db,
   tbl.DeleteById (id);
 }
 
+
+void
+ShipsLogic::HandleDeclareLoss (xaya::SQLiteDatabase& db,
+                               const Json::Value& obj, const std::string& name)
+{
+  if (!obj.isObject ())
+    return;
+
+  if (obj.size () != 1)
+    {
+      LOG (WARNING) << "Invalid declare loss move: " << obj;
+      return;
+    }
+
+  xaya::ChannelsTable tbl(db);
+  auto h = RetrieveChannelFromMove (obj, tbl);
+  if (h == nullptr)
+    return;
+
+  const xaya::uint256 id = h->GetId ();
+  const auto& meta = h->GetMetadata ();
+  if (meta.participants_size () != 2)
+    {
+      LOG (WARNING)
+          << "Cannot declare loss in channel " << id.ToHex ()
+          << " with " << meta.participants_size () << " participants";
+      return;
+    }
+
+  int loser = -1;
+  for (int i = 0; i < meta.participants_size (); ++i)
+    if (meta.participants (i).name () == name)
+      {
+        CHECK_EQ (loser, -1)
+            << name << " participates multiple times in channel "
+            << id.ToHex ();
+        loser = i;
+      }
+  if (loser == -1)
+    {
+      LOG (WARNING)
+          << name << " cannot declare loss on " << id.ToHex ()
+          << " as non-participant";
+      return;
+    }
+  CHECK_EQ (meta.participants (loser).name (), name);
+
+  CHECK_GE (loser, 0);
+  CHECK_LE (loser, 1);
+  const int winner = 1 - loser;
+
+  LOG (INFO)
+      << name << " declared loss on channel " << id.ToHex ()
+      << ", " << meta.participants (winner).name () << " is the winner";
+
+  UpdateStats (db, meta, winner);
+  h.reset ();
+  tbl.DeleteById (id);
+}
+
 namespace
 {
 
@@ -514,6 +574,7 @@ ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
       HandleCreateChannel (db, data["c"], name, txid);
       HandleJoinChannel (db, data["j"], name, txid);
       HandleAbortChannel (db, data["a"], name);
+      HandleDeclareLoss (db, data["l"], name);
       HandleCloseChannel (db, data["w"]);
       HandleDisputeResolution (db, data["d"], height, true);
       HandleDisputeResolution (db, data["r"], height, false);

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -42,6 +42,13 @@ private:
    */
   void HandleCloseChannel (xaya::SQLiteDatabase& db,
                            const Json::Value& obj);
+
+  /**
+   * Tries to process a move declaring one participant of a channel
+   * the loser.
+   */
+  void HandleDeclareLoss (xaya::SQLiteDatabase& db,
+                          const Json::Value& obj, const std::string& name);
 
   /**
    * Tries to process a dispute/resolution move.
