@@ -76,8 +76,9 @@ class FullGameTest (ShipsTest):
       self.mainLogger.info ("Playing the channel...")
       nextCoord = [0, 0]
       while True:
-        phase, state = self.waitForPhase (daemons, ["finished", "shoot"])
-        if phase == "finished":
+        phase, state = self.waitForPhase (daemons,
+                                          ["winner determined", "shoot"])
+        if phase == "winner determined":
           break
 
         turn = state["current"]["state"]["whoseturn"]
@@ -94,10 +95,10 @@ class FullGameTest (ShipsTest):
       # Verify the result.
       self.mainLogger.info ("Verifying result of channel game...")
       state = self.getSyncedChannelState (daemons)["current"]["state"]["parsed"]
-      self.assertEqual (state["phase"], "finished")
+      self.assertEqual (state["phase"], "winner determined")
       self.assertEqual (state["winner"], 1)
 
-      self.expectPendingMoves ("bar", ["w"])
+      self.expectPendingMoves ("foo", ["l"])
       self.generate (1)
       self.expectGameState ({
         "channels": {},

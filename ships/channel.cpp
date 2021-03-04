@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -114,8 +114,6 @@ bool
 ShipsChannel::InternalAutoMove (const ShipsBoardState& state,
                                 proto::BoardMove& mv)
 {
-  const auto& id = state.GetChannelId ();
-  const auto& meta = state.GetMetadata ();
   const auto& pb = state.GetState ();
 
   const int index = GetPlayerIndex (state);
@@ -202,27 +200,10 @@ ShipsChannel::InternalAutoMove (const ShipsBoardState& state,
       }
 
     case ShipsBoardState::Phase::WINNER_DETERMINED:
-      {
-        CHECK (pb.has_winner ());
-
-        proto::WinnerStatement stmt;
-        stmt.set_winner (pb.winner ());
-
-        CHECK_NE (index, stmt.winner ());
-
-        auto* data = mv.mutable_winner_statement ()->mutable_statement ();
-        CHECK (stmt.SerializeToString (data->mutable_data ()));
-
-        if (!xaya::SignDataForParticipant (wallet, id, meta, "winnerstatement",
-                                           index, *data))
-          {
-            LOG (ERROR)
-                << "Tried to send winner statement, but signature failed";
-            return false;
-          }
-
-        return true;
-      }
+      /* We used to sign the winner statement here, but now the game
+         ends unofficially at this stage (even though in theory the board rules
+         still support adding a winner statement later on).  */
+      return false;
 
     case ShipsBoardState::Phase::FINISHED:
     default:
@@ -287,19 +268,16 @@ ShipsChannel::MaybeOnChainMove (const xaya::ParsedBoardState& state,
   const auto& id = shipsState.GetChannelId ();
   const auto& meta = shipsState.GetMetadata ();
 
-  if (shipsState.GetPhase () != ShipsBoardState::Phase::FINISHED)
+  if (shipsState.GetPhase () != ShipsBoardState::Phase::WINNER_DETERMINED)
     return;
 
   const auto& statePb = shipsState.GetState ();
-  CHECK (statePb.has_winner_statement ());
-  const auto& signedStmt = statePb.winner_statement ();
+  CHECK (statePb.has_winner ());
 
-  proto::WinnerStatement stmt;
-  CHECK (stmt.ParseFromString (signedStmt.data ()));
-  CHECK (stmt.has_winner ());
-  CHECK_GE (stmt.winner (), 0);
-  CHECK_LT (stmt.winner (), meta.participants_size ());
-  if (meta.participants (stmt.winner ()).name () != playerName)
+  const int loser = 1 - statePb.winner ();
+  CHECK_GE (loser, 0);
+  CHECK_LT (loser, meta.participants_size ());
+  if (meta.participants (loser).name () != playerName)
     return;
 
   if (!txidClose.IsNull () && sender.IsPending (txidClose))
@@ -322,13 +300,12 @@ ShipsChannel::MaybeOnChainMove (const xaya::ParsedBoardState& state,
 
   Json::Value data(Json::objectValue);
   data["id"] = id.ToHex ();
-  data["stmt"] = xaya::ProtoToBase64 (signedStmt);
 
   Json::Value mv(Json::objectValue);
-  mv["w"] = data;
+  mv["l"] = data;
   txidClose = sender.SendMove (mv);
   LOG (INFO)
-      << "Channel has a winner statement and we won, closing on-chain: "
+      << "Channel has a winner and we lost, closing on-chain: "
       << txidClose.ToHex ();
 }
 

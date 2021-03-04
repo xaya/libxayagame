@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -98,7 +98,7 @@ class ReogTest (ShipsTest):
 
       # Finish the game and let foo win.
       baz.rpc._notify.revealposition ()
-      _, state = self.waitForPhase (daemons, ["finished"])
+      _, state = self.waitForPhase (daemons, ["winner determined"])
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
       self.generate (1)
       self.expectGameState ({
@@ -190,9 +190,9 @@ class ReogTest (ShipsTest):
       self.generate (1)
       self.waitForPhase (daemons, ["shoot"])
       bar.rpc._notify.revealposition ()
-      _, state = self.waitForPhase (daemons, ["finished"])
+      _, state = self.waitForPhase (daemons, ["winner determined"])
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
-      txids = self.expectPendingMoves ("foo", ["w"])
+      txids = self.expectPendingMoves ("bar", ["l"])
       self.generate (1)
       self.expectGameState ({
         "channels": {},
@@ -202,17 +202,17 @@ class ReogTest (ShipsTest):
         },
       })
 
-      self.mainLogger.info ("Reorg and resending of winner statement...")
+      self.mainLogger.info ("Reorg and resending of loss declaration...")
       winnerStmtBlk = self.rpc.xaya.getbestblockhash ()
       self.rpc.xaya.invalidateblock (winnerStmtBlk)
       state = foo.getCurrentState ()
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
-                        "finished")
+                        "winner determined")
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
       # The old transaction should have been restored to the mempool, and
       # we should not resend another one (but detect that it is still there
       # and just wait).
-      newTxids = self.expectPendingMoves ("foo", ["w"])
+      newTxids = self.expectPendingMoves ("bar", ["l"])
       self.assertEqual (newTxids, txids)
       self.generate (1)
       self.expectGameState ({
@@ -230,9 +230,9 @@ class ReogTest (ShipsTest):
       self.rpc.xaya.invalidateblock (winnerStmtBlk)
       state = foo.getCurrentState ()
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
-                        "finished")
+                        "winner determined")
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
-      newTxids = self.expectPendingMoves ("foo", ["w"])
+      newTxids = self.expectPendingMoves ("bar", ["l"])
       assert txids != newTxids
       self.generate (1)
       self.expectGameState ({

@@ -35,6 +35,9 @@ class ShipsBoardState : public BaseProtoBoardState
 
 private:
 
+/* FIXME: We need this accessible to FullGameTests temporarily.  Remove
+   it once the winner statement is fully gone.  */
+public:
   /** The current "phase" that the game is in according to a board state.  */
   enum class Phase
   {
@@ -81,6 +84,7 @@ private:
    * state is inconsistent in any way.
    */
   Phase GetPhase () const;
+private:
 
   /* Helper routines that apply a given move to the state, modifying it
      in-place.  If the move is invalid, they return false.  */
