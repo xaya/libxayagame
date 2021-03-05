@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -46,7 +46,7 @@ class PendingTest (ShipsTest):
     self.mainLogger.info ("Filing a dispute...")
     state = self.getStateProof (cid, """
       turn: 1
-      position_hashes: "foo"
+      position_hashes: "foo 1"
       seed_hash_0: "bar"
     """)
     self.sendMove ("xyz", {"d": {"id": cid, "state": state}})
@@ -55,11 +55,14 @@ class PendingTest (ShipsTest):
     # Send a resolution move as well.
     self.mainLogger.info ("Resolving the dispute...")
     state = self.getStateProof (cid, """
-      winner: 1
       turn: 0
+      position_hashes: "foo 1"
+      position_hashes: "foo 2"
+      seed_hash_0: "bar"
+      seed_1: "baz"
     """)
     self.sendMove ("xyz", {"r": {"id": cid, "state": state}})
-    self.expectPendingChannels ({cid: 4})
+    self.expectPendingChannels ({cid: 3})
 
     # Mine the moves, which should clear the mempool again.
     self.mainLogger.info ("Mining the pending transactions...")

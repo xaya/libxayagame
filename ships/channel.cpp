@@ -4,8 +4,6 @@
 
 #include "channel.hpp"
 
-#include "proto/winnerstatement.pb.h"
-
 #include <gamechannel/proto/signatures.pb.h>
 #include <gamechannel/protoutils.hpp>
 #include <gamechannel/signatures.hpp>
@@ -14,8 +12,8 @@
 namespace ships
 {
 
-ShipsChannel::ShipsChannel (XayaWalletRpcClient& w, const std::string& nm)
-  : wallet(w), playerName(nm)
+ShipsChannel::ShipsChannel (const std::string& nm)
+  : playerName(nm)
 {
   txidClose.SetNull ();
 }
@@ -199,12 +197,6 @@ ShipsChannel::InternalAutoMove (const ShipsBoardState& state,
         return true;
       }
 
-    case ShipsBoardState::Phase::WINNER_DETERMINED:
-      /* We used to sign the winner statement here, but now the game
-         ends unofficially at this stage (even though in theory the board rules
-         still support adding a winner statement later on).  */
-      return false;
-
     case ShipsBoardState::Phase::FINISHED:
     default:
       LOG (FATAL)
@@ -268,7 +260,7 @@ ShipsChannel::MaybeOnChainMove (const xaya::ParsedBoardState& state,
   const auto& id = shipsState.GetChannelId ();
   const auto& meta = shipsState.GetMetadata ();
 
-  if (shipsState.GetPhase () != ShipsBoardState::Phase::WINNER_DETERMINED)
+  if (shipsState.GetPhase () != ShipsBoardState::Phase::FINISHED)
     return;
 
   const auto& statePb = shipsState.GetState ();

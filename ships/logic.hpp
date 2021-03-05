@@ -38,12 +38,6 @@ private:
   ShipsBoardRules boardRules;
 
   /**
-   * Tries to process a channel close with winner statement.
-   */
-  void HandleCloseChannel (xaya::SQLiteDatabase& db,
-                           const Json::Value& obj);
-
-  /**
    * Tries to process a move declaring one participant of a channel
    * the loser.
    */

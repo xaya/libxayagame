@@ -265,62 +265,6 @@ template <typename T>
 } // anonymous namespace
 
 void
-ShipsLogic::HandleCloseChannel (xaya::SQLiteDatabase& db,
-                                const Json::Value& obj)
-{
-  if (!obj.isObject ())
-    return;
-
-  if (obj.size () != 2)
-    {
-      LOG (WARNING) << "Invalid close channel move: " << obj;
-      return;
-    }
-
-  xaya::proto::SignedData data;
-  if (!ExtractProto (obj["stmt"], data))
-    {
-      LOG (WARNING) << "Failed to extract SignedData from move: " << obj;
-      return;
-    }
-
-  xaya::ChannelsTable tbl(db);
-  auto h = RetrieveChannelFromMove (obj, tbl);
-  if (h == nullptr)
-    return;
-
-  const xaya::uint256 id = h->GetId ();
-  const auto& meta = h->GetMetadata ();
-  if (meta.participants_size () != 2)
-    {
-      LOG (WARNING)
-          << "Cannot close channel " << id.ToHex ()
-          << " with " << meta.participants_size () << " participants";
-      return;
-    }
-
-  proto::WinnerStatement stmt;
-  if (!VerifySignedWinnerStatement (boardRules, GetXayaRpc (),
-                                    id, meta, data, stmt))
-    {
-      LOG (WARNING)
-          << "Winner statement for closing channel " << id.ToHex ()
-          << " is invalid: " << obj;
-      return;
-    }
-
-  LOG (INFO)
-      << "Closing channel " << id.ToHex ()
-      << " with winner " << stmt.winner ()
-      << " (" << meta.participants (stmt.winner ()).name () << ")";
-
-  UpdateStats (db, meta, stmt.winner ());
-  h.reset ();
-  tbl.DeleteById (id);
-}
-
-
-void
 ShipsLogic::HandleDeclareLoss (xaya::SQLiteDatabase& db,
                                const Json::Value& obj, const std::string& name)
 {
@@ -575,7 +519,6 @@ ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
       HandleJoinChannel (db, data["j"], name, txid);
       HandleAbortChannel (db, data["a"], name);
       HandleDeclareLoss (db, data["l"], name);
-      HandleCloseChannel (db, data["w"]);
       HandleDisputeResolution (db, data["d"], height, true);
       HandleDisputeResolution (db, data["r"], height, false);
     }

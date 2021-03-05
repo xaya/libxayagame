@@ -107,7 +107,7 @@ class TxFailTest (ShipsTest):
       self.mainLogger.info ("Loser declaration fails...")
       self.lock ()
       foo.rpc._notify.revealposition ()
-      self.waitForPhase (daemons, ["winner determined"])
+      self.waitForPhase (daemons, ["finished"])
 
       # Now unlock the wallet.  Then the next block should re-trigger an update
       # and we should get the move in.

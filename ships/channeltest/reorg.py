@@ -5,7 +5,7 @@
 
 """
 Tests how a game channel reacts to reorgs of important on-chain transactions
-(channel creation, join, resolutions, winner statements).
+(channel creation, join, resolutions, loss declarations).
 """
 
 from shipstest import ShipsTest
@@ -98,7 +98,7 @@ class ReogTest (ShipsTest):
 
       # Finish the game and let foo win.
       baz.rpc._notify.revealposition ()
-      _, state = self.waitForPhase (daemons, ["winner determined"])
+      _, state = self.waitForPhase (daemons, ["finished"])
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
       self.generate (1)
       self.expectGameState ({
@@ -190,7 +190,7 @@ class ReogTest (ShipsTest):
       self.generate (1)
       self.waitForPhase (daemons, ["shoot"])
       bar.rpc._notify.revealposition ()
-      _, state = self.waitForPhase (daemons, ["winner determined"])
+      _, state = self.waitForPhase (daemons, ["finished"])
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
       txids = self.expectPendingMoves ("bar", ["l"])
       self.generate (1)
@@ -207,7 +207,7 @@ class ReogTest (ShipsTest):
       self.rpc.xaya.invalidateblock (winnerStmtBlk)
       state = foo.getCurrentState ()
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
-                        "winner determined")
+                        "finished")
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
       # The old transaction should have been restored to the mempool, and
       # we should not resend another one (but detect that it is still there
@@ -230,7 +230,7 @@ class ReogTest (ShipsTest):
       self.rpc.xaya.invalidateblock (winnerStmtBlk)
       state = foo.getCurrentState ()
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
-                        "winner determined")
+                        "finished")
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
       newTxids = self.expectPendingMoves ("bar", ["l"])
       assert txids != newTxids

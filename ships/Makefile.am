@@ -8,8 +8,7 @@ RPC_STUBS = \
 
 PROTOS = \
   proto/boardmove.proto \
-  proto/boardstate.proto \
-  proto/winnerstatement.proto
+  proto/boardstate.proto
 PROTOHEADERS = $(PROTOS:.proto=.pb.h)
 PROTOSOURCES = $(PROTOS:.proto=.pb.cc)
 PROTOPY = $(PROTOS:.proto=_pb2.py)

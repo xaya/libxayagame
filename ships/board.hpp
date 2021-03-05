@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,7 +7,6 @@
 
 #include "proto/boardmove.pb.h"
 #include "proto/boardstate.pb.h"
-#include "proto/winnerstatement.pb.h"
 
 #include <gamechannel/protoboard.hpp>
 #include <gamechannel/proto/metadata.pb.h>
@@ -35,9 +34,6 @@ class ShipsBoardState : public BaseProtoBoardState
 
 private:
 
-/* FIXME: We need this accessible to FullGameTests temporarily.  Remove
-   it once the winner statement is fully gone.  */
-public:
   /** The current "phase" that the game is in according to a board state.  */
   enum class Phase
   {
@@ -69,10 +65,7 @@ public:
      */
     SECOND_REVEAL_POSITION,
 
-    /** The game is finished and a winning player determined.  */
-    WINNER_DETERMINED,
-
-    /** The game is finished and the winner statement provided already.  */
+    /** The game is finished and the winner determined.  */
     FINISHED,
 
   };
@@ -84,7 +77,6 @@ public:
    * state is inconsistent in any way.
    */
   Phase GetPhase () const;
-private:
 
   /* Helper routines that apply a given move to the state, modifying it
      in-place.  If the move is invalid, they return false.  */
@@ -100,13 +92,6 @@ private:
   static bool ApplyPositionReveal (const proto::PositionRevealMove& mv,
                                    Phase phase,
                                    proto::BoardState& newState);
-  static bool ApplyWinnerStatement (const proto::WinnerStatementMove& mv,
-                                    const xaya::BoardRules& rules,
-                                    XayaRpcClient& rpc,
-                                    const xaya::uint256& channelId,
-                                    const xaya::proto::ChannelMetadata& meta,
-                                    Phase phase,
-                                    proto::BoardState& newState);
 
   /* ShipsChannel handles the automoves and is thus directly tied to the
      board state itself.  We split the logic out nevertheless, because then
@@ -156,19 +141,6 @@ public:
  * participant has joined).
  */
 proto::BoardState InitialBoardState ();
-
-/**
- * Checks whether a SignedData proto holding a winner statement is valid
- * with respect to the given channel metadata.  This means that the statement
- * is indeed signed by the loser.  If it is valid, then the WinnerStatement
- * itself is returned as well for further use.
- */
-bool VerifySignedWinnerStatement (const xaya::BoardRules& rules,
-                                  XayaRpcClient& rpc,
-                                  const xaya::uint256& channelId,
-                                  const xaya::proto::ChannelMetadata& meta,
-                                  const xaya::proto::SignedData& data,
-                                  proto::WinnerStatement& stmt);
 
 } // namespace ships
 

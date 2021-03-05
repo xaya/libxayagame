@@ -6,7 +6,6 @@
 
 #include "board.hpp"
 #include "proto/boardstate.pb.h"
-#include "proto/winnerstatement.pb.h"
 #include "testutils.hpp"
 
 #include <gamechannel/protoutils.hpp>
@@ -72,14 +71,11 @@ protected:
    */
   xaya::proto::ChannelMetadata meta[2];
 
-  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
-  xaya::HttpRpcServer<xaya::MockXayaWalletRpcServer> mockXayaWallet;
-
   ShipsBoardRules rules;
   ShipsChannel channel;
 
   ChannelTests ()
-    : channel(mockXayaWallet.GetClient (), "player")
+    : channel("player")
   {
     CHECK (TextFormat::ParseFromString (R"(
       participants:
@@ -145,8 +141,10 @@ protected:
 class OnChainMoveTests : public ChannelTests
 {
 
-
 protected:
+
+  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
+  xaya::HttpRpcServer<xaya::MockXayaWalletRpcServer> mockXayaWallet;
 
   xaya::MoveSender sender;
 
@@ -270,10 +268,6 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveNotMe)
 {
   proto::BoardState state;
   state.set_winner (0);
-  /* FIXME: Once the winner statement is completely removed, we don't
-     have to set the turn as then "winner determined" will be already
-     the finished state of the game.  */
-  state.set_turn (1);
 
   channel.MaybeOnChainMove (*ParseState (state), sender);
 }
@@ -291,7 +285,6 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveSending)
 
   proto::BoardState state;
   state.set_winner (1);
-  state.set_turn (0);
 
   channel.MaybeOnChainMove (*ParseState (state), sender);
 }
@@ -319,7 +312,6 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveAlreadyPending)
 
   proto::BoardState state;
   state.set_winner (1);
-  state.set_turn (0);
 
   channel.MaybeOnChainMove (*ParseState (state), sender);
   channel.MaybeOnChainMove (*ParseState (state), sender);
@@ -345,7 +337,6 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveNoLongerPending)
 
   proto::BoardState state;
   state.set_winner (1);
-  state.set_turn (0);
 
   channel.MaybeOnChainMove (*ParseState (state), sender);
   channel.MaybeOnChainMove (*ParseState (state), sender);
@@ -602,6 +593,8 @@ class FullGameTests : public ChannelTests
 
 private:
 
+  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
+
   /** Indexable array of the channels.  */
   ShipsChannel* channels[2];
 
@@ -613,31 +606,12 @@ protected:
   std::unique_ptr<xaya::ParsedBoardState> state;
 
   FullGameTests ()
-    : otherChannel(mockXayaWallet.GetClient (), "other player")
+    : otherChannel("other player")
   {
     channels[0] = &channel;
     channels[1] = &otherChannel;
 
     state = ParseState (InitialBoardState (), meta[0]);
-
-    /* Set up the mock RPC servers so that we can "validate" signatures
-       and "sign" messages.  */
-    EXPECT_CALL (*mockXayaWallet, signmessage ("my addr", _))
-        .WillRepeatedly (Return (xaya::EncodeBase64 ("my sgn")));
-    EXPECT_CALL (*mockXayaWallet, signmessage ("other addr", _))
-        .WillRepeatedly (Return (xaya::EncodeBase64 ("other sgn")));
-
-    Json::Value res(Json::objectValue);
-    res["valid"] = true;
-    res["address"] = "my addr";
-    EXPECT_CALL (*mockXayaServer,
-                 verifymessage ("", _, xaya::EncodeBase64 ("my sgn")))
-        .WillRepeatedly (Return (res));
-
-    res["address"] = "other addr";
-    EXPECT_CALL (*mockXayaServer,
-                 verifymessage ("", _, xaya::EncodeBase64 ("other sgn")))
-        .WillRepeatedly (Return (res));
   }
 
   /**
@@ -736,9 +710,7 @@ protected:
   void
   ExpectWinner (const int winner) const
   {
-    /* FIXME: Once we have completely removed the winner statement,
-       put back the line below.  */
-    //ASSERT_EQ (state->WhoseTurn (), xaya::ParsedBoardState::NO_TURN);
+    ASSERT_EQ (state->WhoseTurn (), xaya::ParsedBoardState::NO_TURN);
 
     const auto& shipsState = dynamic_cast<const ShipsBoardState&> (*state);
     const auto& pb = shipsState.GetState ();
@@ -790,13 +762,6 @@ TEST_F (FullGameTests, WithShots)
       const Coord target(nextTarget[state->WhoseTurn ()]++);
       ProcessMove (GetCurrentChannel ().GetShotMove (target));
       ProcessAuto ();
-
-      /* FIXME: Once the winner statement is removed completely, there
-         is no need for this anymore.  */
-      const ShipsBoardState* s = dynamic_cast<ShipsBoardState*> (state.get ());
-      CHECK (s != nullptr);
-      if (s->GetPhase() == ShipsBoardState::Phase::WINNER_DETERMINED)
-        break;
     }
 
   LOG (INFO) << "Final state has turn count: " << state->TurnCount ();

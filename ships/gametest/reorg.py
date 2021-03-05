@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -45,12 +45,11 @@ class ReorgTest (ShipsTest):
       "channels": {},
     })
 
-    # Reorg back and close the channel through a winner statement.
+    # Reorg back and close the channel through a loss declaration.
     self.mainLogger.info ("Reorg and create alternate reality...")
     self.rpc.xaya.invalidateblock (reorgBlock)
     self.expectChannelState (cid, "first commitment", disputeHeight)
-    stmt = self.getWinnerStatement (cid, 0)
-    self.sendMove ("xyz", {"w": {"id": cid, "stmt": stmt}})
+    self.sendMove ("bar", {"l": {"id": cid}})
     self.generate (10)
     self.expectGameState ({
       "gamestats":
