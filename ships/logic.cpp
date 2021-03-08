@@ -36,15 +36,15 @@ ShipsLogic::GetInitialStateBlock (unsigned& height, std::string& hashHex) const
   switch (chain)
     {
     case xaya::Chain::MAIN:
-      height = 930000;
+      height = 2'650'000;
       hashHex
-          = "0b615b33ad3b4da22af2fe53553fbcc49ae00e27ae04c1d7e275c2a76d8f87d9";
+          = "ff155d68419cf3543942ba140c88e5cfeacc74496d87dcffc127974b6c1397a1";
       break;
 
     case xaya::Chain::TEST:
-      height = 40000;
+      height = 112'307;
       hashHex
-          = "74240aba644be39551e74c52eb4ffe6b63d1453c7d4cd1f6cfdee30d55354394";
+          = "4a2497b5ce649747f9dffeab6fafd57aa928901f3b15537287359adf5ed6fb1a";
       break;
 
     case xaya::Chain::REGTEST:
