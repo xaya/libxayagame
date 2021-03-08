@@ -870,6 +870,17 @@ TEST_F (DisputeResolutionTests, ValidResolution)
   ASSERT_FALSE (ExpectChannel (channelId)->HasDispute ());
 }
 
+TEST_F (DisputeResolutionTests, ResolutionClosesChannel)
+{
+  UpdateState (100, {BuildMove ("r", R"(
+    winner: 1
+  )", {"sgn 0", "sgn 1"})});
+
+  ExpectNumberOfChannels (0);
+  ExpectStatsRow ("name 0", 0, 1);
+  ExpectStatsRow ("name 1", 1, 0);
+}
+
 /* ************************************************************************** */
 
 } // anonymous namespace

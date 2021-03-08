@@ -389,7 +389,36 @@ ShipsLogic::HandleDisputeResolution (xaya::SQLiteDatabase& db,
     res = ProcessResolution (*h, proof);
 
   if (!res)
-    LOG (WARNING) << "Dispute/resolution is invalid: " << obj;
+    {
+      LOG (WARNING) << "Dispute/resolution is invalid: " << obj;
+      return;
+    }
+
+  /* If the on-chain state has a determined winner, close the channel
+     right away accordingly.  This makes it possible for the winner
+     to force-close the channel (through filing a resolution) even if the
+     loser does not declare their loss.  */
+  CHECK_EQ (meta.participants_size (), 2);
+  auto baseState = boardRules.ParseState (id, meta, h->GetLatestState ());
+  CHECK (baseState != nullptr)
+      << "Invalid on-chain state for channel " << id.ToHex ()
+      << ": " << h->GetLatestState ();
+  const auto* state = dynamic_cast<const ShipsBoardState*> (baseState.get ());
+  CHECK (state != nullptr);
+  const auto& pb = state->GetState ();
+  if (pb.has_winner ())
+    {
+      CHECK_GE (pb.winner (), 0);
+      CHECK_LE (pb.winner (), 1);
+      LOG (INFO)
+          << "On-chain state of channel " << id.ToHex ()
+          << " has winner " << meta.participants (pb.winner ()).name ()
+          << ", closing now";
+
+      UpdateStats (db, meta, pb.winner ());
+      h.reset ();
+      tbl.DeleteById (id);
+    }
 }
 
 void
