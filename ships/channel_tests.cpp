@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,7 +6,6 @@
 
 #include "board.hpp"
 #include "proto/boardstate.pb.h"
-#include "proto/winnerstatement.pb.h"
 #include "testutils.hpp"
 
 #include <gamechannel/protoutils.hpp>
@@ -60,22 +59,6 @@ TextProof (const std::string& str)
   return res;
 }
 
-/**
- * Builds a winner statement with (fake) signatures for the given winner.
- */
-xaya::proto::SignedData
-FakeWinnerStatement (const int winner)
-{
-  proto::WinnerStatement stmt;
-  stmt.set_winner (winner);
-
-  xaya::proto::SignedData res;
-  CHECK (stmt.SerializeToString (res.mutable_data ()));
-  res.add_signatures ("sgn");
-
-  return res;
-}
-
 class ChannelTests : public testing::Test
 {
 
@@ -88,14 +71,11 @@ protected:
    */
   xaya::proto::ChannelMetadata meta[2];
 
-  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
-  xaya::HttpRpcServer<xaya::MockXayaWalletRpcServer> mockXayaWallet;
-
   ShipsBoardRules rules;
   ShipsChannel channel;
 
   ChannelTests ()
-    : channel(mockXayaWallet.GetClient (), "player")
+    : channel("player")
   {
     CHECK (TextFormat::ParseFromString (R"(
       participants:
@@ -161,8 +141,10 @@ protected:
 class OnChainMoveTests : public ChannelTests
 {
 
-
 protected:
+
+  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
+  xaya::HttpRpcServer<xaya::MockXayaWalletRpcServer> mockXayaWallet;
 
   xaya::MoveSender sender;
 
@@ -174,10 +156,20 @@ protected:
   {}
 
   /**
+   * Parses a BoardState proto into a ParsedBoardState.  It uses the
+   * metadata instance where the channel's user "player" is the first one.
+   */
+  std::unique_ptr<xaya::ParsedBoardState>
+  ParseState (const proto::BoardState& pb)
+  {
+    return ChannelTests::ParseState (pb, meta[0]);
+  }
+
+  /**
    * Verifies that a given JSON object matches the expected move format
-   * for the given key ("r", "d" or "w"), channel ID and encoded data proto.
-   * Note that all three types of moves (disputes, resolutions and channel
-   * closes with WinnerStatement's) have the same basic structure.
+   * for the given key ("r", or "d"), channel ID and encoded data proto.
+   * Note that both types of moves (disputes and resolutions) have the same
+   * basic structure.
    */
   template <typename Proto>
     static bool
@@ -209,6 +201,32 @@ protected:
       return false;
 
     return MessageDifferencer::Equals (actualPb, expectedPb);
+  }
+
+  /**
+   * Verifies that a given JSON object matches the expected move format
+   * for a loss declaration.
+   */
+  static bool
+  IsExpectedLoss (const Json::Value& actual, const xaya::uint256& id)
+  {
+    if (!actual.isObject ())
+      return false;
+    if (actual.size () != 1)
+      return false;
+
+    const auto& sub = actual["l"];
+    if (!sub.isObject ())
+      return false;
+    if (sub.size () != 1)
+      return false;
+
+    if (!sub["id"].isString ())
+      return false;
+    if (sub["id"].asString () != id.ToHex ())
+      return false;
+
+    return true;
   }
 
 };
@@ -249,40 +267,37 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveNotFinished)
 TEST_F (OnChainMoveTests, MaybeOnChainMoveNotMe)
 {
   proto::BoardState state;
-  *state.mutable_winner_statement () = FakeWinnerStatement (1);
+  state.set_winner (0);
 
   channel.MaybeOnChainMove (*ParseState (state), sender);
 }
 
 TEST_F (OnChainMoveTests, MaybeOnChainMoveSending)
 {
-  const auto stmt = FakeWinnerStatement (0);
-
-  const auto isOk = [this, stmt] (const std::string& str)
+  const auto isOk = [this] (const std::string& str)
     {
       const auto val = ParseJson (str);
       const auto& mv = val["g"]["xs"];
-      return IsExpectedMove (mv, "w", "stmt", channelId, stmt);
+      return IsExpectedLoss (mv, channelId);
     };
   EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
       .WillOnce (Return (xaya::SHA256::Hash ("txid").ToHex ()));
 
   proto::BoardState state;
-  *state.mutable_winner_statement () = stmt;
+  state.set_winner (1);
 
   channel.MaybeOnChainMove (*ParseState (state), sender);
 }
 
 TEST_F (OnChainMoveTests, MaybeOnChainMoveAlreadyPending)
 {
-  const auto stmt = FakeWinnerStatement (0);
   const auto txid = xaya::SHA256::Hash ("txid");
 
-  const auto isOk = [this, stmt] (const std::string& str)
+  const auto isOk = [this] (const std::string& str)
     {
       const auto val = ParseJson (str);
       const auto& mv = val["g"]["xs"];
-      return IsExpectedMove (mv, "w", "stmt", channelId, stmt);
+      return IsExpectedLoss (mv, channelId);
     };
   EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
       .WillOnce (Return (txid.ToHex ()));
@@ -296,7 +311,7 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveAlreadyPending)
       .WillOnce (Return (pendings));
 
   proto::BoardState state;
-  *state.mutable_winner_statement () = stmt;
+  state.set_winner (1);
 
   channel.MaybeOnChainMove (*ParseState (state), sender);
   channel.MaybeOnChainMove (*ParseState (state), sender);
@@ -304,15 +319,14 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveAlreadyPending)
 
 TEST_F (OnChainMoveTests, MaybeOnChainMoveNoLongerPending)
 {
-  const auto stmt = FakeWinnerStatement (0);
   const auto txid1 = xaya::SHA256::Hash ("txid 1");
   const auto txid2 = xaya::SHA256::Hash ("txid 2");
 
-  const auto isOk = [this, stmt] (const std::string& str)
+  const auto isOk = [this] (const std::string& str)
     {
       const auto val = ParseJson (str);
       const auto& mv = val["g"]["xs"];
-      return IsExpectedMove (mv, "w", "stmt", channelId, stmt);
+      return IsExpectedLoss (mv, channelId);
     };
   EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
       .WillOnce (Return (txid1.ToHex ()))
@@ -322,7 +336,7 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveNoLongerPending)
       .WillOnce (Return (ParseJson ("[]")));
 
   proto::BoardState state;
-  *state.mutable_winner_statement () = stmt;
+  state.set_winner (1);
 
   channel.MaybeOnChainMove (*ParseState (state), sender);
   channel.MaybeOnChainMove (*ParseState (state), sender);
@@ -568,36 +582,6 @@ TEST_F (AutoMoveTests, SecondRevealPosition)
   EXPECT_EQ (mv.position_reveal ().salt ().size (), 32);
 }
 
-TEST_F (AutoMoveTests, WinnerDeterminedSignatureFailure)
-{
-  EXPECT_CALL (*mockXayaWallet, signmessage ("my addr", _))
-      .WillOnce (Throw (jsonrpc::JsonRpcException (-5)));
-
-  ExpectNoAutoMove (*ParseState (TextState (R"(
-    turn: 0
-    winner: 1
-  )")));
-}
-
-TEST_F (AutoMoveTests, WinnerDeterminedOk)
-{
-  EXPECT_CALL (*mockXayaWallet, signmessage ("my addr", _))
-      .WillOnce (Return (xaya::EncodeBase64 ("sgn")));
-
-  const auto mv = ExpectAutoMove (*ParseState (TextState (R"(
-    turn: 0
-    winner: 1
-  )")));
-  ASSERT_TRUE (mv.has_winner_statement ());
-  const auto& data = mv.winner_statement ().statement ();
-  EXPECT_EQ (data.signatures_size (), 1);
-  EXPECT_EQ (data.signatures (0), "sgn");
-
-  proto::WinnerStatement stmt;
-  ASSERT_TRUE (stmt.ParseFromString (data.data ()));
-  EXPECT_EQ (stmt.winner (), 1);
-}
-
 /* ************************************************************************** */
 
 /**
@@ -608,6 +592,8 @@ class FullGameTests : public ChannelTests
 {
 
 private:
+
+  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
 
   /** Indexable array of the channels.  */
   ShipsChannel* channels[2];
@@ -620,31 +606,12 @@ protected:
   std::unique_ptr<xaya::ParsedBoardState> state;
 
   FullGameTests ()
-    : otherChannel(mockXayaWallet.GetClient (), "other player")
+    : otherChannel("other player")
   {
     channels[0] = &channel;
     channels[1] = &otherChannel;
 
     state = ParseState (InitialBoardState (), meta[0]);
-
-    /* Set up the mock RPC servers so that we can "validate" signatures
-       and "sign" messages.  */
-    EXPECT_CALL (*mockXayaWallet, signmessage ("my addr", _))
-        .WillRepeatedly (Return (xaya::EncodeBase64 ("my sgn")));
-    EXPECT_CALL (*mockXayaWallet, signmessage ("other addr", _))
-        .WillRepeatedly (Return (xaya::EncodeBase64 ("other sgn")));
-
-    Json::Value res(Json::objectValue);
-    res["valid"] = true;
-    res["address"] = "my addr";
-    EXPECT_CALL (*mockXayaServer,
-                 verifymessage ("", _, xaya::EncodeBase64 ("my sgn")))
-        .WillRepeatedly (Return (res));
-
-    res["address"] = "other addr";
-    EXPECT_CALL (*mockXayaServer,
-                 verifymessage ("", _, xaya::EncodeBase64 ("other sgn")))
-        .WillRepeatedly (Return (res));
   }
 
   /**
@@ -749,7 +716,6 @@ protected:
     const auto& pb = shipsState.GetState ();
 
     ASSERT_TRUE (pb.has_winner ());
-    ASSERT_TRUE (pb.has_winner_statement ());
     EXPECT_EQ (pb.winner (), winner);
   }
 

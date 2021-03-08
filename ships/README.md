@@ -28,8 +28,8 @@ Channels can be opened at any time by sending a move requesting to
 open a channel, and anyone can send a move to join an existing channel
 waiting for a second player.  Channels can be closed anytime by the
 player in it as long as no other has joined.  If there are already
-two players in a channel, then it can be closed by any player (typically
-the winner) providing a message stating who won and signed by both participants.
+two players in a channel, then any participant can close the channel
+by declaring themselves loser.
 
 The battleships game itself (on a channel) is played on an **8x8 board**.
 (This allows us conveniently to store a boolean map of the entire board
@@ -116,11 +116,12 @@ a channel.  The exact sequence of moves in such a game is as follows:
     then the state is marked as "Bob won".
 1. If also Alice did not lie at any time, then Alice wins (since Bob did not
    sink all her ships).
-1. The player who *lost* creates a message containing the channel ID and
-   that her opponent won, and signs it with her address.  This is the last
-   move in the channel game.
-1. The winning player can then close the channel and get the results marked
-   on-chain by sending a move containing that signed message.
+1. No more valid moves can be sent on the channel.  At this point, the
+   losing player will typically declare they lost with an on-chain move,
+   which closes the channel.
+1. If the loser does not do this, the winner can force-close the channel
+   through a dispute (which the loser can only resolve by declaring their
+   loss, as there are no more valid board moves they could send).
 
 In a situation where both players have already sunk all ships, the rules
 detailed above imply that the player who reveals the initial position first
@@ -190,36 +191,29 @@ is that one participant.
 After processing this move, the channel will simply be closed (deleted from
 the game state), without any changes to game stats of the player.
 
-#### Closing a Channel in Agreement
+#### Declaring Loss
 
-When both participants of a channel agree on the winner, then the channel
-can be closed.  This can be done by anyone (even someone who's not a
-participant, although that is unusual in practice), as long as they provide
-a proof that the *loser* of the game agrees to the outcome.  For this, a move
-of the following form is used:
+Either participant of an open channel can declare themselves the loser
+any time:
 
-    {"w": {"id": CHANNEL-ID, "stmt": WINNER-STATEMENT}}
+    {"l": {"id": CHANNEL-ID}}
 
 As before, `CHANNEL-ID` is the channel's ID as hex string.
-`WINNER-STATEMENT` is the signed statement where the loser acknowledges
-that they lost.  It is a base64-encoded, serialised
-[`SignedData`](https://github.com/xaya/libxayagame/blob/master/gamechannel/proto/signatures.proto)
-message, where the `data` field is in turn a serialised
-[`WinnerStatement`](https://github.com/xaya/libxayagame/blob/master/ships/proto/winnerstatement.proto)
-message.
 
-The move is valid as long as one of the signatures on the `SignedData`
-was done with the loser's signing key of the channel (where the loser
-is determined as the other player compared to the `winner` field
-in `WinnerStatement`).  In that case, the channel is closed (deleted from
-the game state), and the game stats are updated for both players accordingly.
+Such a move is valid as long as the channel is currently open and has two
+participants, of which the sending user is one.  There are no other checks
+done (e.g. about the actual board state), as only the actual loser would
+want to close a channel in this way in the first place.
+If the move is valid, then the channel is closed (deleted from the game state),
+and the statistics of both players are updated according to the declared
+outcome.
 
-In case a channel game finishes without disputes, then a suitable
-`SignedData` instance for closing the channel will be provided by the
-loser in the last board move.  With this, the winner can then close
-the channel on-chain.
+This is how channels are typically closed in agreement after a game.
+If the loser does not declare loss by themselves at the end of the game,
+the winner can file a [resolution](#disputes) with the final state instead,
+which will also close the channel.
 
-#### Dispute Handling
+#### <a name="disputes">Dispute Handling</a>
 
 Disputes and resolutions can be processed by providing a
 [state proof](https://github.com/xaya/libxayagame/blob/master/gamechannel/proto/stateproof.proto)
@@ -240,6 +234,12 @@ known on-chain.
 If the dispute or resolution is processed successfully, then the proven state
 is recorded on-chain.  For a dispute, also the current block height is
 stored.  For a resolution, any open dispute is marked as resolved.
+
+If the on-chain state after a resolution corresponds to the end of the game
+(i.e. the winner is determined already in the board state), then the
+channel is automatically closed and the game resolved based on that outcome.
+This can be used by the winner of a game to force-close the channel if the
+loser does not declare their loss.
 
 Note that it is possible to file a resolution without an open dispute,
 in which case simply the on-chain board state of the channel is updated.

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -109,12 +109,5 @@ message BoardState
 
   /** If it is already determined who won, the player's index.  */
   optional uint32 winner = 8;
-
-  /**
-   * An encoded WinnerStatement message signed by the loser.  This is set as
-   * the last move in the game by the loser after the result has been
-   * determined.  It allows the winner to claim the result on chain.
-   */
-  optional xaya.proto.SignedData winner_statement = 9;
 
 }

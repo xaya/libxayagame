@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -543,7 +543,7 @@ TEST_F (AbortChannelTests, SuccessfulAbort)
 
 /* ************************************************************************** */
 
-class CloseChannelTests : public StateUpdateTests
+class DeclareLossTests : public StateUpdateTests
 {
 
 protected:
@@ -562,7 +562,7 @@ protected:
   /** Txid for use with the move.  */
   const xaya::uint256 txid = xaya::SHA256::Hash ("txid");
 
-  CloseChannelTests ()
+  DeclareLossTests ()
   {
     CHECK (TextFormat::ParseFromString (R"(
       participants:
@@ -587,63 +587,21 @@ protected:
   }
 
   /**
-   * Expects a signature validation call on the mock RPC server for a winner
-   * statement on our channel ID, and returns that it is valid with the given
-   * signing address.
-   */
-  void
-  ExpectSignature (const proto::WinnerStatement& stmt, const std::string& sgn,
-                   const std::string& addr)
-  {
-    Json::Value res(Json::objectValue);
-    res["valid"] = true;
-    res["address"] = addr;
-
-    std::string data;
-    CHECK (stmt.SerializeToString (&data));
-
-    const std::string hashed
-        = xaya::GetChannelSignatureMessage (channelId, meta,
-                                            "winnerstatement", data);
-    EXPECT_CALL (*mockXayaServer,
-                 verifymessage ("", hashed, xaya::EncodeBase64 (sgn)))
-        .WillOnce (Return (res));
-  }
-
-  /**
-   * Returns a JSON "close" move object for our channel and based on the given
-   * SignedData proto.
+   * Constructs a JSON move for declaring loss in the given channel.
    */
   Json::Value
-  CloseMove (const xaya::proto::SignedData& signedData)
+  LossMove (const std::string& name, const xaya::uint256& channelId) const
   {
     Json::Value data(Json::objectValue);
-    data["w"] = Json::Value (Json::objectValue);
-    data["w"]["id"] = channelId.ToHex ();
-    data["w"]["stmt"] = xaya::ProtoToBase64 (signedData);
+    data["l"] = Json::Value (Json::objectValue);
+    data["l"]["id"] = channelId.ToHex ();
 
-    return Move ("xyz", txid, data);
-  }
-
-  /**
-   * Builds up a "close" move with the given WinnerStatement and signatures.
-   */
-  Json::Value
-  CloseMove (const proto::WinnerStatement& stmt,
-             const std::vector<std::string>& signatures)
-  {
-    xaya::proto::SignedData signedData;
-    CHECK (stmt.SerializeToString (signedData.mutable_data ()));
-
-    for (const auto& sgn : signatures)
-      signedData.add_signatures (sgn);
-
-    return CloseMove (signedData);
+    return Move (name, txid, data);
   }
 
 };
 
-TEST_F (CloseChannelTests, UpdateStats)
+TEST_F (DeclareLossTests, UpdateStats)
 {
   AddStatsRow ("foo", 10, 5);
   AddStatsRow ("bar", 1, 2);
@@ -665,17 +623,16 @@ TEST_F (CloseChannelTests, UpdateStats)
   ExpectStatsRow ("baz", 1, 1);
 }
 
-TEST_F (CloseChannelTests, Malformed)
+TEST_F (DeclareLossTests, Malformed)
 {
   std::vector<Json::Value> moves;
   for (const std::string& create : {"42", "null", "{}",
+                                    R"({"id": 100})",
                                     R"({"id": "00"})",
-                                    R"({"id": 100, "stmt": ""})",
-                                    R"({"id": "00", "stmt": ""})",
-                                    R"({"id": "00", "stmt": "", "x": 5})"})
+                                    R"({"id": "00", "x": 5})"})
     {
       Json::Value data(Json::objectValue);
-      data["w"] = ParseJson (create);
+      data["l"] = ParseJson (create);
       moves.push_back (Move ("xyz", txid, data));
     }
   UpdateState (10, moves);
@@ -685,36 +642,16 @@ TEST_F (CloseChannelTests, Malformed)
   ExpectChannel (otherId);
 }
 
-TEST_F (CloseChannelTests, InvalidStmtData)
+TEST_F (DeclareLossTests, NonExistantChannel)
 {
-  Json::Value data(Json::objectValue);
-  data["w"] = Json::Value (Json::objectValue);
-  data["w"]["id"] = channelId.ToHex ();
-  data["w"]["stmt"] = "invalid base64";
-  UpdateState (10, {Move ("xyz", txid, data)});
-
-  data["w"]["stmt"] = xaya::EncodeBase64 ("invalid proto");
-  UpdateState (11, {Move ("xyz", txid, data)});
+  UpdateState (10, {LossMove ("foo", xaya::SHA256::Hash ("does not exist"))});
 
   ExpectNumberOfChannels (2);
   ExpectChannel (channelId);
   ExpectChannel (otherId);
 }
 
-TEST_F (CloseChannelTests, NonExistantChannel)
-{
-  Json::Value data(Json::objectValue);
-  data["w"] = Json::Value (Json::objectValue);
-  data["w"]["id"] = xaya::SHA256::Hash ("channel does not exist").ToHex ();
-  data["w"]["stmt"] = "";
-  UpdateState (10, {Move ("xyz", txid, data)});
-
-  ExpectNumberOfChannels (2);
-  ExpectChannel (channelId);
-  ExpectChannel (otherId);
-}
-
-TEST_F (CloseChannelTests, WrongNumberOfParticipants)
+TEST_F (DeclareLossTests, WrongNumberOfParticipants)
 {
   auto h = ExpectChannel (channelId);
   xaya::proto::ChannelMetadata meta = h->GetMetadata ();
@@ -723,41 +660,34 @@ TEST_F (CloseChannelTests, WrongNumberOfParticipants)
   h->Reinitialise (meta, "");
   h.reset ();
 
-  auto mv = CloseMove (xaya::proto::SignedData ());
-  UpdateState (10, {mv});
+  UpdateState (10, {LossMove ("name 0", channelId)});
 
   ExpectNumberOfChannels (2);
   ExpectChannel (channelId);
   ExpectChannel (otherId);
 }
 
-TEST_F (CloseChannelTests, InvalidWinnerStatement)
+TEST_F (DeclareLossTests, NotAParticipant)
 {
-  proto::WinnerStatement stmt;
-  stmt.set_winner (0);
-
-  auto mv = CloseMove (stmt, {});
-  UpdateState (10, {mv});
+  UpdateState (10, {LossMove ("foo", channelId)});
 
   ExpectNumberOfChannels (2);
   ExpectChannel (channelId);
   ExpectChannel (otherId);
 }
 
-TEST_F (CloseChannelTests, Valid)
+TEST_F (DeclareLossTests, Valid)
 {
-  proto::WinnerStatement stmt;
-  stmt.set_winner (1);
-
-  ExpectSignature (stmt, "sgn 0", "addr 0");
-
-  auto mv = CloseMove (stmt, {"sgn 0"});
-  UpdateState (10, {mv});
-
+  UpdateState (10, {LossMove ("name 0", channelId)});
   ExpectNumberOfChannels (1);
   ExpectChannel (otherId);
   ExpectStatsRow ("name 0", 0, 1);
   ExpectStatsRow ("name 1", 1, 0);
+
+  UpdateState (10, {LossMove ("name 1", otherId)});
+  ExpectNumberOfChannels (0);
+  ExpectStatsRow ("name 0", 1, 1);
+  ExpectStatsRow ("name 1", 1, 1);
 }
 
 /* ************************************************************************** */
@@ -881,7 +811,7 @@ TEST_F (DisputeResolutionTests, InvalidStateData)
 
 TEST_F (DisputeResolutionTests, NonExistantChannel)
 {
-  auto mv = BuildMove ("d", "turn: 1 winner: 0", {"sgn 0", "sgn 1"});
+  auto mv = BuildMove ("d", "turn: 0", {"sgn 0", "sgn 1"});
   mv["move"]["d"]["id"] = xaya::SHA256::Hash ("invalid channel").ToHex ();
   UpdateState (10, {mv});
 
@@ -898,7 +828,7 @@ TEST_F (DisputeResolutionTests, WrongNumberOfParticipants)
   h->Reinitialise (meta, h->GetLatestState ());
   h.reset ();
 
-  UpdateState (10, {BuildMove ("d", "turn: 1 winner: 0", {"sgn 0", "sgn 1"})});
+  UpdateState (10, {BuildMove ("d", "turn: 0", {"sgn 0", "sgn 1"})});
 
   ExpectNumberOfChannels (1);
   EXPECT_FALSE (ExpectChannel (channelId)->HasDispute ());
@@ -906,7 +836,11 @@ TEST_F (DisputeResolutionTests, WrongNumberOfParticipants)
 
 TEST_F (DisputeResolutionTests, InvalidStateProof)
 {
-  UpdateState (10, {BuildMove ("d", "turn: 1 winner: 0", {})});
+  UpdateState (10, {BuildMove ("d", R"(
+    turn: 1
+    position_hashes: "foo"
+    seed_hash_0: "bar"
+  )", {})});
 
   ExpectNumberOfChannels (1);
   EXPECT_FALSE (ExpectChannel (channelId)->HasDispute ());
@@ -926,10 +860,25 @@ TEST_F (DisputeResolutionTests, ValidResolution)
 {
   ExpectChannel (channelId)->SetDisputeHeight (100);
 
-  UpdateState (110, {BuildMove ("r", "turn: 1 winner: 0", {"sgn 0", "sgn 1"})});
+  UpdateState (110, {BuildMove ("r", R"(
+    turn: 1
+    position_hashes: "foo"
+    seed_hash_0: "bar"
+  )", {"sgn 0", "sgn 1"})});
 
   ExpectNumberOfChannels (1);
   ASSERT_FALSE (ExpectChannel (channelId)->HasDispute ());
+}
+
+TEST_F (DisputeResolutionTests, ResolutionClosesChannel)
+{
+  UpdateState (100, {BuildMove ("r", R"(
+    winner: 1
+  )", {"sgn 0", "sgn 1"})});
+
+  ExpectNumberOfChannels (0);
+  ExpectStatsRow ("name 0", 0, 1);
+  ExpectStatsRow ("name 1", 1, 0);
 }
 
 /* ************************************************************************** */
@@ -1034,7 +983,8 @@ TEST_F (PendingTests, StatesProcessed)
       cid1, xaya::SHA256::Hash ("tx 1"), "d",
       R"(
         turn: 1
-        position_hashes: "foo"
+        position_hashes: "foo 1"
+        seed_hash_0: "bar"
       )", {"sgn 0", "sgn 1"});
   AddPendingMove (mv1);
 
@@ -1042,7 +992,10 @@ TEST_F (PendingTests, StatesProcessed)
       cid2, xaya::SHA256::Hash ("tx 2"), "r",
       R"(
         turn: 0
-        winner: 1
+        position_hashes: "foo 1"
+        position_hashes: "foo 2"
+        seed_hash_0: "bar"
+        seed_1: "baz"
       )", {"sgn 0", "sgn 1"});
   AddPendingMove (mv2);
 

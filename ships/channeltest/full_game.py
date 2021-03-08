@@ -97,7 +97,7 @@ class FullGameTest (ShipsTest):
       self.assertEqual (state["phase"], "finished")
       self.assertEqual (state["winner"], 1)
 
-      self.expectPendingMoves ("bar", ["w"])
+      self.expectPendingMoves ("foo", ["l"])
       self.generate (1)
       self.expectGameState ({
         "channels": {},

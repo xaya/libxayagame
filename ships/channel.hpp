@@ -15,7 +15,6 @@
 #include <gamechannel/openchannel.hpp>
 #include <gamechannel/movesender.hpp>
 #include <gamechannel/proto/stateproof.pb.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/cryptorand.hpp>
 #include <xayautil/uint256.hpp>
 
@@ -36,9 +35,6 @@ class ShipsChannel : public xaya::OpenChannel
 
 private:
 
-  /** RPC connection to the wallet (for signing winner statements).  */
-  XayaWalletRpcClient& wallet;
-
   /** The player name who is running this channel daemon.  */
   const std::string playerName;
 
@@ -58,7 +54,7 @@ private:
   xaya::uint256 seed0;
 
   /**
-   * Set to the txid of the submitted "close by winner statement" move,
+   * Set to the txid of the submitted "close by loss declaration" move,
    * if we sent one already.  Otherwise null.
    */
   xaya::uint256 txidClose;
@@ -82,7 +78,7 @@ private:
 
 public:
 
-  explicit ShipsChannel (XayaWalletRpcClient& w, const std::string& nm);
+  explicit ShipsChannel (const std::string& nm);
 
   ShipsChannel (const ShipsChannel&) = delete;
   void operator= (const ShipsChannel&) = delete;

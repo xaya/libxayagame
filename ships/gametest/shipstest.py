@@ -12,7 +12,6 @@ from gamechannel import signatures
 from gamechannel.proto import stateproof_pb2
 
 from proto import boardstate_pb2
-from proto import winnerstatement_pb2
 
 from google.protobuf import text_format
 
@@ -76,25 +75,6 @@ class ShipsTest (channeltest.TestCase):
     res.initial_state.CopyFrom (signedData)
 
     return base64.b64encode (res.SerializeToString ()).decode ("ascii")
-
-  def getWinnerStatement (self, cid, winner):
-    """
-    Constructs a winner statement for the given winner index and signs it
-    by all players whose addresses we have.  The returned statement
-    is already serialised and base64-encoded, so it can be put into a move.
-    """
-
-    state = self.getGameState ()
-    channel = state["channels"][cid]
-
-    stmt = winnerstatement_pb2.WinnerStatement ()
-    stmt.winner = winner
-
-    data = stmt.SerializeToString ()
-    sgn = signatures.createForChannel (self.rpc.xaya, channel,
-                                       "winnerstatement", data)
-
-    return base64.b64encode (sgn.SerializeToString ()).decode ("ascii")
 
   def expectChannelState (self, cid, phase, disputeHeight):
     """

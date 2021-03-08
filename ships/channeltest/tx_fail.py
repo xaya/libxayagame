@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -102,22 +102,22 @@ class TxFailTest (ShipsTest):
       _, state = self.waitForPhase (daemons, ["shoot"])
       assert "dispute" not in state
 
-      # Let foo lose the game.  We lock the wallet, so that the winner
-      # statement of bar cannot get sent initially.
-      self.mainLogger.info ("Winner statement fails...")
+      # Let foo lose the game.  We lock the wallet, so that the loser
+      # declaration cannot get sent initially.
+      self.mainLogger.info ("Loser declaration fails...")
       self.lock ()
       foo.rpc._notify.revealposition ()
       self.waitForPhase (daemons, ["finished"])
 
       # Now unlock the wallet.  Then the next block should re-trigger an update
       # and we should get the move in.
-      self.mainLogger.info ("Winner statement retrial succeeds...")
+      self.mainLogger.info ("Loser declaration retrial succeeds...")
       self.unlock ()
-      self.expectPendingMoves ("bar", [])
+      self.expectPendingMoves ("foo", [])
       self.generate (1)
       state = bar.getCurrentState ()
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 1)
-      self.expectPendingMoves ("bar", ["w"])
+      self.expectPendingMoves ("foo", ["l"])
       self.generate (1)
       state = foo.getCurrentState ()
       self.assertEqual (state["existsonchain"], False)

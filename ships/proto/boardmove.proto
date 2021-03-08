@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -94,20 +94,6 @@ message PositionRevealMove
 }
 
 /**
- * The last move in the game, where the loser provides a signed WinnerStatement.
- */
-message WinnerStatementMove
-{
-
-  /**
-   * An encoded WinnerStatement message matching the game's result and signed
-   * by the losing player (who is also the player sending this move).
-   */
-  optional xaya.proto.SignedData statement = 1;
-
-}
-
-/**
  * One move in the channel game.  The std::string-encoded BoardMove bytes
  * correspond to a serialised message of this type.
  */
@@ -121,7 +107,6 @@ message BoardMove
     ShotMove shot = 3;
     ReplyMove reply = 4;
     PositionRevealMove position_reveal = 5;
-    WinnerStatementMove winner_statement = 6;
   }
 
 }

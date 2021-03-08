@@ -86,14 +86,8 @@ main (int argc, char** argv)
       return EXIT_FAILURE;
     }
 
-  /* ChannelDaemon manages its own Xaya Core RPC connections, but we need
-     a wallet connection also for the ShipsChannel (to construct signed
-     winner statements).  */
-  jsonrpc::HttpClient xayaWalletClient(FLAGS_xaya_rpc_url);
-  XayaWalletRpcClient xayaWallet(xayaWalletClient, jsonrpc::JSONRPC_CLIENT_V1);
-
   ships::ShipsBoardRules rules;
-  ships::ShipsChannel channel(xayaWallet, FLAGS_playername);
+  ships::ShipsChannel channel(FLAGS_playername);
 
   xaya::ChannelDaemon daemon("xs", channelId, FLAGS_playername,
                              rules, channel);

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -36,15 +36,15 @@ ShipsLogic::GetInitialStateBlock (unsigned& height, std::string& hashHex) const
   switch (chain)
     {
     case xaya::Chain::MAIN:
-      height = 930000;
+      height = 2'650'000;
       hashHex
-          = "0b615b33ad3b4da22af2fe53553fbcc49ae00e27ae04c1d7e275c2a76d8f87d9";
+          = "ff155d68419cf3543942ba140c88e5cfeacc74496d87dcffc127974b6c1397a1";
       break;
 
     case xaya::Chain::TEST:
-      height = 40000;
+      height = 112'307;
       hashHex
-          = "74240aba644be39551e74c52eb4ffe6b63d1453c7d4cd1f6cfdee30d55354394";
+          = "4a2497b5ce649747f9dffeab6fafd57aa928901f3b15537287359adf5ed6fb1a";
       break;
 
     case xaya::Chain::REGTEST:
@@ -265,22 +265,15 @@ template <typename T>
 } // anonymous namespace
 
 void
-ShipsLogic::HandleCloseChannel (xaya::SQLiteDatabase& db,
-                                const Json::Value& obj)
+ShipsLogic::HandleDeclareLoss (xaya::SQLiteDatabase& db,
+                               const Json::Value& obj, const std::string& name)
 {
   if (!obj.isObject ())
     return;
 
-  if (obj.size () != 2)
+  if (obj.size () != 1)
     {
-      LOG (WARNING) << "Invalid close channel move: " << obj;
-      return;
-    }
-
-  xaya::proto::SignedData data;
-  if (!ExtractProto (obj["stmt"], data))
-    {
-      LOG (WARNING) << "Failed to extract SignedData from move: " << obj;
+      LOG (WARNING) << "Invalid declare loss move: " << obj;
       return;
     }
 
@@ -294,27 +287,38 @@ ShipsLogic::HandleCloseChannel (xaya::SQLiteDatabase& db,
   if (meta.participants_size () != 2)
     {
       LOG (WARNING)
-          << "Cannot close channel " << id.ToHex ()
+          << "Cannot declare loss in channel " << id.ToHex ()
           << " with " << meta.participants_size () << " participants";
       return;
     }
 
-  proto::WinnerStatement stmt;
-  if (!VerifySignedWinnerStatement (boardRules, GetXayaRpc (),
-                                    id, meta, data, stmt))
+  int loser = -1;
+  for (int i = 0; i < meta.participants_size (); ++i)
+    if (meta.participants (i).name () == name)
+      {
+        CHECK_EQ (loser, -1)
+            << name << " participates multiple times in channel "
+            << id.ToHex ();
+        loser = i;
+      }
+  if (loser == -1)
     {
       LOG (WARNING)
-          << "Winner statement for closing channel " << id.ToHex ()
-          << " is invalid: " << obj;
+          << name << " cannot declare loss on " << id.ToHex ()
+          << " as non-participant";
       return;
     }
+  CHECK_EQ (meta.participants (loser).name (), name);
+
+  CHECK_GE (loser, 0);
+  CHECK_LE (loser, 1);
+  const int winner = 1 - loser;
 
   LOG (INFO)
-      << "Closing channel " << id.ToHex ()
-      << " with winner " << stmt.winner ()
-      << " (" << meta.participants (stmt.winner ()).name () << ")";
+      << name << " declared loss on channel " << id.ToHex ()
+      << ", " << meta.participants (winner).name () << " is the winner";
 
-  UpdateStats (db, meta, stmt.winner ());
+  UpdateStats (db, meta, winner);
   h.reset ();
   tbl.DeleteById (id);
 }
@@ -385,7 +389,36 @@ ShipsLogic::HandleDisputeResolution (xaya::SQLiteDatabase& db,
     res = ProcessResolution (*h, proof);
 
   if (!res)
-    LOG (WARNING) << "Dispute/resolution is invalid: " << obj;
+    {
+      LOG (WARNING) << "Dispute/resolution is invalid: " << obj;
+      return;
+    }
+
+  /* If the on-chain state has a determined winner, close the channel
+     right away accordingly.  This makes it possible for the winner
+     to force-close the channel (through filing a resolution) even if the
+     loser does not declare their loss.  */
+  CHECK_EQ (meta.participants_size (), 2);
+  auto baseState = boardRules.ParseState (id, meta, h->GetLatestState ());
+  CHECK (baseState != nullptr)
+      << "Invalid on-chain state for channel " << id.ToHex ()
+      << ": " << h->GetLatestState ();
+  const auto* state = dynamic_cast<const ShipsBoardState*> (baseState.get ());
+  CHECK (state != nullptr);
+  const auto& pb = state->GetState ();
+  if (pb.has_winner ())
+    {
+      CHECK_GE (pb.winner (), 0);
+      CHECK_LE (pb.winner (), 1);
+      LOG (INFO)
+          << "On-chain state of channel " << id.ToHex ()
+          << " has winner " << meta.participants (pb.winner ()).name ()
+          << ", closing now";
+
+      UpdateStats (db, meta, pb.winner ());
+      h.reset ();
+      tbl.DeleteById (id);
+    }
 }
 
 void
@@ -514,7 +547,7 @@ ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
       HandleCreateChannel (db, data["c"], name, txid);
       HandleJoinChannel (db, data["j"], name, txid);
       HandleAbortChannel (db, data["a"], name);
-      HandleCloseChannel (db, data["w"]);
+      HandleDeclareLoss (db, data["l"], name);
       HandleDisputeResolution (db, data["d"], height, true);
       HandleDisputeResolution (db, data["r"], height, false);
     }

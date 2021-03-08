@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,10 +6,8 @@
 
 #include "grid.hpp"
 #include "proto/boardstate.pb.h"
-#include "proto/winnerstatement.pb.h"
 
 #include <gamechannel/proto/metadata.pb.h>
-#include <gamechannel/signatures.hpp>
 #include <xayagame/testutils.hpp>
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayautil/base64.hpp>
@@ -207,7 +205,7 @@ TEST_F (SinglePlayerStateTests, TurnCount)
 
 TEST_F (SinglePlayerStateTests, ToJson)
 {
-  const auto val = ParseTextState ("winner_statement: {}")->ToJson ();
+  const auto val = ParseTextState ("winner: 1")->ToJson ();
   const auto& phaseVal = val["phase"];
   ASSERT_TRUE (phaseVal.isString ());
   EXPECT_EQ (phaseVal.asString (), "single participant");
@@ -296,23 +294,31 @@ TEST_F (IsValidTests, InvalidPhase)
 
 TEST_F (IsValidTests, TurnWhenFinished)
 {
-  ExpectValid ("winner_statement: {}");
+  ExpectValid ("winner: 0");
   ExpectInvalid (R"(
     turn: 0
-    winner_statement: {}
+    winner: 1
+  )");
+  ExpectInvalid (R"(
+    turn: 1
+    winner: 1
   )");
 }
 
 TEST_F (IsValidTests, MissingTurnWhenNotFinished)
 {
-  ExpectInvalid ("winner: 0");
+  ExpectInvalid (R"(
+    position_hashes: "foo"
+    seed_hash_0: "bar"
+  )");
 }
 
 TEST_F (IsValidTests, TurnOutOfBounds)
 {
   ExpectInvalid (R"(
     turn: 2
-    winner: 0
+    position_hashes: "foo"
+    seed_hash_0: "bar"
   )");
 }
 
@@ -386,27 +392,6 @@ TEST_F (IsValidTests, TurnForRevealPosition)
   )");
 }
 
-TEST_F (IsValidTests, TurnForWinnerDetermined)
-{
-  ExpectValid (R"(
-    turn: 0
-    winner: 1
-  )");
-  ExpectValid (R"(
-    turn: 1
-    winner: 0
-  )");
-
-  ExpectInvalid (R"(
-    turn: 0
-    winner: 0
-  )");
-  ExpectInvalid (R"(
-    turn: 1
-    winner: 1
-  )");
-}
-
 /* ************************************************************************** */
 
 using GetPhaseTests = BoardTests;
@@ -465,13 +450,8 @@ TEST_F (GetPhaseTests, RevealPosition)
 
 TEST_F (GetPhaseTests, EndOfGame)
 {
-  EXPECT_EQ (GetPhase (*ParseTextState ("winner_statement: {}")),
+  EXPECT_EQ (GetPhase (*ParseTextState ("winner: 0")),
              Phase::FINISHED);
-
-  EXPECT_EQ (GetPhase (*ParseTextState (R"(
-    turn: 1
-    winner: 0
-  )")), Phase::WINNER_DETERMINED);
 }
 
 /* ************************************************************************** */
@@ -500,7 +480,6 @@ TEST_F (ToJsonTests, NoWinner)
 TEST_F (ToJsonTests, HasWinner)
 {
   const auto val = ParseTextState (R"(
-    turn: 1
     winner: 0
   )")->ToJson ();
   const auto& winnerVal = val["winner"];
@@ -567,7 +546,7 @@ TEST_F (ToJsonTests, WithRevealedPositions)
   EXPECT_EQ (positions[1].asString (), pos2.ToString ());
 
   /* Both positions revealed.  */
-  state.set_turn (1);
+  state.clear_turn ();
   state.set_winner (0);
   state.set_positions (0, pos1.GetBits ());
   state.set_positions (1, pos2.GetBits ());
@@ -633,18 +612,18 @@ TEST_F (WhoseTurnTests, TurnSet)
 {
   EXPECT_EQ (ParseTextState (R"(
     turn: 0
-    winner: 1
   )")->WhoseTurn (), 0);
 
   EXPECT_EQ (ParseTextState (R"(
     turn: 1
-    winner: 0
+    position_hashes: "foo"
+    seed_hash_0: "bar"
   )")->WhoseTurn (), 1);
 }
 
 TEST_F (WhoseTurnTests, TurnNotSet)
 {
-  EXPECT_EQ (ParseTextState ("winner_statement: {}")->WhoseTurn (),
+  EXPECT_EQ (ParseTextState ("winner: 1")->WhoseTurn (),
              xaya::ParsedBoardState::NO_TURN);
 }
 
@@ -702,27 +681,6 @@ protected:
 
     EXPECT_EQ (ParseState (oldState)->TurnCount () + 1,
                ParseState (expected)->TurnCount ());
-  }
-
-  /**
-   * Expects a signature validation call on the mock RPC server for a winner
-   * statement on our channel ID, and returns that it is valid with the given
-   * signing address.
-   */
-  void
-  ExpectSignature (const std::string& data, const std::string& sgn,
-                   const std::string& addr)
-  {
-    Json::Value res(Json::objectValue);
-    res["valid"] = true;
-    res["address"] = addr;
-
-    const std::string hashed
-        = xaya::GetChannelSignatureMessage (channelId, meta,
-                                            "winnerstatement", data);
-    EXPECT_CALL (*mockXayaServer,
-                 verifymessage ("", hashed, xaya::EncodeBase64 (sgn)))
-        .WillOnce (Return (res));
   }
 
 };
@@ -1314,7 +1272,6 @@ TEST_F (PositionRevealTests, MissingSaltOk)
         position: 10
       }
   )"), TextState (R"(
-    turn: 0
     winner: 1
     position_hashes: ""
     position_hashes: ""
@@ -1350,7 +1307,6 @@ TEST_F (PositionRevealTests, InvalidShipConfiguration)
         salt: "foo"
       }
   )"), TextState (R"(
-    turn: 0
     winner: 1
     current_shot: 42
     position_hashes: ""
@@ -1372,7 +1328,6 @@ TEST_F (PositionRevealTests, ShotReplyMismatches)
   state.mutable_known_ships (1)->set_guessed (validPosition);
 
   auto expected = TextState (R"(
-    turn: 1
     winner: 0
     position_hashes: ""
     position_hashes: ""
@@ -1396,7 +1351,6 @@ TEST_F (PositionRevealTests, AllShipsHit)
   state.mutable_known_ships (1)->set_hits (0xFFFFFF00);
 
   auto expected = TextState  (R"(
-    turn: 1
     winner: 0
     position_hashes: ""
     position_hashes: ""
@@ -1436,7 +1390,6 @@ TEST_F (PositionRevealTests, NotAllShipsHitSecondWins)
   state.add_positions (1);
 
   auto expected = TextState (R"(
-    turn: 1
     winner: 0
     position_hashes: ""
     position_hashes: ""
@@ -1448,208 +1401,6 @@ TEST_F (PositionRevealTests, NotAllShipsHitSecondWins)
   expected.set_positions (0, validPosition);
 
   ExpectNewState (state, ValidPositionMove ("foo"), expected);
-}
-
-/* ************************************************************************** */
-
-class WinnerStatementTests : public ApplyMoveAndTurnCountTests
-{
-
-protected:
-
-  /**
-   * Returns a SignedData proto holding a winner-statement parsed from
-   * text and with the given signatures.
-   */
-  static xaya::proto::SignedData
-  SignedWinnerStatement (const std::string& stmtStr,
-                         const std::vector<std::string>& signatures = {})
-  {
-    proto::WinnerStatement stmt;
-    CHECK (TextFormat::ParseFromString (stmtStr, &stmt));
-
-    return SignedWinnerStatement (stmt, signatures);
-  }
-
-  /**
-   * Returns a SignedData proto holding a given winner-statement
-   * with the given signatures.
-   */
-  static xaya::proto::SignedData
-  SignedWinnerStatement (const proto::WinnerStatement& stmt,
-                         const std::vector<std::string>& signatures = {})
-  {
-    xaya::proto::SignedData res;
-    CHECK (stmt.SerializeToString (res.mutable_data ()));
-
-    for (const auto& sgn : signatures)
-      res.add_signatures (sgn);
-
-    return res;
-  }
-
-  /**
-   * Returns a winner-statement move proto where the statement itself
-   * is given as text proto.
-   */
-  static proto::BoardMove
-  WinnerStatementMove (const std::string& stmtStr,
-                       const std::vector<std::string>& signatures = {})
-  {
-    proto::BoardMove res;
-    auto* signedData = res.mutable_winner_statement ()->mutable_statement ();
-    *signedData = SignedWinnerStatement (stmtStr, signatures);
-
-    return res;
-  }
-
-};
-
-class VerifySignedWinnerStatementTests : public WinnerStatementTests
-{
-
-protected:
-
-  /**
-   * Utility method to call VerifySignedWinnerStatement with all the arguments
-   * passed in from the test fixture.
-   */
-  bool
-  Verify (const xaya::proto::SignedData& data, proto::WinnerStatement& stmt)
-  {
-    return VerifySignedWinnerStatement (rules, mockXayaServer.GetClient (),
-                                        channelId, meta, data, stmt);
-  }
-
-};
-
-
-TEST_F (VerifySignedWinnerStatementTests, MissingData)
-{
-  const auto data = SignedWinnerStatement ("");
-
-  proto::WinnerStatement stmt;
-  EXPECT_FALSE (Verify (data, stmt));
-}
-
-TEST_F (VerifySignedWinnerStatementTests, MalformedData)
-{
-  xaya::proto::SignedData data;
-  data.set_data ("invalid proto");
-
-  proto::WinnerStatement stmt;
-  EXPECT_FALSE (Verify (data, stmt));
-}
-
-TEST_F (VerifySignedWinnerStatementTests, NoWinnerGiven)
-{
-  const auto data = SignedWinnerStatement ("");
-
-  proto::WinnerStatement stmt;
-  EXPECT_FALSE (Verify (data, stmt));
-}
-
-TEST_F (VerifySignedWinnerStatementTests, InvalidWinnerGiven)
-{
-  const auto data = SignedWinnerStatement ("winner: 2");
-
-  proto::WinnerStatement stmt;
-  EXPECT_FALSE (Verify (data, stmt));
-}
-
-TEST_F (VerifySignedWinnerStatementTests, OuterInvalidVersion)
-{
-  auto data = SignedWinnerStatement (R"(
-    winner: 1
-  )", {"sgn 0"});
-  data.set_for_testing_version ("foo");
-
-  proto::WinnerStatement stmt;
-  EXPECT_FALSE (Verify (data, stmt));
-}
-
-TEST_F (VerifySignedWinnerStatementTests, InnerUnknownField)
-{
-  proto::WinnerStatement originalStmt;
-  originalStmt.set_winner (1);
-  originalStmt.GetReflection ()
-      ->MutableUnknownFields (&originalStmt)->AddVarint (13456, 42);
-
-  const auto data = SignedWinnerStatement (originalStmt, {"sgn 0"});
-
-  proto::WinnerStatement stmt;
-  EXPECT_FALSE (Verify (data, stmt));
-}
-
-TEST_F (VerifySignedWinnerStatementTests, InvalidSignature)
-{
-  const auto data = SignedWinnerStatement ("winner: 0", {"sgn 0"});
-  ExpectSignature (data.data (), "sgn 0",  "addr 0");
-
-  proto::WinnerStatement stmt;
-  EXPECT_FALSE (Verify (data, stmt));
-}
-
-TEST_F (VerifySignedWinnerStatementTests, Valid)
-{
-  const auto data = SignedWinnerStatement ("winner: 1", {"sgn 0"});
-  ExpectSignature (data.data (), "sgn 0",  "addr 0");
-
-  proto::WinnerStatement stmt;
-  ASSERT_TRUE (Verify (data, stmt));
-  EXPECT_EQ (stmt.winner (), 1);
-}
-
-using WinnerStatementMoveTests = WinnerStatementTests;
-
-TEST_F (WinnerStatementMoveTests, InvalidPhase)
-{
-  ExpectInvalid (TextState ("turn: 0"), WinnerStatementMove ("winner: 1"));
-}
-
-TEST_F (WinnerStatementMoveTests, MissingStatement)
-{
-  ExpectInvalid (TextState (R"(
-    turn: 0
-    winner: 1
-  )"), TextMove ("winner_statement: {}"));
-
-}
-
-TEST_F (WinnerStatementMoveTests, InvalidWinner)
-{
-  auto mv = WinnerStatementMove ("winner: 0", {"sgn 1"});
-  ExpectSignature (mv.winner_statement ().statement ().data (),
-                   "sgn 1",  "addr 1");
-  ExpectInvalid (TextState (R"(
-    turn: 0
-    winner: 1
-  )"), mv);
-
-  mv = WinnerStatementMove ("winner: 1", {"sgn 0"});
-  ExpectSignature (mv.winner_statement ().statement ().data (),
-                   "sgn 0",  "addr 0");
-  ExpectInvalid (TextState (R"(
-    turn: 1
-    winner: 0
-  )"), mv);
-}
-
-TEST_F (WinnerStatementMoveTests, Valid)
-{
-  const auto mv = WinnerStatementMove ("winner: 1", {"sgn 0"});
-  ExpectSignature (mv.winner_statement ().statement ().data (),
-                   "sgn 0",  "addr 0");
-
-  auto expected = TextState (R"(
-    winner: 1
-  )");
-  *expected.mutable_winner_statement () = mv.winner_statement ().statement ();
-
-  ExpectNewState (TextState (R"(
-    turn: 0
-    winner: 1
-  )"), mv, expected);
 }
 
 /* ************************************************************************** */

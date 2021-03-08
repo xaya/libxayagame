@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,7 +8,6 @@
 #include "grid.hpp"
 
 #include <gamechannel/protoversion.hpp>
-#include <gamechannel/signatures.hpp>
 #include <xayautil/hash.hpp>
 #include <xayautil/random.hpp>
 #include <xayautil/uint256.hpp>
@@ -100,11 +99,6 @@ ShipsBoardState::IsValid () const
         break;
       }
 
-    case Phase::WINNER_DETERMINED:
-      if (turn == static_cast<int> (pb.winner ()))
-        return false;
-      break;
-
     default:
       LOG (FATAL) << "Unexpected phase: " << static_cast<int> (phase);
       return false;
@@ -118,10 +112,8 @@ ShipsBoardState::GetPhase () const
 {
   const auto& pb = GetState ();
 
-  if (pb.has_winner_statement ())
-    return Phase::FINISHED;
   if (pb.has_winner ())
-    return Phase::WINNER_DETERMINED;
+    return Phase::FINISHED;
 
   switch (pb.position_hashes_size ())
     {
@@ -196,10 +188,6 @@ ShipsBoardState::ToJson () const
 
     case Phase::SECOND_REVEAL_POSITION:
       res["phase"] = "second reveal position";
-      break;
-
-    case Phase::WINNER_DETERMINED:
-      res["phase"] = "winner determined";
       break;
 
     case Phase::FINISHED:
@@ -317,11 +305,10 @@ ShipsBoardState::TurnCount () const
       return 4 + 2 * shots - 1;
 
     case Phase::SECOND_REVEAL_POSITION:
-    case Phase::WINNER_DETERMINED:
     case Phase::FINISHED:
       /* Flow is not fully determined in these phases.  For example, when
          the first player reveals their position, the game may go to either
-         SECOND_REVEAL_POSITION or WINNER_DETERMINED.  Thus those phases are
+         SECOND_REVEAL_POSITION or FINISHED.  Thus those phases are
          handled together.  */
       {
         unsigned cnt = 4 + 2 * shots;
@@ -333,11 +320,6 @@ ShipsBoardState::TurnCount () const
         for (const int p : pb.positions ())
           if (p != 0)
             cnt += 1;
-
-        /* If there is even a winner statement, then one move move has been
-           made (and the game is finished).  */
-        if (pb.has_winner_statement ())
-          cnt += 1;
 
         return cnt;
       }
@@ -667,12 +649,12 @@ ShipsBoardState::ApplyPositionReveal (const proto::PositionRevealMove& mv,
       newState.set_winner (newState.turn ());
     }
 
-  /* If we have a winner, set turn to the loser since they have to send
-     a winner statement next.  Also make sure to clear all position hashes,
-     if not yet done completely above.  */
+  /* If we have a winner, the game is finished and no more turns are takn.
+     Also make sure to clear all position hashes, if not yet done completely
+     above.  */
   if (newState.has_winner ())
     {
-      newState.set_turn (1 - newState.winner ());
+      newState.clear_turn ();
       for (auto& ph : *newState.mutable_position_hashes ())
         ph.clear ();
       return true;
@@ -682,45 +664,6 @@ ShipsBoardState::ApplyPositionReveal (const proto::PositionRevealMove& mv,
      just the first position reveal.  The other player is next to reveal.  */
   CHECK (phase != Phase::SECOND_REVEAL_POSITION);
   newState.set_turn (otherPlayer);
-  return true;
-}
-
-bool
-ShipsBoardState::ApplyWinnerStatement (const proto::WinnerStatementMove& mv,
-                                       const xaya::BoardRules& rules,
-                                       XayaRpcClient& rpc,
-                                       const xaya::uint256& channelId,
-                                       const xaya::proto::ChannelMetadata& meta,
-                                       const Phase phase,
-                                       proto::BoardState& newState)
-{
-  if (phase != Phase::WINNER_DETERMINED)
-    {
-      LOG (WARNING)
-          << "Invalid phase for winner statement: " << static_cast<int> (phase);
-      return false;
-    }
-  CHECK (newState.has_winner ());
-
-  if (!mv.has_statement ())
-    {
-      LOG (WARNING) << "Winner statement move has no statement";
-      return false;
-    }
-
-  proto::WinnerStatement stmt;
-  if (!VerifySignedWinnerStatement (rules, rpc, channelId, meta,
-                                    mv.statement (), stmt))
-    return false;
-
-  if (stmt.winner () != newState.winner ())
-    {
-      LOG (WARNING) << "WinnerStatement does not list correct winner";
-      return false;
-    }
-
-  newState.clear_turn ();
-  *newState.mutable_winner_statement () = mv.statement ();
   return true;
 }
 
@@ -756,12 +699,6 @@ ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
     case proto::BoardMove::kPositionReveal:
       return ApplyPositionReveal (mv.position_reveal (), phase, newState);
 
-    case proto::BoardMove::kWinnerStatement:
-      return ApplyWinnerStatement (mv.winner_statement (),
-                                   GetBoardRules (), rpc,
-                                   GetChannelId (), GetMetadata (),
-                                   phase, newState);
-
     default:
     case proto::BoardMove::MOVE_NOT_SET:
       LOG (WARNING) << "Move does not specify any one-of case";
@@ -784,63 +721,6 @@ InitialBoardState ()
   proto::BoardState res;
   res.set_turn (0);
   return res;
-}
-
-bool
-VerifySignedWinnerStatement (const xaya::BoardRules& rules, XayaRpcClient& rpc,
-                             const xaya::uint256& channelId,
-                             const xaya::proto::ChannelMetadata& meta,
-                             const xaya::proto::SignedData& data,
-                             proto::WinnerStatement& stmt)
-{
-  if (!xaya::CheckVersionedProto (rules, meta, data))
-    {
-      LOG (WARNING)
-          << "Signed winner statement has invalid versioning:\n"
-          << data.DebugString ();
-      return false;
-    }
-
-  if (!stmt.ParseFromString (data.data ()))
-    {
-      LOG (WARNING) << "Failed to parse WinnerStatement proto";
-      return false;
-    }
-  if (xaya::HasAnyUnknownFields (stmt))
-    {
-      LOG (WARNING)
-          << "Embedded winner statement has unknown fields:\n"
-          << stmt.DebugString ();
-      return false;
-    }
-
-  if (!stmt.has_winner ())
-    {
-      LOG (WARNING) << "WinnerStatement does not specify a winner";
-      return false;
-    }
-  if (stmt.winner () != 0 && stmt.winner () != 1)
-    {
-      LOG (WARNING) << "Invalid winner in WinnerStatement: " << stmt.winner ();
-      return false;
-    }
-
-  const auto sgn = xaya::VerifyParticipantSignatures (rpc, channelId, meta,
-                                                      "winnerstatement",
-                                                      data);
-  const int loser = 1 - stmt.winner ();
-  if (sgn.count (loser) == 0)
-    {
-      std::ostringstream signatures;
-      for (const int ind : sgn)
-        signatures << " " << ind;
-      LOG (WARNING)
-          << "Winner statement is not signed by loser, only:"
-          << signatures.str ();
-      return false;
-    }
-
-  return true;
 }
 
 } // namespace ships
