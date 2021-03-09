@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -42,6 +42,15 @@ RollingState::GetStateProof () const
   const auto mit = reinits.find (reinitId);
   CHECK (mit != reinits.end ());
   return mit->second.proof;
+}
+
+unsigned
+RollingState::GetOnChainTurnCount () const
+{
+  CHECK (!reinits.empty ()) << "RollingState has not been initialised yet";
+  const auto mit = reinits.find (reinitId);
+  CHECK (mit != reinits.end ());
+  return mit->second.onChainTurn;
 }
 
 const std::string&
@@ -94,6 +103,7 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
       entry.latestState = rules.ParseState (channelId, *entry.meta,
                                             provenState);
       CHECK (entry.latestState != nullptr);
+      entry.onChainTurn = entry.latestState->TurnCount ();
 
       LOG (INFO)
           << "Added previously unknown reinitialisation.  Turn count: "
@@ -113,6 +123,12 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
   CHECK (parsed != nullptr);
   const unsigned parsedCnt = parsed->TurnCount ();
   LOG (INFO) << "Turn count provided in the update: " << parsedCnt;
+
+  if (parsedCnt > entry.onChainTurn)
+    {
+      LOG (INFO) << "Updating on-chain turn count to " << parsedCnt;
+      entry.onChainTurn = parsedCnt;
+    }
 
   const unsigned currentCnt = entry.latestState->TurnCount ();
   if (currentCnt >= parsedCnt)

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -158,6 +158,13 @@ private:
   std::unique_ptr<DisputeData> dispute;
 
   /**
+   * The txid of a pending move putting the current state on chain.  Set to
+   * null if there is none.  If multiple put-on-chain requests are sent,
+   * this corresponds to the latest.
+   */
+  uint256 pendingPutStateOnChain;
+
+  /**
    * The transaction ID of a dispute move we sent (if any).  Set to null
    * if there is none.
    */
@@ -273,6 +280,15 @@ public:
    * but affects the automoves logic).
    */
   void TriggerAutoMoves ();
+
+  /**
+   * Requests to send a resolution move with the current state, and returns
+   * the txid if successful.  Resolutions for active disputes will be
+   * sent automatically as needed, but this function can be used to
+   * explicitly trigger one in situations where putting the current state
+   * on-chain is useful for a different purpose.
+   */
+  uint256 PutStateOnChain ();
 
   /**
    * Requests to file a dispute with the current state.  Returns the txid

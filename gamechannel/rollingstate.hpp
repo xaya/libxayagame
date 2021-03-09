@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -54,6 +54,9 @@ private:
     /** The initial state for that reinitialisation.  */
     BoardState reinitState;
 
+    /** The turn count for the latest state known on chain.  */
+    unsigned onChainTurn;
+
     /** The state proof for the latest state.  */
     proto::StateProof proof;
 
@@ -108,6 +111,11 @@ public:
    * Returns a proof for the current latest state.
    */
   const proto::StateProof& GetStateProof () const;
+
+  /**
+   * Returns the turn count of the best state known on chain.
+   */
+  unsigned GetOnChainTurnCount () const;
 
   /**
    * Returns the reinitialisation ID of the channel for which the current
