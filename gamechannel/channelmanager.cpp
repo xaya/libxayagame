@@ -7,8 +7,6 @@
 #include "gamestatejson.hpp"
 #include "stateproof.hpp"
 
-#include <glog/logging.h>
-
 #include <chrono>
 
 namespace xaya

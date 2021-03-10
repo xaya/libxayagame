@@ -315,6 +315,23 @@ public:
   Json::Value ToJson () const;
 
   /**
+   * Gives access to the currently latest channel state to a caller,
+   * for custom logic they may need with it.  The callback is invoked
+   * with the latest parsed state cast to the given type (which must be
+   * the actual type of board states used by the game in question).  While
+   * the callback is active, the state is locked and the callback is free
+   * to examine it as needed.
+   *
+   * The callback may be invoked with a null pointer in case there is no
+   * latest state, e.g. because the channel does not yet exist on chain.
+   *
+   * If the callback returns a value, that value will be returned from
+   * this function.
+   */
+  template <typename State, typename Fcn>
+    auto ReadLatestState (const Fcn& cb) const;
+
+  /**
    * Blocks the calling thread until the state of the channel has (probably)
    * been changed.  This can be used by frontends to implement long-polling
    * RPC methods like waitforchange.  Note that the function may return
@@ -337,5 +354,7 @@ public:
 };
 
 } // namespace xaya
+
+#include "channelmanager.tpp"
 
 #endif // GAMECHANNEL_CHANNELMANAGER_HPP
