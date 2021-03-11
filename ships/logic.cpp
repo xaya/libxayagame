@@ -10,6 +10,7 @@
 #include <gamechannel/database.hpp>
 #include <gamechannel/proto/stateproof.pb.h>
 #include <gamechannel/protoutils.hpp>
+#include <xayautil/base64.hpp>
 
 #include <glog/logging.h>
 
@@ -271,7 +272,7 @@ ShipsLogic::HandleDeclareLoss (xaya::SQLiteDatabase& db,
   if (!obj.isObject ())
     return;
 
-  if (obj.size () != 1)
+  if (obj.size () != 2)
     {
       LOG (WARNING) << "Invalid declare loss move: " << obj;
       return;
@@ -289,6 +290,22 @@ ShipsLogic::HandleDeclareLoss (xaya::SQLiteDatabase& db,
       LOG (WARNING)
           << "Cannot declare loss in channel " << id.ToHex ()
           << " with " << meta.participants_size () << " participants";
+      return;
+    }
+
+  const auto reinitVal = obj["r"];
+  std::string reinit;
+  if (!reinitVal.isString ()
+        || !xaya::DecodeBase64 (reinitVal.asString (), reinit))
+    {
+      LOG (WARNING) << "Invalid reinit value on declare loss: " << obj;
+      return;
+    }
+  if (reinit != meta.reinit ())
+    {
+      LOG (WARNING)
+          << "Loss declaration is for different reinit than the channel: "
+          << obj;
       return;
     }
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -543,6 +543,46 @@ TEST_F (ResolveDisputeTests, RetryAfterBlock)
 
 /* ************************************************************************** */
 
+using PutStateOnChainTests = ChannelManagerTests;
+
+TEST_F (PutStateOnChainTests, Successful)
+{
+  const auto txid = ExpectMoves (1, "resolution");
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  cm.ProcessOffChain ("", ValidProof ("12 6"));
+  EXPECT_EQ (cm.PutStateOnChain (), txid);
+}
+
+TEST_F (PutStateOnChainTests, ChannelDoesNotExist)
+{
+  ExpectMoves (0, "resolution");
+  ProcessOnChainNonExistant ();
+  cm.ProcessOffChain ("", ValidProof ("12 6"));
+  EXPECT_TRUE (cm.PutStateOnChain ().IsNull ());
+}
+
+TEST_F (PutStateOnChainTests, BestStateAlreadyOnChain)
+{
+  ExpectMoves (0, "resolution");
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  cm.ProcessOffChain ("", ValidProof ("12 5"));
+  EXPECT_TRUE (cm.PutStateOnChain ().IsNull ());
+}
+
+TEST_F (PutStateOnChainTests, MultipleUpdates)
+{
+  const auto txid = ExpectMoves (2, "resolution");
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+
+  cm.ProcessOffChain ("", ValidProof ("12 6"));
+  EXPECT_EQ (cm.PutStateOnChain (), txid);
+
+  cm.ProcessOffChain ("", ValidProof ("20 7"));
+  EXPECT_EQ (cm.PutStateOnChain (), txid);
+}
+
+/* ************************************************************************** */
+
 using FileDisputeTests = ChannelManagerTests;
 
 TEST_F (FileDisputeTests, Successful)
@@ -670,6 +710,18 @@ TEST_F (ChannelToJsonTests, Dispute)
     "whoseturn": 1,
     "canresolve": true
   })"));
+}
+
+TEST_F (ChannelToJsonTests, PendingPutStateOnChain)
+{
+  const auto txid = ExpectMoves (1, "resolution");
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  cm.ProcessOffChain ("", ValidProof ("12 6"));
+  cm.PutStateOnChain ();
+
+  auto expected = Json::Value (Json::objectValue);
+  expected["putstateonchain"] = txid.ToHex ();
+  EXPECT_EQ (cm.ToJson ()["pending"], expected);
 }
 
 TEST_F (ChannelToJsonTests, PendingDispute)

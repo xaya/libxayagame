@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -132,3 +132,20 @@ class ShipsTest (channeltest.TestCase):
 
       self.log.warning ("Phase is %s, waiting to catch up..." % phase)
       time.sleep (0.01)
+
+  def lockFunds (self):
+    """
+    Locks all UTXO's in the wallet, so that no name_update transactions
+    can be made temporarily.  This does not affect signing messages.
+    """
+
+    outputs = self.rpc.xaya.listunspent ()
+    self.rpc.xaya.lockunspent (False, outputs)
+
+  def unlockFunds (self):
+    """
+    Unlocks all outputs in the wallet, so that name_update's can be done
+    again successfully.
+    """
+
+    self.rpc.xaya.lockunspent (True)

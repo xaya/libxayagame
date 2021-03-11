@@ -82,7 +82,7 @@ class ChannelManagementTest (ShipsTest):
 
     # Declare loss in the channel.
     self.mainLogger.info ("Declaring loss in a game to close the channel...")
-    self.sendMove ("foo", {"l": {"id": id1}})
+    self.sendMove ("foo", {"l": {"id": id1, "r": ch1["meta"]["reinit"]}})
     self.generate (1)
 
     state = self.getGameState ()

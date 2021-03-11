@@ -59,14 +59,14 @@ class TxFailTest (ShipsTest):
 
       # File a dispute with locked wallet.  That should just silently fail.
       self.mainLogger.info ("Trying dispute that fails...")
-      self.lock ()
+      self.lockFunds ()
       self.assertEqual (bar.rpc.filedispute (), "")
       self.expectPendingMoves ("bar", [])
       self.assertEqual (bar.getCurrentState ()["pending"], {})
       self.generate (1)
       state = bar.getCurrentState ()
       assert "dispute" not in state
-      self.unlock ()
+      self.unlockFunds ()
 
       # Let bar file a dispute against foo.
       self.mainLogger.info ("Filing a dispute whose resolution fails...")
@@ -81,13 +81,13 @@ class TxFailTest (ShipsTest):
 
       # Send a new move, but lock the wallet so that the resolution
       # transaction will not succeed.
-      self.lock ()
+      self.lockFunds ()
       foo.rpc._notify.shoot (row=7, column=0)
 
       # Unlock the wallet.  Then the resolution transaction should be
       # retried when another block comes in.
       self.mainLogger.info ("Resolving it with unlocked wallet...")
-      self.unlock ()
+      self.unlockFunds ()
       self.expectPendingMoves ("foo", [])
       self.assertEqual (foo.getCurrentState ()["pending"], {})
       self.generate (1)
@@ -105,14 +105,14 @@ class TxFailTest (ShipsTest):
       # Let foo lose the game.  We lock the wallet, so that the loser
       # declaration cannot get sent initially.
       self.mainLogger.info ("Loser declaration fails...")
-      self.lock ()
+      self.lockFunds ()
       foo.rpc._notify.revealposition ()
       self.waitForPhase (daemons, ["finished"])
 
       # Now unlock the wallet.  Then the next block should re-trigger an update
       # and we should get the move in.
       self.mainLogger.info ("Loser declaration retrial succeeds...")
-      self.unlock ()
+      self.unlockFunds ()
       self.expectPendingMoves ("foo", [])
       self.generate (1)
       state = bar.getCurrentState ()
@@ -138,23 +138,6 @@ class TxFailTest (ShipsTest):
 
     notMine = "cdpSgeapVR8ZgRkqA8zF3fDJ2NgaUqm2pu"
     self.rpc.xaya.generatetoaddress (n, notMine)
-
-  def lock (self):
-    """
-    Locks all UTXO's in the wallet, so that no name_update transactions
-    can be made temporarily.  This does not affect signing messages.
-    """
-
-    outputs = self.rpc.xaya.listunspent ()
-    self.rpc.xaya.lockunspent (False, outputs)
-
-  def unlock (self):
-    """
-    Unlocks all outputs in the wallet, so that name_update's can be done
-    again successfully.
-    """
-
-    self.rpc.xaya.lockunspent (True)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ AM_TESTS_ENVIRONMENT = \
 
 REGTESTS = \
   disputes.py \
+  force_close.py \
   full_game.py \
   pending.py \
   reorg.py \

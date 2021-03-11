@@ -63,7 +63,7 @@ gamechannel_HEADERS = \
   boardrules.hpp \
   broadcast.hpp \
   channelgame.hpp \
-  channelmanager.hpp \
+  channelmanager.hpp channelmanager.tpp \
   chaintochannel.hpp \
   daemon.hpp \
   database.hpp \

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,8 +6,6 @@
 
 #include "gamestatejson.hpp"
 #include "stateproof.hpp"
-
-#include <glog/logging.h>
 
 #include <chrono>
 
@@ -38,6 +36,7 @@ ChannelManager::ChannelManager (const BoardRules& r, OpenChannel& oc,
     boardStates(rules, rpc, channelId)
 {
   blockHash.SetNull ();
+  pendingPutStateOnChain.SetNull ();
   pendingDispute.SetNull ();
 }
 
@@ -269,6 +268,7 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
   blockHash = blk;
   onChainHeight = h;
 
+  ResetMinedTxid (onChainSender, pendingPutStateOnChain);
   ResetMinedTxid (onChainSender, pendingDispute);
   exists = true;
   boardStates.UpdateOnChain (meta, reinitState, proof);
@@ -378,6 +378,43 @@ ChannelManager::TriggerAutoMoves ()
 }
 
 uint256
+ChannelManager::PutStateOnChain ()
+{
+  LOG (INFO)
+      << "Trying to put the latest state on chain for " << channelId.ToHex ();
+  std::lock_guard<std::mutex> lock(mut);
+
+  uint256 txidNull;
+  txidNull.SetNull ();
+
+  if (!exists)
+    {
+      LOG (WARNING) << "The channel does not exist on chain";
+      return txidNull;
+    }
+
+  const unsigned latestCnt = boardStates.GetLatestState ().TurnCount ();
+  const unsigned onChainCnt = boardStates.GetOnChainTurnCount ();
+  if (latestCnt <= boardStates.GetOnChainTurnCount ())
+    {
+      /* We always update the latest state based on what we get on chain,
+         so it should not happen that the on-chain count is actually
+         better than the latest state.  */
+      CHECK_EQ (latestCnt, onChainCnt);
+      LOG (WARNING)
+          << "Latest state on chain matches the best known state already"
+          << " at turn count " << onChainCnt
+          << ", not sending the state on chain";
+      return txidNull;
+    }
+
+  CHECK (onChainSender != nullptr);
+  pendingPutStateOnChain
+      = onChainSender->SendResolution (boardStates.GetStateProof ());
+  return pendingPutStateOnChain;
+}
+
+uint256
 ChannelManager::FileDispute ()
 {
   LOG (INFO) << "Trying to file a dispute for channel " << channelId.ToHex ();
@@ -454,6 +491,8 @@ ChannelManager::UnlockedToJson () const
     }
 
   Json::Value pending(Json::objectValue);
+  if (!pendingPutStateOnChain.IsNull ())
+    pending["putstateonchain"] = pendingPutStateOnChain.ToHex ();
   if (!pendingDispute.IsNull ())
     pending["dispute"] = pendingDispute.ToHex ();
   if (dispute != nullptr && !dispute->pendingResolution.IsNull ())

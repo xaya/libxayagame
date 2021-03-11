@@ -120,7 +120,22 @@ std::string
 ShipsChannelRpcServer::filedispute ()
 {
   LOG (INFO) << "RPC method called: filedispute";
-  const xaya::uint256 txid = daemon.GetChannelManager ().FileDispute ();
+  auto& cm = daemon.GetChannelManager ();
+
+  /* If the winner is already known, we can't file an actual dispute, but
+     instead we put the state on chain (with a resolution move) which will
+     result in closure of the channel.  */
+  bool hasWinner = false;
+  cm.ReadLatestState<ShipsBoardState> (
+      [&hasWinner] (const ShipsBoardState* state)
+        {
+          if (state != nullptr && state->GetState ().has_winner ())
+            hasWinner = true;
+        });
+
+  const xaya::uint256 txid = hasWinner
+      ? cm.PutStateOnChain ()
+      : cm.FileDispute ();
 
   if (txid.IsNull ())
     return "";

@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -158,6 +158,13 @@ private:
   std::unique_ptr<DisputeData> dispute;
 
   /**
+   * The txid of a pending move putting the current state on chain.  Set to
+   * null if there is none.  If multiple put-on-chain requests are sent,
+   * this corresponds to the latest.
+   */
+  uint256 pendingPutStateOnChain;
+
+  /**
    * The transaction ID of a dispute move we sent (if any).  Set to null
    * if there is none.
    */
@@ -275,6 +282,15 @@ public:
   void TriggerAutoMoves ();
 
   /**
+   * Requests to send a resolution move with the current state, and returns
+   * the txid if successful.  Resolutions for active disputes will be
+   * sent automatically as needed, but this function can be used to
+   * explicitly trigger one in situations where putting the current state
+   * on-chain is useful for a different purpose.
+   */
+  uint256 PutStateOnChain ();
+
+  /**
    * Requests to file a dispute with the current state.  Returns the txid
    * of the sent move (or null if sending failed).
    */
@@ -299,6 +315,23 @@ public:
   Json::Value ToJson () const;
 
   /**
+   * Gives access to the currently latest channel state to a caller,
+   * for custom logic they may need with it.  The callback is invoked
+   * with the latest parsed state cast to the given type (which must be
+   * the actual type of board states used by the game in question).  While
+   * the callback is active, the state is locked and the callback is free
+   * to examine it as needed.
+   *
+   * The callback may be invoked with a null pointer in case there is no
+   * latest state, e.g. because the channel does not yet exist on chain.
+   *
+   * If the callback returns a value, that value will be returned from
+   * this function.
+   */
+  template <typename State, typename Fcn>
+    auto ReadLatestState (const Fcn& cb) const;
+
+  /**
    * Blocks the calling thread until the state of the channel has (probably)
    * been changed.  This can be used by frontends to implement long-polling
    * RPC methods like waitforchange.  Note that the function may return
@@ -321,5 +354,7 @@ public:
 };
 
 } // namespace xaya
+
+#include "channelmanager.tpp"
 
 #endif // GAMECHANNEL_CHANNELMANAGER_HPP
