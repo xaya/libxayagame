@@ -575,6 +575,7 @@ protected:
           name: "name 1"
           address: "addr 1"
         }
+      reinit: "foo"
     )", &meta));
 
     auto h = tbl.CreateNew (channelId);
@@ -587,7 +588,8 @@ protected:
   }
 
   /**
-   * Constructs a JSON move for declaring loss in the given channel.
+   * Constructs a JSON move for declaring loss in the given channel
+   * and based on the reinit value of our metadata instance.
    */
   Json::Value
   LossMove (const std::string& name, const xaya::uint256& channelId) const
@@ -595,6 +597,7 @@ protected:
     Json::Value data(Json::objectValue);
     data["l"] = Json::Value (Json::objectValue);
     data["l"]["id"] = channelId.ToHex ();
+    data["l"]["r"] = xaya::EncodeBase64 (meta.reinit ());
 
     return Move (name, txid, data);
   }
@@ -626,15 +629,33 @@ TEST_F (DeclareLossTests, UpdateStats)
 TEST_F (DeclareLossTests, Malformed)
 {
   std::vector<Json::Value> moves;
-  for (const std::string& create : {"42", "null", "{}",
-                                    R"({"id": 100})",
-                                    R"({"id": "00"})",
-                                    R"({"id": "00", "x": 5})"})
+  for (const std::string& create : {"42", "null", "{}"})
     {
       Json::Value data(Json::objectValue);
       data["l"] = ParseJson (create);
-      moves.push_back (Move ("xyz", txid, data));
+      moves.push_back (Move ("name 0", txid, data));
     }
+
+  const auto valid = LossMove ("name 0", channelId);
+
+  auto mv = valid;
+  mv["move"]["l"]["id"] = 42;
+  moves.push_back (mv);
+  mv["move"]["l"].removeMember ("id");
+  moves.push_back (mv);
+
+  mv = valid;
+  mv["move"]["l"]["r"] = "invalid";
+  moves.push_back (mv);
+  mv["move"]["l"]["r"] = 42;
+  moves.push_back (mv);
+  mv["move"]["l"].removeMember ("r");
+  moves.push_back (mv);
+
+  mv = valid;
+  mv["move"]["l"]["x"] = 5;
+  moves.push_back (mv);
+
   UpdateState (10, moves);
 
   ExpectNumberOfChannels (2);
@@ -670,6 +691,18 @@ TEST_F (DeclareLossTests, WrongNumberOfParticipants)
 TEST_F (DeclareLossTests, NotAParticipant)
 {
   UpdateState (10, {LossMove ("foo", channelId)});
+
+  ExpectNumberOfChannels (2);
+  ExpectChannel (channelId);
+  ExpectChannel (otherId);
+}
+
+TEST_F (DeclareLossTests, InvalidReinit)
+{
+  auto mv = LossMove ("name 0", channelId);
+  mv["move"]["l"]["r"] = xaya::EncodeBase64 ("wrong reinit");
+
+  UpdateState (10, {mv});
 
   ExpectNumberOfChannels (2);
   ExpectChannel (channelId);

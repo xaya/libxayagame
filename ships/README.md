@@ -196,9 +196,14 @@ the game state), without any changes to game stats of the player.
 Either participant of an open channel can declare themselves the loser
 any time:
 
-    {"l": {"id": CHANNEL-ID}}
+    {"l": {"id": CHANNEL-ID, "r": REINIT}}
 
-As before, `CHANNEL-ID` is the channel's ID as hex string.
+As before, `CHANNEL-ID` is the channel's ID as hex string, and `REINIT`
+is the reinitialisation ID (raw data base64-encoded) for whose game state
+the user lost.
+(The latter prevents a loss declaration made on a channel from being
+replayed in case there is a reorg that changes who joins the channel as
+second player, and thus might in reality have a different outcome.)
 
 Such a move is valid as long as the channel is currently open and has two
 participants, of which the sending user is one.  There are no other checks

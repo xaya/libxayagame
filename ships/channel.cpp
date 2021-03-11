@@ -7,6 +7,7 @@
 #include <gamechannel/proto/signatures.pb.h>
 #include <gamechannel/protoutils.hpp>
 #include <gamechannel/signatures.hpp>
+#include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
 
 namespace ships
@@ -292,6 +293,7 @@ ShipsChannel::MaybeOnChainMove (const xaya::ParsedBoardState& state,
 
   Json::Value data(Json::objectValue);
   data["id"] = id.ToHex ();
+  data["r"] = xaya::EncodeBase64 (meta.reinit ());
 
   Json::Value mv(Json::objectValue);
   mv["l"] = data;

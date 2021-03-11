@@ -88,6 +88,7 @@ protected:
           name: "other player"
           address: "other addr"
         }
+      reinit: "foo"
     )", &meta[0]));
 
     CHECK (TextFormat::ParseFromString (R"(
@@ -101,6 +102,7 @@ protected:
           name: "player"
           address: "my addr"
         }
+      reinit: "foo"
     )", &meta[1]));
   }
 
@@ -208,7 +210,8 @@ protected:
    * for a loss declaration.
    */
   static bool
-  IsExpectedLoss (const Json::Value& actual, const xaya::uint256& id)
+  IsExpectedLoss (const Json::Value& actual, const xaya::uint256& id,
+                  const xaya::proto::ChannelMetadata& meta)
   {
     if (!actual.isObject ())
       return false;
@@ -218,12 +221,20 @@ protected:
     const auto& sub = actual["l"];
     if (!sub.isObject ())
       return false;
-    if (sub.size () != 1)
+    if (sub.size () != 2)
       return false;
 
     if (!sub["id"].isString ())
       return false;
     if (sub["id"].asString () != id.ToHex ())
+      return false;
+
+    if (!sub["r"].isString ())
+      return false;
+    std::string reinit;
+    if (!xaya::DecodeBase64 (sub["r"].asString (), reinit))
+      return false;
+    if (reinit != meta.reinit ())
       return false;
 
     return true;
@@ -278,7 +289,7 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveSending)
     {
       const auto val = ParseJson (str);
       const auto& mv = val["g"]["xs"];
-      return IsExpectedLoss (mv, channelId);
+      return IsExpectedLoss (mv, channelId, meta[0]);
     };
   EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
       .WillOnce (Return (xaya::SHA256::Hash ("txid").ToHex ()));
@@ -297,7 +308,7 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveAlreadyPending)
     {
       const auto val = ParseJson (str);
       const auto& mv = val["g"]["xs"];
-      return IsExpectedLoss (mv, channelId);
+      return IsExpectedLoss (mv, channelId, meta[0]);
     };
   EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
       .WillOnce (Return (txid.ToHex ()));
@@ -326,7 +337,7 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveNoLongerPending)
     {
       const auto val = ParseJson (str);
       const auto& mv = val["g"]["xs"];
-      return IsExpectedLoss (mv, channelId);
+      return IsExpectedLoss (mv, channelId, meta[0]);
     };
   EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
       .WillOnce (Return (txid1.ToHex ()))

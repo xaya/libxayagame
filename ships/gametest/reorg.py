@@ -49,7 +49,8 @@ class ReorgTest (ShipsTest):
     self.mainLogger.info ("Reorg and create alternate reality...")
     self.rpc.xaya.invalidateblock (reorgBlock)
     self.expectChannelState (cid, "first commitment", disputeHeight)
-    self.sendMove ("bar", {"l": {"id": cid}})
+    ch = self.getGameState ()["channels"][cid]
+    self.sendMove ("bar", {"l": {"id": cid, "r": ch["meta"]["reinit"]}})
     self.generate (10)
     self.expectGameState ({
       "gamestats":
