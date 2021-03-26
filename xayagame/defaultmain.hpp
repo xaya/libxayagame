@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -308,6 +308,39 @@ struct GameLogicCallbacks
 int DefaultMain (const GameDaemonConfiguration& config,
                  const std::string& gameId,
                  const GameLogicCallbacks& callbacks);
+
+/**
+ * Struct with basic function pointers for implementing an SQLite-based
+ * game without having to subclass SQLiteGame.  This can be used with the
+ * SQLiteMain variant below, and is useful e.g. for wrapers to other
+ * programming languages.
+ */
+struct SQLiteGameCallbacks
+{
+
+  /* The following functions are mandatory and need to be set to something
+     that is not null.  */
+  void (*GetInitialStateBlock) (Chain chain, unsigned& height,
+                                std::string& hashHex) = nullptr;
+  void (*UpdateState) (Chain chain, sqlite3* db,
+                       const Json::Value& blockData) = nullptr;
+
+  /* These functions can be left as null in case nothing specific is
+     required to be done.  */
+  void (*SetupSchema) (Chain chain, sqlite3* db) = nullptr;
+  void (*InitialiseState) (Chain chain, sqlite3* db) = nullptr;
+  Json::Value (*GetStateAsJson) (sqlite3* db) = nullptr;
+
+};
+
+/**
+ * Runs a default main for an SQLite-based game, but instead of using an
+ * explicit instance of SQLiteGame for the game logic, the given callbacks
+ * are used.
+ */
+int SQLiteMain (const GameDaemonConfiguration& config,
+                const std::string& gameId,
+                const SQLiteGameCallbacks& callbacks);
 
 } // namespace xaya
 

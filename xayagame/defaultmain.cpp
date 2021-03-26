@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -379,6 +379,78 @@ public:
 
 };
 
+class CallbackSQLiteGame : public SQLiteGame
+{
+
+private:
+
+  /** The callback pointers.  */
+  const SQLiteGameCallbacks& callbacks;
+
+protected:
+
+  void
+  SetupSchema (SQLiteDatabase& db) override
+  {
+    if (callbacks.SetupSchema == nullptr)
+      return;
+
+    db.AccessDatabase ([this] (sqlite3* h)
+      {
+        callbacks.SetupSchema (GetContext ().GetChain (), h);
+      });
+  }
+
+  void
+  GetInitialStateBlock (unsigned& height, std::string& hashHex) const override
+  {
+    CHECK (callbacks.GetInitialStateBlock != nullptr);
+    callbacks.GetInitialStateBlock (GetContext ().GetChain (), height, hashHex);
+  }
+
+  void
+  InitialiseState (SQLiteDatabase& db) override
+  {
+    if (callbacks.InitialiseState == nullptr)
+      return;
+
+    db.AccessDatabase ([this] (sqlite3* h)
+      {
+        callbacks.InitialiseState (GetContext ().GetChain (), h);
+      });
+  }
+
+  void
+  UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override
+  {
+    CHECK (callbacks.UpdateState != nullptr);
+    db.AccessDatabase ([this, &blockData] (sqlite3* h)
+      {
+        callbacks.UpdateState (GetContext ().GetChain (), h, blockData);
+      });
+  }
+
+  Json::Value
+  GetStateAsJson (const SQLiteDatabase& db) override
+  {
+    if (callbacks.GetStateAsJson == nullptr)
+      {
+        LOG_FIRST_N (WARNING, 1)
+            << "No GetStateAsJson callback is implemented, returning null";
+        return Json::Value ();
+      }
+
+    return db.ReadDatabase (callbacks.GetStateAsJson);
+  }
+
+public:
+
+  explicit CallbackSQLiteGame (const SQLiteGameCallbacks& cb)
+    : callbacks(cb)
+  {}
+
+};
+
 } // anonymous namespace
 
 int
@@ -387,6 +459,14 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
 {
   CallbackGameLogic rules(callbacks);
   return DefaultMain (config, gameId, rules);
+}
+
+int
+SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
+            const SQLiteGameCallbacks& callbacks)
+{
+  CallbackSQLiteGame rules(callbacks);
+  return SQLiteMain (config, gameId, rules);
 }
 
 } // namespace xaya
