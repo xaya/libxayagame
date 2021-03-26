@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -119,11 +119,11 @@ public:
    * cases; most operations should go through Prepare instead.
    */
   template <typename Fcn>
-    void
+    auto
     AccessDatabase (const Fcn& cb)
   {
     std::lock_guard<std::mutex> lock(mutDb);
-    cb (db);
+    return cb (db);
   }
 
   /**
@@ -132,11 +132,11 @@ public:
    * and no writes.
    */
   template <typename Fcn>
-    void
+    auto
     ReadDatabase (const Fcn& cb) const
   {
     std::lock_guard<std::mutex> lock(mutDb);
-    cb (db);
+    return cb (db);
   }
 
   /**
