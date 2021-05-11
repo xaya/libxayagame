@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -29,6 +29,10 @@ namespace
 DEFINE_string (xaya_rpc_url, "",
                "URL at which Xaya Core's JSON-RPC interface is available"
                " including a wallet");
+DEFINE_bool (xaya_rpc_legacy_protocol, true,
+             "whether to use JSON-RPC 1.0 instead of 2.0 for the Xaya RPC;"
+             " this is needed for Xaya Core, whereas other servers"
+             " like Electrum-CHI should use JSON-RPC 2.0");
 DEFINE_string (gsp_rpc_url, "",
                "URL at which the shipsd JSON-RPC interface is available");
 DEFINE_string (broadcast_rpc_url, "",
@@ -91,7 +95,7 @@ main (int argc, char** argv)
 
   xaya::ChannelDaemon daemon("xs", channelId, FLAGS_playername,
                              rules, channel);
-  daemon.ConnectXayaRpc (FLAGS_xaya_rpc_url);
+  daemon.ConnectXayaRpc (FLAGS_xaya_rpc_url, FLAGS_xaya_rpc_legacy_protocol);
   daemon.ConnectGspRpc (FLAGS_gsp_rpc_url);
 
   xaya::RpcBroadcast bc(FLAGS_broadcast_rpc_url, daemon.GetChannelManager ());

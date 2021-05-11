@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -67,7 +67,8 @@ private:
     XayaBasedInstances (const XayaBasedInstances&) = delete;
     void operator= (const XayaBasedInstances&) = delete;
 
-    explicit XayaBasedInstances (ChannelDaemon& daemon, const std::string& rpc);
+    explicit XayaBasedInstances (ChannelDaemon& daemon, const std::string& rpc,
+                                 jsonrpc::clientVersion_t rpcVersion);
     ~XayaBasedInstances ();
 
   };
@@ -146,9 +147,12 @@ public:
 
   /**
    * Sets the RPC URL to use for Xaya Core.  This must be called exactly
-   * once before the ChannelDaemon becomes available.
+   * once before the ChannelDaemon becomes available.  By default, the RPC
+   * client uses JSON-RPC 1.0 to be compatible with Xaya Core.  For using
+   * JSON-RPC 2.0 (e.g. to use it with an Electrum-based light client),
+   * set legacy to false.
    */
-  void ConnectXayaRpc (const std::string& url);
+  void ConnectXayaRpc (const std::string& url, bool legacy = true);
 
   /**
    * Connects the GSP RPC URL and initialises the dependencies on that.

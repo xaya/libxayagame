@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -25,11 +25,12 @@ constexpr int GSP_RPC_TIMEOUT_MS = 6000;
 
 } // anonymous namespace
 
-ChannelDaemon::XayaBasedInstances::XayaBasedInstances (ChannelDaemon& d,
-                                                       const std::string& rpc)
+ChannelDaemon::XayaBasedInstances::XayaBasedInstances (
+    ChannelDaemon& d, const std::string& rpc,
+    const jsonrpc::clientVersion_t rpcVersion)
   : xayaClient(rpc),
-    xayaRpc(xayaClient, jsonrpc::JSONRPC_CLIENT_V1),
-    xayaWallet(xayaClient, jsonrpc::JSONRPC_CLIENT_V1),
+    xayaRpc(xayaClient, rpcVersion),
+    xayaWallet(xayaClient, rpcVersion),
     cm(d.rules, d.channel, xayaRpc, xayaWallet, d.channelId, d.playerName),
     sender(d.gameId, d.channelId, d.playerName, xayaRpc, xayaWallet, d.channel)
 {
@@ -50,10 +51,13 @@ ChannelDaemon::GspFeederInstances::GspFeederInstances (ChannelDaemon& d,
 }
 
 void
-ChannelDaemon::ConnectXayaRpc (const std::string& url)
+ChannelDaemon::ConnectXayaRpc (const std::string& url, const bool legacy)
 {
   CHECK (xayaBased == nullptr);
-  xayaBased = std::make_unique<XayaBasedInstances> (*this, url);
+  const auto rpcVersion = (legacy
+                            ? jsonrpc::JSONRPC_CLIENT_V1
+                            : jsonrpc::JSONRPC_CLIENT_V2);
+  xayaBased = std::make_unique<XayaBasedInstances> (*this, url, rpcVersion);
 }
 
 void
