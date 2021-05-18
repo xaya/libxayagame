@@ -4,8 +4,6 @@
 
 syntax = "proto2";
 
-import "gamechannel/proto/signatures.proto";
-
 package ships.proto;
 
 /**
