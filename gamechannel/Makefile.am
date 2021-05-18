@@ -1,5 +1,6 @@
 lib_LTLIBRARIES = libgamechannel.la
 dist_bin_SCRIPTS = rpc-channel-server.py
+dist_data_DATA = rpc-stubs/channel-gsp-rpc.json
 gamechanneldir = $(includedir)/gamechannel
 rpcstubdir = $(gamechanneldir)/rpc-stubs
 protodir = $(gamechanneldir)/proto
@@ -24,7 +25,6 @@ PROTOSOURCES = $(PROTOS:.proto=.pb.cc)
 PROTOPY = $(PROTOS:.proto=_pb2.py)
 
 EXTRA_DIST = $(PROTOS) \
-  rpc-stubs/gsp.json \
   rpc-stubs/rpcbroadcast.json \
   schema.sql schema_head.cpp schema_tail.cpp
 
@@ -148,9 +148,9 @@ test_rpcbroadcast_SOURCES = test_rpcbroadcast.cpp
 schema.cpp: schema_head.cpp schema.sql schema_tail.cpp
 	cat $^ >$@
 
-rpc-stubs/channelgsprpcclient.h: $(srcdir)/rpc-stubs/gsp.json
+rpc-stubs/channelgsprpcclient.h: $(srcdir)/rpc-stubs/channel-gsp-rpc.json
 	jsonrpcstub "$<" --cpp-client=ChannelGspRpcClient --cpp-client-file="$@"
-rpc-stubs/channelgsprpcserverstub.h: $(srcdir)/rpc-stubs/gsp.json
+rpc-stubs/channelgsprpcserverstub.h: $(srcdir)/rpc-stubs/channel-gsp-rpc.json
 	jsonrpcstub "$<" \
 	  --cpp-server=ChannelGspRpcServerStub \
 	  --cpp-server-file="$@"
