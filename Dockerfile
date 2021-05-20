@@ -70,16 +70,16 @@ RUN git clone https://github.com/google/googletest .
 RUN cmake . && make && make install/strip
 
 # The ZMQ C++ bindings need to be installed from source.
-ARG CPPZMQ_VERSION="4.6.0"
+ARG CPPZMQ_VERSION="4.7.1"
 WORKDIR /usr/src/cppzmq
 RUN git clone -b v${CPPZMQ_VERSION} https://github.com/zeromq/cppzmq .
 RUN cp zmq.hpp /usr/local/include
 
 # Build and install sqlite3 from source with the session extension
 # enabled as needed.
-ARG SQLITE_VERSION="3310100"
+ARG SQLITE_VERSION="3350500"
 WORKDIR /usr/src
-RUN wget https://www.sqlite.org/2020/sqlite-autoconf-${SQLITE_VERSION}.tar.gz
+RUN wget https://www.sqlite.org/2021/sqlite-autoconf-${SQLITE_VERSION}.tar.gz
 RUN tar zxvf sqlite-autoconf-${SQLITE_VERSION}.tar.gz
 WORKDIR /usr/src/sqlite-autoconf-${SQLITE_VERSION}
 RUN ./configure CFLAGS="-DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"

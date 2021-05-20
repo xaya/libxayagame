@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -126,9 +126,7 @@ ZmqSubscriber::ReceiveMultiparts (std::string& topic, std::string& payload,
               << "Unexpected number of parts while receiving ZMQ message";
         }
 
-      int more;
-      size_t moreSize = sizeof (more);
-      socket->getsockopt (ZMQ_RCVMORE, &more, &moreSize);
+      const int more = socket->get (zmq::sockopt::rcvmore);
       if (!more)
         {
           CHECK_EQ (parts, 3) << "Expected exactly three message parts in ZMQ";
@@ -260,7 +258,7 @@ ZmqSubscriber::Start ()
     for (const std::string cmd : {"game-block-attach", "game-block-detach"})
       {
         const std::string topic = cmd + " json " + entry.first;
-        socketBlocks->setsockopt (ZMQ_SUBSCRIBE, topic.data (), topic.size ());
+        socketBlocks->set (zmq::sockopt::subscribe, topic);
       }
 
   if (!addrPending.empty ())
@@ -281,8 +279,7 @@ ZmqSubscriber::Start ()
       for (const auto& entry : listeners)
         {
           const std::string topic = "game-pending-move json " + entry.first;
-          socketPending->setsockopt (ZMQ_SUBSCRIBE, topic.data (),
-                                     topic.size ());
+          socketPending->set (zmq::sockopt::subscribe, topic);
         }
     }
   else
