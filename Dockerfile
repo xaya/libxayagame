@@ -40,11 +40,20 @@ RUN ./configure && make && make install-strip
 
 # Build and install jsoncpp from source.  We need at least version >= 1.7.5,
 # which includes an important fix for JSON parsing in some GSPs.
-ARG JSONCPP_VERSION="1.8.4"
-WORKDIR /usr/src/jsoncpp
+ARG JSONCPP_VERSION="1.9.4"
+WORKDIR /usr/src/jsoncpp/build
 RUN git clone -b ${JSONCPP_VERSION} \
-  https://github.com/open-source-parsers/jsoncpp .
-RUN cmake . \
+  https://github.com/open-source-parsers/jsoncpp ../src
+# FIXME: Version 1.9.4 has a broken pkg-config file, which we need
+# to fix specifically.  Once a new version is released, we can get
+# rid of this hack.
+WORKDIR /usr/src/jsoncpp/src
+RUN git config user.email "test@example.com"
+RUN git config user.name "Cherry Picker"
+RUN git cherry-pick ac2870298ed5b5a96a688d9df07461b31f83e906
+WORKDIR /usr/src/jsoncpp/build
+RUN cmake ../src \
+  -DJSONCPP_WITH_PKGCONFIG_SUPPORT=ON \
   -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF
 RUN make && make install/strip
 
