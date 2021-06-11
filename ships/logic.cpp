@@ -236,34 +236,34 @@ HandleJoinChannel (xaya::SQLiteDatabase& db,
 }
 
 /**
- * Tries to process an "abort channel" move.
+ * Tries to parse and validate an "abort channel" move.  If the move seems
+ * valid, the ID of the channel to abort is set.
  */
-void
-HandleAbortChannel (xaya::SQLiteDatabase& db,
-                    const Json::Value& obj, const std::string& name)
+bool
+ParseAbortChannelMove (const Json::Value& obj, const std::string& name,
+                       xaya::ChannelsTable& tbl, xaya::uint256& id)
 {
   if (!obj.isObject ())
-    return;
+    return false;
 
   if (obj.size () != 1)
     {
       LOG (WARNING) << "Invalid abort channel move: " << obj;
-      return;
+      return false;
     }
 
-  xaya::ChannelsTable tbl(db);
   auto h = RetrieveChannelFromMove (obj, tbl);
   if (h == nullptr)
-    return;
+    return false;
 
-  const xaya::uint256 id = h->GetId ();
+  id = h->GetId ();
   const auto& meta = h->GetMetadata ();
   if (meta.participants_size () != 1)
     {
       LOG (WARNING)
           << "Cannot abort channel " << id.ToHex ()
           << " with " << meta.participants_size () << " participants";
-      return;
+      return false;
     }
 
   if (meta.participants (0).name () != name)
@@ -271,11 +271,26 @@ HandleAbortChannel (xaya::SQLiteDatabase& db,
       LOG (WARNING)
           << name << " cannot abort channel " << id.ToHex ()
           << ", only " << meta.participants (0).name () << " can";
-      return;
+      return false;
     }
 
+  return true;
+}
+
+/**
+ * Tries to process an "abort channel" move.
+ */
+void
+HandleAbortChannel (xaya::SQLiteDatabase& db,
+                    const Json::Value& obj, const std::string& name)
+{
+  xaya::ChannelsTable tbl(db);
+
+  xaya::uint256 id;
+  if (!ParseAbortChannelMove (obj, name, tbl, id))
+    return;
+
   LOG (INFO) << "Aborting channel " << id.ToHex ();
-  h.reset ();
   tbl.DeleteById (id);
 }
 
@@ -622,6 +637,7 @@ ShipsPending::ClearShips ()
 {
   create = Json::Value (Json::arrayValue);
   join = Json::Value (Json::arrayValue);
+  abort.clear ();
 }
 
 void
@@ -666,6 +682,24 @@ ShipsPending::HandleJoinChannel (xaya::SQLiteDatabase& db,
   cur["address"] = addr;
   cur["id"] = h->GetId ().ToHex ();
   join.append (cur);
+}
+
+void
+ShipsPending::HandleAbortChannel (xaya::SQLiteDatabase& db,
+                                  const Json::Value& obj,
+                                  const std::string& name)
+{
+  xaya::ChannelsTable tbl(db);
+
+  xaya::uint256 id;
+  if (!ParseAbortChannelMove (obj, name, tbl, id))
+    return;
+
+  LOG (INFO)
+      << "New pending abort-channel move from " << name
+      << " for channel " << id.ToHex ();
+
+  abort.insert (id);
 }
 
 void
@@ -722,6 +756,7 @@ ShipsPending::AddPendingMoveUnsafe (const xaya::SQLiteDatabase& db,
   auto& mutableDb = const_cast<xaya::SQLiteDatabase&> (db);
   HandleCreateChannel (data["c"], name, txid);
   HandleJoinChannel (mutableDb, data["j"], name);
+  HandleAbortChannel (mutableDb, data["a"], name);
   HandleDisputeResolution (mutableDb, data["d"]);
   HandleDisputeResolution (mutableDb, data["r"]);
 }
@@ -745,6 +780,11 @@ ShipsPending::ToJson () const
   Json::Value res = PendingMoves::ToJson ();
   res["create"] = create;
   res["join"] = join;
+
+  Json::Value abortJson(Json::arrayValue);
+  for (const auto& id : abort)
+    abortJson.append (id.ToHex ());
+  res["abort"] = abortJson;
 
   return res;
 }

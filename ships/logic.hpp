@@ -110,6 +110,9 @@ private:
    */
   Json::Value join;
 
+  /** Channels being aborted with pending moves.  */
+  std::set<xaya::uint256> abort;
+
   /**
    * Clears the internal state for ships (not including the Clear
    * method for PendingMoves).
@@ -127,6 +130,12 @@ private:
    */
   void HandleJoinChannel (xaya::SQLiteDatabase& db, const Json::Value& obj,
                           const std::string& name);
+
+  /**
+   * Tries to process a pending "abort channel" move.
+   */
+  void HandleAbortChannel (xaya::SQLiteDatabase& db, const Json::Value& obj,
+                           const std::string& name);
 
   /**
    * Tries to process a pending dispute or resolution move.

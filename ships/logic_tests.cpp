@@ -1029,9 +1029,7 @@ TEST_F (PendingTests, MultipleCommands)
   ASSERT_EQ (meta.participants_size (), 1);
 
   const auto cid = xaya::SHA256::Hash ("channel");
-  auto h = tbl.CreateNew (cid);
-  h->Reinitialise (meta, "");
-  h.reset ();
+  tbl.CreateNew (cid)->Reinitialise (meta, "");
 
   auto joinMove = ParseJson (R"(
     {
@@ -1046,6 +1044,7 @@ TEST_F (PendingTests, MultipleCommands)
 
   EXPECT_EQ (GetPendingField ("create"), ParseJson ("[]"));
   EXPECT_EQ (GetPendingField ("join"), ParseJson ("[]"));
+  EXPECT_EQ (GetPendingField ("abort"), ParseJson ("[]"));
 }
 
 TEST_F (PendingTests, CreateChannel)
@@ -1082,9 +1081,7 @@ TEST_F (PendingTests, JoinChannel)
   ASSERT_EQ (meta.participants_size (), 1);
 
   const auto cid = xaya::SHA256::Hash ("channel");
-  auto h = tbl.CreateNew (cid);
-  h->Reinitialise (meta, "");
-  h.reset ();
+  tbl.CreateNew (cid)->Reinitialise (meta, "");
 
   auto joinMove = ParseJson (R"(
     {"j": {"addr": "address"}}
@@ -1106,6 +1103,30 @@ TEST_F (PendingTests, JoinChannel)
   expected[1]["id"] = cid.ToHex ();
 
   EXPECT_EQ (GetPendingField ("join"), expected);
+}
+
+TEST_F (PendingTests, AbortChannel)
+{
+  meta.mutable_participants ()->RemoveLast ();
+  ASSERT_EQ (meta.participants_size (), 1);
+
+  const auto cid1 = xaya::SHA256::Hash ("channel 1");
+  const auto cid2 = xaya::SHA256::Hash ("channel 2");
+  tbl.CreateNew (cid1)->Reinitialise (meta, "");
+  tbl.CreateNew (cid2)->Reinitialise (meta, "");
+
+  const auto txid = xaya::SHA256::Hash ("txid");
+  auto abortMove = ParseJson (R"({"a": {}})");
+  abortMove["a"]["id"] = cid1.ToHex ();
+  AddPendingMove (Move ("name 0", txid, abortMove));
+
+  abortMove["a"]["id"] = cid2.ToHex ();
+  AddPendingMove (Move ("domob", txid, abortMove));
+
+  auto expected = ParseJson ("[]");
+  expected.append (cid1.ToHex ());
+
+  EXPECT_EQ (GetPendingField ("abort"), expected);
 }
 
 TEST_F (PendingTests, ValidStateProof)
