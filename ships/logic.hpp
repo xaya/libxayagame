@@ -90,13 +90,29 @@ public:
 };
 
 /**
- * PendingMoveProcessor for Xayaships.  This just passes StateProofs recovered
- * from pending disputes and resolutions to ChannelGame::PendingMoves.
+ * PendingMoveProcessor for Xayaships.  This passes StateProofs recovered
+ * from pending disputes and resolutions to ChannelGame::PendingMoves, and
+ * keeps track of basic things like created/joined/aborted channels.
  */
 class ShipsPending : public xaya::ChannelGame::PendingMoves
 {
 
 private:
+
+  /** Pending "create channel" moves, already formatted as JSON.  */
+  Json::Value create;
+
+  /**
+   * Clears the internal state for ships (not including the Clear
+   * method for PendingMoves).
+   */
+  void ClearShips ();
+
+  /**
+   * Tries to process a pending "create channel" move.
+   */
+  void HandleCreateChannel (const Json::Value& obj, const std::string& name,
+                            const xaya::uint256& txid);
 
   /**
    * Tries to process a pending dispute or resolution move.
@@ -116,13 +132,18 @@ private:
 
 protected:
 
+  void Clear () override;
   void AddPendingMove (const Json::Value& mv) override;
 
 public:
 
   ShipsPending (ShipsLogic& g)
     : PendingMoves(g)
-  {}
+  {
+    ClearShips ();
+  }
+
+  Json::Value ToJson () const override;
 
 };
 

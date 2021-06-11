@@ -17,6 +17,8 @@
 namespace ships
 {
 
+/* ************************************************************************** */
+
 const xaya::BoardRules&
 ShipsLogic::GetBoardRules () const
 {
@@ -66,8 +68,31 @@ ShipsLogic::InitialiseState (xaya::SQLiteDatabase& db)
      yet, and also no channels defined.  */
 }
 
+/* ************************************************************************** */
+
 namespace
 {
+
+/**
+ * Tries to parse a "create channel" move.  If the move is valid, the signing
+ * address is set.
+ */
+bool
+ParseCreateChannelMove (const Json::Value& obj, std::string& addr)
+{
+  if (!obj.isObject ())
+    return false;
+
+  const auto& addrVal = obj["addr"];
+  if (obj.size () != 1 || !addrVal.isString ())
+    {
+      LOG (WARNING) << "Invalid create channel move: " << obj;
+      return false;
+    }
+  addr = addrVal.asString ();
+
+  return true;
+}
 
 /**
  * Tries to process a "create channel" move, if the JSON object describes
@@ -79,16 +104,9 @@ HandleCreateChannel (xaya::SQLiteDatabase& db,
                      const std::string& name,
                      const xaya::uint256& txid)
 {
-  if (!obj.isObject ())
+  std::string addr;
+  if (!ParseCreateChannelMove (obj, addr))
     return;
-
-  const auto& addrVal = obj["addr"];
-  if (obj.size () != 1 || !addrVal.isString ())
-    {
-      LOG (WARNING) << "Invalid create channel move: " << obj;
-      return;
-    }
-  const std::string addr = addrVal.asString ();
 
   LOG (INFO)
       << "Creating channel with ID " << txid.ToHex ()
@@ -579,6 +597,34 @@ ShipsLogic::GetStateAsJson (const xaya::SQLiteDatabase& db)
   return gsj.GetFullJson ();
 }
 
+/* ************************************************************************** */
+
+void
+ShipsPending::ClearShips ()
+{
+  create = Json::Value (Json::arrayValue);
+}
+
+void
+ShipsPending::HandleCreateChannel (const Json::Value& obj,
+                                   const std::string& name,
+                                   const xaya::uint256& txid)
+{
+  std::string addr;
+  if (!ParseCreateChannelMove (obj, addr))
+    return;
+
+  LOG (INFO)
+      << "New pending create-channel move from " << name
+      << ": " << txid.ToHex ();
+
+  Json::Value cur(Json::objectValue);
+  cur["name"] = name;
+  cur["address"] = addr;
+  cur["id"] = txid.ToHex ();
+  create.append (cur);
+}
+
 void
 ShipsPending::HandleDisputeResolution (xaya::SQLiteDatabase& db,
                                        const Json::Value& obj)
@@ -601,10 +647,28 @@ ShipsPending::AddPendingMoveUnsafe (const xaya::SQLiteDatabase& db,
 {
   CHECK (mv.isObject ()) << "Not an object: " << mv;
 
+  const auto& nameVal = mv["name"];
+  CHECK (nameVal.isString ());
+  const std::string name = nameVal.asString ();
+
+  const auto& txidVal = mv["txid"];
+  CHECK (txidVal.isString ());
+  xaya::uint256 txid;
+  CHECK (txid.FromHex (txidVal.asString ()));
+
   const auto& data = mv["move"];
   if (!data.isObject ())
     {
-      LOG (WARNING) << "Move is not an object: " << data;
+      LOG (WARNING)
+          << "Pending move by " << name
+          << " is not an object: " << data;
+      return;
+    }
+  if (data.size () > 1)
+    {
+      LOG (WARNING)
+          << "Pending move by " << name
+          << " has more than one action: " << data;
       return;
     }
 
@@ -613,15 +677,33 @@ ShipsPending::AddPendingMoveUnsafe (const xaya::SQLiteDatabase& db,
      its pending StateProof in case it is valid.  */
 
   auto& mutableDb = const_cast<xaya::SQLiteDatabase&> (db);
+  HandleCreateChannel (data["c"], name, txid);
   HandleDisputeResolution (mutableDb, data["d"]);
   HandleDisputeResolution (mutableDb, data["r"]);
 }
 
 void
+ShipsPending::Clear ()
+{
+  PendingMoves::Clear ();
+  ClearShips ();
+}
+
+void
 ShipsPending::AddPendingMove (const Json::Value& mv)
 {
-  AccessConfirmedState ();
   AddPendingMoveUnsafe (AccessConfirmedState (), mv);
 }
+
+Json::Value
+ShipsPending::ToJson () const
+{
+  Json::Value res = PendingMoves::ToJson ();
+  res["create"] = create;
+
+  return res;
+}
+
+/* ************************************************************************** */
 
 } // namespace ships
