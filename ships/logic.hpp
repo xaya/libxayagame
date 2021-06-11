@@ -103,6 +103,14 @@ private:
   Json::Value create;
 
   /**
+   * Pending "join channel" moves, already formatted as JSON.  If there
+   * are multiple joins for the same channel, we simply return all of them
+   * in a JSON array, as the order in which they would be processed in a
+   * block is not known beforehand.
+   */
+  Json::Value join;
+
+  /**
    * Clears the internal state for ships (not including the Clear
    * method for PendingMoves).
    */
@@ -113,6 +121,12 @@ private:
    */
   void HandleCreateChannel (const Json::Value& obj, const std::string& name,
                             const xaya::uint256& txid);
+
+  /**
+   * Tries to process a pending "join channel" move.
+   */
+  void HandleJoinChannel (xaya::SQLiteDatabase& db, const Json::Value& obj,
+                          const std::string& name);
 
   /**
    * Tries to process a pending dispute or resolution move.

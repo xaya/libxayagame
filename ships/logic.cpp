@@ -161,28 +161,28 @@ RetrieveChannelFromMove (const Json::Value& obj, xaya::ChannelsTable& tbl)
 }
 
 /**
- * Tries to process a "join channel" move.
+ * Tries to parse and validate a "join channel" move.  If the move seems
+ * valid, the handle is returned and the second player's signing address
+ * is set.  Returns null if the move is not valid.
  */
-void
-HandleJoinChannel (xaya::SQLiteDatabase& db,
-                   const Json::Value& obj, const std::string& name,
-                   const xaya::uint256& txid)
+xaya::ChannelsTable::Handle
+ParseJoinChannelMove (const Json::Value& obj, const std::string& name,
+                      xaya::ChannelsTable& tbl, std::string& addr)
 {
   if (!obj.isObject ())
-    return;
+    return nullptr;
 
   const auto& addrVal = obj["addr"];
   if (obj.size () != 2 || !addrVal.isString ())
     {
       LOG (WARNING) << "Invalid join channel move: " << obj;
-      return;
+      return nullptr;
     }
-  const std::string addr = addrVal.asString ();
+  addr = addrVal.asString ();
 
-  xaya::ChannelsTable tbl(db);
   auto h = RetrieveChannelFromMove (obj, tbl);
   if (h == nullptr)
-    return;
+    return nullptr;
 
   const auto& meta = h->GetMetadata ();
   if (meta.participants_size () != 1)
@@ -190,7 +190,7 @@ HandleJoinChannel (xaya::SQLiteDatabase& db,
       LOG (WARNING)
           << "Cannot join channel " << h->GetId ().ToHex ()
           << " with " << meta.participants_size () << " participants";
-      return;
+      return nullptr;
     }
 
   if (meta.participants (0).name () == name)
@@ -198,14 +198,32 @@ HandleJoinChannel (xaya::SQLiteDatabase& db,
       LOG (WARNING)
           << name << " cannot join channel " << h->GetId ().ToHex ()
           << " a second time";
-      return;
+      return nullptr;
     }
+
+  return h;
+}
+
+/**
+ * Tries to process a "join channel" move.
+ */
+void
+HandleJoinChannel (xaya::SQLiteDatabase& db,
+                   const Json::Value& obj, const std::string& name,
+                   const xaya::uint256& txid)
+{
+  xaya::ChannelsTable tbl(db);
+
+  std::string addr;
+  auto h = ParseJoinChannelMove (obj, name, tbl, addr);
+  if (h == nullptr)
+    return;
 
   LOG (INFO)
       << "Adding " << name << " to channel " << h->GetId ().ToHex ()
       << " with address " << addr;
 
-  xaya::proto::ChannelMetadata newMeta = meta;
+  xaya::proto::ChannelMetadata newMeta = h->GetMetadata ();
   xaya::UpdateMetadataReinit (txid, newMeta);
   auto* p = newMeta.add_participants ();
   p->set_name (name);
@@ -603,6 +621,7 @@ void
 ShipsPending::ClearShips ()
 {
   create = Json::Value (Json::arrayValue);
+  join = Json::Value (Json::arrayValue);
 }
 
 void
@@ -623,6 +642,30 @@ ShipsPending::HandleCreateChannel (const Json::Value& obj,
   cur["address"] = addr;
   cur["id"] = txid.ToHex ();
   create.append (cur);
+}
+
+void
+ShipsPending::HandleJoinChannel (xaya::SQLiteDatabase& db,
+                                 const Json::Value& obj,
+                                 const std::string& name)
+{
+  xaya::ChannelsTable tbl(db);
+
+  std::string addr;
+  auto h = ParseJoinChannelMove (obj, name, tbl, addr);
+  if (h == nullptr)
+    return;
+
+  LOG (INFO)
+      << "New pending join-channel move from " << name
+      << " for channel " << h->GetId ().ToHex ()
+      << " with address " << addr;
+
+  Json::Value cur(Json::objectValue);
+  cur["name"] = name;
+  cur["address"] = addr;
+  cur["id"] = h->GetId ().ToHex ();
+  join.append (cur);
 }
 
 void
@@ -678,6 +721,7 @@ ShipsPending::AddPendingMoveUnsafe (const xaya::SQLiteDatabase& db,
 
   auto& mutableDb = const_cast<xaya::SQLiteDatabase&> (db);
   HandleCreateChannel (data["c"], name, txid);
+  HandleJoinChannel (mutableDb, data["j"], name);
   HandleDisputeResolution (mutableDb, data["d"]);
   HandleDisputeResolution (mutableDb, data["r"]);
 }
@@ -700,6 +744,7 @@ ShipsPending::ToJson () const
 {
   Json::Value res = PendingMoves::ToJson ();
   res["create"] = create;
+  res["join"] = join;
 
   return res;
 }

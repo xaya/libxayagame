@@ -1023,7 +1023,30 @@ TEST_F (PendingTests, NonObjectMove)
   EXPECT_EQ (GetPendingField ("create"), ParseJson ("[]"));
 }
 
-/* FIXME: Test a combination (e.g. create and join) in one move.  */
+TEST_F (PendingTests, MultipleCommands)
+{
+  meta.mutable_participants ()->RemoveLast ();
+  ASSERT_EQ (meta.participants_size (), 1);
+
+  const auto cid = xaya::SHA256::Hash ("channel");
+  auto h = tbl.CreateNew (cid);
+  h->Reinitialise (meta, "");
+  h.reset ();
+
+  auto joinMove = ParseJson (R"(
+    {
+      "c": {"addr": "address"},
+      "j": {"addr": "address"}
+    }
+  )");
+  joinMove["j"]["id"] = cid.ToHex ();
+
+  const auto txid = xaya::SHA256::Hash ("txid");
+  AddPendingMove (Move ("domob", txid, joinMove));
+
+  EXPECT_EQ (GetPendingField ("create"), ParseJson ("[]"));
+  EXPECT_EQ (GetPendingField ("join"), ParseJson ("[]"));
+}
 
 TEST_F (PendingTests, CreateChannel)
 {
@@ -1051,6 +1074,38 @@ TEST_F (PendingTests, CreateChannel)
   expected[1]["id"] = txid3.ToHex ();
 
   EXPECT_EQ (GetPendingField ("create"), expected);
+}
+
+TEST_F (PendingTests, JoinChannel)
+{
+  meta.mutable_participants ()->RemoveLast ();
+  ASSERT_EQ (meta.participants_size (), 1);
+
+  const auto cid = xaya::SHA256::Hash ("channel");
+  auto h = tbl.CreateNew (cid);
+  h->Reinitialise (meta, "");
+  h.reset ();
+
+  auto joinMove = ParseJson (R"(
+    {"j": {"addr": "address"}}
+  )");
+  joinMove["j"]["id"] = cid.ToHex ();
+
+  const auto txid = xaya::SHA256::Hash ("txid");
+  AddPendingMove (Move ("domob", txid, joinMove));
+  AddPendingMove (Move ("name 0", txid, joinMove));
+  AddPendingMove (Move ("andy", txid, joinMove));
+
+  auto expected = ParseJson (R"(
+    [
+      {"name": "domob", "address": "address"},
+      {"name": "andy", "address": "address"}
+    ]
+  )");
+  expected[0]["id"] = cid.ToHex ();
+  expected[1]["id"] = cid.ToHex ();
+
+  EXPECT_EQ (GetPendingField ("join"), expected);
 }
 
 TEST_F (PendingTests, ValidStateProof)
