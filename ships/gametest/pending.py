@@ -14,14 +14,21 @@ import time
 
 class PendingTest (ShipsTest):
 
+  def getPendingState (self):
+    """
+    Returns the pending state, waiting a bit before to "make sure"
+    it is synced up.
+    """
+
+    time.sleep (0.1)
+    return super ().getPendingState ()
+
   def expectPendingChannels (self, expected):
     """
     Expects that the pending state contains data about the given
     channels.  expected is a dictionary mapping channel IDs (as hex)
     to the expected turn counts.
     """
-
-    time.sleep (0.1)
 
     pending = self.getPendingState ()
     assert "channels" in pending
@@ -35,11 +42,21 @@ class PendingTest (ShipsTest):
   def run (self):
     self.generate (110)
 
-    # Create a test channel with two participants.
+    # Create a test channel with two participants, checking the
+    # pending moves while we do it.
     self.mainLogger.info ("Opening a test channel...")
-    addr1 = self.rpc.xaya.getnewaddress ()
-    addr2 = self.rpc.xaya.getnewaddress ()
-    cid = self.openChannel (["foo", "bar"], [addr1, addr2])
+    addr1 = self.newSigningAddress ()
+    addr2 = self.newSigningAddress ()
+    cid = self.sendMove ("foo", {"c": {"addr": addr1}})
+    self.assertEqual (self.getPendingState ()["create"], [
+      {"name": "foo", "address": addr1, "id": cid},
+    ])
+    self.generate (1)
+    self.sendMove ("bar", {"j": {"id": cid, "addr": addr2}})
+    self.assertEqual (self.getPendingState ()["join"], [
+      {"name": "bar", "address": addr2, "id": cid},
+    ])
+    self.generate (1)
     self.expectChannelState (cid, "first commitment", None)
 
     # Open a dispute and check the pending state.
@@ -67,7 +84,12 @@ class PendingTest (ShipsTest):
     # Mine the moves, which should clear the mempool again.
     self.mainLogger.info ("Mining the pending transactions...")
     self.generate (1)
-    self.expectPendingChannels ({})
+    self.assertEqual (self.getPendingState (), {
+      "channels": {},
+      "create": [],
+      "join": [],
+      "abort": []
+    })
 
 
 if __name__ == "__main__":

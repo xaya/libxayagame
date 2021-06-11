@@ -17,6 +17,8 @@
 namespace ships
 {
 
+/* ************************************************************************** */
+
 const xaya::BoardRules&
 ShipsLogic::GetBoardRules () const
 {
@@ -66,8 +68,31 @@ ShipsLogic::InitialiseState (xaya::SQLiteDatabase& db)
      yet, and also no channels defined.  */
 }
 
+/* ************************************************************************** */
+
 namespace
 {
+
+/**
+ * Tries to parse a "create channel" move.  If the move is valid, the signing
+ * address is set.
+ */
+bool
+ParseCreateChannelMove (const Json::Value& obj, std::string& addr)
+{
+  if (!obj.isObject ())
+    return false;
+
+  const auto& addrVal = obj["addr"];
+  if (obj.size () != 1 || !addrVal.isString ())
+    {
+      LOG (WARNING) << "Invalid create channel move: " << obj;
+      return false;
+    }
+  addr = addrVal.asString ();
+
+  return true;
+}
 
 /**
  * Tries to process a "create channel" move, if the JSON object describes
@@ -79,16 +104,9 @@ HandleCreateChannel (xaya::SQLiteDatabase& db,
                      const std::string& name,
                      const xaya::uint256& txid)
 {
-  if (!obj.isObject ())
+  std::string addr;
+  if (!ParseCreateChannelMove (obj, addr))
     return;
-
-  const auto& addrVal = obj["addr"];
-  if (obj.size () != 1 || !addrVal.isString ())
-    {
-      LOG (WARNING) << "Invalid create channel move: " << obj;
-      return;
-    }
-  const std::string addr = addrVal.asString ();
 
   LOG (INFO)
       << "Creating channel with ID " << txid.ToHex ()
@@ -143,28 +161,28 @@ RetrieveChannelFromMove (const Json::Value& obj, xaya::ChannelsTable& tbl)
 }
 
 /**
- * Tries to process a "join channel" move.
+ * Tries to parse and validate a "join channel" move.  If the move seems
+ * valid, the handle is returned and the second player's signing address
+ * is set.  Returns null if the move is not valid.
  */
-void
-HandleJoinChannel (xaya::SQLiteDatabase& db,
-                   const Json::Value& obj, const std::string& name,
-                   const xaya::uint256& txid)
+xaya::ChannelsTable::Handle
+ParseJoinChannelMove (const Json::Value& obj, const std::string& name,
+                      xaya::ChannelsTable& tbl, std::string& addr)
 {
   if (!obj.isObject ())
-    return;
+    return nullptr;
 
   const auto& addrVal = obj["addr"];
   if (obj.size () != 2 || !addrVal.isString ())
     {
       LOG (WARNING) << "Invalid join channel move: " << obj;
-      return;
+      return nullptr;
     }
-  const std::string addr = addrVal.asString ();
+  addr = addrVal.asString ();
 
-  xaya::ChannelsTable tbl(db);
   auto h = RetrieveChannelFromMove (obj, tbl);
   if (h == nullptr)
-    return;
+    return nullptr;
 
   const auto& meta = h->GetMetadata ();
   if (meta.participants_size () != 1)
@@ -172,7 +190,7 @@ HandleJoinChannel (xaya::SQLiteDatabase& db,
       LOG (WARNING)
           << "Cannot join channel " << h->GetId ().ToHex ()
           << " with " << meta.participants_size () << " participants";
-      return;
+      return nullptr;
     }
 
   if (meta.participants (0).name () == name)
@@ -180,14 +198,32 @@ HandleJoinChannel (xaya::SQLiteDatabase& db,
       LOG (WARNING)
           << name << " cannot join channel " << h->GetId ().ToHex ()
           << " a second time";
-      return;
+      return nullptr;
     }
+
+  return h;
+}
+
+/**
+ * Tries to process a "join channel" move.
+ */
+void
+HandleJoinChannel (xaya::SQLiteDatabase& db,
+                   const Json::Value& obj, const std::string& name,
+                   const xaya::uint256& txid)
+{
+  xaya::ChannelsTable tbl(db);
+
+  std::string addr;
+  auto h = ParseJoinChannelMove (obj, name, tbl, addr);
+  if (h == nullptr)
+    return;
 
   LOG (INFO)
       << "Adding " << name << " to channel " << h->GetId ().ToHex ()
       << " with address " << addr;
 
-  xaya::proto::ChannelMetadata newMeta = meta;
+  xaya::proto::ChannelMetadata newMeta = h->GetMetadata ();
   xaya::UpdateMetadataReinit (txid, newMeta);
   auto* p = newMeta.add_participants ();
   p->set_name (name);
@@ -200,34 +236,34 @@ HandleJoinChannel (xaya::SQLiteDatabase& db,
 }
 
 /**
- * Tries to process an "abort channel" move.
+ * Tries to parse and validate an "abort channel" move.  If the move seems
+ * valid, the ID of the channel to abort is set.
  */
-void
-HandleAbortChannel (xaya::SQLiteDatabase& db,
-                    const Json::Value& obj, const std::string& name)
+bool
+ParseAbortChannelMove (const Json::Value& obj, const std::string& name,
+                       xaya::ChannelsTable& tbl, xaya::uint256& id)
 {
   if (!obj.isObject ())
-    return;
+    return false;
 
   if (obj.size () != 1)
     {
       LOG (WARNING) << "Invalid abort channel move: " << obj;
-      return;
+      return false;
     }
 
-  xaya::ChannelsTable tbl(db);
   auto h = RetrieveChannelFromMove (obj, tbl);
   if (h == nullptr)
-    return;
+    return false;
 
-  const xaya::uint256 id = h->GetId ();
+  id = h->GetId ();
   const auto& meta = h->GetMetadata ();
   if (meta.participants_size () != 1)
     {
       LOG (WARNING)
           << "Cannot abort channel " << id.ToHex ()
           << " with " << meta.participants_size () << " participants";
-      return;
+      return false;
     }
 
   if (meta.participants (0).name () != name)
@@ -235,11 +271,26 @@ HandleAbortChannel (xaya::SQLiteDatabase& db,
       LOG (WARNING)
           << name << " cannot abort channel " << id.ToHex ()
           << ", only " << meta.participants (0).name () << " can";
-      return;
+      return false;
     }
 
+  return true;
+}
+
+/**
+ * Tries to process an "abort channel" move.
+ */
+void
+HandleAbortChannel (xaya::SQLiteDatabase& db,
+                    const Json::Value& obj, const std::string& name)
+{
+  xaya::ChannelsTable tbl(db);
+
+  xaya::uint256 id;
+  if (!ParseAbortChannelMove (obj, name, tbl, id))
+    return;
+
   LOG (INFO) << "Aborting channel " << id.ToHex ();
-  h.reset ();
   tbl.DeleteById (id);
 }
 
@@ -579,6 +630,78 @@ ShipsLogic::GetStateAsJson (const xaya::SQLiteDatabase& db)
   return gsj.GetFullJson ();
 }
 
+/* ************************************************************************** */
+
+void
+ShipsPending::ClearShips ()
+{
+  create = Json::Value (Json::arrayValue);
+  join = Json::Value (Json::arrayValue);
+  abort.clear ();
+}
+
+void
+ShipsPending::HandleCreateChannel (const Json::Value& obj,
+                                   const std::string& name,
+                                   const xaya::uint256& txid)
+{
+  std::string addr;
+  if (!ParseCreateChannelMove (obj, addr))
+    return;
+
+  LOG (INFO)
+      << "New pending create-channel move from " << name
+      << ": " << txid.ToHex ();
+
+  Json::Value cur(Json::objectValue);
+  cur["name"] = name;
+  cur["address"] = addr;
+  cur["id"] = txid.ToHex ();
+  create.append (cur);
+}
+
+void
+ShipsPending::HandleJoinChannel (xaya::SQLiteDatabase& db,
+                                 const Json::Value& obj,
+                                 const std::string& name)
+{
+  xaya::ChannelsTable tbl(db);
+
+  std::string addr;
+  auto h = ParseJoinChannelMove (obj, name, tbl, addr);
+  if (h == nullptr)
+    return;
+
+  LOG (INFO)
+      << "New pending join-channel move from " << name
+      << " for channel " << h->GetId ().ToHex ()
+      << " with address " << addr;
+
+  Json::Value cur(Json::objectValue);
+  cur["name"] = name;
+  cur["address"] = addr;
+  cur["id"] = h->GetId ().ToHex ();
+  join.append (cur);
+}
+
+void
+ShipsPending::HandleAbortChannel (xaya::SQLiteDatabase& db,
+                                  const Json::Value& obj,
+                                  const std::string& name)
+{
+  xaya::ChannelsTable tbl(db);
+
+  xaya::uint256 id;
+  if (!ParseAbortChannelMove (obj, name, tbl, id))
+    return;
+
+  LOG (INFO)
+      << "New pending abort-channel move from " << name
+      << " for channel " << id.ToHex ();
+
+  abort.insert (id);
+}
+
 void
 ShipsPending::HandleDisputeResolution (xaya::SQLiteDatabase& db,
                                        const Json::Value& obj)
@@ -601,10 +724,28 @@ ShipsPending::AddPendingMoveUnsafe (const xaya::SQLiteDatabase& db,
 {
   CHECK (mv.isObject ()) << "Not an object: " << mv;
 
+  const auto& nameVal = mv["name"];
+  CHECK (nameVal.isString ());
+  const std::string name = nameVal.asString ();
+
+  const auto& txidVal = mv["txid"];
+  CHECK (txidVal.isString ());
+  xaya::uint256 txid;
+  CHECK (txid.FromHex (txidVal.asString ()));
+
   const auto& data = mv["move"];
   if (!data.isObject ())
     {
-      LOG (WARNING) << "Move is not an object: " << data;
+      LOG (WARNING)
+          << "Pending move by " << name
+          << " is not an object: " << data;
+      return;
+    }
+  if (data.size () > 1)
+    {
+      LOG (WARNING)
+          << "Pending move by " << name
+          << " has more than one action: " << data;
       return;
     }
 
@@ -613,15 +754,41 @@ ShipsPending::AddPendingMoveUnsafe (const xaya::SQLiteDatabase& db,
      its pending StateProof in case it is valid.  */
 
   auto& mutableDb = const_cast<xaya::SQLiteDatabase&> (db);
+  HandleCreateChannel (data["c"], name, txid);
+  HandleJoinChannel (mutableDb, data["j"], name);
+  HandleAbortChannel (mutableDb, data["a"], name);
   HandleDisputeResolution (mutableDb, data["d"]);
   HandleDisputeResolution (mutableDb, data["r"]);
 }
 
 void
+ShipsPending::Clear ()
+{
+  PendingMoves::Clear ();
+  ClearShips ();
+}
+
+void
 ShipsPending::AddPendingMove (const Json::Value& mv)
 {
-  AccessConfirmedState ();
   AddPendingMoveUnsafe (AccessConfirmedState (), mv);
 }
+
+Json::Value
+ShipsPending::ToJson () const
+{
+  Json::Value res = PendingMoves::ToJson ();
+  res["create"] = create;
+  res["join"] = join;
+
+  Json::Value abortJson(Json::arrayValue);
+  for (const auto& id : abort)
+    abortJson.append (id.ToHex ());
+  res["abort"] = abortJson;
+
+  return res;
+}
+
+/* ************************************************************************** */
 
 } // namespace ships
