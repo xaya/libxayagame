@@ -39,9 +39,9 @@ ShipsLogic::GetInitialStateBlock (unsigned& height, std::string& hashHex) const
   switch (chain)
     {
     case xaya::Chain::MAIN:
-      height = 2'650'000;
+      height = 2'960'000;
       hashHex
-          = "ff155d68419cf3543942ba140c88e5cfeacc74496d87dcffc127974b6c1397a1";
+          = "81c60638621eec528667941d954e044577f0125465ca2ba26347385d5e3aecdd";
       break;
 
     case xaya::Chain::TEST:
