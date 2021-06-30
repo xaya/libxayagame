@@ -26,6 +26,12 @@ namespace ships
 constexpr unsigned DISPUTE_BLOCKS = 10;
 
 /**
+ * The number of blocks until a channel that has not been joined by a second
+ * participant is auto-closed again.
+ */
+constexpr unsigned CHANNEL_TIMEOUT_BLOCKS = 12;
+
+/**
  * The main game logic for the on-chain part of Xayaships.  This takes care of
  * the public game state (win/loss statistics for names), management of open
  * channels and dispute processing.

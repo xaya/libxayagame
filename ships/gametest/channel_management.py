@@ -23,18 +23,20 @@ class ChannelManagementTest (ShipsTest):
       "channels": {},
     })
 
-    # Create two channels with single participants for now.
+    # Create three channels with single participants for now.
     self.mainLogger.info ("Creating two channels...")
     addr1 = self.rpc.xaya.getnewaddress ()
     id1 = self.sendMove ("foo", {"c": {"addr": addr1}})
     addr2 = self.rpc.xaya.getnewaddress ()
     id2 = self.sendMove ("bar", {"c": {"addr": addr2}})
+    addr3 = self.rpc.xaya.getnewaddress ()
+    id3 = self.sendMove ("baz", {"c": {"addr": addr3}})
     self.generate (1)
 
     state = self.getGameState ()
     self.assertEqual (state["gamestats"], {})
     channels = state["channels"]
-    self.assertEqual (len (channels), 2)
+    self.assertEqual (len (channels), 3)
 
     assert id1 in channels
     ch1 = channels[id1]
@@ -49,6 +51,8 @@ class ChannelManagementTest (ShipsTest):
       {"name": "bar", "address": addr2}
     ])
     self.assertEqual (ch2["state"]["parsed"]["phase"], "single participant")
+
+    assert id3 in channels
 
     # Perform an invalid join and abort on the channels. This should not affect
     # the state at all.
@@ -68,7 +72,7 @@ class ChannelManagementTest (ShipsTest):
     state = self.getGameState ()
     self.assertEqual (state["gamestats"], {})
     channels = state["channels"]
-    self.assertEqual (len (channels), 1)
+    self.assertEqual (len (channels), 2)
 
     assert id1 in channels
     ch1 = channels[id1]
@@ -79,6 +83,19 @@ class ChannelManagementTest (ShipsTest):
     self.assertEqual (ch1["state"]["parsed"]["phase"], "first commitment")
 
     assert id2 not in channels
+    assert id3 in channels
+
+    # Let the third channel time out.
+    self.generate (9)
+    channels = self.getGameState ()["channels"]
+    self.assertEqual (len (channels), 2)
+    assert id1 in channels
+    assert id3 in channels
+    self.generate (1)
+    channels = self.getGameState ()["channels"]
+    self.assertEqual (len (channels), 1)
+    assert id1 in channels
+    assert id3 not in channels
 
     # Declare loss in the channel.
     self.mainLogger.info ("Declaring loss in a game to close the channel...")

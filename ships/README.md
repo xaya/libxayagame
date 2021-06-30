@@ -27,7 +27,8 @@ currently open game channels as needed to process disputes.
 Channels can be opened at any time by sending a move requesting to
 open a channel, and anyone can send a move to join an existing channel
 waiting for a second player.  Channels can be closed anytime by the
-player in it as long as no other has joined.  If there are already
+player in it as long as no other has joined, and they are auto-closed
+if noone joined after some time.  If there are already
 two players in a channel, then any participant can close the channel
 by declaring themselves loser.
 
