@@ -39,9 +39,9 @@ ShipsLogic::GetInitialStateBlock (unsigned& height, std::string& hashHex) const
   switch (chain)
     {
     case xaya::Chain::MAIN:
-      height = 2'650'000;
+      height = 2'960'000;
       hashHex
-          = "ff155d68419cf3543942ba140c88e5cfeacc74496d87dcffc127974b6c1397a1";
+          = "81c60638621eec528667941d954e044577f0125465ca2ba26347385d5e3aecdd";
       break;
 
     case xaya::Chain::TEST:
@@ -100,9 +100,8 @@ ParseCreateChannelMove (const Json::Value& obj, std::string& addr)
  */
 void
 HandleCreateChannel (xaya::SQLiteDatabase& db,
-                     const Json::Value& obj,
-                     const std::string& name,
-                     const xaya::uint256& txid)
+                     const Json::Value& obj, const unsigned height,
+                     const std::string& name, const xaya::uint256& txid)
 {
   std::string addr;
   if (!ParseCreateChannelMove (obj, addr))
@@ -125,6 +124,15 @@ HandleCreateChannel (xaya::SQLiteDatabase& db,
   p->set_name (name);
   p->set_address (addr);
   h->Reinitialise (meta, "");
+
+  auto stmt = db.Prepare (R"(
+    INSERT INTO `channel_extradata`
+      (`id`, `createdheight`, `participants`)
+      VALUES (?1, ?2, 1)
+  )");
+  stmt.Bind (1, h->GetId ());
+  stmt.Bind (2, height);
+  stmt.Execute ();
 }
 
 /**
@@ -233,6 +241,15 @@ HandleJoinChannel (xaya::SQLiteDatabase& db,
   xaya::BoardState state;
   CHECK (InitialBoardState ().SerializeToString (&state));
   h->Reinitialise (newMeta, state);
+
+  auto stmt = db.Prepare (R"(
+    UPDATE `channel_extradata`
+      SET `participants` = ?2
+      WHERE `id` = ?1
+  )");
+  stmt.Bind (1, h->GetId ());
+  stmt.Bind (2, newMeta.participants_size ());
+  stmt.Execute ();
 }
 
 /**
@@ -278,6 +295,24 @@ ParseAbortChannelMove (const Json::Value& obj, const std::string& name,
 }
 
 /**
+ * Deletes a channel from the database by ID.  This deletes it from the
+ * game-channel library managed table, as well as from our extra-data one.
+ */
+void
+DeleteChannelById (xaya::SQLiteDatabase& db, xaya::ChannelsTable& tbl,
+                   const xaya::uint256& id)
+{
+  tbl.DeleteById (id);
+
+  auto stmt = db.Prepare (R"(
+    DELETE FROM `channel_extradata`
+      WHERE `id` = ?1
+  )");
+  stmt.Bind (1, id);
+  stmt.Execute ();
+}
+
+/**
  * Tries to process an "abort channel" move.
  */
 void
@@ -291,7 +326,7 @@ HandleAbortChannel (xaya::SQLiteDatabase& db,
     return;
 
   LOG (INFO) << "Aborting channel " << id.ToHex ();
-  tbl.DeleteById (id);
+  DeleteChannelById (db, tbl, id);
 }
 
 /**
@@ -388,7 +423,7 @@ ShipsLogic::HandleDeclareLoss (xaya::SQLiteDatabase& db,
 
   UpdateStats (db, meta, winner);
   h.reset ();
-  tbl.DeleteById (id);
+  DeleteChannelById (db, tbl, id);
 }
 
 namespace
@@ -485,7 +520,7 @@ ShipsLogic::HandleDisputeResolution (xaya::SQLiteDatabase& db,
 
       UpdateStats (db, meta, pb.winner ());
       h.reset ();
-      tbl.DeleteById (id);
+      DeleteChannelById (db, tbl, id);
     }
 }
 
@@ -526,7 +561,7 @@ ShipsLogic::ProcessExpiredDisputes (xaya::SQLiteDatabase& db,
 
       UpdateStats (db, meta, winner);
       h.reset ();
-      tbl.DeleteById (id);
+      DeleteChannelById (db, tbl, id);
     }
 }
 
@@ -567,6 +602,45 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
   stmt.Bind (2, loserName);
   stmt.Execute ();
 }
+
+namespace
+{
+
+/**
+ * Auto-closes all channels that have just one participant and been open
+ * for a timeout number of blocks.
+ */
+void
+TimeOutChannels (xaya::SQLiteDatabase& db, const unsigned height)
+{
+  /* Make sure we don't underflow for the first couple of blocks, particularly
+     on regtest.  */
+  if (height < CHANNEL_TIMEOUT_BLOCKS)
+    return;
+
+  auto stmt = db.PrepareRo (R"(
+    SELECT `id`, `createdheight`, `participants`
+      FROM `channel_extradata`
+      WHERE `participants` < 2 AND `createdheight` <= ?1
+  )");
+  stmt.Bind (1, height - CHANNEL_TIMEOUT_BLOCKS);
+
+  unsigned num = 0;
+  xaya::ChannelsTable tbl(db);
+  while (stmt.Step ())
+    {
+      const auto id = stmt.Get<xaya::uint256> (0);
+      CHECK_EQ (stmt.Get<int> (1), height - CHANNEL_TIMEOUT_BLOCKS);
+      CHECK_EQ (stmt.Get<int> (2), 1);
+      DeleteChannelById (db, tbl, id);
+      ++num;
+    }
+
+  LOG_IF (INFO, num > 0)
+      << "Timed out " << num << " channels at height " << height;
+}
+
+} // anonymous namespace
 
 void
 ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
@@ -612,7 +686,7 @@ ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
           continue;
         }
 
-      HandleCreateChannel (db, data["c"], name, txid);
+      HandleCreateChannel (db, data["c"], height, name, txid);
       HandleJoinChannel (db, data["j"], name, txid);
       HandleAbortChannel (db, data["a"], name);
       HandleDeclareLoss (db, data["l"], name);
@@ -621,6 +695,7 @@ ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
     }
 
   ProcessExpiredDisputes (db, height);
+  TimeOutChannels (db, height);
 }
 
 Json::Value

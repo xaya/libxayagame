@@ -916,6 +916,41 @@ TEST_F (DisputeResolutionTests, ResolutionClosesChannel)
 
 /* ************************************************************************** */
 
+using ChannelTimeoutTests = StateUpdateTests;
+
+TEST_F (ChannelTimeoutTests, Works)
+{
+  const auto id1 = xaya::SHA256::Hash ("foo");
+  const auto id2 = xaya::SHA256::Hash ("bar");
+
+  std::vector<Json::Value> moves;
+  moves.push_back (Move ("foo", id1, ParseJson (R"({"c": {"addr": "a"}})")));
+  moves.push_back (Move ("foo", id2, ParseJson (R"({"c": {"addr": "a"}})")));
+  UpdateState (10, moves);
+
+  /* Until the height is reached, nothing should happen.  */
+  for (unsigned i = 1; i < CHANNEL_TIMEOUT_BLOCKS; ++i)
+    UpdateState (10 + i, {});
+
+  ExpectNumberOfChannels (2);
+  EXPECT_EQ (ExpectChannel (id1)->GetMetadata ().participants_size (), 1);
+  EXPECT_EQ (ExpectChannel (id2)->GetMetadata ().participants_size (), 1);
+
+  /* At the timeout height, join one of the channels, and let the
+     other actually time out.  */
+  moves.clear ();
+  Json::Value data(Json::objectValue);
+  data["j"] = ParseJson (R"({"addr": "b"})");
+  data["j"]["id"] = id2.ToHex ();
+  moves.push_back (Move ("bar", id2, data));
+  UpdateState (10 + CHANNEL_TIMEOUT_BLOCKS, moves);
+
+  ExpectNumberOfChannels (1);
+  EXPECT_EQ (ExpectChannel (id2)->GetMetadata ().participants_size (), 2);
+}
+
+/* ************************************************************************** */
+
 } // anonymous namespace
 
 class PendingTests : public InMemoryLogicFixture
