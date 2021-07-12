@@ -314,11 +314,8 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveAlreadyPending)
       .WillOnce (Return (txid.ToHex ()));
 
   Json::Value pendings(Json::arrayValue);
-  Json::Value p(Json::objectValue);
-  p["name"] = "p/player";
-  p["txid"] = txid.ToHex ();
-  pendings.append (p);
-  EXPECT_CALL (*mockXayaServer, name_pending ())
+  pendings.append (txid.ToHex ());
+  EXPECT_CALL (*mockXayaServer, getrawmempool ())
       .WillOnce (Return (pendings));
 
   proto::BoardState state;
@@ -343,7 +340,7 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveNoLongerPending)
       .WillOnce (Return (txid1.ToHex ()))
       .WillOnce (Return (txid2.ToHex ()));
 
-  EXPECT_CALL (*mockXayaServer, name_pending ())
+  EXPECT_CALL (*mockXayaServer, getrawmempool ())
       .WillOnce (Return (ParseJson ("[]")));
 
   proto::BoardState state;

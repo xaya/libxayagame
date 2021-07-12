@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -66,28 +66,12 @@ MoveSender::SendResolution (const proto::StateProof& proof)
 bool
 MoveSender::IsPending (const uint256& txid) const
 {
-  /* Note that we could optimise this by requesting just name_pending for
-     the MoveSender's player name.  For now, there are two reasons why we
-     don't do that:  First, Xaya Core's (and Namecoin's) name_pending
-     implementation goes through the full mempool anyway instead of using
-     its index of mempool names; so while we would save some transfer of
-     data and processing here, we would still access the whole mempool
-     at some point.  And second, if we defined name_pending as accepting
-     a string argument in the RPC stubs, we couldn't call the general form
-     anymore; that might be useful in other places.
+  const std::string txidHex = txid.ToHex ();
 
-     But in case Namecoin gets updated to use the indices for name_pending
-     and perhaps to allow an empty name to signal "no filtering" (instead of
-     just a null value), we could change the implementation here without
-     any impact on clients.  */
-  const auto pending = rpc.name_pending ();
-
-  for (const auto& p : pending)
-    if (p["txid"].asString () == txid.ToHex ())
-      {
-        CHECK_EQ (p["name"], playerName);
-        return true;
-      }
+  const auto mempool = rpc.getrawmempool ();
+  for (const auto& tx : mempool)
+    if (tx.asString () == txidHex)
+      return true;
 
   return false;
 }

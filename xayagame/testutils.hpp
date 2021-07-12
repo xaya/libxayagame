@@ -94,7 +94,6 @@ public:
                                             const std::string& signature));
 
   MOCK_METHOD0 (getrawmempool, Json::Value ());
-  MOCK_METHOD0 (name_pending, Json::Value ());
 
 };
 

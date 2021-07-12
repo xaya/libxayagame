@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -70,16 +70,10 @@ TEST_F (MoveSenderTests, IsPending)
   const auto txidNotPending = SHA256::Hash ("txid 3");
 
   Json::Value pendings(Json::arrayValue);
-  Json::Value p(Json::objectValue);
-  p["name"] = "p/player";
-  p["txid"] = txidPending.ToHex ();
-  pendings.append (p);
-  p = Json::Value (Json::objectValue);
-  p["name"] = "p/other";
-  p["txid"] = txidOther.ToHex ();
-  pendings.append (p);
+  pendings.append (txidPending.ToHex ());
+  pendings.append (txidOther.ToHex ());
 
-  EXPECT_CALL (*mockXayaServer, name_pending ())
+  EXPECT_CALL (*mockXayaServer, getrawmempool ())
       .WillRepeatedly (Return (pendings));
 
   EXPECT_TRUE (onChain.IsPending (txidPending));

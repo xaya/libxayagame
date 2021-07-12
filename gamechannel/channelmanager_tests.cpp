@@ -524,12 +524,9 @@ TEST_F (ResolveDisputeTests, RetryAfterBlock)
   const auto txid = ExpectMoves (2, "resolution");
 
   Json::Value pendings(Json::arrayValue);
-  Json::Value p(Json::objectValue);
-  p["name"] = "p/player";
-  p["txid"] = txid.ToHex ();
-  pendings.append (p);
+  pendings.append (txid.ToHex ());
 
-  EXPECT_CALL (*mockXayaServer, name_pending ())
+  EXPECT_CALL (*mockXayaServer, getrawmempool ())
       .WillOnce (Return (pendings))
       .WillOnce (Return (ParseJson ("[]")));
 
@@ -619,12 +616,9 @@ TEST_F (FileDisputeTests, RetryAfterBlock)
   const auto txid = ExpectMoves (2, "dispute");
 
   Json::Value pendings(Json::arrayValue);
-  Json::Value p(Json::objectValue);
-  p["name"] = "p/player";
-  p["txid"] = txid.ToHex ();
-  pendings.append (p);
+  pendings.append (txid.ToHex ());
 
-  EXPECT_CALL (*mockXayaServer, name_pending ())
+  EXPECT_CALL (*mockXayaServer, getrawmempool ())
       .WillOnce (Return (pendings))
       .WillOnce (Return (ParseJson ("[]")));
 
