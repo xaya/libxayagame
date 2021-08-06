@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -372,6 +372,16 @@ protected:
                                       "", seqMismatch);
   }
 
+  /**
+   * Connects the given Game instance to our mock server.
+   */
+  void
+  ConnectToMockRpc (Game& g)
+  {
+    g.ConnectRpcClient (mockXayaServer.GetClientConnector (),
+                        jsonrpc::JSONRPC_CLIENT_V2);
+  }
+
 };
 
 /* ************************************************************************** */
@@ -386,7 +396,7 @@ TEST_F (XayaVersionTests, Works)
       .WillOnce (Return (networkInfo));
 
   Game g(GAME_ID);
-  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
+  ConnectToMockRpc (g);
   EXPECT_EQ (g.GetXayaVersion (), 1020300);
 }
 
@@ -398,7 +408,7 @@ TEST_F (ChainDetectionTests, ChainDetected)
 {
   Game g(GAME_ID);
   mockXayaServer->SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
+  ConnectToMockRpc (g);
   EXPECT_TRUE (g.GetChain () == Chain::MAIN);
 }
 
@@ -415,8 +425,8 @@ TEST_F (ChainDetectionTests, Reconnection)
     {
       mockXayaServer->StartListening ();
       mockXayaServer->SetBestBlock (0, BlockHash (0));
-      g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
-      g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
+      ConnectToMockRpc (g);
+      ConnectToMockRpc (g);
     },
     "RPC client is already connected");
 }
@@ -440,7 +450,7 @@ TEST_F (DetectZmqEndpointTests, BlocksWithoutPending)
 
   Game g(GAME_ID);
   mockXayaServer->SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
+  ConnectToMockRpc (g);
   ASSERT_TRUE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "address");
   EXPECT_EQ (GetZmqEndpointPending (g), "");
@@ -460,7 +470,7 @@ TEST_F (DetectZmqEndpointTests, BlocksAndPending)
 
   Game g(GAME_ID);
   mockXayaServer->SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
+  ConnectToMockRpc (g);
   ASSERT_TRUE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "address blocks");
   EXPECT_EQ (GetZmqEndpointPending (g), "address pending");
@@ -480,7 +490,7 @@ TEST_F (DetectZmqEndpointTests, NotSet)
 
   Game g(GAME_ID);
   mockXayaServer->SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
+  ConnectToMockRpc (g);
   ASSERT_FALSE (g.DetectZmqEndpoint ());
   EXPECT_EQ (GetZmqEndpoint (g), "");
 }
@@ -507,7 +517,7 @@ TEST_F (TrackGameTests, CallsMade)
 
   Game g(GAME_ID);
   mockXayaServer->SetBestBlock (0, BlockHash (0));
-  g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
+  ConnectToMockRpc (g);
   TrackGame (g);
   UntrackGame (g);
 }
@@ -539,7 +549,7 @@ protected:
         .WillRepeatedly (Return (GAME_GENESIS_HASH));
 
     mockXayaServer->SetBestBlock (0, BlockHash (0));
-    g.ConnectRpcClient (mockXayaServer.GetClientConnector ());
+    ConnectToMockRpc (g);
 
     g.SetStorage (storage);
     g.SetGameLogic (rules);
@@ -717,7 +727,7 @@ TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
      state).  */
   Game freshGame(GAME_ID);
   TestGame freshRules;
-  freshGame.ConnectRpcClient (mockXayaServer.GetClientConnector ());
+  ConnectToMockRpc (freshGame);
   freshGame.SetStorage (storage);
   freshGame.SetGameLogic (freshRules);
   ReinitialiseState (freshGame);

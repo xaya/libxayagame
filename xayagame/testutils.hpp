@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -264,14 +264,6 @@ protected:
   explicit GameTestFixture (const std::string& id)
     : gameId(id)
   {}
-
-  static void
-  SetUpTestCase ()
-  {
-    /* Use JSON-RPC V2 by the RPC client in Game.  It seems that V1 to V1
-       does not work with jsonrpccpp for some reason.  */
-    Game::rpcClientVersion = jsonrpc::JSONRPC_CLIENT_V2;
-  }
 
   static std::string
   GetZmqEndpoint (const Game& g)

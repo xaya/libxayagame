@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -174,13 +174,6 @@ private:
   /** The pruning queue if we are pruning.  */
   std::unique_ptr<internal::PruningQueue> pruningQueue;
 
-  /**
-   * The JSON-RPC version to use for talking to Xaya Core.  The actual daemon
-   * needs V1, but for the unit test (where the server is mocked and set up
-   * based on jsonrpccpp), we want V2.
-   */
-  static jsonrpc::clientVersion_t rpcClientVersion;
-
   void BlockAttach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
   void BlockDetach (const std::string& id, const Json::Value& data,
@@ -308,9 +301,13 @@ public:
 
   /**
    * Sets up the RPC client based on the given connector.  This must only
-   * be called once.
+   * be called once.  The JSON-RPC protocol version to use can be specified.
+   * V1 is what needs to be used with a real Xaya Core instance, while
+   * unit tests and other situations (e.g. Xaya X) need V2.
    */
-  void ConnectRpcClient (jsonrpc::IClientConnector& conn);
+  void ConnectRpcClient (
+      jsonrpc::IClientConnector& conn,
+      jsonrpc::clientVersion_t version = jsonrpc::JSONRPC_CLIENT_V1);
 
   /**
    * Returns the version of the connected Xaya Core daemon in the form
