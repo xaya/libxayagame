@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -164,6 +164,13 @@ struct GameDaemonConfiguration
    *  http://user:password@localhost:port
    */
   std::string XayaRpcUrl;
+
+  /**
+   * The JSON-RPC protocol version that should be used when talking to Xaya.
+   * For a real Xaya Core, this should be 1.  In other situations (e.g.
+   * when using Xaya X), it could be set to 2.
+   */
+  int XayaJsonRpcProtocol = 1;
 
   /**
    * The minimum required Xaya Core version.  By default, this is

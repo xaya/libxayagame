@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -42,8 +42,6 @@ Game::Game (const std::string& id)
   genesisHash.SetNull ();
   zmq.AddListener (gameId, this);
 }
-
-jsonrpc::clientVersion_t Game::rpcClientVersion = jsonrpc::JSONRPC_CLIENT_V1;
 
 std::string
 Game::StateToString (const State s)
@@ -395,13 +393,14 @@ Game::PendingMove (const std::string& id, const Json::Value& data)
 }
 
 void
-Game::ConnectRpcClient (jsonrpc::IClientConnector& conn)
+Game::ConnectRpcClient (jsonrpc::IClientConnector& conn,
+                        const jsonrpc::clientVersion_t version)
 {
   std::lock_guard<std::mutex> lock(mut);
   CHECK (rpcClient == nullptr) << "RPC client is already connected";
   CHECK (chain == Chain::UNKNOWN);
 
-  rpcClient = std::make_unique<XayaRpcClient> (conn, rpcClientVersion);
+  rpcClient = std::make_unique<XayaRpcClient> (conn, version);
 
   const Json::Value info = rpcClient->getblockchaininfo ();
   const std::string chainStr = info["chain"].asString ();

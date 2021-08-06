@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -151,11 +151,11 @@ VerifyXayaVersion (const GameDaemonConfiguration& config, const unsigned v)
  * client connector.
  */
 void
-WaitForXaya (jsonrpc::IClientConnector& conn)
+WaitForXaya (jsonrpc::IClientConnector& conn, const jsonrpc::clientVersion_t v)
 {
   LOG (INFO) << "Waiting for Xaya to be up...";
 
-  XayaRpcClient client(conn, jsonrpc::JSONRPC_CLIENT_V1);
+  XayaRpcClient client(conn, v);
   while (true)
     try
       {
@@ -169,6 +169,24 @@ WaitForXaya (jsonrpc::IClientConnector& conn)
         LOG (INFO) << "Failed to connect to Xaya Core, waiting...";
         std::this_thread::sleep_for (std::chrono::seconds (1));
       }
+}
+
+/**
+ * Converts the protocol version as integer (1 or 2) from the
+ * config struct to the libjson-rpc-cpp type.
+ */
+jsonrpc::clientVersion_t
+GetClientVersion (const GameDaemonConfiguration& config)
+{
+  switch (config.XayaJsonRpcProtocol)
+    {
+    case 1:
+      return jsonrpc::JSONRPC_CLIENT_V1;
+    case 2:
+      return jsonrpc::JSONRPC_CLIENT_V2;
+    default:
+      LOG (FATAL) << "Invalid JSON-RPC version: " << config.XayaJsonRpcProtocol;
+    }
 }
 
 } // anonymous namespace
@@ -191,11 +209,12 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
       const std::string jsonRpcUrl(config.XayaRpcUrl);
       jsonrpc::HttpClient httpConnector(jsonRpcUrl);
 
+      const auto protocol = GetClientVersion (config);
       if (config.XayaRpcWait)
-        WaitForXaya (httpConnector);
+        WaitForXaya (httpConnector, protocol);
 
       auto game = std::make_unique<Game> (gameId);
-      game->ConnectRpcClient (httpConnector);
+      game->ConnectRpcClient (httpConnector, protocol);
       VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());
 
@@ -264,11 +283,12 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
       const std::string jsonRpcUrl(config.XayaRpcUrl);
       jsonrpc::HttpClient httpConnector(jsonRpcUrl);
 
+      const auto protocol = GetClientVersion (config);
       if (config.XayaRpcWait)
-        WaitForXaya (httpConnector);
+        WaitForXaya (httpConnector, protocol);
 
       auto game = std::make_unique<Game> (gameId);
-      game->ConnectRpcClient (httpConnector);
+      game->ConnectRpcClient (httpConnector, protocol);
       VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());
 
