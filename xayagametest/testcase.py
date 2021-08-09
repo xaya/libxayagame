@@ -152,10 +152,10 @@ class XayaGameTest (object):
       game = None
     self.rpc = RpcHandles ()
 
-    self.startXayaDaemon ()
     cleanup = False
     success = False
-    try:
+    with self.xayanode.run ():
+      self.rpc.xaya = self.xayanode.rpc
       self.startGameDaemon ()
       try:
         self.setup ()
@@ -172,12 +172,12 @@ class XayaGameTest (object):
       finally:
         self.shutdown ()
         self.stopGameDaemon ()
-    finally:
-      self.stopXayaDaemon ()
-      if cleanup:
-        self.log.info ("Cleaning up base directory in %s" % self.basedir)
-        shutil.rmtree (self.basedir, ignore_errors=True)
-      logging.shutdown ()
+
+    if cleanup:
+      self.log.info ("Cleaning up base directory in %s" % self.basedir)
+      shutil.rmtree (self.basedir, ignore_errors=True)
+
+    logging.shutdown ()
 
     if not success:
       sys.exit ("Test failed")
@@ -204,21 +204,6 @@ class XayaGameTest (object):
   def run (self):
     self.mainLogger.warning (
         "Test 'run' method not overridden, this tests nothing")
-
-  def startXayaDaemon (self):
-    """
-    Starts the Xaya Core daemon.
-    """
-
-    self.xayanode.start ()
-    self.rpc.xaya = self.xayanode.rpc
-
-  def stopXayaDaemon (self):
-    """
-    Stops the Xaya Core daemon.
-    """
-
-    self.xayanode.stop ()
 
   def startGameDaemon (self, extraArgs=[], wait=True):
     """
