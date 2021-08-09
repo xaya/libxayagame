@@ -129,17 +129,17 @@ class XayaGameTest (object):
     self.ports = portGenerator (startPort)
 
     zmqPorts = {
-      "blocks": next (self.ports),
+      "gameblocks": next (self.ports),
     }
     if self.zmqPending == "none":
       self.log.info ("Disabling ZMQ for pending moves in Xaya Core")
     elif self.zmqPending == "one socket":
       self.log.info ("Pending moves are sent on the same socket as blocks")
-      zmqPorts["pending"] = zmqPorts["blocks"]
+      zmqPorts["gamepending"] = zmqPorts["gameblocks"]
     elif self.zmqPending == "two sockets":
       self.log.info ("Pending moves are sent on a different socket as blocks")
-      zmqPorts["pending"] = next (self.ports)
-      assert zmqPorts["pending"] != zmqPorts["blocks"]
+      zmqPorts["gamepending"] = next (self.ports)
+      assert zmqPorts["gamepending"] != zmqPorts["gameblocks"]
     else:
       raise AssertionError ("Invalid zmqPending: %s" % self.zmqPending)
 

@@ -32,11 +32,9 @@ class Node ():
       "rpcpassword": "xayagametest",
       "rpcport": rpcPort,
       "fallbackfee": 0.001,
-      "zmqpubgameblocks": "tcp://127.0.0.1:%d" % zmqPorts["blocks"],
     }
-    if "pending" in zmqPorts:
-      zmqPending = "tcp://127.0.0.1:%d" % zmqPorts["pending"]
-      self.config["zmqpubgamepending"] = zmqPending
+    for name, port in zmqPorts.items ():
+      self.config["zmqpub%s" % name] = "tcp://127.0.0.1:%d" % port
     self.baseRpcUrl = ("http://%s:%s@localhost:%d"
         % (self.config["rpcuser"], self.config["rpcpassword"],
            self.config["rpcport"]))
