@@ -30,6 +30,18 @@ DEFAULT_DIR = "/tmp"
 DIR_PREFIX = "xayagametest_"
 
 
+def portGenerator (start):
+  """
+  Generator that yields a sequence of port numbers for use,
+  starting at the given one.
+  """
+
+  p = start
+  while True:
+    yield p
+    p += 1
+
+
 class XayaGameTest (object):
   """
   Base class for integration test cases of Xaya games.  This manages the
@@ -111,12 +123,13 @@ class XayaGameTest (object):
     # produces an empty array.
     self.runGameWith = shlex.split (self.args.run_game_with)
 
-    self.basePort = random.randint (1024, 30000)
-    self.log.info ("Using port range %d..%d, hopefully it is free"
-        % (self.basePort, self.basePort + 3))
+    startPort = random.randint (1024, 30000)
+    self.log.info ("Using port range starting at %d, hopefully it is free"
+        % (startPort))
+    self.ports = portGenerator (startPort)
 
     zmqPorts = {
-      "blocks": self.basePort + 1,
+      "blocks": next (self.ports),
     }
     if self.zmqPending == "none":
       self.log.info ("Disabling ZMQ for pending moves in Xaya Core")
@@ -125,12 +138,12 @@ class XayaGameTest (object):
       zmqPorts["pending"] = zmqPorts["blocks"]
     elif self.zmqPending == "two sockets":
       self.log.info ("Pending moves are sent on a different socket as blocks")
-      zmqPorts["pending"] = self.basePort + 2
+      zmqPorts["pending"] = next (self.ports)
       assert zmqPorts["pending"] != zmqPorts["blocks"]
     else:
       raise AssertionError ("Invalid zmqPending: %s" % self.zmqPending)
 
-    self.xayanode = xaya.Node (self.basedir, self.basePort, zmqPorts,
+    self.xayanode = xaya.Node (self.basedir, next (self.ports), zmqPorts,
                                self.args.xayad_binary)
     self.gamenode = self.createGameNode ()
 
@@ -252,7 +265,7 @@ class XayaGameTest (object):
     gameCmd = list (self.runGameWith)
     gameCmd.append (gameBinary)
 
-    return game.Node (self.basedir, self.basePort + 3, gameCmd)
+    return game.Node (self.basedir, next (self.ports), gameCmd)
 
   ##############################################################################
   # Utility methods for testing.

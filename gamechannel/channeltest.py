@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -160,10 +160,7 @@ class TestCase (XayaGameTest):
   def setup (self):
     super (TestCase, self).setup ()
 
-    bcPort = random.randint (1024, 3000)
-    self.nextChannelPort = bcPort + 1
-    self.log.info ("Using ports starting from %d for channel daemons" % bcPort)
-
+    bcPort = next (self.ports)
     self.broadcast = rpcbroadcast.Server ("localhost", bcPort)
     self.bcurl = "http://localhost:%d" % bcPort
     def serveBroadcast ():
@@ -183,9 +180,7 @@ class TestCase (XayaGameTest):
     underlying Daemon instance when entered.
     """
 
-    port = self.nextChannelPort
-    self.nextChannelPort += 1
-    daemon = Daemon (channelId, playerName, self.basedir, port,
+    daemon = Daemon (channelId, playerName, self.basedir, next (self.ports),
                      self.args.channel_daemon)
 
     return DaemonContext (daemon, self.xayanode.rpcurl, self.gamenode.rpcurl,
