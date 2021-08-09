@@ -30,6 +30,18 @@ DEFAULT_DIR = "/tmp"
 DIR_PREFIX = "xayagametest_"
 
 
+def portGenerator (start):
+  """
+  Generator that yields a sequence of port numbers for use,
+  starting at the given one.
+  """
+
+  p = start
+  while True:
+    yield p
+    p += 1
+
+
 class XayaGameTest (object):
   """
   Base class for integration test cases of Xaya games.  This manages the
@@ -111,26 +123,27 @@ class XayaGameTest (object):
     # produces an empty array.
     self.runGameWith = shlex.split (self.args.run_game_with)
 
-    self.basePort = random.randint (1024, 30000)
-    self.log.info ("Using port range %d..%d, hopefully it is free"
-        % (self.basePort, self.basePort + 3))
+    startPort = random.randint (1024, 30000)
+    self.log.info ("Using port range starting at %d, hopefully it is free"
+        % (startPort))
+    self.ports = portGenerator (startPort)
 
     zmqPorts = {
-      "blocks": self.basePort + 1,
+      "gameblocks": next (self.ports),
     }
     if self.zmqPending == "none":
       self.log.info ("Disabling ZMQ for pending moves in Xaya Core")
     elif self.zmqPending == "one socket":
       self.log.info ("Pending moves are sent on the same socket as blocks")
-      zmqPorts["pending"] = zmqPorts["blocks"]
+      zmqPorts["gamepending"] = zmqPorts["gameblocks"]
     elif self.zmqPending == "two sockets":
       self.log.info ("Pending moves are sent on a different socket as blocks")
-      zmqPorts["pending"] = self.basePort + 2
-      assert zmqPorts["pending"] != zmqPorts["blocks"]
+      zmqPorts["gamepending"] = next (self.ports)
+      assert zmqPorts["gamepending"] != zmqPorts["gameblocks"]
     else:
       raise AssertionError ("Invalid zmqPending: %s" % self.zmqPending)
 
-    self.xayanode = xaya.Node (self.basedir, self.basePort, zmqPorts,
+    self.xayanode = xaya.Node (self.basedir, next (self.ports), zmqPorts,
                                self.args.xayad_binary)
     self.gamenode = self.createGameNode ()
 
@@ -139,10 +152,10 @@ class XayaGameTest (object):
       game = None
     self.rpc = RpcHandles ()
 
-    self.startXayaDaemon ()
     cleanup = False
     success = False
-    try:
+    with self.xayanode.run ():
+      self.rpc.xaya = self.xayanode.rpc
       self.startGameDaemon ()
       try:
         self.setup ()
@@ -159,12 +172,12 @@ class XayaGameTest (object):
       finally:
         self.shutdown ()
         self.stopGameDaemon ()
-    finally:
-      self.stopXayaDaemon ()
-      if cleanup:
-        self.log.info ("Cleaning up base directory in %s" % self.basedir)
-        shutil.rmtree (self.basedir, ignore_errors=True)
-      logging.shutdown ()
+
+    if cleanup:
+      self.log.info ("Cleaning up base directory in %s" % self.basedir)
+      shutil.rmtree (self.basedir, ignore_errors=True)
+
+    logging.shutdown ()
 
     if not success:
       sys.exit ("Test failed")
@@ -191,21 +204,6 @@ class XayaGameTest (object):
   def run (self):
     self.mainLogger.warning (
         "Test 'run' method not overridden, this tests nothing")
-
-  def startXayaDaemon (self):
-    """
-    Starts the Xaya Core daemon.
-    """
-
-    self.xayanode.start ()
-    self.rpc.xaya = self.xayanode.rpc
-
-  def stopXayaDaemon (self):
-    """
-    Stops the Xaya Core daemon.
-    """
-
-    self.xayanode.stop ()
 
   def startGameDaemon (self, extraArgs=[], wait=True):
     """
@@ -252,7 +250,7 @@ class XayaGameTest (object):
     gameCmd = list (self.runGameWith)
     gameCmd.append (gameBinary)
 
-    return game.Node (self.basedir, self.basePort + 3, gameCmd)
+    return game.Node (self.basedir, next (self.ports), gameCmd)
 
   ##############################################################################
   # Utility methods for testing.

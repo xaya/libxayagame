@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2018-2020 The Xaya developers
+# Copyright (C) 2018-2021 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -29,8 +29,9 @@ class StoppedXayadTest (MoverTest):
     # message while xayad is down.  The ZMQ subscription should be back up
     # again automatically.
     self.log.info ("Restarting Xaya daemon")
-    self.stopXayaDaemon ()
-    self.startXayaDaemon ()
+    self.xayanode.stop ()
+    self.xayanode.start ()
+    self.rpc.xaya = self.xayanode.rpc
 
     # Track the game again and sleep a short time, which ensures that the
     # ZMQ subscription has indeed had time to catch up again.

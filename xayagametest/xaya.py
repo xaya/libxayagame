@@ -32,11 +32,9 @@ class Node ():
       "rpcpassword": "xayagametest",
       "rpcport": rpcPort,
       "fallbackfee": 0.001,
-      "zmqpubgameblocks": "tcp://127.0.0.1:%d" % zmqPorts["blocks"],
     }
-    if "pending" in zmqPorts:
-      zmqPending = "tcp://127.0.0.1:%d" % zmqPorts["pending"]
-      self.config["zmqpubgamepending"] = zmqPending
+    for name, port in zmqPorts.items ():
+      self.config["zmqpub%s" % name] = "tcp://127.0.0.1:%d" % port
     self.baseRpcUrl = ("http://%s:%s@localhost:%d"
         % (self.config["rpcuser"], self.config["rpcpassword"],
            self.config["rpcport"]))
@@ -75,7 +73,7 @@ class Node ():
         self.log.info ("Daemon %s is up" % data["subversion"])
         break
       except:
-        time.sleep (1)
+        time.sleep (0.1)
 
     # Make sure we have a default wallet.
     wallets = rpc.listwallets ()
@@ -101,6 +99,13 @@ class Node ():
     self.proc.wait ()
     self.proc = None
 
+  def run (self):
+    """
+    Runs the Xaya node with a context manager.
+    """
+
+    return NodeContext (self)
+
   def getWalletRpc (self, wallet):
     """
     Returns the RPC URL to use for a particular wallet as well as
@@ -109,3 +114,19 @@ class Node ():
 
     url = "%s/wallet/%s" % (self.baseRpcUrl, wallet)
     return url, jsonrpclib.ServerProxy (url)
+
+
+class NodeContext ():
+  """
+  A context manager that starts and stops a Xaya node.
+  """
+
+  def __init__ (self, node):
+    self.node = node
+
+  def __enter__ (self):
+    self.node.start ()
+    return self.node
+
+  def __exit__ (self, excType, excValue, traceback):
+    self.node.stop ()
