@@ -85,6 +85,7 @@ class Node ():
     # Xaya Core will wait for it when shutting down.
     rpc ("close") ()
 
+    self.rpcHandles = []
     self.rpcurl, self.rpc = self.getWalletRpc ("")
 
   def stop (self):
@@ -94,6 +95,10 @@ class Node ():
 
     self.log.info ("Stopping Xaya process")
     self.rpc.stop ()
+
+    for h in self.rpcHandles:
+      h ("close") ()
+    self.rpcHandles = []
 
     self.log.info ("Waiting for Xaya process to stop...")
     self.proc.wait ()
@@ -113,7 +118,13 @@ class Node ():
     """
 
     url = "%s/wallet/%s" % (self.baseRpcUrl, wallet)
-    return url, jsonrpclib.ServerProxy (url)
+    rpc = jsonrpclib.ServerProxy (url)
+
+    # Record all RPC handles created, so we can close them when
+    # shutting down.
+    self.rpcHandles.append (rpc)
+
+    return url, rpc
 
 
 class NodeContext ():
