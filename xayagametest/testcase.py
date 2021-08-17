@@ -11,6 +11,7 @@ from . import premine
 from . import xaya
 
 import argparse
+from contextlib import contextmanager
 import copy
 import json
 import logging
@@ -128,34 +129,17 @@ class XayaGameTest (object):
         % (startPort))
     self.ports = portGenerator (startPort)
 
-    zmqPorts = {
-      "gameblocks": next (self.ports),
-    }
-    if self.zmqPending == "none":
-      self.log.info ("Disabling ZMQ for pending moves in Xaya Core")
-    elif self.zmqPending == "one socket":
-      self.log.info ("Pending moves are sent on the same socket as blocks")
-      zmqPorts["gamepending"] = zmqPorts["gameblocks"]
-    elif self.zmqPending == "two sockets":
-      self.log.info ("Pending moves are sent on a different socket as blocks")
-      zmqPorts["gamepending"] = next (self.ports)
-      assert zmqPorts["gamepending"] != zmqPorts["gameblocks"]
-    else:
-      raise AssertionError ("Invalid zmqPending: %s" % self.zmqPending)
-
-    self.xayanode = xaya.Node (self.basedir, next (self.ports), zmqPorts,
-                               self.args.xayad_binary)
-    self.gamenode = self.createGameNode ()
-
     class RpcHandles:
-      xaya = None
       game = None
+      # Other fields may be set based on the base-chain environment
+      # (see baseChainEnvironment).
     self.rpc = RpcHandles ()
 
     cleanup = False
     success = False
-    with self.xayanode.run ():
-      self.rpc.xaya = self.xayanode.rpc
+    with self.runBaseChainEnvironment () as env:
+      self.env = env
+      self.gamenode = self.createGameNode ()
       self.startGameDaemon ()
       try:
         self.setup ()
@@ -201,6 +185,39 @@ class XayaGameTest (object):
 
     pass
 
+  @contextmanager
+  def runBaseChainEnvironment (self):
+    """
+    Constructs a context manager that runs the environment instance
+    that should be used for the base chain that the GSP is then linked to.
+
+    By default, this is just a xaya.Environment instance, but tests
+    can override this method to e.g. link to a custom chain using Xaya X.
+    """
+
+    zmqPorts = {
+      "gameblocks": next (self.ports),
+    }
+    if self.zmqPending == "none":
+      self.log.info ("Disabling ZMQ for pending moves in Xaya Core")
+    elif self.zmqPending == "one socket":
+      self.log.info ("Pending moves are sent on the same socket as blocks")
+      zmqPorts["gamepending"] = zmqPorts["gameblocks"]
+    elif self.zmqPending == "two sockets":
+      self.log.info ("Pending moves are sent on a different socket as blocks")
+      zmqPorts["gamepending"] = next (self.ports)
+      assert zmqPorts["gamepending"] != zmqPorts["gameblocks"]
+    else:
+      raise AssertionError ("Invalid zmqPending: %s" % self.zmqPending)
+
+    env = xaya.Environment (self.basedir, next (self.ports), zmqPorts,
+                            self.args.xayad_binary)
+    with env.run ():
+      self.xayanode = env.node
+      self.rpc.xaya = env.node.rpc
+      yield env
+
+
   def run (self):
     self.mainLogger.warning (
         "Test 'run' method not overridden, this tests nothing")
@@ -211,7 +228,10 @@ class XayaGameTest (object):
     the game daemon is restarted and needs to catch up.
     """
 
-    self.gamenode.start (self.xayanode.rpcurl, extraArgs, wait=wait)
+    rpcurl, args = self.env.getGspArguments ()
+    extraArgs.extend (args)
+
+    self.gamenode.start (rpcurl, extraArgs, wait=wait)
     self.rpc.game = self.gamenode.rpc
 
   def stopGameDaemon (self):
@@ -262,20 +282,27 @@ class XayaGameTest (object):
     """
 
     for nm in names:
-      self.rpc.xaya.name_register ("p/" + nm, "{}")
+      self.env.register ("p", nm)
 
-  def registerOrUpdateName (self, name, value, options={}):
+  def registerOrUpdateName (self, name, value, *args, **kwargs):
     """
     Tries to update or register the name with the given value, depending
     on whether or not it already exists.
+
+    Extra arguments are forwarded directly to the environment's
+    move function.
     """
 
-    try:
-      return self.rpc.xaya.name_update (name, value, options)
-    except Exception as exc:
-      self.log.exception (exc)
-      self.log.info ("name_update for %s failed, trying name_register" % name)
-      return self.rpc.xaya.name_register (name, value, options)
+    pos = name.find ("/")
+    assert pos > -1, "'%s' contains no namespace" % name
+
+    ns = name[:pos]
+    base = name[pos + 1:]
+
+    if not self.env.nameExists (ns, base):
+      self.env.register (ns, base)
+
+    return self.env.move (ns, base, value, *args, **kwargs)
 
   def sendMove (self, name, move, options={}, burn=0):
     """
@@ -315,8 +342,7 @@ class XayaGameTest (object):
 
     fcn = getattr (self.rpc.game, method)
 
-    bestblk = self.rpc.xaya.getbestblockhash ()
-    bestheight = self.rpc.xaya.getblockcount ()
+    bestblk, bestheight = self.env.getChainTip ()
 
     while True:
       state = fcn (*args, **kwargs)
@@ -383,8 +409,7 @@ class XayaGameTest (object):
     Generates n new blocks on the Xaya network.
     """
 
-    addr = self.rpc.xaya.getnewaddress ()
-    return self.rpc.xaya.generatetoaddress (n, addr)
+    return self.env.generate (n)
 
   def expectError (self, code, msgRegExp, method, *args, **kwargs):
     """
