@@ -1,5 +1,5 @@
 AM_TESTS_ENVIRONMENT = \
-  PYTHONPATH=$(top_srcdir):$(top_srcdir)/ships
+  PYTHONPATH=$(top_srcdir):$(top_srcdir)/ships:$(PYTHONPATH)
 
 TEST_LIBRARY = shipstest.py
 

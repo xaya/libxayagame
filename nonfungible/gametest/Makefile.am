@@ -1,5 +1,5 @@
 AM_TESTS_ENVIRONMENT = \
-  PYTHONPATH=$(top_srcdir)
+  PYTHONPATH=$(top_srcdir):$(PYTHONPATH)
 
 TEST_LIBRARY = \
   nftest.py
