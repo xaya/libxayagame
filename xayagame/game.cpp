@@ -404,15 +404,9 @@ Game::ConnectRpcClient (jsonrpc::IClientConnector& conn,
 
   const Json::Value info = rpcClient->getblockchaininfo ();
   const std::string chainStr = info["chain"].asString ();
-  if (chainStr == "main")
-    chain = Chain::MAIN;
-  else if (chainStr == "test")
-    chain = Chain::TEST;
-  else if (chainStr == "regtest")
-    chain = Chain::REGTEST;
-  else
-    LOG (FATAL)
-        << "Unexpected chain type returned by Xaya Core: " << chainStr;
+  chain = ChainFromString (chainStr);
+  CHECK (chain != Chain::UNKNOWN)
+      << "Unexpected chain type returned by Xaya Core: " << chainStr;
 
   LOG (INFO) << "Connected to RPC daemon with chain " << ChainToString (chain);
   if (rules != nullptr)

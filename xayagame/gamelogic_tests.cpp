@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,6 +21,28 @@ namespace xaya
 {
 namespace
 {
+
+/* ************************************************************************** */
+
+using ChainNameTests = testing::Test;
+
+TEST_F (ChainNameTests, Invalid)
+{
+  EXPECT_DEATH (ChainToString (static_cast<Chain> (123'456)),
+                "Invalid chain enum value");
+  EXPECT_EQ (ChainFromString ("invalid"), Chain::UNKNOWN);
+}
+
+TEST_F (ChainNameTests, Roundtrip)
+{
+  for (const auto c : {Chain::UNKNOWN,
+                       Chain::MAIN, Chain::TEST, Chain::REGTEST,
+                       Chain::POLYGON, Chain::MUMBAI,
+                       Chain::GANACHE})
+    EXPECT_EQ (ChainFromString (ChainToString (c)), c);
+}
+
+/* ************************************************************************** */
 
 constexpr const char GAME_ID[] = "test game";
 

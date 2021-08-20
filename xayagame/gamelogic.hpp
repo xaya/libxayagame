@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,14 +22,23 @@ namespace xaya
 class GameLogic;
 
 /**
- * The possible chains on which a game can be in the Xaya network.
+ * The possible chains on which a game can be on the Xaya platform.
  */
 enum class Chain
 {
   UNKNOWN = 0,
-  MAIN = 1,
-  TEST = 2,
-  REGTEST = 3,
+
+  /* Chains based on Xaya Core */
+  MAIN,
+  TEST,
+  REGTEST,
+
+  /* Polygon network chains */
+  POLYGON,
+  MUMBAI,
+
+  /* Ganache for EVM-based regtests */
+  GANACHE,
 };
 
 /**
@@ -38,6 +47,12 @@ enum class Chain
  * on the chain.
  */
 std::string ChainToString (Chain c);
+
+/**
+ * Converts a string name of a chain to the enum value.  Returns UNKNOWN
+ * if the string value does not match any of the expected values.
+ */
+Chain ChainFromString (const std::string& name);
 
 /**
  * Generic class for a processor game state, which mainly holds some contextual

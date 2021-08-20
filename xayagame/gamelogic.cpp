@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,27 +8,61 @@
 
 #include <glog/logging.h>
 
+#include <map>
+
 namespace xaya
 {
 
 /* ************************************************************************** */
 
+namespace
+{
+
+/** Names for chains per the enum.  */
+const std::map<Chain, std::string> CHAIN_NAMES =
+  {
+    {Chain::UNKNOWN, "unknown"},
+
+    {Chain::MAIN, "main"},
+    {Chain::TEST, "test"},
+    {Chain::REGTEST, "regtest"},
+
+    {Chain::POLYGON, "polygon"},
+    {Chain::MUMBAI, "mumbai"},
+
+    {Chain::GANACHE, "ganache"},
+  };
+
+} // anonymous namespace
+
 std::string
 ChainToString (const Chain c)
 {
-  switch (c)
-    {
-    case Chain::UNKNOWN:
-      return "unknown";
-    case Chain::MAIN:
-      return "main";
-    case Chain::TEST:
-      return "test";
-    case Chain::REGTEST:
-      return "regtest";
-    }
+  const auto mit = CHAIN_NAMES.find (c);
+  CHECK (mit != CHAIN_NAMES.end ())
+      << "Invalid chain enum value: " << static_cast<int> (c);
+  return mit->second;
+}
 
-  LOG (FATAL) << "Invalid chain enum value: " << static_cast<int> (c);
+Chain
+ChainFromString (const std::string& name)
+{
+  /* Helper class for reversing the CHAIN_NAMES map.  */
+  struct ReverseMap
+  {
+    std::map<std::string, Chain> table;
+    explicit ReverseMap (const std::map<Chain, std::string>& forward)
+    {
+      for (const auto& entry : forward)
+        table.emplace (entry.second, entry.first);
+    }
+  };
+  static const ReverseMap reverse(CHAIN_NAMES);
+
+  const auto mit = reverse.table.find (name);
+  if (mit == reverse.table.end ())
+    return Chain::UNKNOWN;
+  return mit->second;
 }
 
 /* ************************************************************************** */
