@@ -312,7 +312,7 @@ SQLiteGame::Storage::CheckCurrentState (const SQLiteDatabase& db,
   unsigned height;
   std::string initialHashHex;
   game.GetInitialStateBlock (height, initialHashHex);
-  if (hashHex != initialHashHex)
+  if (!initialHashHex.empty () && hashHex != initialHashHex)
     {
       VLOG (1)
           << "Current best block in the database (" << hashHex

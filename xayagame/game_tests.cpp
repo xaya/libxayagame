@@ -168,6 +168,13 @@ private:
   using Map = std::map<std::string, std::string>;
 
   /**
+   * The genesis hash reported.  This is GAME_GENESIS_HASH by default, but
+   * can be changed (e.g. to "" for testing unspecified genesis hash)
+   * in specific tests.
+   */
+  std::string genesisHash = GAME_GENESIS_HASH;
+
+  /**
    * Parses a string of the game state / undo format into a map holding
    * the name/value pairs.
    */
@@ -206,7 +213,7 @@ protected:
     CHECK_EQ (GetContext ().GetGameId (), GAME_ID);
 
     height = GAME_GENESIS_HEIGHT;
-    hashHex = GAME_GENESIS_HASH;
+    hashHex = genesisHash;
     return EncodeMap (Map ());
   }
 
@@ -274,6 +281,12 @@ public:
     Json::Value res(Json::objectValue);
     res["state"] = state;
     return res;
+  }
+
+  void
+  SetGenesisHash (const std::string& h)
+  {
+    genesisHash = h;
   }
 
   static uint256
@@ -659,6 +672,31 @@ TEST_F (InitialStateTests, MismatchingGenesisHash)
   EXPECT_DEATH (
       ReinitialiseState (g),
       "genesis block hash and height do not match");
+}
+
+TEST_F (InitialStateTests, UnspecifiedGenesisHash)
+{
+  EXPECT_CALL (*mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
+      .WillRepeatedly (Return (BlockHash (10).ToHex ()));
+
+  const Json::Value emptyMoves(Json::objectValue);
+  rules.SetGenesisHash ("");
+
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  mockXayaServer->SetBestBlock (9, BlockHash (9));
+  SetStartingBlock (8, BlockHash (8));
+  AttachBlock (g, BlockHash (9), emptyMoves);
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  mockXayaServer->SetBestBlock (10, BlockHash (10));
+  AttachBlock (g, BlockHash (10), emptyMoves);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+
+  uint256 hash;
+  EXPECT_TRUE (storage.GetCurrentBlockHash (hash));
+  EXPECT_EQ (hash, BlockHash (10));
 }
 
 /* ************************************************************************** */

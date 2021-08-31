@@ -37,7 +37,7 @@ constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
 } // anonymous namespace
 
 Game::Game (const std::string& id)
-  : gameId(id)
+  : gameId(id), genesisHeight(-1)
 {
   genesisHash.SetNull ();
   zmq.AddListener (gameId, this);
@@ -221,9 +221,10 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
       switch (state)
         {
         case State::PREGENESIS:
+          CHECK_GE (genesisHeight, 0);
           /* Check if we have reached the game's genesis height.  If we have,
              reinitialise which will store the initial game state.  */
-          if (hash == targetBlockHash)
+          if (height >= static_cast<unsigned> (genesisHeight))
             needReinit = true;
           break;
 
@@ -878,8 +879,10 @@ Game::ReinitialiseState ()
   /* We do not have a current state in the storage.  This means that we have
      to reset to the initial state.  */
 
-  if (genesisHash.IsNull ())
+  if (genesisHeight < 0)
     {
+      CHECK_EQ (genesisHeight, -1);
+
       /* GetInitialState may be expensive, and it may do things like update
          some external game state (setting it to the initial one) as we do
          e.g. with SQLiteGame.  Hence we should avoid calling it often, and
@@ -888,21 +891,21 @@ Game::ReinitialiseState ()
          we process in the mean time.  */
 
       std::string genesisHashHex;
-      rules->GetInitialState (genesisHeight, genesisHashHex);
-
-      CHECK (genesisHash.FromHex (genesisHashHex));
+      unsigned genesisHeightFromGame;
+      rules->GetInitialState (genesisHeightFromGame, genesisHashHex);
+      genesisHeight = genesisHeightFromGame;
       LOG (INFO) << "Got genesis height from game: " << genesisHeight;
     }
+  CHECK_GE (genesisHeight, 0);
 
   /* If the current block height in the daemon is not yet the game's genesis
      height, simply wait for the genesis hash to be attached.  */
-  if (data["blocks"].asUInt () < genesisHeight)
+  if (data["blocks"].asUInt () < static_cast<unsigned> (genesisHeight))
     {
       LOG (INFO)
           << "Block height " << data["blocks"].asInt ()
           << " is before the genesis height " << genesisHeight;
       state = State::PREGENESIS;
-      targetBlockHash = genesisHash;
       return;
     }
 
@@ -916,15 +919,28 @@ Game::ReinitialiseState ()
   storage->Clear ();
 
   std::string genesisHashHex;
+  unsigned genesisHeightDummy;
   const GameStateData genesisData
-      = rules->GetInitialState (genesisHeight, genesisHashHex);
-  CHECK (genesisHash.FromHex (genesisHashHex));
+      = rules->GetInitialState (genesisHeightDummy, genesisHashHex);
+  CHECK_EQ (genesisHeight, genesisHeightDummy);
 
   const std::string blockHashHex = rpcClient->getblockhash (genesisHeight);
   uint256 blockHash;
   CHECK (blockHash.FromHex (blockHashHex));
-  CHECK (blockHash == genesisHash)
-    << "The game's genesis block hash and height do not match";
+
+  if (genesisHashHex.empty ())
+    {
+      LOG (WARNING)
+          << "Game did not specify genesis hash, retrieved "
+          << blockHash.ToHex ();
+      genesisHash = blockHash;
+    }
+  else
+    {
+      CHECK (genesisHash.FromHex (genesisHashHex));
+      CHECK (blockHash == genesisHash)
+        << "The game's genesis block hash and height do not match";
+    }
 
   while (true)
     try

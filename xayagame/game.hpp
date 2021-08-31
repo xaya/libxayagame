@@ -117,8 +117,13 @@ private:
    * first call to GetInitialState, so that we can avoid calling it all
    * over again on each block before we reach the genesis height.
    */
-  unsigned genesisHeight;
-  /** The game's genesis hash, if already known (zero otherwise).  */
+  int genesisHeight;
+  /**
+   * The game's genesis hash, if already known (zero otherwise).  Games may
+   * specify only a genesisHeight and no hash, in which case the hash will be
+   * zero until we leave PREGENESIS phase and get the actual hash for the
+   * block height from the blockchain daemon.
+   */
   uint256 genesisHash;
 
   /**
