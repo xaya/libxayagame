@@ -346,8 +346,15 @@ class GameTestWithBlockchain : public GameTestFixture
 
 private:
 
+  /**
+   * Height offset on top of block hashes, which is effectively the height
+   * that the first entry in blockHashes is at.
+   */
+  unsigned heightOffset;
+
   /** Stack of attached block hashes.  */
   std::vector<uint256> blockHashes;
+
   /**
    * Stack of corresponding move objects (the bottom-most entry in
    * blockHashes was set by SetStartingBlock and doesn't have any moves
@@ -364,7 +371,7 @@ public:
    * the real genesis block, it is just the block from where the next attach
    * will be done).
    */
-  void SetStartingBlock (const uint256& hash);
+  void SetStartingBlock (unsigned height, const uint256& hash);
 
   /**
    * Attaches the given next block on top of the current blockchain stack.
