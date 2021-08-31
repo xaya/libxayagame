@@ -28,6 +28,7 @@ from jsonrpclib import ProtocolError
 
 XAYAD_BINARY_DEFAULT = "/usr/local/bin/xayad"
 XCORE_BINARY_DEFAULT = "/usr/local/bin/xayax-core"
+XETH_BINARY_DEFAULT = "/usr/local/bin/xayax-eth"
 DEFAULT_DIR = "/tmp"
 DIR_PREFIX = "xayagametest_"
 
@@ -66,6 +67,8 @@ class XayaGameTest (object):
                          help="xayad binary to use in the test")
     parser.add_argument ("--xcore_binary", default=XCORE_BINARY_DEFAULT,
                          help="xayax-core binary to use")
+    parser.add_argument ("--xeth_binary", default=XETH_BINARY_DEFAULT,
+                         help="xayax-eth binary to use")
     parser.add_argument ("--game_daemon", default=gameBinaryDefault,
                          help="game daemon binary to use in the test")
     parser.add_argument ("--run_game_with", default="",
@@ -303,6 +306,26 @@ class XayaGameTest (object):
     with env.run ():
       self.xayanode = env.xayanode
       self.rpc.xaya = env.xayanode.rpc
+      yield env
+
+  @contextmanager
+  def runXayaXEthEnvironment (self):
+    """
+    Runs a base-chain environment that uses Xaya X to link to an
+    Ethereum-like test chain (based on Ganache).
+    """
+
+    if self.zmqPending != "one socket":
+      raise AssertionError ("Xaya-X-Eth only supports one-socket pending")
+
+    from xayax import eth
+    env = eth.Environment (self.basedir, self.ports, self.args.xeth_binary)
+
+    with env.run ():
+      self.ethnode = env.ganache
+      self.contracts = env.contracts
+      self.rpc.eth = env.createGanacheRpc ()
+      self.w3 = env.ganache.w3
       yield env
 
   ##############################################################################
