@@ -168,6 +168,13 @@ private:
   using Map = std::map<std::string, std::string>;
 
   /**
+   * The genesis hash reported.  This is GAME_GENESIS_HASH by default, but
+   * can be changed (e.g. to "" for testing unspecified genesis hash)
+   * in specific tests.
+   */
+  std::string genesisHash = GAME_GENESIS_HASH;
+
+  /**
    * Parses a string of the game state / undo format into a map holding
    * the name/value pairs.
    */
@@ -206,7 +213,7 @@ protected:
     CHECK_EQ (GetContext ().GetGameId (), GAME_ID);
 
     height = GAME_GENESIS_HEIGHT;
-    hashHex = GAME_GENESIS_HASH;
+    hashHex = genesisHash;
     return EncodeMap (Map ());
   }
 
@@ -274,6 +281,12 @@ public:
     Json::Value res(Json::objectValue);
     res["state"] = state;
     return res;
+  }
+
+  void
+  SetGenesisHash (const std::string& h)
+  {
+    genesisHash = h;
   }
 
   static uint256
@@ -621,7 +634,7 @@ TEST_F (InitialStateTests, WaitingForGenesis)
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer->SetBestBlock (9, BlockHash (9));
-  SetStartingBlock (BlockHash (8));
+  SetStartingBlock (8, BlockHash (8));
   AttachBlock (g, BlockHash (9), emptyMoves);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
@@ -639,7 +652,7 @@ TEST_F (InitialStateTests, MissedNotification)
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
   mockXayaServer->SetBestBlock (9, BlockHash (9));
-  SetStartingBlock (BlockHash (8));
+  SetStartingBlock (8, BlockHash (8));
   AttachBlock (g, BlockHash (9), emptyMoves);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
 
@@ -659,6 +672,31 @@ TEST_F (InitialStateTests, MismatchingGenesisHash)
   EXPECT_DEATH (
       ReinitialiseState (g),
       "genesis block hash and height do not match");
+}
+
+TEST_F (InitialStateTests, UnspecifiedGenesisHash)
+{
+  EXPECT_CALL (*mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
+      .WillRepeatedly (Return (BlockHash (10).ToHex ()));
+
+  const Json::Value emptyMoves(Json::objectValue);
+  rules.SetGenesisHash ("");
+
+  ReinitialiseState (g);
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  mockXayaServer->SetBestBlock (9, BlockHash (9));
+  SetStartingBlock (8, BlockHash (8));
+  AttachBlock (g, BlockHash (9), emptyMoves);
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  mockXayaServer->SetBestBlock (10, BlockHash (10));
+  AttachBlock (g, BlockHash (10), emptyMoves);
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+
+  uint256 hash;
+  EXPECT_TRUE (storage.GetCurrentBlockHash (hash));
+  EXPECT_EQ (hash, BlockHash (10));
 }
 
 /* ************************************************************************** */
@@ -696,7 +734,7 @@ TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
   mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
                                 TestGame::GenesisBlockHash ());
   ReinitialiseState (g);
-  SetStartingBlock (TestGame::GenesisBlockHash ());
+  SetStartingBlock (GAME_GENESIS_HEIGHT, TestGame::GenesisBlockHash ());
   AttachBlock (g, BlockHash (11), Moves ("a0b1"));
 
   const Json::Value state = g.GetCurrentJsonState ();
@@ -704,11 +742,8 @@ TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
   EXPECT_EQ (state["chain"], "main");
   EXPECT_EQ (state["state"], "up-to-date");
   EXPECT_EQ (state["blockhash"], BlockHash (11).ToHex ());
+  EXPECT_EQ (state["height"].asInt (), 11);
   EXPECT_EQ (state["gamestate"]["state"], "a0b1");
-
-  /* The expected cached height is two, since we only attached two blocks
-     (even though we use BlockHash(11) for it).  */
-  EXPECT_EQ (state["height"].asInt (), 2);
 }
 
 TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
@@ -792,7 +827,7 @@ protected:
     EXPECT_CALL (*mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
     EXPECT_CALL (*mockXayaServer, getrawmempool ())
         .WillRepeatedly (Return (Json::Value (Json::arrayValue)));
-    SetStartingBlock (TestGame::GenesisBlockHash ());
+    SetStartingBlock (GAME_GENESIS_HEIGHT, TestGame::GenesisBlockHash ());
   }
 
   /**
@@ -863,7 +898,7 @@ TEST_F (GetPendingJsonStateTests, PendingState)
   EXPECT_EQ (state["pending"], ParseJson (R"(
     {
       "state": "",
-      "height": 2,
+      "height": 11,
       "a": "x"
     }
   )"));
@@ -905,7 +940,7 @@ protected:
     CHECK (g.DetectZmqEndpoint ());
     g.Start ();
 
-    SetStartingBlock (TestGame::GenesisBlockHash ());
+    SetStartingBlock (GAME_GENESIS_HEIGHT, TestGame::GenesisBlockHash ());
   }
 
   /**
@@ -1073,7 +1108,7 @@ protected:
   WaitForPendingChangeTests ()
   {
     g.SetPendingMoveProcessor (proc);
-    SetStartingBlock (TestGame::GenesisBlockHash ());
+    SetStartingBlock (GAME_GENESIS_HEIGHT, TestGame::GenesisBlockHash ());
 
     mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
     ReinitialiseState (g);
@@ -1213,7 +1248,7 @@ TEST_F (WaitForPendingChangeTests, PendingMove)
   EXPECT_EQ (out["pending"], ParseJson (R"(
     {
       "state": "",
-      "height": 2,
+      "height": 11,
       "a": "x"
     }
   )"));
@@ -1266,7 +1301,7 @@ protected:
   {
     mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
                                   TestGame::GenesisBlockHash ());
-    SetStartingBlock (TestGame::GenesisBlockHash ());
+    SetStartingBlock (GAME_GENESIS_HEIGHT, TestGame::GenesisBlockHash ());
     ReinitialiseState (g);
     EXPECT_EQ (GetState (g), State::UP_TO_DATE);
     ExpectGameState (TestGame::GenesisBlockHash (), "");
@@ -1584,7 +1619,7 @@ TEST_F (PendingMoveUpdateTests, PendingMoves)
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "state": "",
-    "height": 2,
+    "height": 11,
     "a": "z",
     "b": "y"
   })"));
@@ -1603,7 +1638,7 @@ TEST_F (PendingMoveUpdateTests, BlockAttach)
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "state": "a0b1",
-    "height": 2,
+    "height": 11,
     "b": "y"
   })"));
 }
@@ -1623,7 +1658,7 @@ TEST_F (PendingMoveUpdateTests, BlockDetach)
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "state": "",
-    "height": 2,
+    "height": 11,
     "a": "x"
   })"));
 }

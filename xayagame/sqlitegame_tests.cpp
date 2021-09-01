@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -381,7 +381,7 @@ protected:
     rules.Initialise (":memory:");
     rules.InitialiseGameContext (Chain::MAIN, GAME_ID, nullptr);
 
-    SetStartingBlock (GenesisHash ());
+    SetStartingBlock (GENESIS_HEIGHT, GenesisHash ());
 
     game.SetStorage (rules.GetStorage ());
     game.SetGameLogic (rules);
@@ -752,7 +752,7 @@ protected:
 
     CreateChatGame (false);
 
-    SetStartingBlock (GenesisHash ());
+    SetStartingBlock (GENESIS_HEIGHT, GenesisHash ());
     InitialiseState (game, *rules);
     ForceState (game, State::UP_TO_DATE);
   }

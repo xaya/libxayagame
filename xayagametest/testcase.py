@@ -12,7 +12,6 @@ from . import xaya
 
 import argparse
 from contextlib import contextmanager
-import copy
 import json
 import logging
 import os.path
@@ -28,6 +27,7 @@ from jsonrpclib import ProtocolError
 
 XAYAD_BINARY_DEFAULT = "/usr/local/bin/xayad"
 XCORE_BINARY_DEFAULT = "/usr/local/bin/xayax-core"
+XETH_BINARY_DEFAULT = "/usr/local/bin/xayax-eth"
 DEFAULT_DIR = "/tmp"
 DIR_PREFIX = "xayagametest_"
 
@@ -66,6 +66,8 @@ class XayaGameTest (object):
                          help="xayad binary to use in the test")
     parser.add_argument ("--xcore_binary", default=XCORE_BINARY_DEFAULT,
                          help="xayax-core binary to use")
+    parser.add_argument ("--xeth_binary", default=XETH_BINARY_DEFAULT,
+                         help="xayax-eth binary to use")
     parser.add_argument ("--game_daemon", default=gameBinaryDefault,
                          help="game daemon binary to use in the test")
     parser.add_argument ("--run_game_with", default="",
@@ -305,6 +307,26 @@ class XayaGameTest (object):
       self.rpc.xaya = env.xayanode.rpc
       yield env
 
+  @contextmanager
+  def runXayaXEthEnvironment (self):
+    """
+    Runs a base-chain environment that uses Xaya X to link to an
+    Ethereum-like test chain (based on Ganache).
+    """
+
+    if self.zmqPending != "one socket":
+      raise AssertionError ("Xaya-X-Eth only supports one-socket pending")
+
+    from xayax import eth
+    env = eth.Environment (self.basedir, self.ports, self.args.xeth_binary)
+
+    with env.run ():
+      self.ethnode = env.ganache
+      self.contracts = env.contracts
+      self.rpc.eth = env.createGanacheRpc ()
+      self.w3 = env.ganache.w3
+      yield env
+
   ##############################################################################
   # Utility methods for testing.
 
@@ -337,7 +359,7 @@ class XayaGameTest (object):
 
     return self.env.move (ns, base, value, *args, **kwargs)
 
-  def sendMove (self, name, move, options={}, burn=0):
+  def sendMove (self, name, move, *args, **kwargs):
     """
     Sends a given move for the name.  This calls name_register or name_update,
     depending on whether the name exists already.  It also builds up the
@@ -345,19 +367,9 @@ class XayaGameTest (object):
     """
 
     value = json.dumps ({"g": {self.gameId: move}})
+    return self.registerOrUpdateName ("p/" + name, value, *args, **kwargs)
 
-    opt = copy.deepcopy (options)
-
-    if burn > 0:
-      if "burn" not in opt:
-        opt["burn"] = {}
-      key = "g/%s" % self.gameId
-      assert key not in opt["burn"]
-      opt["burn"][key] = burn
-
-    return self.registerOrUpdateName ("p/" + name, value, opt)
-
-  def adminCommand (self, cmd, options={}):
+  def adminCommand (self, cmd, *args, **kwargs):
     """
     Sends an admin command with the given value.  This calls name_register or
     name_update, depending on whether or not the g/ name for the game being
@@ -365,7 +377,8 @@ class XayaGameTest (object):
     """
 
     value = json.dumps ({"cmd": cmd})
-    return self.registerOrUpdateName ("g/" + self.gameId, value, options)
+    return self.registerOrUpdateName ("g/" + self.gameId, value,
+                                      *args, **kwargs)
 
   def getCustomState (self, field, method, *args, **kwargs):
     """

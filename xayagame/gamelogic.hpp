@@ -227,7 +227,10 @@ protected:
 
   /**
    * Returns the initial state (as well as the associated block height
-   * and block hash in big-endian hex) for the game.
+   * and block hash in big-endian hex) for the game.  The returned hashHex
+   * may be the empty string, in which case only the genesis height is
+   * specified and any block hash at that height is accepted.  This is useful
+   * e.g. for testing chains that don't have a fixed genesis hash.
    */
   virtual GameStateData GetInitialStateInternal (unsigned& height,
                                                  std::string& hashHex) = 0;

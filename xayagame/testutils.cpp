@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -122,8 +122,10 @@ GameTestFixture::CallPendingMove (Game& g, const Json::Value& mv) const
 }
 
 void
-GameTestWithBlockchain::SetStartingBlock (const uint256& hash)
+GameTestWithBlockchain::SetStartingBlock (const unsigned height,
+                                          const uint256& hash)
 {
+  heightOffset = height;
   blockHashes = {hash};
   moveStack.clear ();
 }
@@ -134,7 +136,8 @@ GameTestWithBlockchain::AttachBlock (Game& g, const uint256& hash,
 {
   CHECK (!blockHashes.empty ()) << "No starting block has been set";
   CallBlockAttach (g, "",
-                   blockHashes.back (), hash, blockHashes.size () + 1,
+                   blockHashes.back (), hash,
+                   heightOffset + blockHashes.size (),
                    moves, false);
   blockHashes.push_back (hash);
   moveStack.push_back (moves);
@@ -149,7 +152,8 @@ GameTestWithBlockchain::DetachBlock (Game& g)
   const uint256 hash = blockHashes.back ();
   blockHashes.pop_back ();
   CallBlockDetach (g, "",
-                   blockHashes.back (), hash, blockHashes.size () + 1,
+                   blockHashes.back (), hash,
+                   heightOffset + blockHashes.size (),
                    moveStack.back (), false);
   moveStack.pop_back ();
 }
