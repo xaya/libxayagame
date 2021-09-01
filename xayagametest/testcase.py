@@ -12,7 +12,6 @@ from . import xaya
 
 import argparse
 from contextlib import contextmanager
-import copy
 import json
 import logging
 import os.path
@@ -360,7 +359,7 @@ class XayaGameTest (object):
 
     return self.env.move (ns, base, value, *args, **kwargs)
 
-  def sendMove (self, name, move, options={}, burn=0):
+  def sendMove (self, name, move, *args, **kwargs):
     """
     Sends a given move for the name.  This calls name_register or name_update,
     depending on whether the name exists already.  It also builds up the
@@ -368,19 +367,9 @@ class XayaGameTest (object):
     """
 
     value = json.dumps ({"g": {self.gameId: move}})
+    return self.registerOrUpdateName ("p/" + name, value, *args, **kwargs)
 
-    opt = copy.deepcopy (options)
-
-    if burn > 0:
-      if "burn" not in opt:
-        opt["burn"] = {}
-      key = "g/%s" % self.gameId
-      assert key not in opt["burn"]
-      opt["burn"][key] = burn
-
-    return self.registerOrUpdateName ("p/" + name, value, opt)
-
-  def adminCommand (self, cmd, options={}):
+  def adminCommand (self, cmd, *args, **kwargs):
     """
     Sends an admin command with the given value.  This calls name_register or
     name_update, depending on whether or not the g/ name for the game being
@@ -388,7 +377,8 @@ class XayaGameTest (object):
     """
 
     value = json.dumps ({"cmd": cmd})
-    return self.registerOrUpdateName ("g/" + self.gameId, value, options)
+    return self.registerOrUpdateName ("g/" + self.gameId, value,
+                                      *args, **kwargs)
 
   def getCustomState (self, field, method, *args, **kwargs):
     """

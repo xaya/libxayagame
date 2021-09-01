@@ -7,6 +7,7 @@ Code for running the Xaya Core daemon as component in an integration test.
 """
 
 from contextlib import contextmanager
+import copy
 import jsonrpclib
 import logging
 import os
@@ -197,7 +198,7 @@ class Environment:
 
     return self.node.rpc.name_register ("%s/%s" % (ns, nm))
 
-  def move (self, ns, nm, strval, options={}):
+  def move (self, ns, nm, strval, options={}, burn=0):
     """
     Sends a move with the given name, which is supposed to be existing
     already.  The move data is already encoded as a string.
@@ -207,7 +208,16 @@ class Environment:
     a particular environment.
     """
 
-    return self.node.rpc.name_update ("%s/%s" % (ns, nm), strval, options)
+    opt = copy.deepcopy (options)
+
+    if burn > 0:
+      if "burn" not in opt:
+        opt["burn"] = {}
+      key = "g/%s" % self.gameId
+      assert key not in opt["burn"]
+      opt["burn"][key] = burn
+
+    return self.node.rpc.name_update ("%s/%s" % (ns, nm), strval, opt)
 
   def getGspArguments (self):
     """
