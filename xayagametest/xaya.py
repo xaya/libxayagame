@@ -7,7 +7,6 @@ Code for running the Xaya Core daemon as component in an integration test.
 """
 
 from contextlib import contextmanager
-import copy
 import jsonrpclib
 import logging
 import os
@@ -157,29 +156,14 @@ class Environment:
       yield self
 
   def generate (self, num):
-    """
-    Generates num new blocks on the active chain, and returns their hashes
-    in an array.
-    """
-
     addr = self.node.rpc.getnewaddress ()
     return self.node.rpc.generatetoaddress (num, addr)
 
   def getChainTip (self):
-    """
-    Returns the hash and height of the current chain tip according
-    to the base chain (not the GSP).
-    """
-
     info = self.node.rpc.getblockchaininfo ()
     return info["bestblockhash"], info["blocks"]
 
   def nameExists (self, ns, nm):
-    """
-    Returns true if the given namespace/name combination exists, and false
-    if it does not.
-    """
-
     full = "%s/%s" % (ns, nm)
     if self.node.rpc.name_pending (full):
       return True
@@ -191,38 +175,10 @@ class Environment:
       return False
 
   def register (self, ns, nm):
-    """
-    Registers a new name with the given namespace and base name.  Returns the
-    transaction ID.
-    """
-
     return self.node.rpc.name_register ("%s/%s" % (ns, nm))
 
-  def move (self, ns, nm, strval, options={}, burn=0):
-    """
-    Sends a move with the given name, which is supposed to be existing
-    already.  The move data is already encoded as a string.
-    Returns the transaction ID.
-
-    Arguments beyond strval are non-standard and can be specific to
-    a particular environment.
-    """
-
-    opt = copy.deepcopy (options)
-
-    if burn > 0:
-      if "burn" not in opt:
-        opt["burn"] = {}
-      key = "g/%s" % self.gameId
-      assert key not in opt["burn"]
-      opt["burn"][key] = burn
-
-    return self.node.rpc.name_update ("%s/%s" % (ns, nm), strval, opt)
+  def move (self, ns, nm, strval, options={}):
+    return self.node.rpc.name_update ("%s/%s" % (ns, nm), strval, options)
 
   def getGspArguments (self):
-    """
-    Returns the Xaya RPC URL and any potential extra arguments that should
-    be used to link a GSP to this environment.
-    """
-
     return self.node.rpcurl, []
