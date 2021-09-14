@@ -373,11 +373,6 @@ void
 Game::PendingMove (const std::string& id, const Json::Value& data)
 {
   CHECK_EQ (id, gameId);
-  VLOG (2) << "Pending move:\n" << data;
-
-  uint256 txid;
-  CHECK (txid.FromHex (data["txid"].asString ()));
-  VLOG (1) << "Processing pending move " << txid.ToHex ();
 
   std::lock_guard<std::mutex> lock(mut);
   if (state == State::UP_TO_DATE)
@@ -386,11 +381,14 @@ Game::PendingMove (const std::string& id, const Json::Value& data)
       CHECK (storage->GetCurrentBlockHash (hash));
 
       CHECK (pending != nullptr);
-      pending->ProcessMove (storage->GetCurrentGameState (), data);
+      pending->ProcessTx (storage->GetCurrentGameState (), data);
       NotifyPendingStateChange ();
     }
   else
-    VLOG (1) << "Ignoring pending move while not up-to-date: " << data;
+    {
+      VLOG (1) << "Ignoring pending move while not up-to-date";
+      VLOG (2) << "Full data: " << data;
+    }
 }
 
 void

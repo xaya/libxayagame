@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -68,6 +68,63 @@ PendingMoveProcessor::GetConfirmedBlock () const
   return ctx->block;
 }
 
+namespace
+{
+
+/**
+ * Extracts the txid of a move JSON object as uint256.
+ */
+uint256
+GetMoveTxid (const Json::Value& mv)
+{
+  if (mv.isArray ())
+    {
+      CHECK_GT (mv.size (), 0);
+      return GetMoveTxid (mv[0]);
+    }
+
+  CHECK (mv.isObject ());
+
+  const auto& txidVal = mv["txid"];
+  CHECK (txidVal.isString ());
+
+  uint256 txid;
+  CHECK (txid.FromHex (txidVal.asString ()));
+
+  return txid;
+}
+
+} // anonymous namespace
+
+void
+PendingMoveProcessor::AddMoveOrMoves (const Json::Value& moves)
+{
+  CHECK (ctx != nullptr);
+
+  if (moves.isObject ())
+    AddPendingMove (moves);
+  else
+    {
+      CHECK (moves.isArray ());
+
+      bool first = true;
+      uint256 lastTxid;
+      for (const auto& mv : moves)
+        {
+          const uint256 curTxid = GetMoveTxid (mv);
+          CHECK (first || curTxid == lastTxid)
+              << "Txid mismatch in array move: "
+              << curTxid.ToHex () << " vs " << lastTxid.ToHex ();
+
+          lastTxid = curTxid;
+          first = false;
+
+          CHECK (mv.isObject ());
+          AddPendingMove (mv);
+        }
+    }
+}
+
 void
 PendingMoveProcessor::Reset (const GameStateData& state)
 {
@@ -103,7 +160,7 @@ PendingMoveProcessor::Reset (const GameStateData& state)
 
       newPending.emplace (txid, mit->second);
       if (ctx != nullptr)
-        AddPendingMove (mit->second);
+        AddMoveOrMoves (mit->second);
     }
 
   VLOG (1)
@@ -111,26 +168,6 @@ PendingMoveProcessor::Reset (const GameStateData& state)
       << pending.size () << " to " << newPending.size ();
   pending = std::move (newPending);
 }
-
-namespace
-{
-
-/**
- * Extracts the txid of a move JSON object as uint256.
- */
-uint256
-GetMoveTxid (const Json::Value& mv)
-{
-  const auto& txidVal = mv["txid"];
-  CHECK (txidVal.isString ());
-
-  uint256 txid;
-  CHECK (txid.FromHex (txidVal.asString ()));
-
-  return txid;
-}
-
-} // anonymous namespace
 
 void
 PendingMoveProcessor::ProcessAttachedBlock (const GameStateData& state,
@@ -197,26 +234,50 @@ PendingMoveProcessor::ProcessDetachedBlock (const GameStateData& state,
 }
 
 void
-PendingMoveProcessor::ProcessMove (const GameStateData& state,
-                                   const Json::Value& mv)
+PendingMoveProcessor::ProcessTx (const GameStateData& state,
+                                 const Json::Value& moves)
 {
-  const uint256 txid = GetMoveTxid (mv);
-  VLOG (1) << "Processing pending move: " << txid.ToHex ();
-  VLOG (2) << "Full data: " << mv;
+  CHECK (moves.isObject () || moves.isArray ())
+      << "Invalid move JSON: " << moves;
 
-  const auto inserted = pending.emplace (txid, mv);
-  if (!inserted.second)
+  if (moves.isArray ())
     {
-      VLOG (1) << "The move is already known";
+      if (moves.size () == 0)
+        return;
+
+      for (const auto& mv : moves)
+        CHECK (mv.isObject ()) << "Invalid move JSON: " << moves;
+    }
+
+  const uint256 txid = GetMoveTxid (moves);
+  VLOG (1) << "Processing pending move: " << txid.ToHex ();
+  VLOG (2) << "Full data: " << moves;
+
+  const auto mit = pending.find (txid);
+  if (mit != pending.end ())
+    {
+      if (mit->second == moves)
+        {
+          VLOG (1) << "The move is already known";
+          return;
+        }
+
+      LOG (WARNING)
+          << "Pending move " << txid.ToHex ()
+          << " changed, resetting the state";
+      mit->second = moves;
+      Reset (state);
       return;
     }
+
+  CHECK (pending.emplace (txid, moves).second);
 
   if (blockQueue.empty ())
     LOG (WARNING) << "Block queue is empty, ignoring pending move for now";
   else
     {
       ContextSetter setter(*this, state, blockQueue.back ());
-      AddPendingMove (mv);
+      AddMoveOrMoves (moves);
     }
 }
 

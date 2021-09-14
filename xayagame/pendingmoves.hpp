@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -55,7 +55,8 @@ private:
   /**
    * All currently known pending moves, indexed by their txid.  This is used
    * to check whether a new move is already known, and also to retrieve the
-   * actual data when we sync with getrawmempool.
+   * actual data when we sync with getrawmempool.  The values can be JSON
+   * objects or arrays of objects.
    */
   std::map<uint256, Json::Value> pending;
 
@@ -80,6 +81,12 @@ private:
    * up the state context for the given game state and using our blockQueue.
    */
   void Reset (const GameStateData& state);
+
+  /**
+   * Adds a single or multiple pending moves (if the data is a JSON array).
+   * Requires a context set up.
+   */
+  void AddMoveOrMoves (const Json::Value& moves);
 
   class ContextSetter;
 
@@ -113,8 +120,13 @@ protected:
    * mv contains the full move data as JSON.
    *
    * Between calls to Clear, this is called at most once for any particular
-   * transaction.  If one move is built on another (i.e. spending the other's
+   * move.  If one move is built on another (i.e. spending the other's
    * name), then it is usually passed to AddPendingMove later.
+   *
+   * Note that it may be possible (depending on the base blockchain environment)
+   * that a single transaction triggers multiple moves.  In this case, all
+   * of them will be passed to this method in order, and they will all have
+   * the same txid value in the JSON data.
    *
    * During exceptional situations (e.g. reorgs), it may happen that
    * conflicting, out-of-order or already confirmed moves are passed here.
@@ -147,9 +159,12 @@ public:
                              const Json::Value& blockData);
 
   /**
-   * Processes a newly received pending move.
+   * Processes a newly received pending move.  The value can be a JSON object
+   * or an array of JSON objects.  In the latter case, all of them must
+   * correspond to the same txid, and will be considered as multiple moves
+   * triggered by a single transaction (e.g. on an EVM chain).
    */
-  void ProcessMove (const GameStateData& state, const Json::Value& mv);
+  void ProcessTx (const GameStateData& state, const Json::Value& moves);
 
   /**
    * Returns a JSON representation of the current state.  This is exposed

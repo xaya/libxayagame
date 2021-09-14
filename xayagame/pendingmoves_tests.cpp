@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -95,6 +95,29 @@ MoveJson (const std::string& nm, const std::string& val)
 }
 
 /**
+ * Constructs a move JSON array for multiple moves supposed to be triggered
+ * by a single transaction.  A dummy value is passed in which gets hashed
+ * to produce the txid (which will be the same for all moves, as would be
+ * the case for a real array-move situation).
+ */
+Json::Value
+MoveJson (const std::string& txidPreimage,
+          const std::vector<std::pair<std::string, std::string>>& moves)
+{
+  const std::string txidHex = SHA256::Hash (txidPreimage).ToHex ();
+
+  Json::Value res(Json::arrayValue);
+  for (const auto& entry : moves)
+    {
+      auto cur = MoveJson (entry.first, entry.second);
+      cur["txid"] = txidHex;
+      res.append (cur);
+    }
+
+  return res;
+}
+
+/**
  * Constructs a block JSON for the given list of moves.
  */
 Json::Value
@@ -162,11 +185,11 @@ TEST_F (PendingMovesTests, AddingMoves)
 {
   proc.ProcessAttachedBlock ("", BlockJson (10, {}));
 
-  proc.ProcessMove ("state", MoveJson ("foo", "bar"));
-  proc.ProcessMove ("state", MoveJson ("foo", "baz"));
-  proc.ProcessMove ("state", MoveJson ("foo", "bar"));
-  proc.ProcessMove ("state", MoveJson ("abc", "def"));
-  proc.ProcessMove ("state", MoveJson ("abc", "def"));
+  proc.ProcessTx ("state", MoveJson ("foo", "bar"));
+  proc.ProcessTx ("state", MoveJson ("foo", "baz"));
+  proc.ProcessTx ("state", MoveJson ("foo", "bar"));
+  proc.ProcessTx ("state", MoveJson ("abc", "def"));
+  proc.ProcessTx ("state", MoveJson ("abc", "def"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "state",
@@ -183,11 +206,11 @@ TEST_F (PendingMovesTests, AttachedBlock)
 {
   proc.ProcessAttachedBlock ("", BlockJson (10, {}));
 
-  proc.ProcessMove ("old", MoveJson ("foo", "c"));
-  proc.ProcessMove ("old", MoveJson ("foo", "b"));
-  proc.ProcessMove ("old", MoveJson ("foo", "a"));
-  proc.ProcessMove ("old", MoveJson ("bar", "x"));
-  proc.ProcessMove ("old", MoveJson ("baz", "y"));
+  proc.ProcessTx ("old", MoveJson ("foo", "c"));
+  proc.ProcessTx ("old", MoveJson ("foo", "b"));
+  proc.ProcessTx ("old", MoveJson ("foo", "a"));
+  proc.ProcessTx ("old", MoveJson ("bar", "x"));
+  proc.ProcessTx ("old", MoveJson ("baz", "y"));
 
   SetMempool ({"b", "c", "y", "z"});
   proc.ProcessAttachedBlock ("new", BlockJson (11, {}));
@@ -208,8 +231,8 @@ TEST_F (PendingMovesTests, DetachedBlock)
   proc.ProcessAttachedBlock ("", BlockJson (10, {}));
   proc.ProcessAttachedBlock ("", BlockJson (11, {}));
 
-  proc.ProcessMove ("new", MoveJson ("foo", "b"));
-  proc.ProcessMove ("new", MoveJson ("bar", "x"));
+  proc.ProcessTx ("new", MoveJson ("foo", "b"));
+  proc.ProcessTx ("new", MoveJson ("bar", "x"));
 
   SetMempool ({"a", "b", "x", "y", "z"});
   proc.ProcessDetachedBlock ("old", BlockJson (11,
@@ -219,7 +242,7 @@ TEST_F (PendingMovesTests, DetachedBlock)
     }));
 
   /* This should be ignored, as we have it already.  */
-  proc.ProcessMove ("old", MoveJson ("foo", "a"));
+  proc.ProcessTx ("old", MoveJson ("foo", "a"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "old",
@@ -229,6 +252,73 @@ TEST_F (PendingMovesTests, DetachedBlock)
         "foo": ["a", "b"],
         "bar": ["x"],
         "baz": ["y"]
+      }
+  })"));
+}
+
+TEST_F (PendingMovesTests, ArrayMove)
+{
+  proc.ProcessAttachedBlock ("", BlockJson (10, {}));
+
+  proc.ProcessTx ("old", ParseJson ("[]"));
+  proc.ProcessTx ("old", MoveJson ("tx1", {{"foo", "c"}, {"foo", "b"}}));
+  proc.ProcessTx ("old", MoveJson ("tx2", {{"foo", "a"}, {"bar", "x"}}));
+  proc.ProcessTx ("old", MoveJson ("baz", "y"));
+
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({
+    "confirmed": "old",
+    "height": 10,
+    "names":
+      {
+        "bar": ["x"],
+        "baz": ["y"],
+        "foo": ["c", "b", "a"]
+      }
+  })"));
+
+  SetMempool ({"tx1", "y"});
+  proc.ProcessAttachedBlock ("new", BlockJson (11, {}));
+
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({
+    "confirmed": "new",
+    "height": 11,
+    "names":
+      {
+        "baz": ["y"],
+        "foo": ["c", "b"]
+      }
+  })"));
+}
+
+TEST_F (PendingMovesTests, ReplacedTransaction)
+{
+  proc.ProcessAttachedBlock ("", BlockJson (10, {}));
+
+  proc.ProcessTx ("state", MoveJson ("tx1", {{"foo", "a"}, {"foo", "b"}}));
+  proc.ProcessTx ("state", MoveJson ("tx2", {{"bar", "x"}}));
+
+  /* Since replacing the transaction later on calls Reset, make sure the
+     mempool matches up with the transactions.  */
+  SetMempool ({"tx1", "tx2"});
+
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({
+    "confirmed": "state",
+    "height": 10,
+    "names":
+      {
+        "bar": ["x"],
+        "foo": ["a", "b"]
+      }
+  })"));
+
+  proc.ProcessTx ("state", MoveJson ("tx1", {{"foo", "1"}, {"foo", "2"}}));
+  EXPECT_EQ (proc.ToJson (), ParseJson (R"({
+    "confirmed": "state",
+    "height": 10,
+    "names":
+      {
+        "bar": ["x"],
+        "foo": ["1", "2"]
       }
   })"));
 }
@@ -244,8 +334,8 @@ TEST_F (PendingMovesTests, OneBlockReorg)
   proc.ProcessAttachedBlock ("", BlockJson (10, {}));
   proc.ProcessAttachedBlock ("", BlockJson (11, {}));
 
-  proc.ProcessMove ("new 1", MoveJson ("foo", "b"));
-  proc.ProcessMove ("new 1", MoveJson ("bar", "x"));
+  proc.ProcessTx ("new 1", MoveJson ("foo", "b"));
+  proc.ProcessTx ("new 1", MoveJson ("bar", "x"));
 
   SetMempool ({"a", "b", "x", "y"});
   proc.ProcessDetachedBlock ("old", BlockJson (11,
@@ -254,8 +344,8 @@ TEST_F (PendingMovesTests, OneBlockReorg)
       MoveJson ("baz", "y"),
     }));
 
-  proc.ProcessMove ("old", MoveJson ("foo", "a"));
-  proc.ProcessMove ("baz", MoveJson ("baz", "y"));
+  proc.ProcessTx ("old", MoveJson ("foo", "a"));
+  proc.ProcessTx ("baz", MoveJson ("baz", "y"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "old",
@@ -270,7 +360,7 @@ TEST_F (PendingMovesTests, OneBlockReorg)
 
   SetMempool ({});
   proc.ProcessAttachedBlock ("new 2", BlockJson (11, {}));
-  proc.ProcessMove ("new 2", MoveJson ("foo", "new"));
+  proc.ProcessTx ("new 2", MoveJson ("foo", "new"));
 
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "new 2",
@@ -292,7 +382,7 @@ TEST_F (PendingMovesTests, AttachedBlockQueueMismatch)
      queue will be empty.  */
 
   proc.ProcessAttachedBlock ("new", BlockJson (15, {}));
-  proc.ProcessMove ("new", MoveJson ("foo", "a"));
+  proc.ProcessTx ("new", MoveJson ("foo", "a"));
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "new",
     "height": 15,
@@ -303,7 +393,7 @@ TEST_F (PendingMovesTests, AttachedBlockQueueMismatch)
   })"));
 
   proc.ProcessDetachedBlock ("old", BlockJson (15, {}));
-  proc.ProcessMove ("old", MoveJson ("foo", "a"));
+  proc.ProcessTx ("old", MoveJson ("foo", "a"));
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({"names": {}})"));
 }
 
@@ -313,7 +403,7 @@ TEST_F (PendingMovesTests, DetachedBlockQueueMismatch)
   proc.ProcessAttachedBlock ("", BlockJson (11, {}));
 
   proc.ProcessDetachedBlock ("old", BlockJson (15, {}));
-  proc.ProcessMove ("old", MoveJson ("foo", "a"));
+  proc.ProcessTx ("old", MoveJson ("foo", "a"));
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({"names": {}})"));
 }
 
@@ -330,7 +420,7 @@ TEST_F (PendingMovesTests, BlockQueuePruning)
   for (; i > 950; --i)
     proc.ProcessDetachedBlock ("", BlockJson (i, {}));
 
-  proc.ProcessMove ("state", MoveJson ("foo", "a"));
+  proc.ProcessTx ("state", MoveJson ("foo", "a"));
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({
     "confirmed": "state",
     "height": 950,
@@ -345,8 +435,21 @@ TEST_F (PendingMovesTests, BlockQueuePruning)
   for (; i > 800; --i)
     proc.ProcessDetachedBlock ("", BlockJson (i, {}));
 
-  proc.ProcessMove ("state", MoveJson ("foo", "a"));
+  proc.ProcessTx ("state", MoveJson ("foo", "a"));
   EXPECT_EQ (proc.ToJson (), ParseJson (R"({"names": {}})"));
+}
+
+TEST_F (PendingMovesTests, InvalidMoveData)
+{
+  proc.ProcessAttachedBlock ("", BlockJson (10, {}));
+
+  EXPECT_DEATH (proc.ProcessTx ("state", "invalid"), "Invalid move JSON");
+  EXPECT_DEATH (proc.ProcessTx ("state", ParseJson ("[\"invalid\"]")),
+                "Invalid move JSON");
+
+  auto arr = MoveJson ("tx", {{"foo", "c"}, {"foo", "b"}});
+  arr[0]["txid"] = SHA256::Hash ("other").ToHex ();
+  EXPECT_DEATH (proc.ProcessTx ("state", arr), "Txid mismatch");
 }
 
 /* ************************************************************************** */
