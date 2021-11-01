@@ -68,6 +68,7 @@ AC_CONFIG_FILES([
   ships/Makefile \
   ships/channeltest/Makefile \
   ships/gametest/Makefile \
+  websocket/Makefile \
   xayagame/Makefile \
   xayagametest/Makefile \
   xayautil/Makefile \
