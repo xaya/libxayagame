@@ -76,11 +76,12 @@ class Node:
       except:
         time.sleep (0.1)
 
-    # Make sure we have a default wallet.
+    # Make sure we have a default wallet.  We use a legacy wallet
+    # so we can importprivkey the premine.
     wallets = rpc.listwallets ()
     if "" not in wallets:
       self.log.info ("Creating default wallet in Xaya Core...")
-      rpc.createwallet ("")
+      rpc.createwallet (wallet_name="", descriptors=False)
 
     # We need to explicitly close the client connection, or else
     # Xaya Core will wait for it when shutting down.
