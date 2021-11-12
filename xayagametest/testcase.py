@@ -319,6 +319,7 @@ class XayaGameTest (object):
 
     from xayax import eth
     env = eth.Environment (self.basedir, self.ports, self.args.xeth_binary)
+    env.enablePending ()
 
     with env.run ():
       self.ethnode = env.ganache
