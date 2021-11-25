@@ -40,17 +40,11 @@ RUN ./configure && make && make install-strip
 
 # Build and install jsoncpp from source.  We need at least version >= 1.7.5,
 # which includes an important fix for JSON parsing in some GSPs.
-ARG JSONCPP_VERSION="1.9.4"
-WORKDIR /usr/src/jsoncpp
+ARG JSONCPP_VERSION="1.9.5"
+WORKDIR /usr/src/jsoncpp/build
 RUN git clone -b ${JSONCPP_VERSION} \
-  https://github.com/open-source-parsers/jsoncpp .
-# FIXME: Version 1.9.4 has a broken pkg-config file, which we need
-# to fix specifically.  Once a new version is released, we can get
-# rid of this hack.
-RUN git config user.email "test@example.com"
-RUN git config user.name "Cherry Picker"
-RUN git cherry-pick ac2870298ed5b5a96a688d9df07461b31f83e906
-RUN cmake . \
+  https://github.com/open-source-parsers/jsoncpp ../source
+RUN cmake ../source \
   -DJSONCPP_WITH_PKGCONFIG_SUPPORT=ON \
   -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF
 RUN make && make install/strip
@@ -77,14 +71,14 @@ RUN git clone https://github.com/google/googletest .
 RUN cmake . && make && make install/strip
 
 # The ZMQ C++ bindings need to be installed from source.
-ARG CPPZMQ_VERSION="4.7.1"
+ARG CPPZMQ_VERSION="4.8.1"
 WORKDIR /usr/src/cppzmq
 RUN git clone -b v${CPPZMQ_VERSION} https://github.com/zeromq/cppzmq .
 RUN cp zmq.hpp /usr/local/include
 
 # Build and install sqlite3 from source with the session extension
 # enabled as needed.
-ARG SQLITE_VERSION="3350500"
+ARG SQLITE_VERSION="3360000"
 WORKDIR /usr/src
 RUN wget https://www.sqlite.org/2021/sqlite-autoconf-${SQLITE_VERSION}.tar.gz
 RUN tar zxvf sqlite-autoconf-${SQLITE_VERSION}.tar.gz
@@ -113,7 +107,7 @@ RUN ./autogen.sh && ./configure && make && make install-strip
 
 # For the final image, just copy over all built / installed stuff and
 # add in the non-dev libraries needed (where we installed the dev version
-# on the builder package only).  We also add bash for the cpld script.
+# on the builder image only).  We also add bash for the cpld script.
 FROM base
 COPY --from=build /usr/local /usr/local/
 ENV PKG_CONFIG_PATH "/usr/local/lib64/pkgconfig"
