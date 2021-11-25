@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -35,15 +35,7 @@ private:
   /** The underlying MDH daemon.  */
   struct MHD_Daemon* daemon = nullptr;
 
-  /**
-   * Request handler function for MHD.
-   */
-  static int RequestCallback (void* data, struct MHD_Connection* conn,
-                              const char* url, const char* method,
-                              const char* version,
-                              const char* upload, size_t* uploadSize,
-                              void** connData);
-
+  class Callbacks;
   friend class RestTests;
 
 protected:

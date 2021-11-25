@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2021 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -200,7 +200,7 @@ public:
   /**
    * Enqueues the response for sending by MHD.
    */
-  int
+  auto
   Queue (struct MHD_Connection* conn)
   {
     CHECK (resp != nullptr);
@@ -211,13 +211,39 @@ public:
 
 } // anonymous namespace
 
-int
-RestApi::RequestCallback (void* data, struct MHD_Connection* conn,
-                          const char* url, const char* method,
-                          const char* version,
-                          const char* upload, size_t* uploadSize,
-                          void** connData)
+/**
+ * Helper class that we just use to define the callback function in
+ * a way that gives access to internals of RestApi, but without having
+ * to declare it in the header (which would make the header depend on
+ * libmicrohttpd).
+ */
+class RestApi::Callbacks
 {
+
+public:
+
+  /**
+   * Request handler function for MHD.
+   */
+  static auto Request (void* data, struct MHD_Connection* conn,
+                       const char* url, const char* method,
+                       const char* version,
+                       const char* upload, size_t* uploadSize,
+                       void** connData);
+
+};
+
+auto
+RestApi::Callbacks::Request (void* data, struct MHD_Connection* conn,
+                             const char* url, const char* method,
+                             const char* version,
+                             const char* upload, size_t* uploadSize,
+                             void** connData)
+{
+  /* We use "auto" as return type here as well as in Response::Queue
+     so that it both works with old libmicrohttpd (returning int)
+     and newer versions (returning MHD_Result).  */
+
   LOG (INFO) << "REST server: " << method << " request to " << url;
 
   Response resp;
@@ -247,7 +273,7 @@ RestApi::Start ()
   CHECK (daemon == nullptr);
   daemon = MHD_start_daemon (MHD_USE_INTERNAL_POLLING_THREAD, port,
                              nullptr, nullptr,
-                             &RequestCallback, this, MHD_OPTION_END);
+                             &Callbacks::Request, this, MHD_OPTION_END);
   CHECK (daemon != nullptr) << "Failed to start microhttpd daemon";
 }
 
