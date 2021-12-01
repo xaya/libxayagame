@@ -160,6 +160,22 @@ class Environment:
     addr = self.node.rpc.getnewaddress ()
     return self.node.rpc.generatetoaddress (num, addr)
 
+  def createSignerAddress (self):
+    """
+    Creates and returns a new address which can be used to sign messages
+    (e.g. for Xid authentication or game channels).
+    """
+
+    return self.node.rpc.getnewaddress ("", "legacy")
+
+  def signMessage (self, addr, msg):
+    """
+    Signs a message with the given address, which should be one returned
+    from createSignerAddress earlier.
+    """
+
+    return self.node.rpc.signmessage (addr, msg)
+
   def getChainTip (self):
     info = self.node.rpc.getblockchaininfo ()
     return info["bestblockhash"], info["blocks"]
