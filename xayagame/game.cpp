@@ -841,6 +841,12 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
   LOG (INFO)
       << "Game state does not match current tip, requesting updates from "
       << currentHash.ToHex ();
+  /* At this point, mut is locked.  This means that even if game_sendupdates
+     pushes ZMQ notifications before returning from the RPC, the ZMQ thread
+     will only be able to get them processed by BlockAttach and BlockDetach
+     once game_sendupdates and the code here are done.  This ensures that
+     we won't ignore ZMQ messages that we just requested simply because we
+     are not yet aware of the associated reqtoken.  */
   const Json::Value upd
       = rpcClient->game_sendupdates (currentHash.ToHex (), gameId);
 
