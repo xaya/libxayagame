@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,6 +15,8 @@
 
 namespace xaya
 {
+
+/* ************************************************************************** */
 
 void
 ChannelGame::SetupGameChannelsSchema (SQLiteDatabase& db)
@@ -40,8 +42,8 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
     return false;
 
   BoardState provenState;
-  if (!VerifyStateProof (GetXayaRpc (), rules, id, meta, ch.GetReinitState (),
-                         proof, provenState))
+  if (!VerifyStateProof (GetSignatureVerifier (), rules, id, meta,
+                         ch.GetReinitState (), proof, provenState))
     {
       LOG (WARNING) << "Dispute has invalid state proof";
       return false;
@@ -114,8 +116,8 @@ ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
     return false;
 
   BoardState provenState;
-  if (!VerifyStateProof (GetXayaRpc (), rules, id, meta, ch.GetReinitState (),
-                         proof, provenState))
+  if (!VerifyStateProof (GetSignatureVerifier (), rules, id, meta,
+                         ch.GetReinitState (), proof, provenState))
     {
       LOG (WARNING) << "Resolution has invalid state proof";
       return false;
@@ -142,6 +144,18 @@ ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
   return true;
 }
 
+const SignatureVerifier&
+ChannelGame::GetSignatureVerifier ()
+{
+  if (verifier == nullptr)
+    verifier = std::make_unique<RpcSignatureVerifier> (GetXayaRpc ());
+
+  CHECK (verifier != nullptr);
+  return *verifier;
+}
+
+/* ************************************************************************** */
+
 void
 ChannelGame::PendingMoves::Clear ()
 {
@@ -162,8 +176,8 @@ ChannelGame::PendingMoves::AddPendingStateProof (ChannelData& ch,
     return;
 
   BoardState provenState;
-  if (!VerifyStateProof (GetXayaRpc (), rules, id, meta, ch.GetReinitState (),
-                         proof, provenState))
+  if (!VerifyStateProof (game.GetSignatureVerifier (), rules, id, meta,
+                         ch.GetReinitState (), proof, provenState))
     {
       LOG (WARNING) << "StateProof of pending move is invalid";
       return;
@@ -235,5 +249,7 @@ UpdateMetadataReinit (const uint256& txid, proto::ChannelMetadata& meta)
 
   meta.set_reinit (hasher.Finalise ().GetBinaryString ());
 }
+
+/* ************************************************************************** */
 
 } // namespace xaya

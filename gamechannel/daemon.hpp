@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,6 +11,7 @@
 #include "channelmanager.hpp"
 #include "movesender.hpp"
 #include "openchannel.hpp"
+#include "signatures.hpp"
 
 #include "rpc-stubs/channelgsprpcclient.h"
 
@@ -57,6 +58,11 @@ private:
     /** The RPC client for the Xaya wallet.  */
     XayaWalletRpcClient xayaWallet;
 
+    /** Signature verifier (based on the RPC).  */
+    RpcSignatureVerifier verifier;
+    /** Signature signer based on RPC.  */
+    RpcSignatureSigner signer;
+
     /** The ChannelManager instance.  */
     ChannelManager cm;
 
@@ -67,7 +73,8 @@ private:
     XayaBasedInstances (const XayaBasedInstances&) = delete;
     void operator= (const XayaBasedInstances&) = delete;
 
-    explicit XayaBasedInstances (ChannelDaemon& daemon, const std::string& rpc,
+    explicit XayaBasedInstances (ChannelDaemon& daemon, const std::string& addr,
+                                 const std::string& rpc,
                                  jsonrpc::clientVersion_t rpcVersion);
     ~XayaBasedInstances ();
 
@@ -103,6 +110,8 @@ private:
 
   /** The player's name (without p/ prefix).  */
   const std::string playerName;
+  /** The player's signing address.  */
+  const std::string address;
 
   /** The board rules for this game.  */
   const BoardRules& rules;
@@ -135,9 +144,10 @@ private:
 public:
 
   explicit ChannelDaemon (const std::string& gid,
-                          const uint256& id, const std::string& nm,
+                          const uint256& id,
+                          const std::string& nm, const std::string& addr,
                           const BoardRules& r, OpenChannel& oc)
-    : gameId(gid), channelId(id), playerName(nm),
+    : gameId(gid), channelId(id), playerName(nm), address(addr),
       rules(r), channel(oc)
   {}
 

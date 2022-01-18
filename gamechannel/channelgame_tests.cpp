@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -52,9 +52,9 @@ protected:
     meta.add_participants ()->set_address ("addr0");
     meta.add_participants ()->set_address ("addr1");
 
-    ValidSignature ("sgn0", "addr0");
-    ValidSignature ("sgn1", "addr1");
-    ValidSignature ("sgn42", "addr42");
+    verifier.SetValid ("sgn0", "addr0");
+    verifier.SetValid ("sgn1", "addr1");
+    verifier.SetValid ("sgn42", "addr42");
   }
 
   /**

@@ -4,8 +4,6 @@
 
 #include "stateproof.hpp"
 
-#include "signatures.hpp"
-
 #include <glog/logging.h>
 
 #include <iterator>
@@ -23,7 +21,8 @@ namespace
  * proof, so that we do not need to duplicate that check.
  */
 bool
-ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
+ExtraVerifyStateTransition (const SignatureVerifier& verifier,
+                            const BoardRules& rules,
                             const uint256& channelId,
                             const proto::ChannelMetadata& meta,
                             const ParsedBoardState& oldState,
@@ -57,7 +56,7 @@ ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
       return false;
     }
 
-  signatures = VerifyParticipantSignatures (rpc, channelId, meta, "state",
+  signatures = VerifyParticipantSignatures (verifier, channelId, meta, "state",
                                             transition.new_state ());
   if (signatures.count (turn) == 0)
     {
@@ -72,7 +71,8 @@ ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
 } // anonymous namespace
 
 bool
-VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
+VerifyStateTransition (const SignatureVerifier& verifier,
+                       const BoardRules& rules,
                        const uint256& channelId,
                        const proto::ChannelMetadata& meta,
                        const BoardState& oldState,
@@ -87,12 +87,13 @@ VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
 
   std::unique_ptr<ParsedBoardState> parsedNew;
   std::set<int> signatures;
-  return ExtraVerifyStateTransition (rpc, rules, channelId, meta, *parsedOld,
+  return ExtraVerifyStateTransition (verifier, rules,
+                                     channelId, meta, *parsedOld,
                                      transition, signatures, parsedNew);
 }
 
 bool
-VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
+VerifyStateProof (const SignatureVerifier& verifier, const BoardRules& rules,
                   const uint256& channelId,
                   const proto::ChannelMetadata& meta,
                   const BoardState& reinitState,
@@ -100,7 +101,7 @@ VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
                   BoardState& endState)
 {
   std::set<int> signatures
-      = VerifyParticipantSignatures (rpc, channelId, meta, "state",
+      = VerifyParticipantSignatures (verifier, channelId, meta, "state",
                                      proof.initial_state ());
 
   auto parsed = rules.ParseState (channelId, meta,
@@ -118,8 +119,8 @@ VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
     {
       std::unique_ptr<ParsedBoardState> parsedNew;
       std::set<int> newSignatures;
-      if (!ExtraVerifyStateTransition (rpc, rules, channelId, meta, *parsed, t,
-                                       newSignatures, parsedNew))
+      if (!ExtraVerifyStateTransition (verifier, rules, channelId, meta,
+                                       *parsed, t, newSignatures, parsedNew))
         return false;
 
       signatures.insert (newSignatures.begin (), newSignatures.end ());
@@ -154,7 +155,7 @@ UnverifiedProofEndState (const proto::StateProof& proof)
 }
 
 bool
-ExtendStateProof (XayaRpcClient& rpc, XayaWalletRpcClient& wallet,
+ExtendStateProof (const SignatureVerifier& verifier, SignatureSigner& signer,
                   const BoardRules& rules,
                   const uint256& channelId,
                   const proto::ChannelMetadata& meta,
@@ -186,7 +187,7 @@ ExtendStateProof (XayaRpcClient& rpc, XayaWalletRpcClient& wallet,
   ns->set_data (newState);
 
   LOG (INFO) << "Trying to sign new state for participant " << turn;
-  if (!SignDataForParticipant (wallet, channelId, meta, "state", turn, *ns))
+  if (!SignDataForParticipant (signer, channelId, meta, "state", turn, *ns))
     return false;
 
   /* We got a valid signature of the new state.  Now we have to figure out what
@@ -208,7 +209,7 @@ ExtendStateProof (XayaRpcClient& rpc, XayaWalletRpcClient& wallet,
   while (true)
     {
       const auto newSigs
-          = VerifyParticipantSignatures (rpc, channelId, meta, "state",
+          = VerifyParticipantSignatures (verifier, channelId, meta, "state",
                                          begin->new_state ());
       signatures.insert (newSigs.begin (), newSigs.end ());
 

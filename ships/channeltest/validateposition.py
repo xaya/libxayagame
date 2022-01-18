@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,7 +18,8 @@ class ValidatePositionTest (ShipsTest):
     channelId = "ab" * 32
 
     self.mainLogger.info ("Starting channel daemons...")
-    with self.runChannelDaemon (channelId, "foo") as ch:
+    addr = self.newSigningAddress ()
+    with self.runChannelDaemon (channelId, "foo", addr) as ch:
       self.mainLogger.info ("Testing validateposition...")
       self.assertEqual (False, ch.rpc.validateposition ("invalid string"))
       self.assertEqual (False, ch.rpc.validateposition ("""

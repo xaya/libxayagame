@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -47,6 +47,8 @@ DEFINE_bool (rpc_listen_locally, true,
 
 DEFINE_string (playername, "",
                "the Xaya name of the player for this channel (without p/)");
+DEFINE_string (address, "",
+               "the Xaya address used for signing on the channel");
 DEFINE_string (channelid, "", "ID of the channel to manage as hex string");
 
 } // anonymous namespace
@@ -82,6 +84,11 @@ main (int argc, char** argv)
       std::cerr << "Error: --playername must be set" << std::endl;
       return EXIT_FAILURE;
     }
+  if (FLAGS_address.empty ())
+    {
+      std::cerr << "Error: --address must be set" << std::endl;
+      return EXIT_FAILURE;
+    }
 
   xaya::uint256 channelId;
   if (!channelId.FromHex (FLAGS_channelid))
@@ -93,7 +100,8 @@ main (int argc, char** argv)
   ships::ShipsBoardRules rules;
   ships::ShipsChannel channel(FLAGS_playername);
 
-  xaya::ChannelDaemon daemon("xs", channelId, FLAGS_playername,
+  xaya::ChannelDaemon daemon("xs", channelId,
+                             FLAGS_playername, FLAGS_address,
                              rules, channel);
   daemon.ConnectXayaRpc (FLAGS_xaya_rpc_url, FLAGS_xaya_rpc_legacy_protocol);
   daemon.ConnectGspRpc (FLAGS_gsp_rpc_url);

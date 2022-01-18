@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -46,7 +46,7 @@ protected:
   RollingState state;
 
   RollingStateTests ()
-    : state(game.rules, mockXayaServer.GetClient (), channelId)
+    : state(game.rules, verifier, channelId)
   {
     meta1.set_reinit ("reinit 1");
     meta1.add_participants ()->set_address ("addr 0");
@@ -56,9 +56,9 @@ protected:
     meta2.add_participants ()->set_address ("addr 0");
     meta2.add_participants ()->set_address ("addr 2");
 
-    ValidSignature ("sgn 0", "addr 0");
-    ValidSignature ("sgn 1", "addr 1");
-    ValidSignature ("sgn 2", "addr 2");
+    verifier.SetValid ("sgn 0", "addr 0");
+    verifier.SetValid ("sgn 1", "addr 1");
+    verifier.SetValid ("sgn 2", "addr 2");
   }
 
   /**

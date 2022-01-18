@@ -19,6 +19,8 @@
 namespace xaya
 {
 
+/* ************************************************************************** */
+
 namespace
 {
 
@@ -200,6 +202,30 @@ AdditionChannel::MaybeOnChainMove (const ParsedBoardState& state,
   addState.MaybeOnChainMove (sender);
 }
 
+/* ************************************************************************** */
+
+void
+MockSignatureVerifier::SetValid (const std::string& sgn,
+                                 const std::string& addr)
+{
+  EXPECT_CALL (*this, RecoverSigner (_, sgn)).WillRepeatedly (Return (addr));
+}
+
+void
+MockSignatureVerifier::ExpectOne (const uint256& channelId,
+                                  const proto::ChannelMetadata& meta,
+                                  const std::string& topic,
+                                  const std::string& msg,
+                                  const std::string& sgn,
+                                  const std::string& addr)
+{
+  const std::string hashed
+      = GetChannelSignatureMessage (channelId, meta, topic, msg);
+  EXPECT_CALL (*this, RecoverSigner (hashed, sgn)).WillOnce (Return (addr));
+}
+
+/* ************************************************************************** */
+
 void
 TestGame::SetupSchema (SQLiteDatabase& db)
 {
@@ -230,6 +256,12 @@ TestGame::GetStateAsJson (const SQLiteDatabase& db)
   LOG (FATAL) << "TestGame::GetStateAsJson is not implemented";
 }
 
+const SignatureVerifier&
+TestGame::GetSignatureVerifier ()
+{
+  return mockVerifier;
+}
+
 const BoardRules&
 TestGame::GetBoardRules () const
 {
@@ -237,6 +269,7 @@ TestGame::GetBoardRules () const
 }
 
 TestGameFixture::TestGameFixture ()
+  : game(verifier)
 {
   game.Initialise (":memory:");
   game.InitialiseGameContext (Chain::MAIN, "add",
@@ -251,34 +284,6 @@ TestGameFixture::GetDb ()
   return game.GetDatabaseForTesting ();
 }
 
-void
-TestGameFixture::ValidSignature (const std::string& sgn,
-                                 const std::string& addr)
-{
-  Json::Value res(Json::objectValue);
-  res["valid"] = true;
-  res["address"] = addr;
-
-  EXPECT_CALL (*mockXayaServer, verifymessage ("", _, EncodeBase64 (sgn)))
-      .WillRepeatedly (Return (res));
-}
-
-void
-TestGameFixture::ExpectSignature (const uint256& channelId,
-                                  const proto::ChannelMetadata& meta,
-                                  const std::string& topic,
-                                  const std::string& msg,
-                                  const std::string& sgn,
-                                  const std::string& addr)
-{
-  Json::Value res(Json::objectValue);
-  res["valid"] = true;
-  res["address"] = addr;
-
-  const std::string hashed
-      = GetChannelSignatureMessage (channelId, meta, topic, msg);
-  EXPECT_CALL (*mockXayaServer, verifymessage ("", hashed, EncodeBase64 (sgn)))
-      .WillOnce (Return (res));
-}
+/* ************************************************************************** */
 
 } // namespace xaya

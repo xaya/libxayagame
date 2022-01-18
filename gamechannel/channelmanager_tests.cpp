@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -25,7 +25,6 @@ using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
 using testing::_;
 using testing::Return;
-using testing::Throw;
 using testing::Truly;
 
 namespace xaya
@@ -45,8 +44,7 @@ ValidProof (const std::string& state)
 
 ChannelManagerTestFixture::ChannelManagerTestFixture ()
   : cm(game.rules, game.channel,
-       mockXayaServer.GetClient (),
-       mockXayaWallet.GetClient (),
+       verifier, signer,
        channelId, "player")
 {
   CHECK (TextFormat::ParseFromString (R"(
@@ -62,13 +60,11 @@ ChannelManagerTestFixture::ChannelManagerTestFixture ()
       }
   )", &meta));
 
-  ValidSignature ("sgn", "my addr");
-  ValidSignature ("other sgn", "not my addr");
+  verifier.SetValid ("sgn", "my addr");
+  verifier.SetValid ("other sgn", "not my addr");
 
-  EXPECT_CALL (*mockXayaWallet, signmessage ("my addr", _))
-      .WillRepeatedly (Return (EncodeBase64 ("sgn")));
-  EXPECT_CALL (*mockXayaWallet, signmessage ("not my addr", _))
-      .WillRepeatedly (Throw (jsonrpc::JsonRpcException (-5)));
+  signer.SetAddress ("my addr");
+  EXPECT_CALL (signer, SignMessage (_)).WillRepeatedly (Return ("sgn"));
 }
 
 ChannelManagerTestFixture::~ChannelManagerTestFixture ()

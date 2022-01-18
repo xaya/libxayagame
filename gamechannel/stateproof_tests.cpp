@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -26,7 +26,6 @@ namespace
 using google::protobuf::TextFormat;
 using testing::_;
 using testing::Return;
-using testing::Throw;
 
 proto::StateProof
 TextProof (const std::string& str)
@@ -50,9 +49,9 @@ protected:
     meta.add_participants ()->set_address ("addr0");
     meta.add_participants ()->set_address ("addr1");
 
-    ValidSignature ("sgn0", "addr0");
-    ValidSignature ("sgn1", "addr1");
-    ValidSignature ("sgn42", "addr42");
+    verifier.SetValid ("sgn0", "addr0");
+    verifier.SetValid ("sgn1", "addr1");
+    verifier.SetValid ("sgn42", "addr42");
   }
 
 };
@@ -74,8 +73,7 @@ protected:
     proto::StateTransition proto;
     CHECK (TextFormat::ParseFromString (transition, &proto));
 
-    return VerifyStateTransition (mockXayaServer.GetClient (),
-                                  game.rules, channelId, meta,
+    return VerifyStateTransition (verifier, game.rules, channelId, meta,
                                   oldState, proto);
   }
 
@@ -156,8 +154,8 @@ TEST_F (StateTransitionTests, InvalidSignature)
 
 TEST_F (StateTransitionTests, Valid)
 {
-  ExpectSignature (channelId, meta, "state",
-                   " 11 2 ", "signed by zero", "addr0");
+  verifier.ExpectOne (channelId, meta, "state",
+                      " 11 2 ", "signed by zero", "addr0");
 
   EXPECT_TRUE (VerifyTransition ("10 1", R"(
     move: "1",
@@ -186,8 +184,7 @@ protected:
   bool
   VerifyProof (const BoardState& chainState, const std::string& proof)
   {
-    return VerifyStateProof (mockXayaServer.GetClient (),
-                             game.rules, channelId, meta, chainState,
+    return VerifyStateProof (verifier, game.rules, channelId, meta, chainState,
                              TextProof (proof), endState);
   }
 
@@ -253,8 +250,8 @@ TEST_F (StateProofTests, OnlyInitialOnChain)
 
 TEST_F (StateProofTests, OnlyInitialSigned)
 {
-  ExpectSignature (channelId, meta, "state", "42 5", "signature 0", "addr0");
-  ExpectSignature (channelId, meta, "state", "42 5", "signature 1", "addr1");
+  verifier.ExpectOne (channelId, meta, "state", "42 5", "signature 0", "addr0");
+  verifier.ExpectOne (channelId, meta, "state", "42 5", "signature 1", "addr1");
 
   ASSERT_TRUE (VerifyProof ("0 1", R"(
     initial_state:
@@ -421,9 +418,7 @@ protected:
   bool
   ExtendProof (const std::string& oldProof, const BoardMove& mv)
   {
-    return ExtendStateProof (mockXayaServer.GetClient (),
-                             mockXayaWallet.GetClient (),
-                             game.rules, channelId, meta,
+    return ExtendStateProof (verifier, signer, game.rules, channelId, meta,
                              TextProof (oldProof), mv, newProof);
   }
 
@@ -455,8 +450,7 @@ TEST_F (ExtendStateProofTests, InvalidMove)
 
 TEST_F (ExtendStateProofTests, SignatureFailure)
 {
-  EXPECT_CALL (*mockXayaWallet, signmessage ("addr0", _))
-      .WillOnce (Throw (jsonrpc::JsonRpcException (-5)));
+  signer.SetAddress ("invalid address");
 
   EXPECT_FALSE (ExtendProof (R"(
     initial_state:
@@ -470,10 +464,8 @@ TEST_F (ExtendStateProofTests, SignatureFailure)
 
 TEST_F (ExtendStateProofTests, Valid)
 {
-  EXPECT_CALL (*mockXayaWallet, signmessage ("addr0", _))
-      .WillRepeatedly (Return (EncodeBase64 ("sgn0")));
-  EXPECT_CALL (*mockXayaWallet, signmessage ("addr1", _))
-      .WillRepeatedly (Return (EncodeBase64 ("sgn1")));
+  signer.SetAddress ("addr0");
+  EXPECT_CALL (signer, SignMessage (_)).WillRepeatedly (Return ("sgn0"));
 
   struct Test
   {
@@ -524,23 +516,23 @@ TEST_F (ExtendStateProofTests, Valid)
         R"(
           initial_state:
             {
-              data: "10 2"
-              signatures: "sgn 1"
+              data: "11 2"
+              signatures: "sgn0"
             }
           transitions:
             {
               move: "1"
               new_state:
                 {
-                  data: "11 3"
-                  signatures: "sgn0"
+                  data: "12 3"
+                  signatures: "sgn1"
                 }
             }
         )",
         "1",
-        "12 4",
+        "13 4",
         1,
-      }
+      },
 
     };
 
@@ -551,8 +543,7 @@ TEST_F (ExtendStateProofTests, Valid)
       EXPECT_EQ (newProof.transitions_size (), t.numTrans);
 
       BoardState provenState;
-      CHECK (VerifyStateProof (mockXayaServer.GetClient (),
-                               game.rules, channelId, meta, "0 0",
+      CHECK (VerifyStateProof (verifier, game.rules, channelId, meta, "0 0",
                                newProof, provenState));
       auto p = game.rules.ParseState (channelId, meta, provenState);
       CHECK (p != nullptr);

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,7 @@
 #include "boardrules.hpp"
 #include "channelgame.hpp"
 #include "openchannel.hpp"
+#include "signatures.hpp"
 
 #include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
@@ -18,6 +19,7 @@
 
 #include <json/json.h>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -109,6 +111,11 @@ public:
 class TestGame : public ChannelGame
 {
 
+private:
+
+  /** The mock verifier used.  */
+  const SignatureVerifier& mockVerifier;
+
 protected:
 
   void SetupSchema (SQLiteDatabase& db) override;
@@ -118,17 +125,84 @@ protected:
   void UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override;
   Json::Value GetStateAsJson (const SQLiteDatabase& db) override;
 
+  const SignatureVerifier& GetSignatureVerifier () override;
   const BoardRules& GetBoardRules () const override;
 
   friend class TestGameFixture;
 
 public:
 
+  explicit TestGame (const SignatureVerifier& v)
+    : mockVerifier(v)
+  {}
+
   AdditionRules rules;
   AdditionChannel channel;
 
   using ChannelGame::ProcessDispute;
   using ChannelGame::ProcessResolution;
+
+};
+
+/**
+ * Mock signature verifier.
+ */
+class MockSignatureVerifier : public SignatureVerifier
+{
+
+public:
+
+  MOCK_METHOD (std::string, RecoverSigner,
+               (const std::string&, const std::string&), (const, override));
+
+  /**
+   * Sets up the mock to validate *any* message with the given
+   * signature as belonging to the given address.
+   */
+  void SetValid (const std::string& sgn, const std::string& addr);
+
+  /**
+   * Expects exactly one call to verification with the given message
+   * and signature (both as binary).  Returns a valid response for the
+   * given address.
+   */
+  void ExpectOne (const uint256& channelId,
+                  const proto::ChannelMetadata& meta,
+                  const std::string& topic,
+                  const std::string& msg, const std::string& sgn,
+                  const std::string& addr);
+
+};
+
+/**
+ * Mock signature signer.
+ */
+class MockSignatureSigner : public SignatureSigner
+{
+
+private:
+
+  /** The address returned from GetAddress.  */
+  std::string address;
+
+public:
+
+  /**
+   * Sets the address this signer should consider itself for.
+   */
+  void
+  SetAddress (const std::string& addr)
+  {
+    address = addr;
+  }
+
+  std::string
+  GetAddress () const override
+  {
+    return address;
+  }
+
+  MOCK_METHOD (std::string, SignMessage, (const std::string&), (override));
 
 };
 
@@ -142,8 +216,13 @@ class TestGameFixture : public testing::Test
 
 protected:
 
+  /* TODO: Once the MoveSender is abstracted away from the RPCs, mock it
+     for tests and remove the RPC servers here.  */
   HttpRpcServer<MockXayaRpcServer> mockXayaServer;
   HttpRpcServer<MockXayaWalletRpcServer> mockXayaWallet;
+
+  MockSignatureVerifier verifier;
+  MockSignatureSigner signer;
 
   TestGame game;
 
@@ -157,24 +236,6 @@ protected:
    * Returns the raw database handle of the test game.
    */
   SQLiteDatabase& GetDb ();
-
-  /**
-   * Sets up the mock server to validate *any* message with the given
-   * signature as belonging to the given address.  sgn is in raw binary
-   * (will be base64-encoded for the RPC).
-   */
-  void ValidSignature (const std::string& sgn, const std::string& addr);
-
-  /**
-   * Expects exactly one call to verifymessage with the given message
-   * and signature (both as binary, they will be hashed / base64-encoded).
-   * Returns a valid response for the given address.
-   */
-  void ExpectSignature (const uint256& channelId,
-                        const proto::ChannelMetadata& meta,
-                        const std::string& topic,
-                        const std::string& msg, const std::string& sgn,
-                        const std::string& addr);
 
 };
 

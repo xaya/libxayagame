@@ -21,6 +21,8 @@
 
 #include <vector>
 
+/* FIXME: Replace mockXayaServer by mocked signature verifier */
+
 using google::protobuf::TextFormat;
 using testing::_;
 using testing::Return;
