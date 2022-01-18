@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -83,7 +83,7 @@ protected:
   }
 
   bool
-  ApplyMoveProto (XayaRpcClient& rpc, const proto::TestBoardMove& mv,
+  ApplyMoveProto (const proto::TestBoardMove& mv,
                   proto::TestBoardState& newState) const override
   {
     if (!mv.has_msg ())
@@ -137,12 +137,6 @@ class ProtoBoardTests : public testing::Test
 
 protected:
 
-  /**
-   * Fake instance of XayaRpcClient, which is just a disguised null pointer.
-   * This is fine, as our board rules never need the RPC.
-   */
-  XayaRpcClient& rpc;
-
   /** Fake channel ID used in tests.  */
   const uint256 channelId = SHA256::Hash ("foo");
 
@@ -155,7 +149,6 @@ protected:
   TestRules rules;
 
   ProtoBoardTests ()
-    : rpc(*static_cast<XayaRpcClient*> (nullptr))
   {}
 
   /**
@@ -216,10 +209,10 @@ TEST_F (ProtoBoardTests, ApplyMove)
   auto p = ParseState (TextState ("msg: \"foo\""));
 
   BoardState newState;
-  EXPECT_FALSE (p->ApplyMove (rpc, "invalid", newState));
-  EXPECT_FALSE (p->ApplyMove (rpc, TextMove (""), newState));
+  EXPECT_FALSE (p->ApplyMove ("invalid", newState));
+  EXPECT_FALSE (p->ApplyMove (TextMove (""), newState));
 
-  ASSERT_TRUE (p->ApplyMove (rpc, TextMove ("msg: \"bar\""), newState));
+  ASSERT_TRUE (p->ApplyMove (TextMove ("msg: \"bar\""), newState));
   proto::TestBoardState newPb;
   ASSERT_TRUE (newPb.ParseFromString (newState));
   EXPECT_EQ (newPb.msg (), "bar");
@@ -246,11 +239,11 @@ TEST_F (ProtoBoardTests, UnknownFields)
 
   BoardState newState;
   CHECK (pbMove.SerializeToString (&serialised));
-  EXPECT_TRUE (p->ApplyMove (rpc, serialised, newState));
+  EXPECT_TRUE (p->ApplyMove (serialised, newState));
 
   AddUnknownField (pbMove);
   CHECK (pbMove.SerializeToString (&serialised));
-  EXPECT_FALSE (p->ApplyMove (rpc, serialised, newState));
+  EXPECT_FALSE (p->ApplyMove (serialised, newState));
 }
 
 } // anonymous namespace

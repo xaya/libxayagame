@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -40,7 +40,7 @@ ExtraVerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
     }
 
   BoardState newState;
-  if (!oldState.ApplyMove (rpc, transition.move (), newState))
+  if (!oldState.ApplyMove (transition.move (), newState))
     {
       LOG (WARNING) << "Failed to apply move of state transition";
       return false;
@@ -174,7 +174,7 @@ ExtendStateProof (XayaRpcClient& rpc, XayaWalletRpcClient& wallet,
     }
 
   BoardState newState;
-  if (!parsedOld->ApplyMove (rpc, mv, newState))
+  if (!parsedOld->ApplyMove (mv, newState))
     {
       LOG (ERROR) << "Invalid move for extending a state proof: " << mv;
       return false;

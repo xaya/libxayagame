@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -32,9 +32,7 @@ namespace
 
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
-using testing::_;
 using testing::Return;
-using testing::Throw;
 using testing::Truly;
 
 /**
@@ -601,8 +599,6 @@ class FullGameTests : public ChannelTests
 
 private:
 
-  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
-
   /** Indexable array of the channels.  */
   ShipsChannel* channels[2];
 
@@ -680,8 +676,7 @@ protected:
     CHECK (mv.SerializeToString (&serialised));
 
     xaya::BoardState newState;
-    CHECK (state->ApplyMove (mockXayaServer.GetClient (),
-                             serialised, newState));
+    CHECK (state->ApplyMove (serialised, newState));
 
     state = rules.ParseState (channelId, meta[0], newState);
     CHECK (state != nullptr);

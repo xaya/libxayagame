@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,7 +8,6 @@
 #include "proto/metadata.pb.h"
 #include "protoversion.hpp"
 
-#include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayautil/uint256.hpp>
 
 #include <json/json.h>
@@ -141,8 +140,7 @@ public:
    * not represent a move at all, or because the move is invalid in the
    * context of the given old state).
    */
-  virtual bool ApplyMove (XayaRpcClient& rpc, const BoardMove& mv,
-                          BoardState& newState) const = 0;
+  virtual bool ApplyMove (const BoardMove& mv, BoardState& newState) const = 0;
 
   /**
    * Returns a JSON representation of the current board state.  This is used

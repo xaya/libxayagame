@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,7 +10,6 @@
 
 #include <gamechannel/protoboard.hpp>
 #include <gamechannel/proto/metadata.pb.h>
-#include <xayagame/rpc-stubs/xayarpcclient.h>
 
 #include <json/json.h>
 
@@ -103,7 +102,7 @@ private:
 
 protected:
 
-  bool ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
+  bool ApplyMoveProto (const proto::BoardMove& mv,
                        proto::BoardState& newState) const override;
 
 public:

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -91,8 +91,7 @@ public:
   }
 
   bool
-  ApplyMove (XayaRpcClient& rpc, const BoardMove& mv,
-             BoardState& newState) const override
+  ApplyMove (const BoardMove& mv, BoardState& newState) const override
   {
     /* The game-channel engine should never invoke ApplyMove on a 'no turn'
        situation.  Make sure to verify that.  */

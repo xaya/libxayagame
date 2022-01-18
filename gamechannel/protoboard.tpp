@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -60,8 +60,7 @@ template <typename State, typename Move>
 
 template <typename State, typename Move>
   bool
-  ProtoBoardState<State, Move>::ApplyMove (XayaRpcClient& rpc,
-                                           const BoardMove& mv,
+  ProtoBoardState<State, Move>::ApplyMove (const BoardMove& mv,
                                            BoardState& newState) const
 {
   Move pm;
@@ -77,7 +76,7 @@ template <typename State, typename Move>
     }
 
   State pn;
-  if (!ApplyMoveProto (rpc, pm, pn))
+  if (!ApplyMoveProto (pm, pn))
     return false;
 
   CHECK (pn.SerializeToString (&newState));
