@@ -7,6 +7,7 @@
 
 #include "boardrules.hpp"
 #include "channelgame.hpp"
+#include "movesender.hpp"
 #include "openchannel.hpp"
 #include "signatures.hpp"
 
@@ -23,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <queue>
 #include <string>
 
 namespace xaya
@@ -207,6 +209,61 @@ public:
 };
 
 /**
+ * Fake instance for TransactionSender for testing.
+ */
+class MockTransactionSender : public TransactionSender
+{
+
+private:
+
+  /** The current simulated "mempool".  */
+  std::set<uint256> mempool;
+
+  /** The queue of txid's to be returned.  */
+  std::queue<uint256> txidQueue;
+
+  /** Counter used to generate unique txid's.  */
+  unsigned cnt = 0;
+
+public:
+
+  MockTransactionSender ();
+
+  /**
+   * Marks the mock for expecting a call with a raw string value that satisfies
+   * the given mater.  The call will throw an error.
+   */
+  void ExpectFailure (const std::string& name,
+                      const testing::Matcher<const std::string&>& m);
+
+  /**
+   * Marks the mock for expecting n calls where the passed-in string value
+   * satisfies a gMock matcher.  It will return a list of n unique txids
+   * (generated automatically), which the move calls will return and which will
+   * also be marked as pending until ClearMempool is called the next time.
+   */
+  std::vector<uint256> ExpectSuccess (
+      unsigned n, const std::string& name,
+      const testing::Matcher<const std::string&>& m);
+
+  /**
+   * Expects exactly one successful call.
+   */
+  uint256 ExpectSuccess (const std::string& name,
+                         const testing::Matcher<const std::string&>& m);
+
+  /**
+   * Clears the internal mempool, simulating a block being mined.
+   */
+  void ClearMempool ();
+
+  MOCK_METHOD (uint256, SendRawMove,
+               (const std::string&, const std::string&), (override));
+  bool IsPending (const uint256& txid) const override;
+
+};
+
+/**
  * Test fixture that constructs a TestGame instance with an in-memory database
  * and exposes that to the test itself.  It also runs a mock Xaya Core server
  * for use together with signature verification.
@@ -215,11 +272,6 @@ class TestGameFixture : public testing::Test
 {
 
 protected:
-
-  /* TODO: Once the MoveSender is abstracted away from the RPCs, mock it
-     for tests and remove the RPC servers here.  */
-  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
-  HttpRpcServer<MockXayaWalletRpcServer> mockXayaWallet;
 
   MockSignatureVerifier verifier;
   MockSignatureSigner signer;

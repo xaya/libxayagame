@@ -63,11 +63,13 @@ private:
     /** Signature signer based on RPC.  */
     RpcSignatureSigner signer;
 
+    /** The TransactionSender based on RPC.  */
+    RpcTransactionSender txSender;
+    /** The MoveSender instance we use.  */
+    MoveSender sender;
+
     /** The ChannelManager instance.  */
     ChannelManager cm;
-
-    /** The MoveSender instance.  */
-    MoveSender sender;
 
     XayaBasedInstances () = delete;
     XayaBasedInstances (const XayaBasedInstances&) = delete;

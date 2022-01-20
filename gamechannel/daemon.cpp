@@ -32,8 +32,9 @@ ChannelDaemon::XayaBasedInstances::XayaBasedInstances (
     xayaRpc(xayaClient, rpcVersion),
     xayaWallet(xayaClient, rpcVersion),
     verifier(xayaRpc), signer(xayaWallet, addr),
-    cm(d.rules, d.channel, verifier, signer, d.channelId, d.playerName),
-    sender(d.gameId, d.channelId, d.playerName, xayaRpc, xayaWallet, d.channel)
+    txSender(xayaRpc, xayaWallet),
+    sender(d.gameId, d.channelId, d.playerName, txSender, d.channel),
+    cm(d.rules, d.channel, verifier, signer, d.channelId, d.playerName)
 {
   cm.SetMoveSender (sender);
 }

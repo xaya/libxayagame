@@ -143,16 +143,16 @@ class OnChainMoveTests : public ChannelTests
 
 protected:
 
+  /* FIXME: Use mocked move sender.  */
   xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
   xaya::HttpRpcServer<xaya::MockXayaWalletRpcServer> mockXayaWallet;
 
+  xaya::RpcTransactionSender txSender;
   xaya::MoveSender sender;
 
   OnChainMoveTests ()
-    : sender("xs", channelId, "player",
-             mockXayaServer.GetClient (),
-             mockXayaWallet.GetClient (),
-             channel)
+    : txSender (mockXayaServer.GetClient (), mockXayaWallet.GetClient ()),
+      sender("xs", channelId, "player", txSender, channel)
   {}
 
   /**

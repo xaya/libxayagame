@@ -451,8 +451,9 @@ protected:
   PendingMovesTests ()
     : proc(game)
   {
-    proc.InitialiseGameContext (Chain::MAIN, "add",
-                                &mockXayaServer.GetClient ());
+    /* All tests work without requiring a signature verifier, thus we
+       do not need to set a mock Xaya RPC server.  */
+    proc.InitialiseGameContext (Chain::MAIN, "add", nullptr);
   }
 
   /**

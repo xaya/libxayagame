@@ -9,6 +9,7 @@
 #include "signatures.hpp"
 
 #include <xayautil/base64.hpp>
+#include <xayautil/hash.hpp>
 
 #include <gmock/gmock.h>
 
@@ -25,7 +26,9 @@ namespace
 {
 
 using testing::_;
+using testing::InvokeWithoutArgs;
 using testing::Return;
+using testing::Throw;
 
 struct ParsedState
 {
@@ -204,6 +207,73 @@ AdditionChannel::MaybeOnChainMove (const ParsedBoardState& state,
 
 /* ************************************************************************** */
 
+MockTransactionSender::MockTransactionSender ()
+{
+  /* By default, we expect no calls to be made.  */
+  EXPECT_CALL (*this, SendRawMove (_, _)).Times (0);
+}
+
+void
+MockTransactionSender::ExpectFailure (
+    const std::string& name, const testing::Matcher<const std::string&>& m)
+{
+  EXPECT_CALL (*this, SendRawMove (name, m))
+      .WillOnce (Throw (std::runtime_error ("faked error")));
+}
+
+std::vector<uint256>
+MockTransactionSender::ExpectSuccess (
+    const unsigned n,
+    const std::string& name, const testing::Matcher<const std::string&>& m)
+{
+  std::vector<uint256> txids;
+  for (unsigned i = 0; i < n; ++i)
+    {
+      ++cnt;
+      std::ostringstream str;
+      str << "txid " << cnt;
+      const uint256 txid = SHA256::Hash (str.str ());
+
+      txids.push_back (txid);
+      txidQueue.push (txid);
+    }
+
+  EXPECT_CALL (*this, SendRawMove (name, m))
+      .Times (n)
+      .WillRepeatedly (InvokeWithoutArgs ([&] ()
+        {
+          const uint256 txid = txidQueue.front ();
+          txidQueue.pop ();
+
+          mempool.insert (txid);
+          return txid;
+        }));
+
+  return txids;
+}
+
+uint256
+MockTransactionSender::ExpectSuccess (
+    const std::string& name, const testing::Matcher<const std::string&>& m)
+{
+  const auto txids = ExpectSuccess (1, name, m);
+  CHECK_EQ (txids.size (), 1);
+  return txids[0];
+}
+
+void
+MockTransactionSender::ClearMempool ()
+{
+  LOG (INFO) << "Clearing simulated mempool of MockTransactionSender";
+  mempool.clear ();
+}
+
+bool
+MockTransactionSender::IsPending (const uint256& txid) const
+{
+  return mempool.count (txid) > 0;
+}
+
 void
 MockSignatureVerifier::SetValid (const std::string& sgn,
                                  const std::string& addr)
@@ -272,8 +342,7 @@ TestGameFixture::TestGameFixture ()
   : game(verifier)
 {
   game.Initialise (":memory:");
-  game.InitialiseGameContext (Chain::MAIN, "add",
-                              &mockXayaServer.GetClient ());
+  game.InitialiseGameContext (Chain::MAIN, "add", nullptr);
   game.GetStorage ().Initialise ();
   /* The initialisation above already sets up the database schema.  */
 }
