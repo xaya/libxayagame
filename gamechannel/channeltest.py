@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2021 The Xaya developers
+# Copyright (C) 2019-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,6 +11,7 @@ from . import rpcbroadcast
 
 from xayagametest.testcase import XayaGameTest
 
+from contextlib import contextmanager
 import jsonrpclib
 import logging
 import os
@@ -236,3 +237,25 @@ class TestCase (XayaGameTest):
       time.sleep (0.01)
 
     return state
+
+  @contextmanager
+  def waitForTurnIncrease (self, daemons, delta):
+    """
+    Runs a context that waits until the synced channel state between all
+    daemons has increased the turn count by at least a certain number.
+    """
+
+    before = self.getSyncedChannelState (daemons)
+    cntBefore = before["current"]["state"]["turncount"]
+
+    yield
+
+    while True:
+      after = self.getSyncedChannelState (daemons)
+      cntAfter = after["current"]["state"]["turncount"]
+
+      if cntAfter >= cntBefore + delta:
+        break
+
+      self.log.warning ("Turn count still too small, waiting...")
+      time.sleep (0.01)

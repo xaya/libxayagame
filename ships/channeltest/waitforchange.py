@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,6 +9,7 @@ Tests a channel daemon's waitforchange RPC interface.
 
 from shipstest import ShipsTest
 
+from contextlib import contextmanager
 import logging
 import threading
 import time
@@ -94,6 +95,17 @@ class WaitForChangeUpdater (threading.Thread):
 
 class WaitForChangeTest (ShipsTest):
 
+  @contextmanager
+  def expectNoUpdates (self, waiter):
+    """
+    Runs a context during which we expect no updates on the waiter.
+    """
+
+    before = waiter.getNumCalls ()
+    yield
+    after = waiter.getNumCalls ()
+    self.assertEqual (after, before)
+
   def run (self):
     self.generate (110)
 
@@ -127,28 +139,28 @@ class WaitForChangeTest (ShipsTest):
       waiter.sync ()
 
       self.mainLogger.info ("No calls if no updates...")
-      cnt = waiter.getNumCalls ()
-      time.sleep (1)
-      self.assertEqual (waiter.getNumCalls (), cnt)
+      with self.expectNoUpdates (waiter):
+        time.sleep (1)
 
       # Make sure it is foo's turn.  If not, miss a shot with bar.
       if state["current"]["state"]["whoseturn"] == 1:
-        bar.rpc._notify.shoot (row=0, column=0)
+        with self.waitForTurnIncrease (daemons, 2):
+          bar.rpc._notify.shoot (row=0, column=0)
         _, state = self.waitForPhase (daemons, ["shoot"])
       self.assertEqual (state["current"]["state"]["whoseturn"], 0)
 
       # Off-chain moves should trigger updates.
       self.mainLogger.info ("Off-chain moves...")
-      foo.rpc._notify.shoot (row=7, column=0)
+      with self.waitForTurnIncrease (daemons, 2):
+        foo.rpc._notify.shoot (row=7, column=0)
       waiter.sync ()
 
       # Disputes should trigger updates when they get into a block
       # (because blocks trigger updates in general).
       self.mainLogger.info ("On-chain updates...")
-      cnt = waiter.getNumCalls ()
-      bar.rpc.filedispute ()
-      time.sleep (1)
-      self.assertEqual (waiter.getNumCalls (), cnt)
+      with self.expectNoUpdates (waiter):
+        bar.rpc.filedispute ()
+        time.sleep (1)
       self.generate (1)
       waiter.sync ()
 
@@ -162,6 +174,8 @@ class WaitForChangeTest (ShipsTest):
           "bar": {"won": 1, "lost": 0},
         },
       })
+      state = self.getSyncedChannelState (daemons)
+      self.assertEqual (state["existsonchain"], False)
       waiter.sync ()
 
 
