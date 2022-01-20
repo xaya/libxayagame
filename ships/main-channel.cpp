@@ -9,6 +9,7 @@
 
 #include <gamechannel/daemon.hpp>
 #include <gamechannel/rpcbroadcast.hpp>
+#include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
@@ -97,13 +98,22 @@ main (int argc, char** argv)
       return EXIT_FAILURE;
     }
 
+  const auto rpcVersion = (FLAGS_xaya_rpc_legacy_protocol
+                              ? jsonrpc::JSONRPC_CLIENT_V1
+                              : jsonrpc::JSONRPC_CLIENT_V2);
+  jsonrpc::HttpClient xayaClient(FLAGS_xaya_rpc_url);
+  XayaRpcClient xayaRpc(xayaClient, rpcVersion);
+  XayaWalletRpcClient xayaWallet(xayaClient, rpcVersion);
+
+  const xaya::RpcSignatureVerifier verifier(xayaRpc);
+  xaya::RpcSignatureSigner signer(xayaWallet, FLAGS_address);
+  xaya::RpcTransactionSender sender(xayaRpc, xayaWallet);
+
   ships::ShipsBoardRules rules;
   ships::ShipsChannel channel(FLAGS_playername);
 
-  xaya::ChannelDaemon daemon("xs", channelId,
-                             FLAGS_playername, FLAGS_address,
-                             rules, channel);
-  daemon.ConnectXayaRpc (FLAGS_xaya_rpc_url, FLAGS_xaya_rpc_legacy_protocol);
+  xaya::ChannelDaemon daemon("xs", channelId, FLAGS_playername, rules, channel);
+  daemon.ConnectWallet (verifier, signer, sender);
   daemon.ConnectGspRpc (FLAGS_gsp_rpc_url);
 
   xaya::RpcBroadcast bc(FLAGS_broadcast_rpc_url, daemon.GetChannelManager ());
