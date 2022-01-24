@@ -26,10 +26,10 @@ ParseJson (const std::string& str)
 }
 
 InMemoryLogicFixture::InMemoryLogicFixture ()
+  : game(verifier)
 {
   game.Initialise (":memory:");
-  game.InitialiseGameContext (xaya::Chain::MAIN, "xs",
-                              &mockXayaServer.GetClient ());
+  game.InitialiseGameContext (xaya::Chain::MAIN, "xs", nullptr);
   game.GetStorage ().Initialise ();
   /* The initialisation above already sets up the database schema.  */
 }

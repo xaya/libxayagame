@@ -9,13 +9,10 @@
 #include "testutils.hpp"
 
 #include <gamechannel/protoutils.hpp>
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
+#include <gamechannel/testutils.hpp>
 #include <xayagame/testutils.hpp>
 #include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
-
-#include <jsonrpccpp/common/exception.h>
 
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
@@ -32,7 +29,6 @@ namespace
 
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
-using testing::Return;
 using testing::Truly;
 
 /**
@@ -143,16 +139,11 @@ class OnChainMoveTests : public ChannelTests
 
 protected:
 
-  /* FIXME: Use mocked move sender.  */
-  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
-  xaya::HttpRpcServer<xaya::MockXayaWalletRpcServer> mockXayaWallet;
-
-  xaya::RpcTransactionSender txSender;
+  xaya::MockTransactionSender txSender;
   xaya::MoveSender sender;
 
   OnChainMoveTests ()
-    : txSender (mockXayaServer.GetClient (), mockXayaWallet.GetClient ()),
-      sender("xs", channelId, "player", txSender, channel)
+    : sender("xs", channelId, "player", txSender, channel)
   {}
 
   /**
@@ -289,62 +280,17 @@ TEST_F (OnChainMoveTests, MaybeOnChainMoveSending)
       const auto& mv = val["g"]["xs"];
       return IsExpectedLoss (mv, channelId, meta[0]);
     };
-  EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
-      .WillOnce (Return (xaya::SHA256::Hash ("txid").ToHex ()));
+  txSender.ExpectSuccess (2, "player", Truly (isOk));
 
   proto::BoardState state;
   state.set_winner (1);
 
   channel.MaybeOnChainMove (*ParseState (state), sender);
-}
-
-TEST_F (OnChainMoveTests, MaybeOnChainMoveAlreadyPending)
-{
-  const auto txid = xaya::SHA256::Hash ("txid");
-
-  const auto isOk = [this] (const std::string& str)
-    {
-      const auto val = ParseJson (str);
-      const auto& mv = val["g"]["xs"];
-      return IsExpectedLoss (mv, channelId, meta[0]);
-    };
-  EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
-      .WillOnce (Return (txid.ToHex ()));
-
-  Json::Value pendings(Json::arrayValue);
-  pendings.append (txid.ToHex ());
-  EXPECT_CALL (*mockXayaServer, getrawmempool ())
-      .WillOnce (Return (pendings));
-
-  proto::BoardState state;
-  state.set_winner (1);
-
+  /* No second move is sent as the one is still pending.  */
   channel.MaybeOnChainMove (*ParseState (state), sender);
   channel.MaybeOnChainMove (*ParseState (state), sender);
-}
-
-TEST_F (OnChainMoveTests, MaybeOnChainMoveNoLongerPending)
-{
-  const auto txid1 = xaya::SHA256::Hash ("txid 1");
-  const auto txid2 = xaya::SHA256::Hash ("txid 2");
-
-  const auto isOk = [this] (const std::string& str)
-    {
-      const auto val = ParseJson (str);
-      const auto& mv = val["g"]["xs"];
-      return IsExpectedLoss (mv, channelId, meta[0]);
-    };
-  EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
-      .WillOnce (Return (txid1.ToHex ()))
-      .WillOnce (Return (txid2.ToHex ()));
-
-  EXPECT_CALL (*mockXayaServer, getrawmempool ())
-      .WillOnce (Return (ParseJson ("[]")));
-
-  proto::BoardState state;
-  state.set_winner (1);
-
-  channel.MaybeOnChainMove (*ParseState (state), sender);
+  /* This one will retry.  */
+  txSender.ClearMempool ();
   channel.MaybeOnChainMove (*ParseState (state), sender);
 }
 

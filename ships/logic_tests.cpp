@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,16 +16,11 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <vector>
 
-/* FIXME: Replace mockXayaServer by mocked signature verifier */
-
 using google::protobuf::TextFormat;
-using testing::_;
-using testing::Return;
 
 namespace ships
 {
@@ -292,10 +287,6 @@ TEST_F (CreateChannelTests, CreationSuccessful)
 
 TEST_F (CreateChannelTests, FailsForTxidCollision)
 {
-  /* Turn off the mock server.  We don't need it, and it complicates the
-     death test due to extra threads.  */
-  mockXayaServer->StopListening ();
-
   const auto data = ParseJson (R"(
     {"c": {"addr": "address"}}
   )");
@@ -762,17 +753,8 @@ protected:
     h->Reinitialise (meta, SerialisedState ("turn: 0"));
     h.reset ();
 
-    Json::Value signatureOk(Json::objectValue);
-    signatureOk["valid"] = true;
-    signatureOk["address"] = "addr 0";
-    EXPECT_CALL (*mockXayaServer,
-                 verifymessage ("", _, xaya::EncodeBase64 ("sgn 0")))
-        .WillRepeatedly (Return (signatureOk));
-
-    signatureOk["address"] = "addr 1";
-    EXPECT_CALL (*mockXayaServer,
-                 verifymessage ("", _, xaya::EncodeBase64 ("sgn 1")))
-        .WillRepeatedly (Return (signatureOk));
+    verifier.SetValid ("sgn 0", "addr 0");
+    verifier.SetValid ("sgn 1", "addr 1");
 
     /* Explicitly add stats rows so we can use ExpectStatsRow even if there
        were no changes.  */
@@ -971,8 +953,7 @@ protected:
   PendingTests ()
     : proc(game), tbl(GetDb ())
   {
-    proc.InitialiseGameContext (xaya::Chain::MAIN, "xs",
-                                &mockXayaServer.GetClient ());
+    proc.InitialiseGameContext (xaya::Chain::MAIN, "xs", nullptr);
 
     CHECK (TextFormat::ParseFromString (R"(
       participants:
@@ -987,17 +968,8 @@ protected:
         }
     )", &meta));
 
-    Json::Value signatureOk(Json::objectValue);
-    signatureOk["valid"] = true;
-    signatureOk["address"] = "addr 0";
-    EXPECT_CALL (*mockXayaServer,
-                 verifymessage ("", _, xaya::EncodeBase64 ("sgn 0")))
-        .WillRepeatedly (Return (signatureOk));
-
-    signatureOk["address"] = "addr 1";
-    EXPECT_CALL (*mockXayaServer,
-                 verifymessage ("", _, xaya::EncodeBase64 ("sgn 1")))
-        .WillRepeatedly (Return (signatureOk));
+    verifier.SetValid ("sgn 0", "addr 0");
+    verifier.SetValid ("sgn 1", "addr 1");
   }
 
   /**
