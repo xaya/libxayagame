@@ -10,6 +10,7 @@
 #include "movesender.hpp"
 #include "openchannel.hpp"
 #include "signatures.hpp"
+#include "testutils.hpp"
 
 #include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
@@ -20,11 +21,9 @@
 
 #include <json/json.h>
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <memory>
-#include <queue>
 #include <string>
 
 namespace xaya
@@ -147,126 +146,9 @@ public:
 };
 
 /**
- * Mock signature verifier.
- */
-class MockSignatureVerifier : public SignatureVerifier
-{
-
-public:
-
-  MOCK_METHOD (std::string, RecoverSigner,
-               (const std::string&, const std::string&), (const, override));
-
-  /**
-   * Sets up the mock to validate *any* message with the given
-   * signature as belonging to the given address.
-   */
-  void SetValid (const std::string& sgn, const std::string& addr);
-
-  /**
-   * Expects exactly one call to verification with the given message
-   * and signature (both as binary).  Returns a valid response for the
-   * given address.
-   */
-  void ExpectOne (const uint256& channelId,
-                  const proto::ChannelMetadata& meta,
-                  const std::string& topic,
-                  const std::string& msg, const std::string& sgn,
-                  const std::string& addr);
-
-};
-
-/**
- * Mock signature signer.
- */
-class MockSignatureSigner : public SignatureSigner
-{
-
-private:
-
-  /** The address returned from GetAddress.  */
-  std::string address;
-
-public:
-
-  /**
-   * Sets the address this signer should consider itself for.
-   */
-  void
-  SetAddress (const std::string& addr)
-  {
-    address = addr;
-  }
-
-  std::string
-  GetAddress () const override
-  {
-    return address;
-  }
-
-  MOCK_METHOD (std::string, SignMessage, (const std::string&), (override));
-
-};
-
-/**
- * Fake instance for TransactionSender for testing.
- */
-class MockTransactionSender : public TransactionSender
-{
-
-private:
-
-  /** The current simulated "mempool".  */
-  std::set<uint256> mempool;
-
-  /** The queue of txid's to be returned.  */
-  std::queue<uint256> txidQueue;
-
-  /** Counter used to generate unique txid's.  */
-  unsigned cnt = 0;
-
-public:
-
-  MockTransactionSender ();
-
-  /**
-   * Marks the mock for expecting a call with a raw string value that satisfies
-   * the given mater.  The call will throw an error.
-   */
-  void ExpectFailure (const std::string& name,
-                      const testing::Matcher<const std::string&>& m);
-
-  /**
-   * Marks the mock for expecting n calls where the passed-in string value
-   * satisfies a gMock matcher.  It will return a list of n unique txids
-   * (generated automatically), which the move calls will return and which will
-   * also be marked as pending until ClearMempool is called the next time.
-   */
-  std::vector<uint256> ExpectSuccess (
-      unsigned n, const std::string& name,
-      const testing::Matcher<const std::string&>& m);
-
-  /**
-   * Expects exactly one successful call.
-   */
-  uint256 ExpectSuccess (const std::string& name,
-                         const testing::Matcher<const std::string&>& m);
-
-  /**
-   * Clears the internal mempool, simulating a block being mined.
-   */
-  void ClearMempool ();
-
-  MOCK_METHOD (uint256, SendRawMove,
-               (const std::string&, const std::string&), (override));
-  bool IsPending (const uint256& txid) const override;
-
-};
-
-/**
  * Test fixture that constructs a TestGame instance with an in-memory database
- * and exposes that to the test itself.  It also runs a mock Xaya Core server
- * for use together with signature verification.
+ * and exposes that to the test itself.  It also holds mock objects used
+ * for signature verification and move sending.
  */
 class TestGameFixture : public testing::Test
 {

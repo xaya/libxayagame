@@ -96,14 +96,28 @@ pyproto_PYTHON = proto/__init__.py $(PROTOPY)
 AM_TESTS_ENVIRONMENT = \
   PYTHONPATH=$(top_srcdir)
 
+check_LTLIBRARIES = libtestutils.la
 check_PROGRAMS = tests test_rpcbroadcast
 TESTS = tests $(PYTHONTESTS)
+
+libtestutils_la_CXXFLAGS = \
+  -I$(top_srcdir) \
+  $(GLOG_CFLAGS) $(GTEST_CFLAGS)
+libtestutils_la_LIBADD = \
+  $(builddir)/libgamechannel.la \
+  $(top_builddir)/xayautil/libxayautil.la \
+  $(GLOG_LIBS) $(GTEST_LIBS)
+libtestutils_la_SOURCES = \
+  testutils.cpp
+TESTUTILHEADERS = \
+  testutils.hpp
 
 tests_CXXFLAGS = \
   -I$(top_srcdir) \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
   $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS) $(PROTOBUF_CFLAGS)
 tests_LDADD = \
+  $(builddir)/libtestutils.la \
   $(builddir)/libgamechannel.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
@@ -128,10 +142,12 @@ tests_SOURCES = \
   testgame_tests.cpp \
   \
   testgame.cpp
-check_HEADERS = \
+TESTHEADERS = \
   channelmanager_tests.hpp \
   \
   testgame.hpp
+
+check_HEADERS = $(TESTUTILHEADERS) $(TESTHEADERS)
 
 test_rpcbroadcast_CXXFLAGS = \
   -I$(top_srcdir) \
