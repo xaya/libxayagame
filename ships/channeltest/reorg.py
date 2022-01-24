@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2021 The Xaya developers
+# Copyright (C) 2019-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,14 +20,15 @@ class ReogTest (ShipsTest):
     # where it was created and joined by the second one, so that we can
     # later invalidate those.
     self.mainLogger.info ("Creating test channel...")
+    addr = [self.newSigningAddress () for _ in range (3)]
     channelId = self.sendMove ("foo", {"c": {
-      "addr": self.newSigningAddress (),
+      "addr": addr[0],
     }})
     self.generate (1)
     createBlk = self.rpc.xaya.getbestblockhash ()
     self.sendMove ("bar", {"j": {
       "id": channelId,
-      "addr": self.newSigningAddress (),
+      "addr": addr[1],
     }})
     self.generate (1)
     joinBlk = self.rpc.xaya.getbestblockhash ()
@@ -36,9 +37,9 @@ class ReogTest (ShipsTest):
     # a third one, which will join the channel later in a reorged
     # alternate reality.
     self.mainLogger.info ("Starting channel daemons...")
-    with self.runChannelDaemon (channelId, "foo") as foo, \
-         self.runChannelDaemon (channelId, "bar") as bar, \
-         self.runChannelDaemon (channelId, "baz") as baz:
+    with self.runChannelDaemon (channelId, "foo", addr[0]) as foo, \
+         self.runChannelDaemon (channelId, "bar", addr[1]) as bar, \
+         self.runChannelDaemon (channelId, "baz", addr[2]) as baz:
 
       daemons = [foo, bar, baz]
 
@@ -82,7 +83,7 @@ class ReogTest (ShipsTest):
       self.mainLogger.info ("Alternate join...")
       self.sendMove ("baz", {"j": {
         "id": channelId,
-        "addr": self.newSigningAddress (),
+        "addr": addr[2],
       }})
       self.expectPendingMoves ("bar", [])
       self.expectPendingMoves ("baz", ["j"])

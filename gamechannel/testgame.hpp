@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,7 +7,10 @@
 
 #include "boardrules.hpp"
 #include "channelgame.hpp"
+#include "movesender.hpp"
 #include "openchannel.hpp"
+#include "signatures.hpp"
+#include "testutils.hpp"
 
 #include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
@@ -109,6 +112,11 @@ public:
 class TestGame : public ChannelGame
 {
 
+private:
+
+  /** The mock verifier used.  */
+  const SignatureVerifier& mockVerifier;
+
 protected:
 
   void SetupSchema (SQLiteDatabase& db) override;
@@ -118,11 +126,16 @@ protected:
   void UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override;
   Json::Value GetStateAsJson (const SQLiteDatabase& db) override;
 
+  const SignatureVerifier& GetSignatureVerifier () override;
   const BoardRules& GetBoardRules () const override;
 
   friend class TestGameFixture;
 
 public:
+
+  explicit TestGame (const SignatureVerifier& v)
+    : mockVerifier(v)
+  {}
 
   AdditionRules rules;
   AdditionChannel channel;
@@ -134,16 +147,16 @@ public:
 
 /**
  * Test fixture that constructs a TestGame instance with an in-memory database
- * and exposes that to the test itself.  It also runs a mock Xaya Core server
- * for use together with signature verification.
+ * and exposes that to the test itself.  It also holds mock objects used
+ * for signature verification and move sending.
  */
 class TestGameFixture : public testing::Test
 {
 
 protected:
 
-  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
-  HttpRpcServer<MockXayaWalletRpcServer> mockXayaWallet;
+  MockSignatureVerifier verifier;
+  MockSignatureSigner signer;
 
   TestGame game;
 
@@ -157,24 +170,6 @@ protected:
    * Returns the raw database handle of the test game.
    */
   SQLiteDatabase& GetDb ();
-
-  /**
-   * Sets up the mock server to validate *any* message with the given
-   * signature as belonging to the given address.  sgn is in raw binary
-   * (will be base64-encoded for the RPC).
-   */
-  void ValidSignature (const std::string& sgn, const std::string& addr);
-
-  /**
-   * Expects exactly one call to verifymessage with the given message
-   * and signature (both as binary, they will be hashed / base64-encoded).
-   * Returns a valid response for the given address.
-   */
-  void ExpectSignature (const uint256& channelId,
-                        const proto::ChannelMetadata& meta,
-                        const std::string& topic,
-                        const std::string& msg, const std::string& sgn,
-                        const std::string& addr);
 
 };
 

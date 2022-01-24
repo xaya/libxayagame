@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,12 +6,11 @@
 #define GAMECHANNEL_STATEPROOF_HPP
 
 #include "boardrules.hpp"
+#include "signatures.hpp"
 
 #include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
 
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
 namespace xaya
@@ -24,7 +23,8 @@ namespace xaya
  * A state transition is valid if the move is valid from old state -> new state
  * and the player who was supposed to make that move signed the new state.
  */
-bool VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
+bool VerifyStateTransition (const SignatureVerifier& verifier,
+                            const BoardRules& rules,
                             const uint256& channelId,
                             const proto::ChannelMetadata& meta,
                             const BoardState& oldState,
@@ -35,7 +35,8 @@ bool VerifyStateTransition (XayaRpcClient& rpc, const BoardRules& rules,
  * and valid, then true is returned and the resulting board state is returned
  * in endState.
  */
-bool VerifyStateProof (XayaRpcClient& rpc, const BoardRules& rules,
+bool VerifyStateProof (const SignatureVerifier& verifier,
+                       const BoardRules& rules,
                        const uint256& channelId,
                        const proto::ChannelMetadata& meta,
                        const BoardState& reinitState,
@@ -61,7 +62,8 @@ const BoardState& UnverifiedProofEndState (const proto::StateProof& proof);
  *
  * Returns true if the state proof was extended successfully.
  */
-bool ExtendStateProof (XayaRpcClient& rpc, XayaWalletRpcClient& wallet,
+bool ExtendStateProof (const SignatureVerifier& verifier,
+                       SignatureSigner& signer,
                        const BoardRules& rules,
                        const uint256& channelId,
                        const proto::ChannelMetadata& meta,

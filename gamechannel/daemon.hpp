@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,12 +11,11 @@
 #include "channelmanager.hpp"
 #include "movesender.hpp"
 #include "openchannel.hpp"
+#include "signatures.hpp"
 
 #include "rpc-stubs/channelgsprpcclient.h"
 
 #include <xayagame/mainloop.hpp>
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
@@ -34,7 +33,7 @@ namespace xaya
  *
  * Note that initialisation of the various components must be done in the
  * right order.  To correctly use this class, first call the constructor.
- * Then call ConnectXayaRpc, then ConnectGspRpc, then SetOffChainBroadcast
+ * Then call ConnectWallet, then ConnectGspRpc, then SetOffChainBroadcast
  * and then Start/Stop or Run.
  */
 class ChannelDaemon
@@ -43,33 +42,30 @@ class ChannelDaemon
 private:
 
   /**
-   * Xaya Core RPC clients and a ChannelManager instance using them.
-   * These are the things that can get constructed when the Xaya Core RPC
-   * is connected.
+   * The signature signers/verifiers and transaction sender, as well
+   * as the ChannelManager instance using them.
+   *
+   * These are the things that can get constructed when the underlying
+   * "wallet" is connected.
    */
-  struct XayaBasedInstances
+  struct WalletBasedInstances
   {
 
-    /** The HTTP client for Xaya Core RPC.  */
-    jsonrpc::HttpClient xayaClient;
-    /** The RPC client for Xaya Core (not wallet).  */
-    XayaRpcClient xayaRpc;
-    /** The RPC client for the Xaya wallet.  */
-    XayaWalletRpcClient xayaWallet;
+    /** The MoveSender instance we use.  */
+    MoveSender sender;
 
     /** The ChannelManager instance.  */
     ChannelManager cm;
 
-    /** The MoveSender instance.  */
-    MoveSender sender;
+    WalletBasedInstances () = delete;
+    WalletBasedInstances (const WalletBasedInstances&) = delete;
+    void operator= (const WalletBasedInstances&) = delete;
 
-    XayaBasedInstances () = delete;
-    XayaBasedInstances (const XayaBasedInstances&) = delete;
-    void operator= (const XayaBasedInstances&) = delete;
-
-    explicit XayaBasedInstances (ChannelDaemon& daemon, const std::string& rpc,
-                                 jsonrpc::clientVersion_t rpcVersion);
-    ~XayaBasedInstances ();
+    explicit WalletBasedInstances (
+        ChannelDaemon& daemon,
+        const SignatureVerifier& v, SignatureSigner& s,
+        TransactionSender& tx);
+    ~WalletBasedInstances ();
 
   };
 
@@ -114,10 +110,9 @@ private:
   internal::MainLoop mainLoop;
 
   /**
-   * Instances of components based on the Xaya Core RPC connection.  This is
-   * set by ConnectXayaRpc.
+   * Instances of components based on the wallet.  This is set by ConnectWallet.
    */
-  std::unique_ptr<XayaBasedInstances> xayaBased;
+  std::unique_ptr<WalletBasedInstances> walletBased;
 
   /** Instances of the GSP RPC connection and dependencies.  */
   std::unique_ptr<GspFeederInstances> feeder;
@@ -146,17 +141,16 @@ public:
   void operator= (const ChannelDaemon&) = delete;
 
   /**
-   * Sets the RPC URL to use for Xaya Core.  This must be called exactly
-   * once before the ChannelDaemon becomes available.  By default, the RPC
-   * client uses JSON-RPC 1.0 to be compatible with Xaya Core.  For using
-   * JSON-RPC 2.0 (e.g. to use it with an Electrum-based light client),
-   * set legacy to false.
+   * Connects the blockchain "wallet" (defining the signature scheme and
+   * the connector used for triggering automatic on-chain transactions).
+   * This can e.g. be based on a Xaya Core RPC.
    */
-  void ConnectXayaRpc (const std::string& url, bool legacy = true);
+  void ConnectWallet (const SignatureVerifier& v, SignatureSigner& s,
+                      TransactionSender& tx);
 
   /**
    * Connects the GSP RPC URL and initialises the dependencies on that.
-   * This must be called after ConnectXayaRpc and before starting.
+   * This must be called after ConnectWallet and before starting.
    */
   void ConnectGspRpc (const std::string& url);
 

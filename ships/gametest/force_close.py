@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2021 The Xaya developers
+# Copyright (C) 2021-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,9 +18,7 @@ class ForceCloseTest (ShipsTest):
 
     # Create a test channel with two participants.
     self.mainLogger.info ("Opening a test channel...")
-    addr1 = self.rpc.xaya.getnewaddress ()
-    addr2 = self.rpc.xaya.getnewaddress ()
-    cid = self.openChannel (["foo", "bar"], [addr1, addr2])
+    cid, _ = self.openChannel (["foo", "bar"])
     self.expectChannelState (cid, "first commitment", None)
 
     # Filing a dispute at the end state doesn't work as it is a no-turn

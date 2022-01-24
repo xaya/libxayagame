@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -668,7 +668,7 @@ ShipsBoardState::ApplyPositionReveal (const proto::PositionRevealMove& mv,
 }
 
 bool
-ShipsBoardState::ApplyMoveProto (XayaRpcClient& rpc, const proto::BoardMove& mv,
+ShipsBoardState::ApplyMoveProto (const proto::BoardMove& mv,
                                  proto::BoardState& newState) const
 {
   /* Moves do typically incremental changes, so we start by copying the

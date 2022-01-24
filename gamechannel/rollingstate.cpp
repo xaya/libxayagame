@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -78,7 +78,7 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
   CHECK (CheckVersionedProto (rules, meta, proof));
 
   BoardState provenState;
-  CHECK (VerifyStateProof (rpc, rules, channelId, meta,
+  CHECK (VerifyStateProof (verifier, rules, channelId, meta,
                            reinitState, proof, provenState))
       << "State proof provided on-chain is not valid";
 
@@ -179,7 +179,7 @@ RollingState::UpdateWithMove (const std::string& updReinit,
      on-chain updates (which are filtered through the GSP), the data we get
      here comes straight from the other players and may be complete garbage.  */
   BoardState provenState;
-  if (!VerifyStateProof (rpc, rules, channelId, *entry.meta,
+  if (!VerifyStateProof (verifier, rules, channelId, *entry.meta,
                          entry.reinitState, proof, provenState))
     {
       LOG (WARNING)

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -31,25 +31,21 @@ protected:
   const std::string gameId = "game id";
   const uint256 channelId = SHA256::Hash ("channel id");
 
-  MoveSender onChain;
+  MockTransactionSender txSender;
+  MoveSender sender;
 
   MoveSenderTests ()
-    : onChain(gameId, channelId, "player",
-              mockXayaServer.GetClient (),
-              mockXayaWallet.GetClient (),
-              game.channel)
+    : sender(gameId, channelId, "player", txSender, game.channel)
   {}
 
 };
 
 TEST_F (MoveSenderTests, SendMoveSuccess)
 {
-  const uint256 txid = SHA256::Hash ("txid");
   const std::string expectedValue = R"({"g":{"game id":[42,null,{"a":"b"}]}})";
-  EXPECT_CALL (*mockXayaWallet, name_update ("p/player", expectedValue))
-      .WillOnce (Return (txid.ToHex ()));
+  const uint256 txid = txSender.ExpectSuccess ("player", expectedValue);
 
-  EXPECT_EQ (onChain.SendMove (ParseJson (R"([
+  EXPECT_EQ (sender.SendMove (ParseJson (R"([
     42, null, {"a": "b"} 
   ])")), txid);
 }
@@ -57,27 +53,9 @@ TEST_F (MoveSenderTests, SendMoveSuccess)
 TEST_F (MoveSenderTests, SendMoveError)
 {
   const std::string expectedValue = R"({"g":{"game id":{}}})";
-  EXPECT_CALL (*mockXayaWallet, name_update ("p/player", expectedValue))
-      .WillOnce (Throw (jsonrpc::JsonRpcException ("error")));
+  txSender.ExpectFailure ("player", expectedValue);
 
-  EXPECT_TRUE (onChain.SendMove (ParseJson ("{}")).IsNull ());
-}
-
-TEST_F (MoveSenderTests, IsPending)
-{
-  const auto txidPending = SHA256::Hash ("txid 1");
-  const auto txidOther = SHA256::Hash ("txid 2");
-  const auto txidNotPending = SHA256::Hash ("txid 3");
-
-  Json::Value pendings(Json::arrayValue);
-  pendings.append (txidPending.ToHex ());
-  pendings.append (txidOther.ToHex ());
-
-  EXPECT_CALL (*mockXayaServer, getrawmempool ())
-      .WillRepeatedly (Return (pendings));
-
-  EXPECT_TRUE (onChain.IsPending (txidPending));
-  EXPECT_FALSE (onChain.IsPending (txidNotPending));
+  EXPECT_TRUE (sender.SendMove (ParseJson ("{}")).IsNull ());
 }
 
 } // anonymous namespace

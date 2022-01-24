@@ -91,6 +91,7 @@ tests_LDADD = \
   $(top_builddir)/xayagame/libtestutils.la \
   $(top_builddir)/xayagame/libxayagame.la \
   $(top_builddir)/gamechannel/libgamechannel.la \
+  $(top_builddir)/gamechannel/libtestutils.la \
   $(JSONCPP_LIBS) $(GLOG_LIBS) $(GTEST_LIBS) $(PROTOBUF_LIBS)
 tests_SOURCES = \
   board_tests.cpp \

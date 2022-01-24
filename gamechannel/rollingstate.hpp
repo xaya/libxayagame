@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,11 +6,11 @@
 #define GAMECHANNEL_ROLLINGSTATE_HPP
 
 #include "boardrules.hpp"
+#include "signatures.hpp"
 
 #include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
 
-#include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayautil/uint256.hpp>
 
 #include <map>
@@ -75,8 +75,8 @@ private:
   /** Board rules to use for our game.  */
   const BoardRules& rules;
 
-  /** RPC client for signature verification.  */
-  XayaRpcClient& rpc;
+  /** Signature verifier for state proofs.  */
+  const SignatureVerifier& verifier;
 
   /** The ID of the channel this is for.  */
   const uint256& channelId;
@@ -93,9 +93,9 @@ private:
 
 public:
 
-  explicit RollingState (const BoardRules& r, XayaRpcClient& c,
+  explicit RollingState (const BoardRules& r, const SignatureVerifier& v,
                          const uint256& id)
-    : rules(r), rpc(c), channelId(id)
+    : rules(r), verifier(v), channelId(id)
   {}
 
   RollingState () = delete;

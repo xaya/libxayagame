@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,23 +21,21 @@ namespace
  * that typically the calls return ordinarily; but we put up a safety net
  * in case the server is messed up.
  */
-constexpr int GSP_RPC_TIMEOUT_MS = 6000;
+constexpr int GSP_RPC_TIMEOUT_MS = 6'000;
 
 } // anonymous namespace
 
-ChannelDaemon::XayaBasedInstances::XayaBasedInstances (
-    ChannelDaemon& d, const std::string& rpc,
-    const jsonrpc::clientVersion_t rpcVersion)
-  : xayaClient(rpc),
-    xayaRpc(xayaClient, rpcVersion),
-    xayaWallet(xayaClient, rpcVersion),
-    cm(d.rules, d.channel, xayaRpc, xayaWallet, d.channelId, d.playerName),
-    sender(d.gameId, d.channelId, d.playerName, xayaRpc, xayaWallet, d.channel)
+ChannelDaemon::WalletBasedInstances::WalletBasedInstances (
+    ChannelDaemon& d,
+    const SignatureVerifier& verifier, SignatureSigner& signer,
+    TransactionSender& txSender)
+  : sender(d.gameId, d.channelId, d.playerName, txSender, d.channel),
+    cm(d.rules, d.channel, verifier, signer, d.channelId, d.playerName)
 {
   cm.SetMoveSender (sender);
 }
 
-ChannelDaemon::XayaBasedInstances::~XayaBasedInstances ()
+ChannelDaemon::WalletBasedInstances::~WalletBasedInstances ()
 {
   cm.StopUpdates ();
 }
@@ -45,25 +43,23 @@ ChannelDaemon::XayaBasedInstances::~XayaBasedInstances ()
 ChannelDaemon::GspFeederInstances::GspFeederInstances (ChannelDaemon& d,
                                                        const std::string& rpc)
   : gspClient(rpc), gspRpc(gspClient),
-    feeder(gspRpc, d.xayaBased->cm)
+    feeder(gspRpc, d.walletBased->cm)
 {
   gspClient.SetTimeout (GSP_RPC_TIMEOUT_MS);
 }
 
 void
-ChannelDaemon::ConnectXayaRpc (const std::string& url, const bool legacy)
+ChannelDaemon::ConnectWallet (const SignatureVerifier& v, SignatureSigner& s,
+                              TransactionSender& tx)
 {
-  CHECK (xayaBased == nullptr);
-  const auto rpcVersion = (legacy
-                            ? jsonrpc::JSONRPC_CLIENT_V1
-                            : jsonrpc::JSONRPC_CLIENT_V2);
-  xayaBased = std::make_unique<XayaBasedInstances> (*this, url, rpcVersion);
+  CHECK (walletBased == nullptr);
+  walletBased = std::make_unique<WalletBasedInstances> (*this, v, s, tx);
 }
 
 void
 ChannelDaemon::ConnectGspRpc (const std::string& url)
 {
-  CHECK (xayaBased != nullptr);
+  CHECK (walletBased != nullptr);
   CHECK (feeder == nullptr);
   feeder = std::make_unique<GspFeederInstances> (*this, url);
 }
@@ -71,23 +67,23 @@ ChannelDaemon::ConnectGspRpc (const std::string& url)
 ChannelManager&
 ChannelDaemon::GetChannelManager ()
 {
-  CHECK (xayaBased != nullptr);
-  return xayaBased->cm;
+  CHECK (walletBased != nullptr);
+  return walletBased->cm;
 }
 
 void
 ChannelDaemon::SetOffChainBroadcast (OffChainBroadcast& b)
 {
-  CHECK (xayaBased != nullptr);
+  CHECK (walletBased != nullptr);
   CHECK (offChain == nullptr);
   offChain = &b;
-  xayaBased->cm.SetOffChainBroadcast (*offChain);
+  walletBased->cm.SetOffChainBroadcast (*offChain);
 }
 
 void
 ChannelDaemon::Start ()
 {
-  CHECK (xayaBased != nullptr);
+  CHECK (walletBased != nullptr);
   CHECK (feeder != nullptr);
   CHECK (offChain != nullptr);
   CHECK (!startedOnce);
@@ -100,14 +96,14 @@ ChannelDaemon::Start ()
 void
 ChannelDaemon::Stop ()
 {
-  CHECK (xayaBased != nullptr);
+  CHECK (walletBased != nullptr);
   CHECK (feeder != nullptr);
   CHECK (offChain != nullptr);
   CHECK (startedOnce);
 
   feeder->feeder.Stop ();
   offChain->Stop ();
-  xayaBased->cm.StopUpdates ();
+  walletBased->cm.StopUpdates ();
 }
 
 void

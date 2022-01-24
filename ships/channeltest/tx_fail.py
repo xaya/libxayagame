@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2021 The Xaya developers
+# Copyright (C) 2019-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,12 +19,12 @@ class TxFailTest (ShipsTest):
 
     # Create a test channel with two participants.
     self.mainLogger.info ("Creating test channel...")
-    channelId = self.openChannel (["foo", "bar"])
+    channelId, addr = self.openChannel (["foo", "bar"])
 
     # Start up the two channel daemons.
     self.mainLogger.info ("Starting channel daemons...")
-    with self.runChannelDaemon (channelId, "foo") as foo, \
-         self.runChannelDaemon (channelId, "bar") as bar:
+    with self.runChannelDaemon (channelId, "foo", addr[0]) as foo, \
+         self.runChannelDaemon (channelId, "bar", addr[1]) as bar:
 
       daemons = [foo, bar]
 

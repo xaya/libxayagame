@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,6 +7,7 @@
 
 #include "boardrules.hpp"
 #include "database.hpp"
+#include "signatures.hpp"
 
 #include "proto/metadata.pb.h"
 #include "proto/stateproof.pb.h"
@@ -26,6 +27,15 @@ namespace xaya
  */
 class ChannelGame : public SQLiteGame
 {
+
+private:
+
+  /**
+   * The default signature verifier based on the game's underlying
+   * RPC connection.  This is lazy constructed on first request (and then
+   * uses GetXayaRpc() under the hood).
+   */
+  std::unique_ptr<RpcSignatureVerifier> verifier;
 
 protected:
 
@@ -61,6 +71,13 @@ protected:
    * in that case, the on-chain state will simply be updated.
    */
   bool ProcessResolution (ChannelData& ch, const proto::StateProof& proof);
+
+  /**
+   * Returns the signature verifier to be used for the game's state proofs.
+   * By default, it uses verification based on the Xaya RPC "verifymessage",
+   * but that can be overridden by subclasses if desired.
+   */
+  virtual const SignatureVerifier& GetSignatureVerifier ();
 
   /**
    * This method needs to be overridden to provide an instance of BoardRules

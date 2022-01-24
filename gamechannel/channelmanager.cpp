@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -30,10 +30,10 @@ ChannelManager::DisputeData::DisputeData ()
 }
 
 ChannelManager::ChannelManager (const BoardRules& r, OpenChannel& oc,
-                                XayaRpcClient& c, XayaWalletRpcClient& w,
+                                const SignatureVerifier& v, SignatureSigner& s,
                                 const uint256& id, const std::string& name)
-  : rules(r), game(oc), rpc(c), wallet(w), channelId(id), playerName(name),
-    boardStates(rules, rpc, channelId)
+  : rules(r), game(oc), verifier(v), signer(s), channelId(id), playerName(name),
+    boardStates(rules, verifier, channelId)
 {
   blockHash.SetNull ();
   pendingPutStateOnChain.SetNull ();
@@ -312,7 +312,7 @@ ChannelManager::ApplyLocalMove (const BoardMove& mv)
   CHECK (!stopped && exists);
 
   proto::StateProof newProof;
-  if (!ExtendStateProof (rpc, wallet, rules, channelId,
+  if (!ExtendStateProof (verifier, signer, rules, channelId,
                          boardStates.GetMetadata (),
                          boardStates.GetStateProof (), mv, newProof))
     {

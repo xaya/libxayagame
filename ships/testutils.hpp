@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,9 +8,10 @@
 #include "grid.hpp"
 #include "logic.hpp"
 
+#include <gamechannel/signatures.hpp>
+#include <gamechannel/testutils.hpp>
 #include <xayagame/sqlitestorage.hpp>
 #include <xayagame/testutils.hpp>
-#include <xayagame/rpc-stubs/xayarpcclient.h>
 
 #include <json/json.h>
 
@@ -34,11 +35,40 @@ Json::Value ParseJson (const std::string& str);
 class InMemoryLogicFixture : public testing::Test
 {
 
+private:
+
+  /**
+   * Helper class that is essentially a ShipsLogic but using a mock
+   * signature verifier rather than the RPC one.
+   */
+  class ShipsLogicWithVerifier : public ShipsLogic
+  {
+
+  private:
+
+    /** The verifier used.  */
+    const xaya::SignatureVerifier& verifier;
+
+  protected:
+
+    const xaya::SignatureVerifier&
+    GetSignatureVerifier () override
+    {
+      return verifier;
+    }
+
+  public:
+
+    explicit ShipsLogicWithVerifier (const xaya::SignatureVerifier& v)
+      : verifier(v)
+    {}
+
+  };
+
 protected:
 
-  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
-
-  ShipsLogic game;
+  xaya::MockSignatureVerifier verifier;
+  ShipsLogicWithVerifier game;
 
   /**
    * Initialises the test case.  This connects the game instance to an

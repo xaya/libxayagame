@@ -32,14 +32,16 @@ class Daemon ():
   but other games can use it as well if their channel daemons:
 
   * Have the --xaya_rpc_url, --gsp_rpc_url, --broadcast_rpc_url,
-    --rpc_port, --playername and --channelid flags of ships-channel, and
+    --rpc_port, --playername, -address and --channelid flags of ships-channel,
+    and
   * provide the "stop" and "getcurrentstate" RPC methods.
   """
 
-  def __init__ (self, channelId, playerName, basedir, port, binary):
+  def __init__ (self, channelId, playerName, addr, basedir, port, binary):
     self.log = logging.getLogger ("gamechannel.channeltest.Daemon")
     self.channelId = channelId
     self.playerName = playerName
+    self.address = addr
     self.datadir = os.path.join (basedir, "channel_%s" % playerName)
     self.port = port
     self.binary = binary
@@ -64,6 +66,7 @@ class Daemon ():
     args.append ("--rpc_port=%d" % self.port)
     args.append ("--channelid=%s" % self.channelId)
     args.append ("--playername=%s" % self.playerName)
+    args.append ("--address=%s" % self.address)
     args.extend (extraArgs)
     envVars = dict (os.environ)
     envVars["GLOG_log_dir"] = self.datadir
@@ -174,15 +177,15 @@ class TestCase (XayaGameTest):
     self.broadcastThread.join ()
     super (TestCase, self).shutdown ()
 
-  def runChannelDaemon (self, channelId, playerName):
+  def runChannelDaemon (self, channelId, address, playerName):
     """
     Starts a new channel daemon for the given ID and player name.
     This returns a context manager instance, which returns the
     underlying Daemon instance when entered.
     """
 
-    daemon = Daemon (channelId, playerName, self.basedir, next (self.ports),
-                     self.args.channel_daemon)
+    daemon = Daemon (channelId, address, playerName, self.basedir,
+                     next (self.ports), self.args.channel_daemon)
 
     return DaemonContext (daemon, self.xayanode.rpcurl, self.gamenode.rpcurl,
                           self.bcurl)

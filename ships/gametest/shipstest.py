@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2021 The Xaya developers
+# Copyright (C) 2019-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -35,13 +35,12 @@ class ShipsTest (channeltest.TestCase):
   def openChannel (self, names, addresses=None):
     """
     Creates a channel and joins it, so that we end up with a fully set-up
-    channel and two participants.  names and addresses should be arrays of
-    length two each, giving the names / addresses for the participants.
-    Returns the ID of the created channel.
+    channel and two participants.  names hould be an array of
+    length two, giving the names for the participants.
+    Returns the ID of the created channel and their signing addresses.
     """
 
-    if addresses is None:
-      addresses = [self.newSigningAddress () for _ in range (2)]
+    addresses = [self.newSigningAddress () for _ in range (2)]
 
     self.assertEqual (len (names), 2)
     self.assertEqual (len (addresses), 2)
@@ -53,7 +52,7 @@ class ShipsTest (channeltest.TestCase):
     state = self.getGameState ()
     assert cid in state["channels"]
 
-    return cid
+    return cid, addresses
 
   def getStateProof (self, cid, stateStr):
     """

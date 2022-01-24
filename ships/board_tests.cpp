@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,7 +9,6 @@
 
 #include <gamechannel/proto/metadata.pb.h>
 #include <xayagame/testutils.hpp>
-#include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
 #include <xayautil/uint256.hpp>
@@ -17,7 +16,6 @@
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -25,8 +23,6 @@
 
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
-using testing::_;
-using testing::Return;
 
 namespace ships
 {
@@ -160,10 +156,10 @@ protected:
    * Exposes ShipsBoardState::ApplyMoveProto to subtests.
    */
   static bool
-  ApplyMoveProto (const ShipsBoardState& s, XayaRpcClient& rpc,
+  ApplyMoveProto (const ShipsBoardState& s,
                   const proto::BoardMove& mv, proto::BoardState& newState)
   {
-    return s.ApplyMoveProto (rpc, mv, newState);
+    return s.ApplyMoveProto (mv, newState);
   }
 
 };
@@ -645,13 +641,10 @@ private:
     auto oldState = ParseState (state);
     CHECK (oldState != nullptr) << "Old state is invalid: " << state;
 
-    return ApplyMoveProto (*oldState, mockXayaServer.GetClient (),
-                           mv, newState);
+    return ApplyMoveProto (*oldState, mv, newState);
   }
 
 protected:
-
-  xaya::HttpRpcServer<xaya::MockXayaRpcServer> mockXayaServer;
 
   /**
    * Tries to apply a move onto the given state and expects that it is invalid.

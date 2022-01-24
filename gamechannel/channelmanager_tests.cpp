@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -25,7 +25,6 @@ using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
 using testing::_;
 using testing::Return;
-using testing::Throw;
 using testing::Truly;
 
 namespace xaya
@@ -45,8 +44,7 @@ ValidProof (const std::string& state)
 
 ChannelManagerTestFixture::ChannelManagerTestFixture ()
   : cm(game.rules, game.channel,
-       mockXayaServer.GetClient (),
-       mockXayaWallet.GetClient (),
+       verifier, signer,
        channelId, "player")
 {
   CHECK (TextFormat::ParseFromString (R"(
@@ -62,13 +60,11 @@ ChannelManagerTestFixture::ChannelManagerTestFixture ()
       }
   )", &meta));
 
-  ValidSignature ("sgn", "my addr");
-  ValidSignature ("other sgn", "not my addr");
+  verifier.SetValid ("sgn", "my addr");
+  verifier.SetValid ("other sgn", "not my addr");
 
-  EXPECT_CALL (*mockXayaWallet, signmessage ("my addr", _))
-      .WillRepeatedly (Return (EncodeBase64 ("sgn")));
-  EXPECT_CALL (*mockXayaWallet, signmessage ("not my addr", _))
-      .WillRepeatedly (Throw (jsonrpc::JsonRpcException (-5)));
+  signer.SetAddress ("my addr");
+  EXPECT_CALL (signer, SignMessage (_)).WillRepeatedly (Return ("sgn"));
 }
 
 ChannelManagerTestFixture::~ChannelManagerTestFixture ()
@@ -120,14 +116,12 @@ class ChannelManagerTests : public ChannelManagerTestFixture
 
 protected:
 
+  MockTransactionSender txSender;
   MoveSender onChain;
   MockOffChainBroadcast offChain;
 
   ChannelManagerTests ()
-    : onChain("game id", channelId, "player",
-              mockXayaServer.GetClient (),
-              mockXayaWallet.GetClient (),
-              game.channel),
+    : onChain("game id", channelId, "player", txSender, game.channel),
       offChain(cm)
   {
     cm.SetMoveSender (onChain);
@@ -135,18 +129,18 @@ protected:
   }
 
   /**
-   * Expects exactly n disputes or resolutions to be sent through the
-   * wallet with name_update's, and checks that the associated state proof
+   * Expects exactly n dispute or resolution to be sent through the
+   * mocked MoveSender, and checks that the associated state proof
    * matches that from GetBoardStates().
    *
-   * Returns the txid that moves will return.
+   * Returns the txids that those moves will return in order.
    */
-  uint256
-  ExpectMoves (const int n, const std::string& type)
+  std::vector<uint256>
+  ExpectMoves (const unsigned n, const std::string& type)
   {
-    auto isOk = [this, type] (const std::string& val)
+    const auto isOk = [this, type] (const std::string& val)
       {
-        VLOG (1) << "name_update sent: " << val;
+        VLOG (1) << "on-chain move sent: " << val;
 
         const auto parsed = ParseJson (val);
         const auto& mv = parsed["g"]["game id"];
@@ -188,12 +182,18 @@ protected:
         return true;
       };
 
-    const uint256 txid = SHA256::Hash ("txid");
-    EXPECT_CALL (*mockXayaWallet, name_update ("p/player", Truly (isOk)))
-        .Times (n)
-        .WillRepeatedly (Return (txid.ToHex ()));
+    return txSender.ExpectSuccess (n, "player", Truly (isOk));
+  }
 
-    return txid;
+  /**
+   * Expects a single move of the given type (as per ExpectMoves).
+   */
+  uint256
+  ExpectMove (const std::string& type)
+  {
+    const auto txids = ExpectMoves (1, type);
+    CHECK_EQ (txids.size (), 1);
+    return txids[0];
   }
 
   /**
@@ -258,7 +258,7 @@ TEST_F (ProcessOnChainTests, Dispute)
 
 TEST_F (ProcessOnChainTests, TriggersResolutionn)
 {
-  ExpectMoves (1, "resolution");
+  ExpectMove ("resolution");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
@@ -277,7 +277,7 @@ TEST_F (ProcessOffChainTests, UpdatesState)
 
 TEST_F (ProcessOffChainTests, TriggersResolutionn)
 {
-  ExpectMoves (1, "resolution");
+  ExpectMove ("resolution");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 }
@@ -327,7 +327,7 @@ TEST_F (ProcessLocalMoveTests, Valid)
 TEST_F (ProcessLocalMoveTests, TriggersResolution)
 {
   ExpectOneBroadcast ("11 6");
-  ExpectMoves (1, "resolution");
+  ExpectMove ("resolution");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessLocalMove ("1");
 }
@@ -371,7 +371,7 @@ TEST_F (AutoMoveTests, NoAutoMove)
 TEST_F (AutoMoveTests, WithDisputeResolution)
 {
   ExpectOneBroadcast ("50 6");
-  ExpectMoves (1, "resolution");
+  ExpectMove ("resolution");
   ProcessOnChain ("0 0", ValidProof ("48 5"), 1);
   EXPECT_EQ (GetLatestState (), "50 6");
 }
@@ -439,8 +439,7 @@ protected:
   ExpectOnChainMove ()
   {
     const std::string expectedVal = R"({"g":{"game id":"100"}})";
-    EXPECT_CALL (*mockXayaWallet, name_update ("p/player", expectedVal))
-        .WillOnce (Return (SHA256::Hash ("txid").ToHex ()));
+    txSender.ExpectSuccess ("player", expectedVal);
   }
 
 };
@@ -484,14 +483,14 @@ using ResolveDisputeTests = ChannelManagerTests;
 
 TEST_F (ResolveDisputeTests, SendsResolution)
 {
-  ExpectMoves (1, "resolution");
+  ExpectMove ("resolution");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 }
 
 TEST_F (ResolveDisputeTests, ChannelDoesNotExist)
 {
-  ExpectMoves (0, "resolution");
+  /* No moves are expected.  */
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   ProcessOnChainNonExistant ();
   cm.ProcessOffChain ("", ValidProof ("12 6"));
@@ -499,7 +498,7 @@ TEST_F (ResolveDisputeTests, ChannelDoesNotExist)
 
 TEST_F (ResolveDisputeTests, AlreadyPending)
 {
-  ExpectMoves (1, "resolution");
+  ExpectMove ("resolution");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   cm.ProcessOffChain ("", ValidProof ("14 8"));
@@ -507,33 +506,32 @@ TEST_F (ResolveDisputeTests, AlreadyPending)
 
 TEST_F (ResolveDisputeTests, OtherPlayer)
 {
-  ExpectMoves (0, "resolution");
+  /* No moves are expected.  */
   ProcessOnChain ("0 0", ValidProof ("11 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 }
 
 TEST_F (ResolveDisputeTests, NoBetterTurn)
 {
-  ExpectMoves (0, "resolution");
+  /* No moves are expected.  */
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 5"));
 }
 
 TEST_F (ResolveDisputeTests, RetryAfterBlock)
 {
-  const auto txid = ExpectMoves (2, "resolution");
-
-  Json::Value pendings(Json::arrayValue);
-  pendings.append (txid.ToHex ());
-
-  EXPECT_CALL (*mockXayaServer, getrawmempool ())
-      .WillOnce (Return (pendings))
-      .WillOnce (Return (ParseJson ("[]")));
+  ExpectMoves (2, "resolution");
 
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
+
+  /* The previous resolution is still pending, so this will do nothing.  */
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("14 8"));
+
+  /* Mark it as confirmed.  The ProcessOnChain will notice that, and the
+     subsequent ProcessOffChain will then retry.  */
+  txSender.ClearMempool ();
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("14 8"));
 }
@@ -544,7 +542,7 @@ using PutStateOnChainTests = ChannelManagerTests;
 
 TEST_F (PutStateOnChainTests, Successful)
 {
-  const auto txid = ExpectMoves (1, "resolution");
+  const auto txid = ExpectMove ("resolution");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   EXPECT_EQ (cm.PutStateOnChain (), txid);
@@ -552,7 +550,7 @@ TEST_F (PutStateOnChainTests, Successful)
 
 TEST_F (PutStateOnChainTests, ChannelDoesNotExist)
 {
-  ExpectMoves (0, "resolution");
+  /* No moves are expected.  */
   ProcessOnChainNonExistant ();
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   EXPECT_TRUE (cm.PutStateOnChain ().IsNull ());
@@ -560,7 +558,7 @@ TEST_F (PutStateOnChainTests, ChannelDoesNotExist)
 
 TEST_F (PutStateOnChainTests, BestStateAlreadyOnChain)
 {
-  ExpectMoves (0, "resolution");
+  /* No moves are expected.  */
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.ProcessOffChain ("", ValidProof ("12 5"));
   EXPECT_TRUE (cm.PutStateOnChain ().IsNull ());
@@ -568,14 +566,16 @@ TEST_F (PutStateOnChainTests, BestStateAlreadyOnChain)
 
 TEST_F (PutStateOnChainTests, MultipleUpdates)
 {
-  const auto txid = ExpectMoves (2, "resolution");
+  const auto txids = ExpectMoves (2, "resolution");
+  ASSERT_EQ (txids.size (), 2);
+
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
 
   cm.ProcessOffChain ("", ValidProof ("12 6"));
-  EXPECT_EQ (cm.PutStateOnChain (), txid);
+  EXPECT_EQ (cm.PutStateOnChain (), txids[0]);
 
   cm.ProcessOffChain ("", ValidProof ("20 7"));
-  EXPECT_EQ (cm.PutStateOnChain (), txid);
+  EXPECT_EQ (cm.PutStateOnChain (), txids[1]);
 }
 
 /* ************************************************************************** */
@@ -584,28 +584,28 @@ using FileDisputeTests = ChannelManagerTests;
 
 TEST_F (FileDisputeTests, Successful)
 {
-  const auto txid = ExpectMoves (1, "dispute");
+  const auto txid = ExpectMove ("dispute");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   EXPECT_EQ (cm.FileDispute (), txid);
 }
 
 TEST_F (FileDisputeTests, ChannelDoesNotExist)
 {
-  ExpectMoves (0, "dispute");
+  /* No moves are expected.  */
   ProcessOnChainNonExistant ();
   EXPECT_TRUE (cm.FileDispute ().IsNull ());
 }
 
 TEST_F (FileDisputeTests, HasOtherDispute)
 {
-  ExpectMoves (0, "dispute");
+  /* No moves are expected.  */
   ProcessOnChain ("0 0", ValidProof ("10 5"), 10);
   EXPECT_TRUE (cm.FileDispute ().IsNull ());
 }
 
 TEST_F (FileDisputeTests, AlreadyPending)
 {
-  const auto txid = ExpectMoves (1, "dispute");
+  const auto txid = ExpectMove ("dispute");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   EXPECT_EQ (cm.FileDispute (), txid);
   EXPECT_TRUE (cm.FileDispute ().IsNull ());
@@ -613,21 +613,20 @@ TEST_F (FileDisputeTests, AlreadyPending)
 
 TEST_F (FileDisputeTests, RetryAfterBlock)
 {
-  const auto txid = ExpectMoves (2, "dispute");
-
-  Json::Value pendings(Json::arrayValue);
-  pendings.append (txid.ToHex ());
-
-  EXPECT_CALL (*mockXayaServer, getrawmempool ())
-      .WillOnce (Return (pendings))
-      .WillOnce (Return (ParseJson ("[]")));
+  const auto txids = ExpectMoves (2, "dispute");
+  ASSERT_EQ (txids.size (), 2);
 
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  EXPECT_EQ (cm.FileDispute (), txid);
+  EXPECT_EQ (cm.FileDispute (), txids[0]);
+
+  /* The previous dispute is still pending.  */
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   EXPECT_TRUE (cm.FileDispute ().IsNull ());
+
+  /* Mark it as not pending.  This will retry.  */
+  txSender.ClearMempool ();
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  EXPECT_EQ (cm.FileDispute (), txid);
+  EXPECT_EQ (cm.FileDispute (), txids[1]);
 }
 
 /* ************************************************************************** */
@@ -708,7 +707,7 @@ TEST_F (ChannelToJsonTests, Dispute)
 
 TEST_F (ChannelToJsonTests, PendingPutStateOnChain)
 {
-  const auto txid = ExpectMoves (1, "resolution");
+  const auto txid = ExpectMove ("resolution");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
   cm.PutStateOnChain ();
@@ -720,7 +719,7 @@ TEST_F (ChannelToJsonTests, PendingPutStateOnChain)
 
 TEST_F (ChannelToJsonTests, PendingDispute)
 {
-  const auto txid = ExpectMoves (1, "dispute");
+  const auto txid = ExpectMove ("dispute");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   cm.FileDispute ();
 
@@ -731,7 +730,7 @@ TEST_F (ChannelToJsonTests, PendingDispute)
 
 TEST_F (ChannelToJsonTests, PendingResolution)
 {
-  const auto txid = ExpectMoves (1, "resolution");
+  const auto txid = ExpectMove ("resolution");
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("12 6"));
 

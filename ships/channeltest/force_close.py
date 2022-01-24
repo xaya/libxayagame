@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2021 The Xaya developers
+# Copyright (C) 2021-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,11 +19,11 @@ class ForceCloseTest (ShipsTest):
     self.generate (150)
 
     self.mainLogger.info ("Creating test channel...")
-    channelId = self.openChannel (["foo", "bar"])
+    channelId, addr = self.openChannel (["foo", "bar"])
 
     self.mainLogger.info ("Starting channel daemons...")
-    with self.runChannelDaemon (channelId, "foo") as foo, \
-         self.runChannelDaemon (channelId, "bar") as bar:
+    with self.runChannelDaemon (channelId, "foo", addr[0]) as foo, \
+         self.runChannelDaemon (channelId, "bar", addr[1]) as bar:
 
       daemons = [foo, bar]
 

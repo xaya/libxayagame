@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -23,7 +23,6 @@ namespace
 
 using testing::_;
 using testing::Return;
-using testing::Throw;
 
 class SignaturesTests : public TestGameFixture
 {
@@ -39,8 +38,8 @@ protected:
     meta.add_participants ()->set_address ("address 0");
     meta.add_participants ()->set_address ("address 1");
 
-    ValidSignature ("sgn 0", "address 0");
-    ValidSignature ("sgn 1", "address 1");
+    verifier.SetValid ("sgn 0", "address 0");
+    verifier.SetValid ("sgn 1", "address 1");
   }
 
 };
@@ -81,44 +80,29 @@ TEST_F (SignaturesTests, VerifyParticipantSignatures)
   data.add_signatures ("signature 1");
   data.add_signatures ("signature 2");
 
-  const std::string msg = GetChannelSignatureMessage (channelId, meta, "topic",
-                                                      data.data ());
+  verifier.ExpectOne (channelId, meta, "topic", data.data (),
+                      "signature 0", "some other address");
+  verifier.ExpectOne (channelId, meta, "topic", data.data (),
+                      "signature 1", "address 1");
+  verifier.ExpectOne (channelId, meta, "topic", data.data (),
+                      "signature 2", "invalid");
 
-  EXPECT_CALL (*mockXayaServer,
-               verifymessage ("", msg, EncodeBase64 ("signature 0")))
-      .WillOnce (Return (ParseJson (R"({
-        "valid": true,
-        "address": "some other address"
-      })")));
-  ExpectSignature (channelId, meta, "topic", data.data (),
-                   "signature 1", "address 1");
-  EXPECT_CALL (*mockXayaServer,
-               verifymessage ("", msg, EncodeBase64 ("signature 2")))
-      .WillOnce (Return (ParseJson (R"({
-        "valid": false
-      })")));
-
-  EXPECT_EQ (VerifyParticipantSignatures (mockXayaServer.GetClient (),
-                                          channelId, meta,
+  EXPECT_EQ (VerifyParticipantSignatures (verifier, channelId, meta,
                                           "topic", data),
              std::set<int> ({1}));
 }
 
 TEST_F (SignaturesTests, SignDataForParticipantError)
 {
-  EXPECT_CALL (*mockXayaWallet, signmessage ("address 1", _))
-      .WillOnce (Throw (jsonrpc::JsonRpcException (-5)));
-
   proto::SignedData data;
   data.set_data ("foobar");
   data.add_signatures ("sgn 0");
 
-  EXPECT_FALSE (SignDataForParticipant (mockXayaWallet.GetClient (),
-                                        channelId, meta, "topic",
+  signer.SetAddress ("wrong address");
+  EXPECT_FALSE (SignDataForParticipant (signer, channelId, meta, "topic",
                                         1, data));
 
-  EXPECT_EQ (VerifyParticipantSignatures (mockXayaServer.GetClient (),
-                                          channelId, meta,
+  EXPECT_EQ (VerifyParticipantSignatures (verifier, channelId, meta,
                                           "topic", data),
              std::set<int> ({0}));
 }
@@ -131,17 +115,15 @@ TEST_F (SignaturesTests, SignDataForParticipantSuccess)
 
   const std::string msg = GetChannelSignatureMessage (channelId, meta, "topic",
                                                       data.data ());
-  EXPECT_CALL (*mockXayaWallet, signmessage ("address 1", msg))
-      .WillOnce (Return (EncodeBase64 ("signature 1")));
-  ExpectSignature (channelId, meta, "topic", data.data (),
-                   "signature 1", "address 1");
+  signer.SetAddress ("address 1");
+  EXPECT_CALL (signer, SignMessage (msg)).WillOnce (Return ("signature 1"));
+  verifier.ExpectOne (channelId, meta, "topic", data.data (),
+                      "signature 1", "address 1");
 
-  ASSERT_TRUE (SignDataForParticipant (mockXayaWallet.GetClient (),
-                                       channelId, meta, "topic",
+  ASSERT_TRUE (SignDataForParticipant (signer, channelId, meta, "topic",
                                        1, data));
 
-  EXPECT_EQ (VerifyParticipantSignatures (mockXayaServer.GetClient (),
-                                          channelId, meta,
+  EXPECT_EQ (VerifyParticipantSignatures (verifier, channelId, meta,
                                           "topic", data),
              std::set<int> ({0, 1}));
 }

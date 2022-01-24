@@ -1,16 +1,11 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "testgame.hpp"
 
-#include "movesender.hpp"
 #include "protoutils.hpp"
 #include "signatures.hpp"
-
-#include <xayautil/base64.hpp>
-
-#include <gmock/gmock.h>
 
 #include <glog/logging.h>
 
@@ -19,11 +14,10 @@
 namespace xaya
 {
 
+/* ************************************************************************** */
+
 namespace
 {
-
-using testing::_;
-using testing::Return;
 
 struct ParsedState
 {
@@ -91,8 +85,7 @@ public:
   }
 
   bool
-  ApplyMove (XayaRpcClient& rpc, const BoardMove& mv,
-             BoardState& newState) const override
+  ApplyMove (const BoardMove& mv, BoardState& newState) const override
   {
     /* The game-channel engine should never invoke ApplyMove on a 'no turn'
        situation.  Make sure to verify that.  */
@@ -201,6 +194,8 @@ AdditionChannel::MaybeOnChainMove (const ParsedBoardState& state,
   addState.MaybeOnChainMove (sender);
 }
 
+/* ************************************************************************** */
+
 void
 TestGame::SetupSchema (SQLiteDatabase& db)
 {
@@ -231,6 +226,12 @@ TestGame::GetStateAsJson (const SQLiteDatabase& db)
   LOG (FATAL) << "TestGame::GetStateAsJson is not implemented";
 }
 
+const SignatureVerifier&
+TestGame::GetSignatureVerifier ()
+{
+  return mockVerifier;
+}
+
 const BoardRules&
 TestGame::GetBoardRules () const
 {
@@ -238,10 +239,10 @@ TestGame::GetBoardRules () const
 }
 
 TestGameFixture::TestGameFixture ()
+  : game(verifier)
 {
   game.Initialise (":memory:");
-  game.InitialiseGameContext (Chain::MAIN, "add",
-                              &mockXayaServer.GetClient ());
+  game.InitialiseGameContext (Chain::MAIN, "add", nullptr);
   game.GetStorage ().Initialise ();
   /* The initialisation above already sets up the database schema.  */
 }
@@ -252,34 +253,6 @@ TestGameFixture::GetDb ()
   return game.GetDatabaseForTesting ();
 }
 
-void
-TestGameFixture::ValidSignature (const std::string& sgn,
-                                 const std::string& addr)
-{
-  Json::Value res(Json::objectValue);
-  res["valid"] = true;
-  res["address"] = addr;
-
-  EXPECT_CALL (*mockXayaServer, verifymessage ("", _, EncodeBase64 (sgn)))
-      .WillRepeatedly (Return (res));
-}
-
-void
-TestGameFixture::ExpectSignature (const uint256& channelId,
-                                  const proto::ChannelMetadata& meta,
-                                  const std::string& topic,
-                                  const std::string& msg,
-                                  const std::string& sgn,
-                                  const std::string& addr)
-{
-  Json::Value res(Json::objectValue);
-  res["valid"] = true;
-  res["address"] = addr;
-
-  const std::string hashed
-      = GetChannelSignatureMessage (channelId, meta, topic, msg);
-  EXPECT_CALL (*mockXayaServer, verifymessage ("", hashed, EncodeBase64 (sgn)))
-      .WillOnce (Return (res));
-}
+/* ************************************************************************** */
 
 } // namespace xaya

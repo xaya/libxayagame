@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,11 +10,10 @@
 #include "movesender.hpp"
 #include "openchannel.hpp"
 #include "rollingstate.hpp"
+#include "signatures.hpp"
 
 #include "proto/stateproof.pb.h"
 
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
 #include <json/json.h>
@@ -96,11 +95,10 @@ private:
   /** OpenChannel instance for this game.  */
   OpenChannel& game;
 
-  /** RPC connection to Xaya Core used for verifying signatures.  */
-  XayaRpcClient& rpc;
-
-  /** RPC connection to the Xaya wallet used for signing local moves.  */
-  XayaWalletRpcClient& wallet;
+  /** Verification provider for signatures.  */
+  const SignatureVerifier& verifier;
+  /** Message signer for this user.  */
+  SignatureSigner& signer;
 
   /** The ID of the managed channel.  */
   const uint256 channelId;
@@ -226,7 +224,8 @@ public:
   static constexpr int WAITFORCHANGE_ALWAYS_BLOCK = 0;
 
   explicit ChannelManager (const BoardRules& r, OpenChannel& oc,
-                           XayaRpcClient& c, XayaWalletRpcClient& w,
+                           const SignatureVerifier& v,
+                           SignatureSigner& s,
                            const uint256& id, const std::string& name);
 
   ~ChannelManager ();

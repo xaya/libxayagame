@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,6 +16,45 @@
 
 namespace xaya
 {
+
+/* ************************************************************************** */
+
+std::string
+RpcSignatureVerifier::RecoverSigner (const std::string& msg,
+                                     const std::string& sgn) const
+{
+  return VerifyMessage (rpc, msg, EncodeBase64 (sgn));
+}
+
+RpcSignatureSigner::RpcSignatureSigner (XayaWalletRpcClient& w,
+                                        const std::string& addr)
+  : wallet(w), address(addr)
+{
+  const auto info = wallet.getaddressinfo (address);
+  CHECK (info.isObject ());
+  const auto& mineVal = info["ismine"];
+  CHECK (mineVal.isBool ());
+  CHECK (mineVal.asBool ())
+      << "Address " << address
+      << " for signing is not owned by wallet RPC client";
+}
+
+std::string
+RpcSignatureSigner::GetAddress () const
+{
+  return address;
+}
+
+std::string
+RpcSignatureSigner::SignMessage (const std::string& msg)
+{
+  const std::string sgn = wallet.signmessage (address, msg);
+  std::string decoded;
+  CHECK (DecodeBase64 (sgn, decoded));
+  return decoded;
+}
+
+/* ************************************************************************** */
 
 std::string
 GetChannelSignatureMessage (const uint256& channelId,
@@ -37,7 +76,7 @@ GetChannelSignatureMessage (const uint256& channelId,
 }
 
 std::set<int>
-VerifyParticipantSignatures (XayaRpcClient& rpc,
+VerifyParticipantSignatures (const SignatureVerifier& verifier,
                              const uint256& channelId,
                              const proto::ChannelMetadata& meta,
                              const std::string& topic,
@@ -48,10 +87,7 @@ VerifyParticipantSignatures (XayaRpcClient& rpc,
 
   std::set<std::string> addresses;
   for (const auto& sgn : data.signatures ())
-    {
-      const std::string& sgnStr = EncodeBase64 (sgn);
-      addresses.emplace (VerifyMessage (rpc, msg, sgnStr));
-    }
+    addresses.emplace (verifier.RecoverSigner (msg, sgn));
 
   std::set<int> res;
   for (int i = 0; i < meta.participants_size (); ++i)
@@ -62,7 +98,7 @@ VerifyParticipantSignatures (XayaRpcClient& rpc,
 }
 
 bool
-SignDataForParticipant (XayaWalletRpcClient& wallet,
+SignDataForParticipant (SignatureSigner& signer,
                         const uint256& channelId,
                         const proto::ChannelMetadata& meta,
                         const std::string& topic,
@@ -74,19 +110,16 @@ SignDataForParticipant (XayaWalletRpcClient& wallet,
   const std::string& addr = meta.participants (index).address ();
   LOG (INFO) << "Trying to sign data with address " << addr << "...";
 
-  try
+  if (addr != signer.GetAddress ())
     {
-      const auto msg
-          = GetChannelSignatureMessage (channelId, meta, topic, data.data ());
-      const std::string sgn = wallet.signmessage (addr, msg);
-      CHECK (DecodeBase64 (sgn, *data.add_signatures ()));
-      return true;
-    }
-  catch (const jsonrpc::JsonRpcException& exc)
-    {
-      LOG (ERROR) << "Signature with " << addr << " failed: " << exc.what ();
+      LOG (ERROR) << "The provided signer is for a different address";
       return false;
     }
+
+  const auto msg
+      = GetChannelSignatureMessage (channelId, meta, topic, data.data ());
+  data.add_signatures (signer.SignMessage (msg));
+  return true;
 }
 
 } // namespace xaya

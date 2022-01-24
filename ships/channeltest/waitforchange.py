@@ -111,12 +111,12 @@ class WaitForChangeTest (ShipsTest):
 
     # Create a test channel with two participants.
     self.mainLogger.info ("Creating test channel...")
-    channelId = self.openChannel (["foo", "bar"])
+    channelId, addr = self.openChannel (["foo", "bar"])
 
     # Start up the two channel daemons.
     self.mainLogger.info ("Starting channel daemons...")
-    with self.runChannelDaemon (channelId, "foo") as foo, \
-         self.runChannelDaemon (channelId, "bar") as bar, \
+    with self.runChannelDaemon (channelId, "foo", addr[0]) as foo, \
+         self.runChannelDaemon (channelId, "bar", addr[1]) as bar, \
          WaitForChangeUpdater (foo) as waiter:
 
       daemons = [foo, bar]

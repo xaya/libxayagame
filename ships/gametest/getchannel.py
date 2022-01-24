@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,11 +21,10 @@ class GetChannelTest (ShipsTest):
 
     # Create a test channel and join it.
     self.mainLogger.info ("Creating test channel...")
-    addr1 = self.rpc.xaya.getnewaddress ()
-    channelId = self.sendMove ("foo", {"c": {"addr": addr1}})
+    addr = [self.newSigningAddress () for _ in range (2)]
+    channelId = self.sendMove ("foo", {"c": {"addr": addr[0]}})
     self.generate (1)
-    addr2 = self.rpc.xaya.getnewaddress ()
-    self.sendMove ("bar", {"j": {"id": channelId, "addr": addr2}})
+    self.sendMove ("bar", {"j": {"id": channelId, "addr": addr[1]}})
     self.generate (1)
 
     # Verify the channel using getcurrentstate.
@@ -38,8 +37,8 @@ class GetChannelTest (ShipsTest):
     assert channelId in channels
     ch = channels[channelId]
     self.assertEqual (ch["meta"]["participants"], [
-      {"name": "foo", "address": addr1},
-      {"name": "bar", "address": addr2},
+      {"name": "foo", "address": addr[0]},
+      {"name": "bar", "address": addr[1]},
     ])
     self.assertEqual (ch["state"]["parsed"]["phase"], "first commitment")
 

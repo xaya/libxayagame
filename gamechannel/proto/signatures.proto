@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,7 +18,10 @@ message SignedData
 
   /**
    * The signatures made on the data by channel participants.  Each signature
-   * is the "signmessage" output of Xaya Core, but base64-decoded to binary.
+   * stores raw bytes based on the underlying message signing/verification
+   * provider used.  For instance, for signing based on Xaya Core's RPC
+   * interface with signmessage/verifymessage, the data is the base64-decoded
+   * signature string as raw binary.
    *
    * For the message, the channel's ID (uint256) is concatenated with
    * the base64-encoded reinit ID, a nul byte, a string describing what the

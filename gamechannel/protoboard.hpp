@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,8 +8,6 @@
 #include "boardrules.hpp"
 
 #include "proto/metadata.pb.h"
-
-#include <xayagame/rpc-stubs/xayarpcclient.h>
 
 #include <json/json.h>
 
@@ -56,8 +54,7 @@ protected:
    * it is already considered invalid before).  Any more potential
    * versioning checks need to be done by this function.
    */
-  virtual bool ApplyMoveProto (XayaRpcClient& rpc, const Move& mv,
-                               State& newState) const = 0;
+  virtual bool ApplyMoveProto (const Move& mv, State& newState) const = 0;
 
 public:
 
@@ -101,8 +98,7 @@ public:
   virtual bool IsValid () const;
 
   bool Equals (const BoardState& other) const override;
-  bool ApplyMove (XayaRpcClient& rpc, const BoardMove& mv,
-                  BoardState& newState) const override;
+  bool ApplyMove (const BoardMove& mv, BoardState& newState) const override;
 
 };
 
