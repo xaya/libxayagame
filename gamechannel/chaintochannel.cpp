@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,9 +20,12 @@ namespace xaya
 {
 
 ChainToChannelFeeder::ChainToChannelFeeder (ChannelGspRpcClient& r,
-                                            ChannelManager& cm)
+                                            SynchronisedChannelManager& cm)
   : rpc(r), manager(cm)
 {
+  auto cmLocked = manager.Read ();
+  channelIdHex = cmLocked->GetChannelId ().ToHex ();
+
   lastBlock.SetNull ();
 }
 
@@ -56,7 +59,6 @@ template <typename Proto>
 void
 ChainToChannelFeeder::UpdateOnce ()
 {
-  const std::string channelIdHex = manager.GetChannelId ().ToHex ();
   const auto data = rpc.getchannel (channelIdHex);
 
   if (data["state"] != "up-to-date")
@@ -93,7 +95,8 @@ ChainToChannelFeeder::UpdateOnce ()
   if (channel.isNull ())
     {
       LOG (INFO) << "Channel " << channelIdHex << " is not known on-chain";
-      manager.ProcessOnChainNonExistant (lastBlock, height);
+      auto cmLocked = manager.Access ();
+      cmLocked->ProcessOnChainNonExistant (lastBlock, height);
       return;
     }
   CHECK (channel.isObject ());
@@ -114,8 +117,9 @@ ChainToChannelFeeder::UpdateOnce ()
       disputeHeight = disputeVal.asUInt ();
     }
 
-  manager.ProcessOnChain (lastBlock, height, meta, reinitState,
-                          proof, disputeHeight);
+  auto cmLocked = manager.Access ();
+  cmLocked->ProcessOnChain (lastBlock, height, meta, reinitState,
+                            proof, disputeHeight);
   LOG (INFO) << "Updated channel from on-chain state: " << channelIdHex;
 }
 

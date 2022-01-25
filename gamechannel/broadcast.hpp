@@ -21,6 +21,7 @@ namespace xaya
 {
 
 class ChannelManager;
+class SynchronisedChannelManager;
 
 /**
  * This class handles the off-chain broadcast of messages within a channel.
@@ -137,7 +138,7 @@ private:
    * For testing purposes it can be null, in which case we require that
    * FeedMessage is overridden in a subclass to handle the messages directly.
    */
-  ChannelManager* manager;
+  SynchronisedChannelManager* manager;
 
   /** The currently running wait loop, if any.  */
   std::unique_ptr<std::thread> loop;
@@ -187,7 +188,7 @@ public:
    * Constructs an instance for normal use.  It will feed messages into
    * the given ChannelManager.
    */
-  explicit ReceivingOffChainBroadcast (ChannelManager& cm);
+  explicit ReceivingOffChainBroadcast (SynchronisedChannelManager& cm);
 
   ~ReceivingOffChainBroadcast ();
 

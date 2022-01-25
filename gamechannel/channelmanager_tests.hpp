@@ -35,7 +35,6 @@ protected:
   ChannelManager cm;
 
   ChannelManagerTestFixture ();
-  ~ChannelManagerTestFixture ();
 
   /**
    * Processes an on-chain update with fixed block hash and height, our

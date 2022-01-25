@@ -30,9 +30,10 @@ ChannelDaemon::WalletBasedInstances::WalletBasedInstances (
     const SignatureVerifier& verifier, SignatureSigner& signer,
     TransactionSender& txSender)
   : sender(d.gameId, d.channelId, d.playerName, txSender, d.channel),
-    cm(d.rules, d.channel, verifier, signer, d.channelId, d.playerName)
+    realCm(d.rules, d.channel, verifier, signer, d.channelId, d.playerName),
+    cm(realCm)
 {
-  cm.SetMoveSender (sender);
+  realCm.SetMoveSender (sender);
 }
 
 ChannelDaemon::WalletBasedInstances::~WalletBasedInstances ()
@@ -64,7 +65,7 @@ ChannelDaemon::ConnectGspRpc (const std::string& url)
   feeder = std::make_unique<GspFeederInstances> (*this, url);
 }
 
-ChannelManager&
+SynchronisedChannelManager&
 ChannelDaemon::GetChannelManager ()
 {
   CHECK (walletBased != nullptr);
@@ -77,7 +78,8 @@ ChannelDaemon::SetOffChainBroadcast (ReceivingOffChainBroadcast& b)
   CHECK (walletBased != nullptr);
   CHECK (offChain == nullptr);
   offChain = &b;
-  walletBased->cm.SetOffChainBroadcast (*offChain);
+  auto cmLocked = walletBased->cm.Access ();
+  cmLocked->SetOffChainBroadcast (*offChain);
 }
 
 void

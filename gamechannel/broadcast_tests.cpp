@@ -110,7 +110,7 @@ protected:
 
 public:
 
-  explicit FeedBackBroadcast (ChannelManager& cm)
+  explicit FeedBackBroadcast (SynchronisedChannelManager& cm)
     : ReceivingOffChainBroadcast(cm)
   {}
 
@@ -131,10 +131,18 @@ class ReceivingBroadcastTests : public ChannelManagerTestFixture
 
 protected:
 
+  /**
+   * SynchronisedChannelManager based on the fixture's manager.  We need that
+   * so we can instantiate the ReceivingOffChainBroadcast.  Otherwise we do
+   * not use the lock here, as the offchain broadcast's loop doesn't actually
+   * access the channel manager in any way.
+   */
+  SynchronisedChannelManager scm;
+
   FeedBackBroadcast offChain;
 
   ReceivingBroadcastTests ()
-    : offChain(cm)
+    : scm(cm), offChain(scm)
   {
     cm.SetOffChainBroadcast (offChain);
     offChain.Start ();

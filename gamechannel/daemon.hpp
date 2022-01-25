@@ -54,8 +54,10 @@ private:
     /** The MoveSender instance we use.  */
     MoveSender sender;
 
-    /** The ChannelManager instance.  */
-    ChannelManager cm;
+    /** The ChannelManager instance used.  */
+    ChannelManager realCm;
+    /** The lock wrapper around the channel manager.  */
+    SynchronisedChannelManager cm;
 
     WalletBasedInstances () = delete;
     WalletBasedInstances (const WalletBasedInstances&) = delete;
@@ -158,7 +160,7 @@ public:
    * Returns a reference to the underlying ChannelManager, which can be used
    * for constructing the OffChainBroadcast and/or RPC server externally.
    */
-  ChannelManager& GetChannelManager ();
+  SynchronisedChannelManager& GetChannelManager ();
 
   /**
    * Sets the off-chain broadcast instance.  This must be called before

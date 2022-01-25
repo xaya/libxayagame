@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,19 +9,17 @@
 namespace xaya
 {
 
-template <typename State, typename Fcn>
-  auto
-  ChannelManager::ReadLatestState (const Fcn& cb) const
+template <typename State>
+  const State*
+  ChannelManager::GetBoardState () const
 {
-  std::lock_guard<std::mutex> lock(mut);
-
   if (!exists)
-    return cb (nullptr);
+    return nullptr;
 
   const auto& state = boardStates.GetLatestState ();
   const auto* typedState = dynamic_cast<const State*> (&state);
   CHECK (typedState != nullptr);
-  return cb (typedState);
+  return typedState;
 }
 
 } // namespace xaya

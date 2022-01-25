@@ -24,6 +24,8 @@ constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
 
 } // anonymous namespace
 
+/* ************************************************************************** */
+
 ChannelManager::DisputeData::DisputeData ()
 {
   pendingResolution.SetNull ();
@@ -38,12 +40,6 @@ ChannelManager::ChannelManager (const BoardRules& r, OpenChannel& oc,
   blockHash.SetNull ();
   pendingPutStateOnChain.SetNull ();
   pendingDispute.SetNull ();
-}
-
-ChannelManager::~ChannelManager ()
-{
-  std::lock_guard<std::mutex> lock(mut);
-  CHECK (stopped);
 }
 
 void
@@ -179,14 +175,6 @@ void
 ChannelManager::ProcessOffChain (const std::string& reinitId,
                                  const proto::StateProof& proof)
 {
-  std::lock_guard<std::mutex> lock(mut);
-
-  if (stopped)
-    {
-      LOG (INFO) << "ChannelManager is stopped, ignoring update";
-      return;
-    }
-
   if (!boardStates.UpdateWithMove (reinitId, proof))
     return;
 
@@ -198,13 +186,6 @@ ChannelManager::ProcessOnChainNonExistant (const uint256& blk, const unsigned h)
 {
   LOG_IF (INFO, exists)
       << "Channel " << channelId.ToHex () << " no longer exists on-chain";
-  std::lock_guard<std::mutex> lock(mut);
-
-  if (stopped)
-    {
-      LOG (INFO) << "ChannelManager is stopped, ignoring update";
-      return;
-    }
 
   blockHash = blk;
   onChainHeight = h;
@@ -257,13 +238,6 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
 {
   LOG_IF (INFO, !exists)
       << "Channel " << channelId.ToHex () << " is now found on-chain";
-  std::lock_guard<std::mutex> lock(mut);
-
-  if (stopped)
-    {
-      LOG (INFO) << "ChannelManager is stopped, ignoring update";
-      return;
-    }
 
   blockHash = blk;
   onChainHeight = h;
@@ -309,7 +283,7 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
 bool
 ChannelManager::ApplyLocalMove (const BoardMove& mv)
 {
-  CHECK (!stopped && exists);
+  CHECK (exists);
 
   proto::StateProof newProof;
   if (!ExtendStateProof (verifier, signer, rules, channelId,
@@ -331,13 +305,6 @@ void
 ChannelManager::ProcessLocalMove (const BoardMove& mv)
 {
   LOG (INFO) << "Local move: " << mv;
-  std::lock_guard<std::mutex> lock(mut);
-
-  if (stopped)
-    {
-      LOG (INFO) << "ChannelManager is stopped, ignoring update";
-      return;
-    }
 
   if (!exists)
     {
@@ -354,14 +321,6 @@ ChannelManager::ProcessLocalMove (const BoardMove& mv)
 void
 ChannelManager::TriggerAutoMoves ()
 {
-  std::lock_guard<std::mutex> lock(mut);
-
-  if (stopped)
-    {
-      LOG (INFO) << "ChannelManager is stopped, not triggering automoves";
-      return;
-    }
-
   if (!exists)
     {
       LOG (INFO) << "Channel does not exist on chain, not triggering automoves";
@@ -382,7 +341,6 @@ ChannelManager::PutStateOnChain ()
 {
   LOG (INFO)
       << "Trying to put the latest state on chain for " << channelId.ToHex ();
-  std::lock_guard<std::mutex> lock(mut);
 
   uint256 txidNull;
   txidNull.SetNull ();
@@ -418,7 +376,6 @@ uint256
 ChannelManager::FileDispute ()
 {
   LOG (INFO) << "Trying to file a dispute for channel " << channelId.ToHex ();
-  std::lock_guard<std::mutex> lock(mut);
 
   uint256 txidNull;
   txidNull.SetNull ();
@@ -444,16 +401,8 @@ ChannelManager::FileDispute ()
   return pendingDispute;
 }
 
-void
-ChannelManager::StopUpdates ()
-{
-  std::lock_guard<std::mutex> lock(mut);
-  stopped = true;
-  NotifyStateChange ();
-}
-
 Json::Value
-ChannelManager::UnlockedToJson () const
+ChannelManager::ToJson () const
 {
   Json::Value res(Json::objectValue);
   res["id"] = channelId.ToHex ();
@@ -502,39 +451,104 @@ ChannelManager::UnlockedToJson () const
   return res;
 }
 
-Json::Value
-ChannelManager::ToJson () const
-{
-  std::lock_guard<std::mutex> lock(mut);
-  return UnlockedToJson ();
-}
-
 void
 ChannelManager::NotifyStateChange ()
 {
   /* Callers are expected to hold a lock on mut already, as is the case in
      all the updating code that will call here anyway.  */
-  CHECK_GT (stateVersion, WAITFORCHANGE_ALWAYS_BLOCK);
+  CHECK_GT (stateVersion, 0);
   ++stateVersion;
   VLOG (1)
-      << "Notifying waiting threads about state change, new version: "
+      << "Notifying about state change, new version: "
       << stateVersion;
+  for (auto* cb : callbacks)
+    cb->StateChanged ();
+}
+
+void
+ChannelManager::RegisterCallback (Callbacks& cb)
+{
+  callbacks.insert (&cb);
+}
+
+void
+ChannelManager::UnregisterCallback (Callbacks& cb)
+{
+  callbacks.erase (&cb);
+}
+
+/* ************************************************************************** */
+
+SynchronisedChannelManager::SynchronisedChannelManager (ChannelManager& c)
+  : cm(c)
+{
+  cm.RegisterCallback (*this);
+}
+
+SynchronisedChannelManager::~SynchronisedChannelManager ()
+{
+  StopUpdates ();
+
+  std::unique_lock<std::mutex> lock(mut);
+  cm.UnregisterCallback (*this);
+
+  /* Wait for all active waiter threads to finish before we let the instance
+     be destructed.  This is just an extra sanity measure and usually updates
+     should have been stopped (and event loops calling into waitforchange
+     explicitly joined) already before the instance is destructed anyway.
+
+     Using a condition variable here just for signalling possible changes to
+     the waiting counter seems overkill in this situation, so we just sleep
+     as needed (which in practice won't be at all).  */
+  while (waiting > 0)
+    {
+      LOG_FIRST_N (WARNING, 1)
+          << "There are still " << waiting << " waiters active, sleeping";
+      lock.unlock ();
+      std::this_thread::sleep_for (std::chrono::milliseconds (1));
+      lock.lock ();
+    }
+}
+
+void
+SynchronisedChannelManager::StateChanged ()
+{
+  cvStateChanged.notify_all ();
+}
+
+SynchronisedChannelManager::Locked<ChannelManager>
+SynchronisedChannelManager::Access ()
+{
+  return Locked<ChannelManager> (*this);
+}
+
+SynchronisedChannelManager::Locked<const ChannelManager>
+SynchronisedChannelManager::Read () const
+{
+  return Locked<const ChannelManager> (*this);
+}
+
+void
+SynchronisedChannelManager::StopUpdates ()
+{
+  std::lock_guard<std::mutex> lock(mut);
+  stopped = true;
   cvStateChanged.notify_all ();
 }
 
 Json::Value
-ChannelManager::WaitForChange (const int knownVersion) const
+SynchronisedChannelManager::WaitForChange (const int knownVersion) const
 {
   std::unique_lock<std::mutex> lock(mut);
 
   if (knownVersion != WAITFORCHANGE_ALWAYS_BLOCK
-          && knownVersion != stateVersion)
+          && knownVersion != cm.GetStateVersion ())
     {
       VLOG (1)
           << "Known version " << knownVersion
-          << " differs from current one (" << stateVersion
+          << " differs from current one (" << cm.GetStateVersion ()
           << "), returning immediately from WaitForChange";
-      return UnlockedToJson ();
+      return cm.ToJson ();
     }
 
   if (stopped)
@@ -542,11 +556,16 @@ ChannelManager::WaitForChange (const int knownVersion) const
   else
     {
       VLOG (1) << "Waiting for state change on condition variable...";
+      ++waiting;
       cvStateChanged.wait_for (lock, WAITFORCHANGE_TIMEOUT);
+      CHECK_GT (waiting, 0);
+      --waiting;
       VLOG (1) << "Potential state change detected in WaitForChange";
     }
 
-  return UnlockedToJson ();
+  return cm.ToJson ();
 }
+
+/* ************************************************************************** */
 
 } // namespace xaya

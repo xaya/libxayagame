@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,7 +20,14 @@ Json::Value
 ShipsChannelRpcServer::getcurrentstate ()
 {
   LOG (INFO) << "RPC method called: getcurrentstate";
-  return ExtendStateJson (daemon.GetChannelManager ().ToJson ());
+  Json::Value state;
+  {
+    auto cm = daemon.GetChannelManager ().Read ();
+    state = cm->ToJson ();
+    /* We need to release the lock here again, since ExtendStateJson uses
+       its own lock on the channel manager.  */
+  }
+  return ExtendStateJson (std::move (state));
 }
 
 Json::Value
@@ -73,9 +80,11 @@ ShipsChannelRpcServer::setposition (const std::string& str)
   if (!ParseAndValidatePosition (str, pos))
     return;
 
-  std::lock_guard<std::mutex> lock(mut);
+  /* The lock on the channel manager also protects our direct access
+     to the open channel (for setting the position).  */
+  auto cm = daemon.GetChannelManager ().Access ();
   channel.SetPosition (pos);
-  daemon.GetChannelManager ().TriggerAutoMoves ();
+  cm->TriggerAutoMoves ();
 }
 
 bool
@@ -95,8 +104,8 @@ ShipsChannelRpcServer::shoot (const int column, const int row)
   const Coord target(row, column);
   if (target.IsOnBoard ())
     {
-      std::lock_guard<std::mutex> lock(mut);
-      ProcessLocalMove (channel.GetShotMove (target));
+      auto cm = daemon.GetChannelManager ().Access ();
+      ProcessLocalMove (*cm, channel.GetShotMove (target));
     }
   else
     LOG (ERROR) << "Invalid coordinate given as shot target";
@@ -109,8 +118,8 @@ ShipsChannelRpcServer::revealposition ()
 
   if (channel.IsPositionSet ())
     {
-      std::lock_guard<std::mutex> lock(mut);
-      ProcessLocalMove (channel.GetPositionRevealMove ());
+      auto cm = daemon.GetChannelManager ().Access ();
+      ProcessLocalMove (*cm, channel.GetPositionRevealMove ());
     }
   else
     LOG (ERROR) << "Cannot reveal position if it is not set yet";
@@ -120,22 +129,18 @@ std::string
 ShipsChannelRpcServer::filedispute ()
 {
   LOG (INFO) << "RPC method called: filedispute";
-  auto& cm = daemon.GetChannelManager ();
+  auto cm = daemon.GetChannelManager ().Access ();
 
   /* If the winner is already known, we can't file an actual dispute, but
      instead we put the state on chain (with a resolution move) which will
      result in closure of the channel.  */
-  bool hasWinner = false;
-  cm.ReadLatestState<ShipsBoardState> (
-      [&hasWinner] (const ShipsBoardState* state)
-        {
-          if (state != nullptr && state->GetState ().has_winner ())
-            hasWinner = true;
-        });
+  const auto* state = cm->GetBoardState<ShipsBoardState> ();
+  const bool hasWinner
+      = (state != nullptr && state->GetState ().has_winner ());
 
   const xaya::uint256 txid = hasWinner
-      ? cm.PutStateOnChain ()
-      : cm.FileDispute ();
+      ? cm->PutStateOnChain ()
+      : cm->FileDispute ();
 
   if (txid.IsNull ())
     return "";
@@ -146,7 +151,12 @@ ShipsChannelRpcServer::filedispute ()
 Json::Value
 ShipsChannelRpcServer::ExtendStateJson (Json::Value&& state) const
 {
-  std::lock_guard<std::mutex> lock(mut);
+  /* We abuse the channel manager lock also as internal lock for the
+     ships channel.  There is a bit of a possible race condition between
+     the state passed in here and when we re-lock to add our ships, but that
+     doesn't matter because the ships are a "set once and then stay constant"
+     thing anyway.  */
+  auto lock = daemon.GetChannelManager ().Read ();
 
   if (channel.IsPositionSet ())
     state["myships"] = channel.GetPosition ().ToString ();
@@ -155,11 +165,12 @@ ShipsChannelRpcServer::ExtendStateJson (Json::Value&& state) const
 }
 
 void
-ShipsChannelRpcServer::ProcessLocalMove (const proto::BoardMove& mv)
+ShipsChannelRpcServer::ProcessLocalMove (xaya::ChannelManager& cm,
+                                         const proto::BoardMove& mv)
 {
   xaya::BoardMove serialised;
   CHECK (mv.SerializeToString (&serialised));
-  daemon.GetChannelManager ().ProcessLocalMove (serialised);
+  cm.ProcessLocalMove (serialised);
 }
 
 } // namespace ships

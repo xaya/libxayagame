@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -31,7 +31,10 @@ private:
   ChannelGspRpcClient& rpc;
 
   /** The ChannelManager that is updated.  */
-  ChannelManager& manager;
+  SynchronisedChannelManager& manager;
+
+  /** The channel ID in hex.  */
+  std::string channelIdHex;
 
   /** The running thread (if any).  */
   std::unique_ptr<std::thread> loop;
@@ -65,7 +68,8 @@ public:
    * be used from a separate thread and must thus not be used anywhere else
    * at the same time.
    */
-  explicit ChainToChannelFeeder (ChannelGspRpcClient& r, ChannelManager& cm);
+  explicit ChainToChannelFeeder (ChannelGspRpcClient& r,
+                                 SynchronisedChannelManager& cm);
 
   ~ChainToChannelFeeder ();
 

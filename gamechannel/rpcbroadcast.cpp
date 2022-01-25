@@ -11,7 +11,8 @@
 namespace xaya
 {
 
-RpcBroadcast::RpcBroadcast (const std::string& rpcUrl, ChannelManager& cm)
+RpcBroadcast::RpcBroadcast (const std::string& rpcUrl,
+                            SynchronisedChannelManager& cm)
   : ReceivingOffChainBroadcast(cm),
     sendConnector(rpcUrl), receiveConnector(rpcUrl),
     sendRpc(sendConnector), receiveRpc(receiveConnector)

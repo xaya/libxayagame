@@ -14,7 +14,6 @@
 #include <json/json.h>
 #include <jsonrpccpp/server.h>
 
-#include <mutex>
 #include <string>
 
 namespace ships
@@ -38,24 +37,18 @@ private:
   xaya::ChannelDaemon& daemon;
 
   /**
-   * Mutex for synchronising access particularly to the ShipsChannel.
-   * The ChannelManager has its own synchronisation in place for processing
-   * updates, but the RPC server uses the ShipsChannel instance before
-   * passing any updates to ChannelManager.  Thus we need our own lock
-   * with a  "wider scope".
-   */
-  mutable std::mutex mut;
-
-  /**
-   * Processes a local move given as proto.
-   */
-  void ProcessLocalMove (const proto::BoardMove& mv);
-
-  /**
    * Extends a given state JSON by extra data from the ShipsChannel directly
    * (i.e. the player's own position if set).
    */
   Json::Value ExtendStateJson (Json::Value&& state) const;
+
+  /**
+   * Processes a local move given as proto.  When this method gets called,
+   * we already hold the lock on the channel manager, and pass the instance
+   * in directly.
+   */
+  static void ProcessLocalMove (xaya::ChannelManager& cm,
+                                const proto::BoardMove& mv);
 
 public:
 

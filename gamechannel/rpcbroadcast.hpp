@@ -76,7 +76,8 @@ protected:
 
 public:
 
-  explicit RpcBroadcast (const std::string& rpcUrl, ChannelManager& cm);
+  explicit RpcBroadcast (const std::string& rpcUrl,
+                         SynchronisedChannelManager& cm);
 
   /**
    * Starts the broadcast channel.  We use the default event loop, but override

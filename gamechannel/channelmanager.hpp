@@ -21,10 +21,13 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 
 namespace xaya
 {
+
+/* ************************************************************************** */
 
 /**
  * The main logic for a channel daemon.  This class keeps track of the
@@ -35,12 +38,17 @@ namespace xaya
  * resolutions if disputes are filed against the player and a newer state
  * is already known.
  *
- * This class performs locking as needed, and its functions (e.g. updates
- * for on-chain and off-chain changes) may be freely called from different
- * threads and in parallel.
+ * This class does not do any locking or threading.  It awaits external
+ * updates (through ProcessOnChain, ProcessOffChain or ProcessLocalMove),
+ * and will in response update the state and trigger calls to the move
+ * sender or offchain broadcast.
  */
 class ChannelManager
 {
+
+public:
+
+  class Callbacks;
 
 private:
 
@@ -71,23 +79,6 @@ private:
     DisputeData& operator= (const DisputeData&) = default;
 
   };
-
-  /**
-   * Mutex protecting the state in this class.  This is needed since there
-   * may be multiple threads calling functions on the ChannelManager (e.g.
-   * one thread listing to the GSP's waitforchange and another on the real-time
-   * broadcast network).
-   *
-   * This is also used as lock for the waitforchange condition variable.
-   */
-  mutable std::mutex mut;
-
-  /**
-   * Condition variable that gets signalled when the state is changed due
-   * to on-chain updates, off-chain updates or local moves.  This is used
-   * for waitforchange.
-   */
-  mutable std::condition_variable cvStateChanged;
 
   /** The board rules of the game being played.  */
   const BoardRules& rules;
@@ -133,14 +124,6 @@ private:
   int stateVersion = 1;
 
   /**
-   * If set to true, then no more updates will be processed.  This is used
-   * when shutting down the channel daemon and to make sure that we can properly
-   * handle waking up all waitforchange callers (without them re-calling
-   * and blocking again).
-   */
-  bool stopped = false;
-
-  /**
    * If set to false, it means that there is no on-chain data about the
    * channel ID.  This may be the case because the channel creation has not
    * been confirmed yet, or perhaps because the channel is already closed.
@@ -167,6 +150,9 @@ private:
    * if there is none.
    */
   uint256 pendingDispute;
+
+  /** Callbacks registered (e.g. for state updates).  */
+  std::set<Callbacks*> callbacks;
 
   /**
    * Tries to apply a local move to the current state.  Returns true if
@@ -200,14 +186,6 @@ private:
   void ProcessStateUpdate (bool broadcast);
 
   /**
-   * Returns the current state of the channel as JSON, assuming that mut is
-   * already locked.  This is used internally for ToJson as well as
-   * WaitForChange (the latter cannot call the former directly, since that would
-   * lock the mutex twice).
-   */
-  Json::Value UnlockedToJson () const;
-
-  /**
    * Notifies threads waiting on cvStateChanged that a new state is available.
    * This also increments the state version.
    */
@@ -217,18 +195,10 @@ private:
 
 public:
 
-  /**
-   * Special value for the known version in WaitForChange that tells the
-   * function to always block.
-   */
-  static constexpr int WAITFORCHANGE_ALWAYS_BLOCK = 0;
-
   explicit ChannelManager (const BoardRules& r, OpenChannel& oc,
                            const SignatureVerifier& v,
                            SignatureSigner& s,
                            const uint256& id, const std::string& name);
-
-  ~ChannelManager ();
 
   ChannelManager () = delete;
   ChannelManager (const ChannelManager&) = delete;
@@ -296,6 +266,139 @@ public:
   uint256 FileDispute ();
 
   /**
+   * Returns the current state version integer.
+   */
+  int
+  GetStateVersion () const
+  {
+    return stateVersion;
+  }
+
+  /**
+   * Returns the current board state if there is one, and null if no state
+   * is known yet, e.g. because the channel does not yet exist on chain.
+   *
+   * The state is dynamic-cast to the given type, which must match the
+   * actual runtime type.
+   */
+  template <typename State>
+    const State* GetBoardState () const;
+
+  /**
+   * Returns the current state of this channel as JSON, suitable to be
+   * sent to frontends.
+   */
+  Json::Value ToJson () const;
+
+  /**
+   * Register a callback instance to be invoked from this manager.
+   */
+  void RegisterCallback (Callbacks& cb);
+
+  /**
+   * Removes a registered callback.
+   */
+  void UnregisterCallback (Callbacks& cb);
+
+};
+
+/**
+ * Interface for callbacks that can be invoked by a ChannelManager.
+ */
+class ChannelManager::Callbacks
+{
+
+public:
+
+  Callbacks () = default;
+  virtual ~Callbacks () = default;
+
+  /**
+   * Invoked when the current channel state changes.
+   */
+  virtual void
+  StateChanged ()
+  {}
+
+};
+
+/* ************************************************************************** */
+
+/**
+ * A ChannelManager reference together with a mutex, so that it can be accessed
+ * from multiple threads (e.g. update event loops and an RPC server).
+ * This class also supports a waitforchange-like interface for handling
+ * state changes.
+ */
+class SynchronisedChannelManager : private ChannelManager::Callbacks
+{
+
+private:
+
+  template <typename T>
+    class Locked;
+
+  /** The actual ChannelManager instance used.  */
+  ChannelManager& cm;
+
+  /**
+   * Mutex for synchronising the internal channel manager.  Also used as
+   * lock for the waitforchange condition variable.
+   */
+  mutable std::mutex mut;
+
+  /**
+   * Condition variable that gets signalled when the state is changed due
+   * to on-chain updates, off-chain updates or local moves.  This is used
+   * for waitforchange.
+   */
+  mutable std::condition_variable cvStateChanged;
+
+  /**
+   * If set to true, then future waitforchange calls will not block anymore.
+   * We use this to ensure we can properly wake all waiters up when shutting
+   * down, without them re-calling.
+   */
+  bool stopped = false;
+
+  /**
+   * Number of currently blocked waiter calls.
+   */
+  mutable unsigned waiting = 0;
+
+  void StateChanged () override;
+
+public:
+
+  /**
+   * Special value for the known version in WaitForChange that tells the
+   * function to always block.
+   */
+  static constexpr int WAITFORCHANGE_ALWAYS_BLOCK = 0;
+
+  explicit SynchronisedChannelManager (ChannelManager& c);
+  ~SynchronisedChannelManager ();
+
+  SynchronisedChannelManager () = delete;
+  SynchronisedChannelManager (const SynchronisedChannelManager&) = delete;
+  void operator= (const SynchronisedChannelManager&) = delete;
+
+  /**
+   * Returns a "locked instance" of the underlying ChannelManager.  This is
+   * a movable instance that holds the underlying mutex while it exists
+   * (like a std::unique_lock) and can be dereferenced to yield the
+   * ChannelManager.
+   *
+   * This method returns a mutable instance of the ChannelManager.
+   */
+  Locked<ChannelManager> Access ();
+
+  /**
+   * Returns a read-only locked ChannelManager (similar to Access).
+   */
+  Locked<const ChannelManager> Read () const;
+
+  /**
    * Disables processing of updates in the future.  This should be called
    * when shutting down the channel daemon.  It makes sure that all waiting
    * callers to WaitForChange are woken up, and no more callers will block
@@ -306,29 +409,6 @@ public:
    * destructed.  Otherwise the destructor will CHECK-fail.
    */
   void StopUpdates ();
-
-  /**
-   * Returns the current state of this channel as JSON, suitable to be
-   * sent to frontends.
-   */
-  Json::Value ToJson () const;
-
-  /**
-   * Gives access to the currently latest channel state to a caller,
-   * for custom logic they may need with it.  The callback is invoked
-   * with the latest parsed state cast to the given type (which must be
-   * the actual type of board states used by the game in question).  While
-   * the callback is active, the state is locked and the callback is free
-   * to examine it as needed.
-   *
-   * The callback may be invoked with a null pointer in case there is no
-   * latest state, e.g. because the channel does not yet exist on chain.
-   *
-   * If the callback returns a value, that value will be returned from
-   * this function.
-   */
-  template <typename State, typename Fcn>
-    auto ReadLatestState (const Fcn& cb) const;
 
   /**
    * Blocks the calling thread until the state of the channel has (probably)
@@ -351,6 +431,58 @@ public:
   Json::Value WaitForChange (int knownVersion) const;
 
 };
+
+/**
+ * A "locked" ChannelManager instance.  While an object exists, it will
+ * hold the mutex of an underlying SynchronisedChannelManager, and give
+ * access to its ChannelManager.
+ *
+ * The type T is either "ChannelManager" or "const ChannelManager".
+ */
+template <typename T>
+  class SynchronisedChannelManager::Locked
+{
+
+private:
+
+  /** The underlying instance that can be accessed.  */
+  T& instance;
+
+  /** The lock on the mutex held by this instance.  */
+  std::unique_lock<std::mutex> lock;
+
+public:
+
+  /**
+   * Constructs a new instance, based on the underlying
+   * SynchronisedChannelManager instance.
+   */
+  template <typename CM>
+    explicit Locked (CM& underlying)
+    : instance(underlying.cm), lock(underlying.mut)
+  {}
+
+  Locked (Locked&&) = default;
+  Locked& operator= (Locked&&) = default;
+
+  Locked (const Locked&) = delete;
+  void operator= (const Locked&) = delete;
+
+  T*
+  operator-> ()
+  {
+    return &instance;
+  }
+
+  T&
+  operator* ()
+  {
+    return instance;
+  }
+
+};
+
+/* ************************************************************************** */
 
 } // namespace xaya
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -194,11 +194,19 @@ class ChainToChannelFeederTests : public ChannelManagerTestFixture
 
 protected:
 
+  /**
+   * The Synchronised manager is needed to instantiate the chain-to-channel
+   * feeder for the test.  In the actual tests, the feeder is not running
+   * at the same time as the main thread is doing changes to the channel
+   * manager, though, so we don't actually have to use its lock in the tests.
+   */
+  SynchronisedChannelManager scm;
+
   ChainToChannelFeeder feeder;
   HttpRpcServer<TestGspServer> gspServer;
 
   ChainToChannelFeederTests ()
-    : feeder(gspServer.GetClient (), cm),
+    : scm(cm), feeder(gspServer.GetClient (), scm),
       gspServer(channelId, meta, GetDb (), game)
   {
     gspServer.GetClientConnector ().SetTimeout (RPC_TIMEOUT_MS);

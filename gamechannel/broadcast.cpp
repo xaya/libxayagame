@@ -73,8 +73,9 @@ OffChainBroadcast::ProcessIncoming (ChannelManager& m,
 
 /* ************************************************************************** */
 
-ReceivingOffChainBroadcast::ReceivingOffChainBroadcast (ChannelManager& cm)
-  : OffChainBroadcast(cm.GetChannelId ()), manager(&cm)
+ReceivingOffChainBroadcast::ReceivingOffChainBroadcast (
+    SynchronisedChannelManager& cm)
+  : OffChainBroadcast(cm.Read ()->GetChannelId ()), manager(&cm)
 {}
 
 ReceivingOffChainBroadcast::ReceivingOffChainBroadcast (const uint256& i)
@@ -143,7 +144,8 @@ ReceivingOffChainBroadcast::FeedMessage (const std::string& msg)
 {
   CHECK (manager != nullptr)
       << "Without ChannelManager, FeedMessage must be overridden";
-  ProcessIncoming (*manager, msg);
+  auto cmLocked = manager->Access ();
+  ProcessIncoming (*cmLocked, msg);
 }
 
 /* ************************************************************************** */
