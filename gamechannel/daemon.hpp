@@ -118,7 +118,7 @@ private:
   std::unique_ptr<GspFeederInstances> feeder;
 
   /** The broadcast instance we use.  */
-  OffChainBroadcast* offChain = nullptr;
+  ReceivingOffChainBroadcast* offChain = nullptr;
 
   /**
    * Set to true when the daemon is started for the first time.  Since we
@@ -165,7 +165,7 @@ public:
    * starting.  The instance must be constructed and managed externally
    * (based on the desired broadcast system).
    */
-  void SetOffChainBroadcast (OffChainBroadcast& b);
+  void SetOffChainBroadcast (ReceivingOffChainBroadcast& b);
 
   /**
    * Requests the mainloop to stop, e.g. from an RPC.

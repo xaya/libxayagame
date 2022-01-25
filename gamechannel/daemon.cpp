@@ -72,7 +72,7 @@ ChannelDaemon::GetChannelManager ()
 }
 
 void
-ChannelDaemon::SetOffChainBroadcast (OffChainBroadcast& b)
+ChannelDaemon::SetOffChainBroadcast (ReceivingOffChainBroadcast& b)
 {
   CHECK (walletBased != nullptr);
   CHECK (offChain == nullptr);

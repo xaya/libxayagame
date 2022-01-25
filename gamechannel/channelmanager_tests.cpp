@@ -100,8 +100,8 @@ class MockOffChainBroadcast : public OffChainBroadcast
 
 public:
 
-  MockOffChainBroadcast (ChannelManager& cm)
-    : OffChainBroadcast(cm)
+  MockOffChainBroadcast (const uint256& i)
+    : OffChainBroadcast(i)
   {
     /* Expect no calls by default.  */
     EXPECT_CALL (*this, SendMessage (_)).Times (0);
@@ -122,7 +122,7 @@ protected:
 
   ChannelManagerTests ()
     : onChain("game id", channelId, "player", txSender, game.channel),
-      offChain(cm)
+      offChain(cm.GetChannelId ())
   {
     cm.SetMoveSender (onChain);
     cm.SetOffChainBroadcast (offChain);
