@@ -54,8 +54,10 @@ private:
     /** The MoveSender instance we use.  */
     MoveSender sender;
 
-    /** The ChannelManager instance.  */
-    ChannelManager cm;
+    /** The ChannelManager instance used.  */
+    ChannelManager realCm;
+    /** The lock wrapper around the channel manager.  */
+    SynchronisedChannelManager cm;
 
     WalletBasedInstances () = delete;
     WalletBasedInstances (const WalletBasedInstances&) = delete;
@@ -118,7 +120,7 @@ private:
   std::unique_ptr<GspFeederInstances> feeder;
 
   /** The broadcast instance we use.  */
-  OffChainBroadcast* offChain = nullptr;
+  ReceivingOffChainBroadcast* offChain = nullptr;
 
   /**
    * Set to true when the daemon is started for the first time.  Since we
@@ -158,14 +160,14 @@ public:
    * Returns a reference to the underlying ChannelManager, which can be used
    * for constructing the OffChainBroadcast and/or RPC server externally.
    */
-  ChannelManager& GetChannelManager ();
+  SynchronisedChannelManager& GetChannelManager ();
 
   /**
    * Sets the off-chain broadcast instance.  This must be called before
    * starting.  The instance must be constructed and managed externally
    * (based on the desired broadcast system).
    */
-  void SetOffChainBroadcast (OffChainBroadcast& b);
+  void SetOffChainBroadcast (ReceivingOffChainBroadcast& b);
 
   /**
    * Requests the mainloop to stop, e.g. from an RPC.

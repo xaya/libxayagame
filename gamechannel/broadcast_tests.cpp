@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,6 +9,7 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <glog/logging.h>
@@ -22,15 +23,62 @@ namespace
 {
 
 using google::protobuf::TextFormat;
+using testing::_;
+using testing::IsEmpty;
+using testing::UnorderedElementsAre;
 
 /** Timeout for the waiters in the test broadcast.  */
 constexpr auto WAITER_TIMEOUT = std::chrono::milliseconds (50);
+
+/* ************************************************************************** */
+
+class MockBroadcast : public OffChainBroadcast
+{
+
+public:
+
+  explicit MockBroadcast (const uint256& i)
+    : OffChainBroadcast(i)
+  {
+    EXPECT_CALL (*this, SendMessage (_)).Times (0);
+  }
+
+  MOCK_METHOD (void, SendMessage, (const std::string&), (override));
+
+};
+
+class BroadcastTests : public ChannelManagerTestFixture
+{
+
+protected:
+
+  MockBroadcast offChain;
+
+  BroadcastTests ()
+    : offChain(cm.GetChannelId ())
+  {
+    cm.SetOffChainBroadcast (offChain);
+  }
+
+};
+
+TEST_F (BroadcastTests, Participants)
+{
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  EXPECT_THAT (offChain.GetParticipants (),
+               UnorderedElementsAre ("player", "other"));
+
+  ProcessOnChainNonExistant ();
+  EXPECT_THAT (offChain.GetParticipants (), IsEmpty ());
+}
+
+/* ************************************************************************** */
 
 /**
  * Implementation of OffChainBroadcast that simply feeds sent messages back
  * to GetMessages using a condition variable.
  */
-class FeedBackBroadcast : public OffChainBroadcast
+class FeedBackBroadcast : public ReceivingOffChainBroadcast
 {
 
 private:
@@ -62,11 +110,9 @@ protected:
 
 public:
 
-  explicit FeedBackBroadcast (ChannelManager& cm)
-    : OffChainBroadcast(cm)
+  explicit FeedBackBroadcast (SynchronisedChannelManager& cm)
+    : ReceivingOffChainBroadcast(cm)
   {}
-
-  using OffChainBroadcast::GetParticipants;
 
   /**
    * Forwards the queued messages (by notifying the waiting thread).
@@ -80,46 +126,36 @@ public:
 
 };
 
-class BroadcastTests : public ChannelManagerTestFixture
+class ReceivingBroadcastTests : public ChannelManagerTestFixture
 {
 
 protected:
 
+  /**
+   * SynchronisedChannelManager based on the fixture's manager.  We need that
+   * so we can instantiate the ReceivingOffChainBroadcast.  Otherwise we do
+   * not use the lock here, as the offchain broadcast's loop doesn't actually
+   * access the channel manager in any way.
+   */
+  SynchronisedChannelManager scm;
+
   FeedBackBroadcast offChain;
 
-  BroadcastTests ()
-    : offChain(cm)
+  ReceivingBroadcastTests ()
+    : scm(cm), offChain(scm)
   {
     cm.SetOffChainBroadcast (offChain);
     offChain.Start ();
   }
 
-  ~BroadcastTests ()
+  ~ReceivingBroadcastTests ()
   {
     offChain.Stop ();
   }
 
-  /**
-   * Expects the given list of participants.
-   */
-  void
-  ExpectParticipants (const std::set<std::string>& expected)
-  {
-    EXPECT_EQ (offChain.GetParticipants (), expected);
-  }
-
 };
 
-TEST_F (BroadcastTests, Participants)
-{
-  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  ExpectParticipants ({"player", "other"});
-
-  ProcessOnChainNonExistant ();
-  ExpectParticipants ({});
-}
-
-TEST_F (BroadcastTests, FeedingMoves)
+TEST_F (ReceivingBroadcastTests, FeedingMoves)
 {
   meta.set_reinit ("reinit");
   ProcessOnChain ("0 0", ValidProof ("1 2"), 0);
@@ -142,7 +178,7 @@ TEST_F (BroadcastTests, FeedingMoves)
   EXPECT_EQ (GetLatestState (), "9 10");
 }
 
-TEST_F (BroadcastTests, BeyondTimeout)
+TEST_F (ReceivingBroadcastTests, BeyondTimeout)
 {
   ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
   offChain.SendNewState ("", ValidProof ("10 5"));
@@ -152,6 +188,8 @@ TEST_F (BroadcastTests, BeyondTimeout)
   std::this_thread::sleep_for (2 * WAITER_TIMEOUT);
   EXPECT_EQ (GetLatestState (), "10 5");
 }
+
+/* ************************************************************************** */
 
 } // anonymous namespace
 } // namespace xaya

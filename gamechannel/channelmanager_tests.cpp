@@ -67,11 +67,6 @@ ChannelManagerTestFixture::ChannelManagerTestFixture ()
   EXPECT_CALL (signer, SignMessage (_)).WillRepeatedly (Return ("sgn"));
 }
 
-ChannelManagerTestFixture::~ChannelManagerTestFixture ()
-{
-  cm.StopUpdates ();
-}
-
 void
 ChannelManagerTestFixture::ProcessOnChain (const BoardState& reinitState,
                                            const proto::StateProof& proof,
@@ -100,8 +95,8 @@ class MockOffChainBroadcast : public OffChainBroadcast
 
 public:
 
-  MockOffChainBroadcast (ChannelManager& cm)
-    : OffChainBroadcast(cm)
+  MockOffChainBroadcast (const uint256& i)
+    : OffChainBroadcast(i)
   {
     /* Expect no calls by default.  */
     EXPECT_CALL (*this, SendMessage (_)).Times (0);
@@ -122,7 +117,7 @@ protected:
 
   ChannelManagerTests ()
     : onChain("game id", channelId, "player", txSender, game.channel),
-      offChain(cm)
+      offChain(cm.GetChannelId ())
   {
     cm.SetMoveSender (onChain);
     cm.SetOffChainBroadcast (offChain);
@@ -760,11 +755,19 @@ private:
 
 protected:
 
+  /** Our synchronised manager for waiting.  */
+  SynchronisedChannelManager scm;
+
+  WaitForChangeTests ()
+    : scm(cm)
+  {}
+
   /**
    * Calls WaitForChange on a newly started thread.
    */
   void
-  CallWaitForChange (int known = ChannelManager::WAITFORCHANGE_ALWAYS_BLOCK)
+  CallWaitForChange (
+      int known = SynchronisedChannelManager::WAITFORCHANGE_ALWAYS_BLOCK)
   {
     CHECK (waiter == nullptr);
     waiter = std::make_unique<std::thread> ([this, known] ()
@@ -774,7 +777,7 @@ protected:
           std::lock_guard<std::mutex> lock(mut);
           waiting = true;
         }
-        returnedJson = cm.WaitForChange (known);
+        returnedJson = scm.WaitForChange (known);
         {
           std::lock_guard<std::mutex> lock(mut);
           waiting = false;
@@ -853,7 +856,7 @@ TEST_F (WaitForChangeTests, OffChainNoChange)
   SleepSome ();
   EXPECT_TRUE (IsWaiting ());
 
-  cm.StopUpdates ();
+  scm.StopUpdates ();
   JoinWaiter ();
 }
 
@@ -869,7 +872,7 @@ TEST_F (WaitForChangeTests, LocalMove)
 
 TEST_F (WaitForChangeTests, WhenStopped)
 {
-  cm.StopUpdates ();
+  scm.StopUpdates ();
   CallWaitForChange ();
   JoinWaiter ();
 }
@@ -877,7 +880,7 @@ TEST_F (WaitForChangeTests, WhenStopped)
 TEST_F (WaitForChangeTests, StopNotifies)
 {
   CallWaitForChange ();
-  cm.StopUpdates ();
+  scm.StopUpdates ();
   JoinWaiter ();
 }
 
@@ -899,53 +902,6 @@ TEST_F (WaitForChangeTests, UpToDateKnownVersion)
 
   ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
   JoinWaiter ();
-}
-
-/* ************************************************************************** */
-
-using StopUpdatesTests = ChannelManagerTests;
-
-TEST_F (StopUpdatesTests, OnChain)
-{
-  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.StopUpdates ();
-  ProcessOnChain ("0 0", ValidProof ("20 6"), 0);
-  EXPECT_EQ (GetLatestState (), "10 5");
-}
-
-TEST_F (StopUpdatesTests, OnChainNonExistant)
-{
-  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.StopUpdates ();
-  ProcessOnChainNonExistant ();
-  EXPECT_TRUE (GetExists ());
-}
-
-TEST_F (StopUpdatesTests, OffChain)
-{
-  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.StopUpdates ();
-  cm.ProcessOffChain ("", ValidProof ("12 6"));
-  EXPECT_EQ (GetLatestState (), "10 5");
-}
-
-TEST_F (StopUpdatesTests, LocalMove)
-{
-  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
-  cm.StopUpdates ();
-  cm.ProcessLocalMove ("1");
-  EXPECT_EQ (GetLatestState (), "10 5");
-}
-
-TEST_F (StopUpdatesTests, TriggerAutoMoves)
-{
-  game.channel.SetAutomovesEnabled (false);
-  ProcessOnChain ("0 0", ValidProof ("8 5"), 0);
-
-  cm.StopUpdates ();
-  game.channel.SetAutomovesEnabled (true);
-  cm.TriggerAutoMoves ();
-  EXPECT_EQ (GetLatestState (), "8 5");
 }
 
 /* ************************************************************************** */

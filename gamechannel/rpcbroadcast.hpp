@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -30,7 +30,7 @@ namespace xaya
  * for sending and receiving messages.  The server manages the individual
  * channels and takes care of distributing the messages to clients.
  */
-class RpcBroadcast : public OffChainBroadcast
+class RpcBroadcast : public ReceivingOffChainBroadcast
 {
 
 private:
@@ -76,7 +76,8 @@ protected:
 
 public:
 
-  explicit RpcBroadcast (const std::string& rpcUrl, ChannelManager& cm);
+  explicit RpcBroadcast (const std::string& rpcUrl,
+                         SynchronisedChannelManager& cm);
 
   /**
    * Starts the broadcast channel.  We use the default event loop, but override

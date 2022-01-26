@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,7 +12,6 @@
 
 #include <atomic>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <string>
 #include <thread>
@@ -22,6 +21,7 @@ namespace xaya
 {
 
 class ChannelManager;
+class SynchronisedChannelManager;
 
 /**
  * This class handles the off-chain broadcast of messages within a channel.
@@ -29,34 +29,19 @@ class ChannelManager;
  * exchanging messages (e.g. via a server, XMPP, IRC, P2P, ...) have to
  * subclass OffChainBroadcaster and implement their logic.
  *
- * For sending messages (local moves to everyone else in the channel),
- * subclasses need to implement the SendMessage function.  Receiving
- * messages is more complex, as that needs to take care of waiting for
- * incoming messages.
+ * The core interface in this class provides functionality to send
+ * mossages (local moves to everyone else in the channel).  This is what
+ * gets directly used by the ChannelManager and must be provided to it.
  *
- * There are two general architectures that implementations can use for
- * that:  If they have their own event loop, then they should override the
- * Start and Stop methods, and feed messages they receive to FeedMessage.
- *
- * Alternatively, the default implementation of Start and Stop will run
- * a waiting loop in a new thread, and repeatedly call GetMessages to
- * retrieve the next message in a blocking call.
+ * Receiving messages and feeding them into ChannelManager::ProcessOffChain
+ * is a separate task, which is not directly handled by this class.
  */
 class OffChainBroadcast
 {
 
 private:
 
-  /**
-   * The ChannelManager instance that is updated with received messges.
-   *
-   * For testing purposes it can be null, in which case the channel ID
-   * is directly set and we require that FeedMessage is overridden
-   * in a subclass to handle the messages directly.
-   */
-  ChannelManager* manager;
-
-  /** The corresponding channel ID.  */
+  /** The channel ID this is for.  */
   const uint256 id;
 
   /**
@@ -67,12 +52,93 @@ private:
    */
   std::set<std::string> participants;
 
+protected:
+
   /**
-   * Lock for shared state, in particular participants.  This lock is held
-   * while SendNewState is running.  It is not held through the receive
-   * cycle, though.
+   * Sends a given encoded message to all participants in the channel.
    */
-  mutable std::mutex mut;
+  virtual void SendMessage (const std::string& msg) = 0;
+
+public:
+
+  /**
+   * Constructs an instance for the given channel ID.
+   */
+  explicit OffChainBroadcast (const uint256& i)
+    : id(i)
+  {}
+
+  virtual ~OffChainBroadcast () = default;
+
+  OffChainBroadcast () = delete;
+  OffChainBroadcast (const OffChainBroadcast&) = delete;
+  void operator= (const OffChainBroadcast&) = delete;
+
+  /**
+   * Returns the ID of the channel for which this is.  Can be used by
+   * implementations if they need it.
+   */
+  const uint256&
+  GetChannelId () const
+  {
+    return id;
+  }
+
+  /**
+   * Sends a new state (presumably after the player made a move) to all
+   * channel participants.
+   */
+  void SendNewState (const std::string& reinitId,
+                     const proto::StateProof& proof);
+
+  /**
+   * Returns the current list of participants.  This may be used by
+   * subclasses for their implementation of SendMessage.
+   */
+  const std::set<std::string>&
+  GetParticipants () const
+  {
+    return participants;
+  }
+
+  /**
+   * Updates the list of channel participants when the on-chain state changes.
+   */
+  void SetParticipants (const proto::ChannelMetadata& meta);
+
+  /**
+   * Decodes a message and feeds the corresponding state into the
+   * ChannelManager's ProcessOffChain method.  It is assumed that
+   * this instance is used as OffChainBroadcast on the channel manager m.
+   */
+  void ProcessIncoming (ChannelManager& m, const std::string& msg) const;
+
+};
+
+/**
+ * A subclass of OffChainBroadcast, which also takes care of an event loop
+ * for receiving messages.
+ *
+ * There are two general architectures that implementations can use for
+ * that:  If they have their own event loop, then they should override the
+ * Start and Stop methods, and feed messages they receive to FeedMessage.
+ *
+ * Alternatively, the default implementation of Start and Stop will run
+ * a waiting loop in a new thread, and repeatedly call GetMessages to
+ * retrieve the next message in a blocking call.
+ */
+class ReceivingOffChainBroadcast : public OffChainBroadcast
+{
+
+private:
+
+  /**
+   * The ChannelManager instance that is updated with received messages.
+   *
+   * For testing purposes it can be null, in which case we require that
+   * FeedMessage is overridden in a subclass to handle the messages directly.
+   */
+  SynchronisedChannelManager* manager;
 
   /** The currently running wait loop, if any.  */
   std::unique_ptr<std::thread> loop;
@@ -88,47 +154,12 @@ private:
 protected:
 
   /**
-   * Constructs an instance for normal use.  It will feed messages into
-   * the given ChannelManager.
-   */
-  explicit OffChainBroadcast (ChannelManager& cm);
-
-  /**
    * Constructs an instance without a ChannelManager but the given explicit
    * channel ID.  This can be used for testing broadcast implementations;
    * in those tests, the FeedMessage method must be overridden to handle
    * messages directly.
    */
-  explicit OffChainBroadcast (const uint256& i);
-
-  /**
-   * Returns the current list of participants.  This may be used by
-   * subclasses for their implementation of SendMessage.  While SendMessage
-   * is running, the participants are properly synchronised.  At any other
-   * time, calling this function may lead to race conditions.
-   */
-  const std::set<std::string>&
-  GetParticipants () const
-  {
-    return participants;
-  }
-
-  /**
-   * Returns the ID of the channel for which this is.  Can be used by
-   * implementations if they need it.
-   */
-  const uint256&
-  GetChannelId () const
-  {
-    return id;
-  }
-
-  /**
-   * Sends a given encoded message to all participants in the channel.
-   * This function may be called from different threads, but it is guaranteed
-   * that it is only called by one concurrent thread at any time.
-   */
-  virtual void SendMessage (const std::string& msg) = 0;
+  explicit ReceivingOffChainBroadcast (const uint256& i);
 
   /**
    * Processes a message retrieved through the broadcast channel.  If the
@@ -153,23 +184,13 @@ protected:
 
 public:
 
-  virtual ~OffChainBroadcast ();
-
-  OffChainBroadcast () = delete;
-  OffChainBroadcast (const OffChainBroadcast&) = delete;
-  void operator= (const OffChainBroadcast&) = delete;
-
   /**
-   * Sends a new state (presumably after the player made a move) to all
-   * channel participants.
+   * Constructs an instance for normal use.  It will feed messages into
+   * the given ChannelManager.
    */
-  void SendNewState (const std::string& reinitId,
-                     const proto::StateProof& proof);
+  explicit ReceivingOffChainBroadcast (SynchronisedChannelManager& cm);
 
-  /**
-   * Updates the list of channel participants when the on-chain state changes.
-   */
-  void SetParticipants (const proto::ChannelMetadata& meta);
+  ~ReceivingOffChainBroadcast ();
 
   /**
    * Starts an event loop listening for new messages and feeding them into

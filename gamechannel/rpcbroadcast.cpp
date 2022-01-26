@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,14 +11,15 @@
 namespace xaya
 {
 
-RpcBroadcast::RpcBroadcast (const std::string& rpcUrl, ChannelManager& cm)
-  : OffChainBroadcast(cm),
+RpcBroadcast::RpcBroadcast (const std::string& rpcUrl,
+                            SynchronisedChannelManager& cm)
+  : ReceivingOffChainBroadcast(cm),
     sendConnector(rpcUrl), receiveConnector(rpcUrl),
     sendRpc(sendConnector), receiveRpc(receiveConnector)
 {}
 
 RpcBroadcast::RpcBroadcast (const std::string& rpcUrl, const uint256& id)
-  : OffChainBroadcast(id),
+  : ReceivingOffChainBroadcast(id),
     sendConnector(rpcUrl), receiveConnector(rpcUrl),
     sendRpc(sendConnector), receiveRpc(receiveConnector)
 {}
@@ -44,7 +45,7 @@ void
 RpcBroadcast::Start ()
 {
   InitialiseSequence ();
-  OffChainBroadcast::Start ();
+  ReceivingOffChainBroadcast::Start ();
 }
 
 void
