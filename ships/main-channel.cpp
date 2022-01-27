@@ -9,6 +9,7 @@
 
 #include <gamechannel/daemon.hpp>
 #include <gamechannel/rpcbroadcast.hpp>
+#include <gamechannel/rpcwallet.hpp>
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 

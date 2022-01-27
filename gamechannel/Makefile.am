@@ -55,6 +55,7 @@ libgamechannel_la_SOURCES = \
   protoversion.cpp \
   rollingstate.cpp \
   rpcbroadcast.cpp \
+  rpcwallet.cpp \
   schema.cpp \
   signatures.cpp \
   stateproof.cpp \
@@ -76,6 +77,7 @@ gamechannel_HEADERS = \
   protoversion.hpp \
   rollingstate.hpp \
   rpcbroadcast.hpp \
+  rpcwallet.hpp \
   schema.hpp \
   signatures.hpp \
   stateproof.hpp

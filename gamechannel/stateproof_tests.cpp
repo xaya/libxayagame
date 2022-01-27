@@ -9,8 +9,6 @@
 #include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
 
-#include <jsonrpccpp/common/exception.h>
-
 #include <google/protobuf/text_format.h>
 
 #include <gmock/gmock.h>
