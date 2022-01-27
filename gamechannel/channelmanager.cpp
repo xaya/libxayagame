@@ -8,6 +8,7 @@
 #include "stateproof.hpp"
 
 #include <chrono>
+#include <thread>
 
 namespace xaya
 {

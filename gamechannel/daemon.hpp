@@ -6,11 +6,11 @@
 #define GAMECHANNEL_DAEMON_HPP
 
 #include "boardrules.hpp"
-#include "broadcast.hpp"
 #include "chaintochannel.hpp"
 #include "channelmanager.hpp"
 #include "movesender.hpp"
 #include "openchannel.hpp"
+#include "recvbroadcast.hpp"
 #include "signatures.hpp"
 
 #include "rpc-stubs/channelgsprpcclient.h"

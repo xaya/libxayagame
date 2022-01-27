@@ -53,6 +53,7 @@ libgamechannel_la_SOURCES = \
   movesender.cpp \
   openchannel.cpp \
   protoversion.cpp \
+  recvbroadcast.cpp \
   rollingstate.cpp \
   rpcbroadcast.cpp \
   rpcwallet.cpp \
@@ -75,6 +76,7 @@ gamechannel_HEADERS = \
   protoboard.hpp protoboard.tpp \
   protoutils.hpp protoutils.tpp \
   protoversion.hpp \
+  recvbroadcast.hpp \
   rollingstate.hpp \
   rpcbroadcast.hpp \
   rpcwallet.hpp \
@@ -137,6 +139,7 @@ tests_SOURCES = \
   protoboard_tests.cpp \
   protoutils_tests.cpp \
   protoversion_tests.cpp \
+  recvbroadcast_tests.cpp \
   rollingstate_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \
