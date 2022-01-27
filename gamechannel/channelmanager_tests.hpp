@@ -7,9 +7,10 @@
 
 #include "channelmanager.hpp"
 
+#include "movesender.hpp"
 #include "testgame.hpp"
+#include "testutils.hpp"
 
-#include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
 
 namespace xaya
@@ -33,6 +34,9 @@ protected:
   proto::ChannelMetadata meta;
 
   ChannelManager cm;
+
+  MockTransactionSender txSender;
+  MoveSender onChain;
 
   ChannelManagerTestFixture ();
 

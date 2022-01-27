@@ -5,6 +5,7 @@
 #ifndef GAMECHANNEL_TESTUTILS_HPP
 #define GAMECHANNEL_TESTUTILS_HPP
 
+#include "broadcast.hpp"
 #include "movesender.hpp"
 #include "signatures.hpp"
 
@@ -135,6 +136,25 @@ public:
   MOCK_METHOD (uint256, SendRawMove,
                (const std::string&, const std::string&), (override));
   bool IsPending (const uint256& txid) const override;
+
+};
+
+/**
+ * Mock instance for a basic off-chain broadcast.
+ */
+class MockOffChainBroadcast : public OffChainBroadcast
+{
+
+public:
+
+  MockOffChainBroadcast (const uint256& i)
+    : OffChainBroadcast(i)
+  {
+    /* Expect no calls by default.  */
+    EXPECT_CALL (*this, SendMessage (testing::_)).Times (0);
+  }
+
+  MOCK_METHOD1 (SendMessage, void (const std::string& msg));
 
 };
 

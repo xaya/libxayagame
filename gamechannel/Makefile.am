@@ -60,6 +60,7 @@ libgamechannel_la_SOURCES = \
   schema.cpp \
   signatures.cpp \
   stateproof.cpp \
+  syncmanager.cpp \
   $(PROTOSOURCES)
 gamechannel_HEADERS = \
   boardrules.hpp \
@@ -82,7 +83,8 @@ gamechannel_HEADERS = \
   rpcwallet.hpp \
   schema.hpp \
   signatures.hpp \
-  stateproof.hpp
+  stateproof.hpp \
+  syncmanager.hpp
 rpcstub_HEADERS = $(RPC_STUBS)
 proto_HEADERS = $(PROTOHEADERS)
 
@@ -144,6 +146,7 @@ tests_SOURCES = \
   schema_tests.cpp \
   signatures_tests.cpp \
   stateproof_tests.cpp \
+  syncmanager_tests.cpp \
   testgame_tests.cpp \
   \
   testgame.cpp

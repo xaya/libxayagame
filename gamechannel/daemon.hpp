@@ -12,6 +12,7 @@
 #include "openchannel.hpp"
 #include "recvbroadcast.hpp"
 #include "signatures.hpp"
+#include "syncmanager.hpp"
 
 #include "rpc-stubs/channelgsprpcclient.h"
 

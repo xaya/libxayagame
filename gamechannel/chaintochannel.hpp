@@ -5,7 +5,7 @@
 #ifndef GAMECHANNEL_CHAINTOCHANNEL_HPP
 #define GAMECHANNEL_CHAINTOCHANNEL_HPP
 
-#include "channelmanager.hpp"
+#include "syncmanager.hpp"
 
 #include "rpc-stubs/channelgsprpcclient.h"
 

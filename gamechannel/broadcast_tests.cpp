@@ -17,31 +17,15 @@ namespace xaya
 namespace
 {
 
-using testing::_;
 using testing::IsEmpty;
 using testing::UnorderedElementsAre;
-
-class MockBroadcast : public OffChainBroadcast
-{
-
-public:
-
-  explicit MockBroadcast (const uint256& i)
-    : OffChainBroadcast(i)
-  {
-    EXPECT_CALL (*this, SendMessage (_)).Times (0);
-  }
-
-  MOCK_METHOD (void, SendMessage, (const std::string&), (override));
-
-};
 
 class BroadcastTests : public ChannelManagerTestFixture
 {
 
 protected:
 
-  MockBroadcast offChain;
+  MockOffChainBroadcast offChain;
 
   BroadcastTests ()
     : offChain(cm.GetChannelId ())

@@ -6,7 +6,7 @@
 #define GAMECHANNEL_RECVBROADCAST_HPP
 
 #include "broadcast.hpp"
-#include "channelmanager.hpp"
+#include "syncmanager.hpp"
 
 #include <atomic>
 #include <memory>
