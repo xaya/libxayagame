@@ -45,6 +45,7 @@ libgamechannel_la_SOURCES = \
   broadcast.cpp \
   channelgame.cpp \
   channelmanager.cpp \
+  channelstatejson.cpp \
   chaintochannel.cpp \
   daemon.cpp \
   database.cpp \
@@ -67,6 +68,7 @@ gamechannel_HEADERS = \
   broadcast.hpp \
   channelgame.hpp \
   channelmanager.hpp channelmanager.tpp \
+  channelstatejson.hpp \
   chaintochannel.hpp \
   daemon.hpp \
   database.hpp \
@@ -134,6 +136,7 @@ tests_SOURCES = \
   broadcast_tests.cpp \
   channelgame_tests.cpp \
   channelmanager_tests.cpp \
+  channelstatejson_tests.cpp \
   chaintochannel_tests.cpp \
   database_tests.cpp \
   gamestatejson_tests.cpp \
@@ -152,6 +155,7 @@ tests_SOURCES = \
   testgame.cpp
 TESTHEADERS = \
   channelmanager_tests.hpp \
+  channelstatejson_tests.hpp \
   \
   testgame.hpp
 

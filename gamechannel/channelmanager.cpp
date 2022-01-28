@@ -4,7 +4,7 @@
 
 #include "channelmanager.hpp"
 
-#include "gamestatejson.hpp"
+#include "channelstatejson.hpp"
 #include "stateproof.hpp"
 
 namespace xaya
