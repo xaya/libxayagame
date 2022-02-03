@@ -1,4 +1,4 @@
-lib_LTLIBRARIES = libgamechannel.la
+lib_LTLIBRARIES = libchannelcore.la libgamechannel.la
 dist_bin_SCRIPTS = rpc-channel-server.py
 dist_data_DATA = rpc-stubs/channel-gsp-rpc.json
 gamechanneldir = $(includedir)/gamechannel
@@ -7,7 +7,7 @@ protodir = $(gamechanneldir)/proto
 pydir = $(pythondir)/gamechannel
 pyprotodir = $(pydir)/proto
 
-pkgconfig_DATA = gamechannel.pc
+pkgconfig_DATA = channelcore.pc gamechannel.pc
 
 RPC_STUBS = \
   rpc-stubs/channelgsprpcclient.h \
@@ -31,54 +31,74 @@ EXTRA_DIST = $(PROTOS) \
 BUILT_SOURCES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOPY)
 CLEANFILES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOSOURCES) $(PROTOPY) schema.cpp
 
-libgamechannel_la_CXXFLAGS = \
+libchannelcore_la_CXXFLAGS = \
   -I$(top_srcdir) \
-  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
-  $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(PROTOBUF_CFLAGS)
-libgamechannel_la_LIBADD = \
+  $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
+libchannelcore_la_LIBADD = \
   $(top_builddir)/xayautil/libxayautil.la \
-  $(top_builddir)/xayagame/libxayagame.la \
-  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(GLOG_LIBS) $(SQLITE3_LIBS) $(PROTOBUF_LIBS)
-libgamechannel_la_SOURCES = \
+  $(JSONCPP_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
+libchannelcore_la_SOURCES = \
   boardrules.cpp \
   broadcast.cpp \
-  channelgame.cpp \
   channelmanager.cpp \
-  chaintochannel.cpp \
-  daemon.cpp \
-  database.cpp \
-  gamestatejson.cpp \
-  gsprpc.cpp \
+  channelstatejson.cpp \
   movesender.cpp \
   openchannel.cpp \
   protoversion.cpp \
   rollingstate.cpp \
-  rpcbroadcast.cpp \
-  schema.cpp \
   signatures.cpp \
   stateproof.cpp \
   $(PROTOSOURCES)
-gamechannel_HEADERS = \
+CHANNELCOREHEADERS = \
   boardrules.hpp \
   broadcast.hpp \
-  channelgame.hpp \
   channelmanager.hpp channelmanager.tpp \
-  chaintochannel.hpp \
-  daemon.hpp \
-  database.hpp \
-  gamestatejson.hpp \
-  gsprpc.hpp \
+  channelstatejson.hpp \
   movesender.hpp \
   openchannel.hpp \
   protoboard.hpp protoboard.tpp \
   protoutils.hpp protoutils.tpp \
   protoversion.hpp \
   rollingstate.hpp \
-  rpcbroadcast.hpp \
-  schema.hpp \
   signatures.hpp \
   stateproof.hpp
+
+libgamechannel_la_CXXFLAGS = \
+  -I$(top_srcdir) \
+  $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
+  $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(PROTOBUF_CFLAGS)
+libgamechannel_la_LIBADD = \
+  $(builddir)/libchannelcore.la \
+  $(top_builddir)/xayautil/libxayautil.la \
+  $(top_builddir)/xayagame/libxayagame.la \
+  $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
+  $(GLOG_LIBS) $(SQLITE3_LIBS) $(PROTOBUF_LIBS)
+libgamechannel_la_SOURCES = \
+  channelgame.cpp \
+  chaintochannel.cpp \
+  daemon.cpp \
+  database.cpp \
+  gamestatejson.cpp \
+  gsprpc.cpp \
+  recvbroadcast.cpp \
+  rpcbroadcast.cpp \
+  rpcwallet.cpp \
+  schema.cpp \
+  syncmanager.cpp
+GAMECHANNELHEADERS = \
+  channelgame.hpp \
+  chaintochannel.hpp \
+  daemon.hpp \
+  database.hpp \
+  gamestatejson.hpp \
+  gsprpc.hpp \
+  recvbroadcast.hpp \
+  rpcbroadcast.hpp \
+  rpcwallet.hpp \
+  schema.hpp \
+  syncmanager.hpp
+
+gamechannel_HEADERS = $(CHANNELCOREHEADERS) $(GAMECHANNELHEADERS)
 rpcstub_HEADERS = $(RPC_STUBS)
 proto_HEADERS = $(PROTOHEADERS)
 
@@ -105,6 +125,7 @@ libtestutils_la_CXXFLAGS = \
   $(GLOG_CFLAGS) $(GTEST_CFLAGS)
 libtestutils_la_LIBADD = \
   $(builddir)/libgamechannel.la \
+  $(builddir)/libchannelcore.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(GLOG_LIBS) $(GTEST_LIBS)
 libtestutils_la_SOURCES = \
@@ -119,6 +140,7 @@ tests_CXXFLAGS = \
 tests_LDADD = \
   $(builddir)/libtestutils.la \
   $(builddir)/libgamechannel.la \
+  $(builddir)/libchannelcore.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
   $(top_builddir)/xayagame/libtestutils.la \
@@ -128,6 +150,7 @@ tests_SOURCES = \
   broadcast_tests.cpp \
   channelgame_tests.cpp \
   channelmanager_tests.cpp \
+  channelstatejson_tests.cpp \
   chaintochannel_tests.cpp \
   database_tests.cpp \
   gamestatejson_tests.cpp \
@@ -135,15 +158,18 @@ tests_SOURCES = \
   protoboard_tests.cpp \
   protoutils_tests.cpp \
   protoversion_tests.cpp \
+  recvbroadcast_tests.cpp \
   rollingstate_tests.cpp \
   schema_tests.cpp \
   signatures_tests.cpp \
   stateproof_tests.cpp \
+  syncmanager_tests.cpp \
   testgame_tests.cpp \
   \
   testgame.cpp
 TESTHEADERS = \
   channelmanager_tests.hpp \
+  channelstatejson_tests.hpp \
   \
   testgame.hpp
 
@@ -155,6 +181,7 @@ test_rpcbroadcast_CXXFLAGS = \
   $(GLOG_CFLAGS) $(GFLAGS_CFLAGS) $(PROTOBUF_CFLAGS)
 test_rpcbroadcast_LDADD = \
   $(builddir)/libgamechannel.la \
+  $(builddir)/libchannelcore.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \

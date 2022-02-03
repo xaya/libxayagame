@@ -8,8 +8,6 @@
 #include "openchannel.hpp"
 #include "proto/stateproof.pb.h"
 
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
 #include <json/writer.h>
@@ -46,33 +44,6 @@ public:
    * by the same instance) is still pending.
    */
   virtual bool IsPending (const uint256& txid) const = 0;
-
-};
-
-/**
- * A concrete implementation of TransactionSender that uses a Xaya Core RPC
- * connection with name_update.
- */
-class RpcTransactionSender : public TransactionSender
-{
-
-private:
-
-  /** Xaya RPC connection to use.  */
-  XayaRpcClient& rpc;
-
-  /** Xaya wallet RPC that we use.  */
-  XayaWalletRpcClient& wallet;
-
-public:
-
-  explicit RpcTransactionSender (XayaRpcClient& r, XayaWalletRpcClient& w)
-    : rpc(r), wallet(w)
-  {}
-
-  uint256 SendRawMove (const std::string& name,
-                       const std::string& value) override;
-  bool IsPending (const uint256& txid) const override;
 
 };
 

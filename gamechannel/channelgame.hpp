@@ -7,6 +7,7 @@
 
 #include "boardrules.hpp"
 #include "database.hpp"
+#include "rpcwallet.hpp"
 #include "signatures.hpp"
 
 #include "proto/metadata.pb.h"

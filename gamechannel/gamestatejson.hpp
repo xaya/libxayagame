@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,26 +7,11 @@
 
 #include "boardrules.hpp"
 #include "database.hpp"
-#include "proto/metadata.pb.h"
-
-#include <xayautil/uint256.hpp>
 
 #include <json/json.h>
 
 namespace xaya
 {
-
-/**
- * Encodes a metadata proto into JSON.
- */
-Json::Value ChannelMetadataToJson (const proto::ChannelMetadata& meta);
-
-/**
- * Encodes a given state as JSON.
- */
-Json::Value BoardStateToJson (const BoardRules& r, const uint256& channelId,
-                              const proto::ChannelMetadata& meta,
-                              const BoardState& state);
 
 /**
  * Converts the game-state data for a given channel into JSON format.

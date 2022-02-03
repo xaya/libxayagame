@@ -1,1 +1,1 @@
-bin_SCRIPTS = gsp-websocket-server.py
+dist_bin_SCRIPTS = gsp-websocket-server.py

@@ -5,7 +5,7 @@
 #ifndef GAMECHANNEL_RPCBROADCAST_HPP
 #define GAMECHANNEL_RPCBROADCAST_HPP
 
-#include "broadcast.hpp"
+#include "recvbroadcast.hpp"
 #include "channelmanager.hpp"
 
 #include "rpc-stubs/rpcbroadcastclient.h"

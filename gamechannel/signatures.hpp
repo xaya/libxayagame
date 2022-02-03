@@ -8,8 +8,6 @@
 #include "proto/metadata.pb.h"
 #include "proto/signatures.pb.h"
 
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
 #include <xayautil/uint256.hpp>
 
 #include <set>
@@ -66,55 +64,6 @@ public:
    * Signs a message with the underlying address.
    */
   virtual std::string SignMessage (const std::string& msg) = 0;
-
-};
-
-/**
- * An implementation of the verifier based on a Xaya RPC connection.
- *
- * This uses Xaya Core's signmessage/verifymessage scheme, but signatures
- * returned and passed in for verification are assumed to be already base64
- * decoded to raw bytes.
- */
-class RpcSignatureVerifier : public SignatureVerifier
-{
-
-private:
-
-  /** The underlying RPC client for verification.  */
-  XayaRpcClient& rpc;
-
-public:
-
-  explicit RpcSignatureVerifier (XayaRpcClient& r)
-    : rpc(r)
-  {}
-
-  std::string RecoverSigner (const std::string& msg,
-                             const std::string& sgn) const override;
-
-};
-
-/**
- * An implementation of the signer based on a Xaya RPC connection.
- */
-class RpcSignatureSigner : public SignatureSigner
-{
-
-private:
-
-  /** The underlying RPC wallet for signing.  */
-  XayaWalletRpcClient& wallet;
-
-  /** The address used for signing (must be in the wallet).  */
-  const std::string address;
-
-public:
-
-  explicit RpcSignatureSigner (XayaWalletRpcClient& w, const std::string& addr);
-
-  std::string GetAddress () const override;
-  std::string SignMessage (const std::string& msg) override;
 
 };
 

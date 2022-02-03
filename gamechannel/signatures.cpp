@@ -4,57 +4,13 @@
 
 #include "signatures.hpp"
 
-#include <xayagame/signatures.hpp>
 #include <xayautil/base64.hpp>
 #include <xayautil/hash.hpp>
 
-#include <jsonrpccpp/common/exception.h>
-
 #include <glog/logging.h>
-
-#include <string>
 
 namespace xaya
 {
-
-/* ************************************************************************** */
-
-std::string
-RpcSignatureVerifier::RecoverSigner (const std::string& msg,
-                                     const std::string& sgn) const
-{
-  return VerifyMessage (rpc, msg, EncodeBase64 (sgn));
-}
-
-RpcSignatureSigner::RpcSignatureSigner (XayaWalletRpcClient& w,
-                                        const std::string& addr)
-  : wallet(w), address(addr)
-{
-  const auto info = wallet.getaddressinfo (address);
-  CHECK (info.isObject ());
-  const auto& mineVal = info["ismine"];
-  CHECK (mineVal.isBool ());
-  CHECK (mineVal.asBool ())
-      << "Address " << address
-      << " for signing is not owned by wallet RPC client";
-}
-
-std::string
-RpcSignatureSigner::GetAddress () const
-{
-  return address;
-}
-
-std::string
-RpcSignatureSigner::SignMessage (const std::string& msg)
-{
-  const std::string sgn = wallet.signmessage (address, msg);
-  std::string decoded;
-  CHECK (DecodeBase64 (sgn, decoded));
-  return decoded;
-}
-
-/* ************************************************************************** */
 
 std::string
 GetChannelSignatureMessage (const uint256& channelId,

@@ -9,36 +9,6 @@
 namespace xaya
 {
 
-/* ************************************************************************** */
-
-uint256
-RpcTransactionSender::SendRawMove (const std::string& name,
-                                   const std::string& value)
-{
-  const std::string fullName = "p/" + name;
-  const std::string txidHex = wallet.name_update (fullName, value);
-
-  uint256 txid;
-  CHECK (txid.FromHex (txidHex));
-
-  return txid;
-}
-
-bool
-RpcTransactionSender::IsPending (const uint256& txid) const
-{
-  const std::string txidHex = txid.ToHex ();
-
-  const auto mempool = rpc.getrawmempool ();
-  for (const auto& tx : mempool)
-    if (tx.asString () == txidHex)
-      return true;
-
-  return false;
-}
-
-/* ************************************************************************** */
-
 MoveSender::MoveSender (const std::string& gId,
                         const uint256& chId, const std::string& nm,
                         TransactionSender& s, OpenChannel& oc)
@@ -83,7 +53,5 @@ MoveSender::SendResolution (const proto::StateProof& proof)
 {
   return SendMove (game.ResolutionMove (channelId, proof));
 }
-
-/* ************************************************************************** */
 
 } // namespace xaya

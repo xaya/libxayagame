@@ -26,6 +26,7 @@ libships_la_CXXFLAGS = \
 libships_la_LIBADD = \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
+  $(top_builddir)/gamechannel/libchannelcore.la \
   $(top_builddir)/gamechannel/libgamechannel.la \
   $(JSONCPP_LIBS) $(SQLITE3_CFLAGS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
 libships_la_SOURCES = \
@@ -55,6 +56,7 @@ shipsd_LDADD = \
   $(builddir)/libships.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
+  $(top_builddir)/gamechannel/libchannelcore.la \
   $(top_builddir)/gamechannel/libgamechannel.la \
   $(JSONCPP_LIBS) $(GLOG_LIBS) $(GFLAGS_LIBS) $(PROTOBUF_LIBS)
 shipsd_SOURCES = main-gsp.cpp
@@ -67,6 +69,7 @@ ships_channel_LDADD = \
   $(builddir)/libships.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
+  $(top_builddir)/gamechannel/libchannelcore.la \
   $(top_builddir)/gamechannel/libgamechannel.la \
   $(JSONCPP_LIBS) $(JSONRPCSERVER_LIBS) \
   $(GLOG_LIBS) $(GFLAGS_LIBS) $(PROTOBUF_LIBS)
@@ -90,6 +93,7 @@ tests_LDADD = \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libtestutils.la \
   $(top_builddir)/xayagame/libxayagame.la \
+  $(top_builddir)/gamechannel/libchannelcore.la \
   $(top_builddir)/gamechannel/libgamechannel.la \
   $(top_builddir)/gamechannel/libtestutils.la \
   $(JSONCPP_LIBS) $(GLOG_LIBS) $(GTEST_LIBS) $(PROTOBUF_LIBS)
