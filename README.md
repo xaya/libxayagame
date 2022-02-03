@@ -17,7 +17,7 @@ for testing [Democrit](https://github.com/xaya/democrit) but also as an actual
 application on Xaya for issuing and trading fungible and non-fungible tokens.
 
 This repository also contains a framework for [**game
-channels**](http://www.ledgerjournal.org/ojs/index.php/ledger/article/view/15)
+channels**](https://www.ledgerjournal.org/ojs/index.php/ledger/article/view/15)
 as well as [Xayaships](ships/README.md), which is an example game for
 channels.
 
