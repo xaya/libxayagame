@@ -3,14 +3,13 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: libxayautil
+Name: channelcore
 Version: @PACKAGE_VERSION@
 
-Description: A library of basic utilities for games on the Xaya platform.
+Description: Core library for any game-channel applications.
 URL: https://github.com/xaya/libxayagame
 
-Requires: jsoncpp
-Requires.private: libglog openssl zlib
+Requires: jsoncpp libglog protobuf libxayautil
 
 Cflags: -I${includedir}
-Libs: -L${libdir} -lxayautil
+Libs: -L${libdir} -lchannelcore

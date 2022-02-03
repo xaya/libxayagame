@@ -9,8 +9,8 @@ Version: @PACKAGE_VERSION@
 Description: A library for Xaya games with game channels.
 URL: https://github.com/xaya/libxayagame
 
-Requires: @AX_PACKAGE_REQUIRES@ libxayautil
+Requires: @AX_PACKAGE_REQUIRES@ channelcore libxayagame libxayautil
 Requires.private: @AX_PACKAGE_REQUIRES_PRIVATE@
 
 Cflags: -I${includedir}
-Libs: -L${libdir} -lgamechannel -lxayagame
+Libs: -L${libdir} -lgamechannel
