@@ -39,6 +39,7 @@ class GeneralStateProofTests : public TestGameFixture
 protected:
 
   proto::ChannelMetadata meta;
+  const std::string gameId = "game id";
   const uint256 channelId = SHA256::Hash ("channel id");
 
   GeneralStateProofTests ()
@@ -71,8 +72,8 @@ protected:
     proto::StateTransition proto;
     CHECK (TextFormat::ParseFromString (transition, &proto));
 
-    return VerifyStateTransition (verifier, game.rules, channelId, meta,
-                                  oldState, proto);
+    return VerifyStateTransition (verifier, game.rules, gameId, channelId,
+                                  meta, oldState, proto);
   }
 
 };
@@ -152,7 +153,7 @@ TEST_F (StateTransitionTests, InvalidSignature)
 
 TEST_F (StateTransitionTests, Valid)
 {
-  verifier.ExpectOne (channelId, meta, "state",
+  verifier.ExpectOne (gameId, channelId, meta, "state",
                       " 11 2 ", "signed by zero", "addr0");
 
   EXPECT_TRUE (VerifyTransition ("10 1", R"(
@@ -182,8 +183,8 @@ protected:
   bool
   VerifyProof (const BoardState& chainState, const std::string& proof)
   {
-    return VerifyStateProof (verifier, game.rules, channelId, meta, chainState,
-                             TextProof (proof), endState);
+    return VerifyStateProof (verifier, game.rules, gameId, channelId, meta,
+                             chainState, TextProof (proof), endState);
   }
 
 };
@@ -248,8 +249,10 @@ TEST_F (StateProofTests, OnlyInitialOnChain)
 
 TEST_F (StateProofTests, OnlyInitialSigned)
 {
-  verifier.ExpectOne (channelId, meta, "state", "42 5", "signature 0", "addr0");
-  verifier.ExpectOne (channelId, meta, "state", "42 5", "signature 1", "addr1");
+  verifier.ExpectOne (gameId, channelId, meta, "state",
+                      "42 5", "signature 0", "addr0");
+  verifier.ExpectOne (gameId, channelId, meta, "state",
+                      "42 5", "signature 1", "addr1");
 
   ASSERT_TRUE (VerifyProof ("0 1", R"(
     initial_state:
@@ -416,8 +419,8 @@ protected:
   bool
   ExtendProof (const std::string& oldProof, const BoardMove& mv)
   {
-    return ExtendStateProof (verifier, signer, game.rules, channelId, meta,
-                             TextProof (oldProof), mv, newProof);
+    return ExtendStateProof (verifier, signer, game.rules, gameId, channelId,
+                             meta, TextProof (oldProof), mv, newProof);
   }
 
 };
@@ -541,8 +544,8 @@ TEST_F (ExtendStateProofTests, Valid)
       EXPECT_EQ (newProof.transitions_size (), t.numTrans);
 
       BoardState provenState;
-      CHECK (VerifyStateProof (verifier, game.rules, channelId, meta, "0 0",
-                               newProof, provenState));
+      CHECK (VerifyStateProof (verifier, game.rules, gameId, channelId, meta,
+                               "0 0", newProof, provenState));
       auto p = game.rules.ParseState (channelId, meta, provenState);
       CHECK (p != nullptr);
       EXPECT_TRUE (p->Equals (t.newState));

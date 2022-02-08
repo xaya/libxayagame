@@ -13,7 +13,8 @@ namespace xaya
 {
 
 std::string
-GetChannelSignatureMessage (const uint256& channelId,
+GetChannelSignatureMessage (const std::string& gameId,
+                            const uint256& channelId,
                             const proto::ChannelMetadata& meta,
                             const std::string& topic,
                             const std::string& data)
@@ -33,13 +34,15 @@ GetChannelSignatureMessage (const uint256& channelId,
 
 std::set<int>
 VerifyParticipantSignatures (const SignatureVerifier& verifier,
+                             const std::string& gameId,
                              const uint256& channelId,
                              const proto::ChannelMetadata& meta,
                              const std::string& topic,
                              const proto::SignedData& data)
 {
-  const std::string msg = GetChannelSignatureMessage (channelId, meta, topic,
-                                                      data.data ());
+  const auto msg
+      = GetChannelSignatureMessage (gameId, channelId, meta,
+                                    topic, data.data ());
 
   std::set<std::string> addresses;
   for (const auto& sgn : data.signatures ())
@@ -55,6 +58,7 @@ VerifyParticipantSignatures (const SignatureVerifier& verifier,
 
 bool
 SignDataForParticipant (SignatureSigner& signer,
+                        const std::string& gameId,
                         const uint256& channelId,
                         const proto::ChannelMetadata& meta,
                         const std::string& topic,
@@ -73,7 +77,8 @@ SignDataForParticipant (SignatureSigner& signer,
     }
 
   const auto msg
-      = GetChannelSignatureMessage (channelId, meta, topic, data.data ());
+      = GetChannelSignatureMessage (gameId, channelId, meta,
+                                    topic, data.data ());
   data.add_signatures (signer.SignMessage (msg));
   return true;
 }

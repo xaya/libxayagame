@@ -25,6 +25,7 @@ namespace xaya
  */
 bool VerifyStateTransition (const SignatureVerifier& verifier,
                             const BoardRules& rules,
+                            const std::string& gameId,
                             const uint256& channelId,
                             const proto::ChannelMetadata& meta,
                             const BoardState& oldState,
@@ -37,6 +38,7 @@ bool VerifyStateTransition (const SignatureVerifier& verifier,
  */
 bool VerifyStateProof (const SignatureVerifier& verifier,
                        const BoardRules& rules,
+                       const std::string& gameId,
                        const uint256& channelId,
                        const proto::ChannelMetadata& meta,
                        const BoardState& reinitState,
@@ -65,6 +67,7 @@ const BoardState& UnverifiedProofEndState (const proto::StateProof& proof);
 bool ExtendStateProof (const SignatureVerifier& verifier,
                        SignatureSigner& signer,
                        const BoardRules& rules,
+                       const std::string& gameId,
                        const uint256& channelId,
                        const proto::ChannelMetadata& meta,
                        const proto::StateProof& oldProof,

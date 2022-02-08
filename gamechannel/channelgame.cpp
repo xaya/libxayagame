@@ -42,8 +42,8 @@ ChannelGame::ProcessDispute (ChannelData& ch, const unsigned height,
     return false;
 
   BoardState provenState;
-  if (!VerifyStateProof (GetSignatureVerifier (), rules, id, meta,
-                         ch.GetReinitState (), proof, provenState))
+  if (!VerifyStateProof (GetSignatureVerifier (), rules, GetGameId (), id,
+                         meta, ch.GetReinitState (), proof, provenState))
     {
       LOG (WARNING) << "Dispute has invalid state proof";
       return false;
@@ -116,8 +116,8 @@ ChannelGame::ProcessResolution (ChannelData& ch, const proto::StateProof& proof)
     return false;
 
   BoardState provenState;
-  if (!VerifyStateProof (GetSignatureVerifier (), rules, id, meta,
-                         ch.GetReinitState (), proof, provenState))
+  if (!VerifyStateProof (GetSignatureVerifier (), rules, GetGameId (), id,
+                         meta, ch.GetReinitState (), proof, provenState))
     {
       LOG (WARNING) << "Resolution has invalid state proof";
       return false;
@@ -176,8 +176,8 @@ ChannelGame::PendingMoves::AddPendingStateProof (ChannelData& ch,
     return;
 
   BoardState provenState;
-  if (!VerifyStateProof (game.GetSignatureVerifier (), rules, id, meta,
-                         ch.GetReinitState (), proof, provenState))
+  if (!VerifyStateProof (game.GetSignatureVerifier (), rules, GetGameId (), id,
+                         meta, ch.GetReinitState (), proof, provenState))
     {
       LOG (WARNING) << "StateProof of pending move is invalid";
       return;

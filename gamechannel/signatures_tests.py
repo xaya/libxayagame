@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2019-2020 The Xaya developers
+# Copyright (C) 2019-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -27,7 +27,7 @@ class SignaturesTest (unittest.TestCase):
 
     # This is logged by the C++ signatures test.
     msg = "917ad3494da16c7728ef5f8f44f2285d7d7fd3ed7b78278be440fa644927d5cc"
-    actual = signatures.getChannelMessage (channelId, meta,
+    actual = signatures.getChannelMessage ("game id", channelId, meta,
                                            "topic", b"foo\0bar")
     self.assertEqual (actual, msg)
 
@@ -72,7 +72,8 @@ class SignaturesTest (unittest.TestCase):
       signatures: "sgn 1"
     """, expected)
 
-    actual = signatures.createForChannel (rpc, channel, "topic", b"foobar")
+    actual = signatures.createForChannel (rpc, "game id", channel,
+                                          "topic", b"foobar")
     self.assertEqual (actual, expected)
 
 

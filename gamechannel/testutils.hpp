@@ -44,7 +44,7 @@ public:
    * and signature (both as binary).  Returns a valid response for the
    * given address.
    */
-  void ExpectOne (const uint256& channelId,
+  void ExpectOne (const std::string& gameId, const uint256& channelId,
                   const proto::ChannelMetadata& meta,
                   const std::string& topic,
                   const std::string& msg, const std::string& sgn,

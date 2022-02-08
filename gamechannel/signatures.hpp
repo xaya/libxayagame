@@ -79,7 +79,8 @@ public:
  * with a game-specific BoardState and BoardMove value, respectively.  Other
  * values can be used for game-specific needs.
  */
-std::string GetChannelSignatureMessage (const uint256& channelId,
+std::string GetChannelSignatureMessage (const std::string& gameId,
+                                        const uint256& channelId,
                                         const proto::ChannelMetadata& meta,
                                         const std::string& topic,
                                         const std::string& data);
@@ -97,6 +98,7 @@ std::string GetChannelSignatureMessage (const uint256& channelId,
  * values can be used for game-specific needs.
  */
 std::set<int> VerifyParticipantSignatures (const SignatureVerifier& verifier,
+                                           const std::string& gameId,
                                            const uint256& channelId,
                                            const proto::ChannelMetadata& meta,
                                            const std::string& topic,
@@ -107,6 +109,7 @@ std::set<int> VerifyParticipantSignatures (const SignatureVerifier& verifier,
  * the provided signer.  Returns true if a signature could be made.
  */
 bool SignDataForParticipant (SignatureSigner& signer,
+                             const std::string& gameId,
                              const uint256& channelId,
                              const proto::ChannelMetadata& meta,
                              const std::string& topic,

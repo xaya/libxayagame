@@ -27,6 +27,7 @@ class SignaturesTests : public TestGameFixture
 
 protected:
 
+  const std::string gameId = "game id";
   const uint256 channelId = SHA256::Hash ("channel id");
   proto::ChannelMetadata meta;
 
@@ -54,7 +55,8 @@ TEST_F (SignaturesTests, GetChannelSignatureMessage)
   hasher << dataWithNul;
 
   const std::string actual
-      = GetChannelSignatureMessage (channelId, meta, "topic", dataWithNul);
+      = GetChannelSignatureMessage (gameId, channelId, meta,
+                                    "topic", dataWithNul);
   EXPECT_EQ (actual, hasher.Finalise ().ToHex ());
   LOG (INFO) << "Signature message: " << actual;
 }
@@ -65,7 +67,7 @@ TEST_F (SignaturesTests, InvalidTopic)
   ASSERT_EQ (invalidTopic.size (), 3);
   ASSERT_EQ (invalidTopic[1], '\0');
 
-  EXPECT_DEATH (GetChannelSignatureMessage (channelId, meta,
+  EXPECT_DEATH (GetChannelSignatureMessage (gameId, channelId, meta,
                                             invalidTopic, "foobar"),
                 "Topic string contains nul character");
 }
@@ -78,14 +80,14 @@ TEST_F (SignaturesTests, VerifyParticipantSignatures)
   data.add_signatures ("signature 1");
   data.add_signatures ("signature 2");
 
-  verifier.ExpectOne (channelId, meta, "topic", data.data (),
+  verifier.ExpectOne (gameId, channelId, meta, "topic", data.data (),
                       "signature 0", "some other address");
-  verifier.ExpectOne (channelId, meta, "topic", data.data (),
+  verifier.ExpectOne (gameId, channelId, meta, "topic", data.data (),
                       "signature 1", "address 1");
-  verifier.ExpectOne (channelId, meta, "topic", data.data (),
+  verifier.ExpectOne (gameId, channelId, meta, "topic", data.data (),
                       "signature 2", "invalid");
 
-  EXPECT_EQ (VerifyParticipantSignatures (verifier, channelId, meta,
+  EXPECT_EQ (VerifyParticipantSignatures (verifier, gameId, channelId, meta,
                                           "topic", data),
              std::set<int> ({1}));
 }
@@ -97,10 +99,10 @@ TEST_F (SignaturesTests, SignDataForParticipantError)
   data.add_signatures ("sgn 0");
 
   signer.SetAddress ("wrong address");
-  EXPECT_FALSE (SignDataForParticipant (signer, channelId, meta, "topic",
-                                        1, data));
+  EXPECT_FALSE (SignDataForParticipant (signer, gameId, channelId, meta,
+                                        "topic", 1, data));
 
-  EXPECT_EQ (VerifyParticipantSignatures (verifier, channelId, meta,
+  EXPECT_EQ (VerifyParticipantSignatures (verifier, gameId, channelId, meta,
                                           "topic", data),
              std::set<int> ({0}));
 }
@@ -111,17 +113,18 @@ TEST_F (SignaturesTests, SignDataForParticipantSuccess)
   data.set_data ("foobar");
   data.add_signatures ("sgn 0");
 
-  const std::string msg = GetChannelSignatureMessage (channelId, meta, "topic",
-                                                      data.data ());
+  const std::string msg
+      = GetChannelSignatureMessage (gameId, channelId, meta,
+                                    "topic", data.data ());
   signer.SetAddress ("address 1");
   EXPECT_CALL (signer, SignMessage (msg)).WillOnce (Return ("signature 1"));
-  verifier.ExpectOne (channelId, meta, "topic", data.data (),
+  verifier.ExpectOne (gameId, channelId, meta, "topic", data.data (),
                       "signature 1", "address 1");
 
-  ASSERT_TRUE (SignDataForParticipant (signer, channelId, meta, "topic",
-                                       1, data));
+  ASSERT_TRUE (SignDataForParticipant (signer, gameId, channelId, meta,
+                                       "topic", 1, data));
 
-  EXPECT_EQ (VerifyParticipantSignatures (verifier, channelId, meta,
+  EXPECT_EQ (VerifyParticipantSignatures (verifier, gameId, channelId, meta,
                                           "topic", data),
              std::set<int> ({0, 1}));
 }
