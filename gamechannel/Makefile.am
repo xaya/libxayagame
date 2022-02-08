@@ -33,10 +33,10 @@ CLEANFILES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOSOURCES) $(PROTOPY) schema.cpp
 
 libchannelcore_la_CXXFLAGS = \
   -I$(top_srcdir) \
-  $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
+  $(JSONCPP_CFLAGS) $(ETHUTILS_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
 libchannelcore_la_LIBADD = \
   $(top_builddir)/xayautil/libxayautil.la \
-  $(JSONCPP_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
+  $(JSONCPP_LIBS) $(ETHUTILS_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
 libchannelcore_la_SOURCES = \
   boardrules.cpp \
   broadcast.cpp \

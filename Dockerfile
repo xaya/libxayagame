@@ -86,6 +86,23 @@ WORKDIR /usr/src/sqlite-autoconf-${SQLITE_VERSION}
 RUN ./configure CFLAGS="-DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"
 RUN make && make install-strip
 
+# Build and install libsecp256k1.
+ARG SECP256K1_VERSION="master"
+WORKDIR /usr/src/libsecp256k1
+RUN git clone -b ${SECP256K1_VERSION} \
+  https://github.com/bitcoin-core/secp256k1 .
+RUN ./autogen.sh \
+    && ./configure --disable-tests --disable-benchmark  \
+                   --enable-module-recovery \
+    && make && make install-strip
+
+# Build and install eth-utils.
+ARG ETHUTILS_VERSION="master"
+WORKDIR /usr/src/ethutils
+RUN git clone -b ${ETHUTILS_VERSION} \
+  https://github.com/xaya/eth-utils .
+RUN ./autogen.sh && ./configure && make && make install-strip
+
 # Also add a utility script for copying dynamic libraries needed for
 # a given binary.  This can be used by GSP images based on this one
 # to make them as minimal as possible.
