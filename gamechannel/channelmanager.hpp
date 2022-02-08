@@ -87,6 +87,8 @@ private:
   /** Message signer for this user.  */
   SignatureSigner& signer;
 
+  /** The ID for this channel application (used to salt signatures).  */
+  const std::string gameId;
   /** The ID of the managed channel.  */
   const uint256 channelId;
 
@@ -194,7 +196,8 @@ public:
   explicit ChannelManager (const BoardRules& r, OpenChannel& oc,
                            const SignatureVerifier& v,
                            SignatureSigner& s,
-                           const uint256& id, const std::string& name);
+                           const std::string& gId, const uint256& id,
+                           const std::string& name);
 
   ChannelManager () = delete;
   ChannelManager (const ChannelManager&) = delete;

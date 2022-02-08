@@ -30,7 +30,8 @@ ChannelDaemon::WalletBasedInstances::WalletBasedInstances (
     const SignatureVerifier& verifier, SignatureSigner& signer,
     TransactionSender& txSender)
   : sender(d.gameId, d.channelId, d.playerName, txSender, d.channel),
-    realCm(d.rules, d.channel, verifier, signer, d.channelId, d.playerName),
+    realCm(d.rules, d.channel, verifier, signer,
+           d.gameId, d.channelId, d.playerName),
     cm(realCm)
 {
   realCm.SetMoveSender (sender);

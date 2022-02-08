@@ -23,6 +23,7 @@ namespace
 bool
 ExtraVerifyStateTransition (const SignatureVerifier& verifier,
                             const BoardRules& rules,
+                            const std::string& gameId,
                             const uint256& channelId,
                             const proto::ChannelMetadata& meta,
                             const ParsedBoardState& oldState,
@@ -56,8 +57,8 @@ ExtraVerifyStateTransition (const SignatureVerifier& verifier,
       return false;
     }
 
-  signatures = VerifyParticipantSignatures (verifier, channelId, meta, "state",
-                                            transition.new_state ());
+  signatures = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                            "state", transition.new_state ());
   if (signatures.count (turn) == 0)
     {
       LOG (WARNING)
@@ -73,6 +74,7 @@ ExtraVerifyStateTransition (const SignatureVerifier& verifier,
 bool
 VerifyStateTransition (const SignatureVerifier& verifier,
                        const BoardRules& rules,
+                       const std::string& gameId,
                        const uint256& channelId,
                        const proto::ChannelMetadata& meta,
                        const BoardState& oldState,
@@ -88,12 +90,13 @@ VerifyStateTransition (const SignatureVerifier& verifier,
   std::unique_ptr<ParsedBoardState> parsedNew;
   std::set<int> signatures;
   return ExtraVerifyStateTransition (verifier, rules,
-                                     channelId, meta, *parsedOld,
+                                     gameId, channelId, meta, *parsedOld,
                                      transition, signatures, parsedNew);
 }
 
 bool
 VerifyStateProof (const SignatureVerifier& verifier, const BoardRules& rules,
+                  const std::string& gameId,
                   const uint256& channelId,
                   const proto::ChannelMetadata& meta,
                   const BoardState& reinitState,
@@ -101,8 +104,8 @@ VerifyStateProof (const SignatureVerifier& verifier, const BoardRules& rules,
                   BoardState& endState)
 {
   std::set<int> signatures
-      = VerifyParticipantSignatures (verifier, channelId, meta, "state",
-                                     proof.initial_state ());
+      = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                     "state", proof.initial_state ());
 
   auto parsed = rules.ParseState (channelId, meta,
                                   proof.initial_state ().data ());
@@ -119,7 +122,7 @@ VerifyStateProof (const SignatureVerifier& verifier, const BoardRules& rules,
     {
       std::unique_ptr<ParsedBoardState> parsedNew;
       std::set<int> newSignatures;
-      if (!ExtraVerifyStateTransition (verifier, rules, channelId, meta,
+      if (!ExtraVerifyStateTransition (verifier, rules, gameId, channelId, meta,
                                        *parsed, t, newSignatures, parsedNew))
         return false;
 
@@ -157,6 +160,7 @@ UnverifiedProofEndState (const proto::StateProof& proof)
 bool
 ExtendStateProof (const SignatureVerifier& verifier, SignatureSigner& signer,
                   const BoardRules& rules,
+                  const std::string& gameId,
                   const uint256& channelId,
                   const proto::ChannelMetadata& meta,
                   const proto::StateProof& oldProof,
@@ -187,7 +191,8 @@ ExtendStateProof (const SignatureVerifier& verifier, SignatureSigner& signer,
   ns->set_data (newState);
 
   LOG (INFO) << "Trying to sign new state for participant " << turn;
-  if (!SignDataForParticipant (signer, channelId, meta, "state", turn, *ns))
+  if (!SignDataForParticipant (signer, gameId, channelId, meta,
+                               "state", turn, *ns))
     return false;
 
   /* We got a valid signature of the new state.  Now we have to figure out what
@@ -209,8 +214,8 @@ ExtendStateProof (const SignatureVerifier& verifier, SignatureSigner& signer,
   while (true)
     {
       const auto newSigs
-          = VerifyParticipantSignatures (verifier, channelId, meta, "state",
-                                         begin->new_state ());
+          = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                         "state", begin->new_state ());
       signatures.insert (newSigs.begin (), newSigs.end ());
 
       CHECK_LE (signatures.size (), n);

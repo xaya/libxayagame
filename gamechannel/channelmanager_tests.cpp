@@ -43,7 +43,7 @@ ValidProof (const std::string& state)
 ChannelManagerTestFixture::ChannelManagerTestFixture ()
   : cm(game.rules, game.channel,
        verifier, signer,
-       channelId, "player"),
+       "game id", channelId, "player"),
     onChain("game id", cm.GetChannelId (), "player", txSender, game.channel)
 {
   CHECK (TextFormat::ParseFromString (R"(

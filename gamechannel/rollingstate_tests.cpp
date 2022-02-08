@@ -39,6 +39,7 @@ class RollingStateTests : public TestGameFixture
 
 protected:
 
+  const std::string gameId = "game id";
   const uint256 channelId = SHA256::Hash ("channel id");
   proto::ChannelMetadata meta1;
   proto::ChannelMetadata meta2;
@@ -46,7 +47,7 @@ protected:
   RollingState state;
 
   RollingStateTests ()
-    : state(game.rules, verifier, channelId)
+    : state(game.rules, verifier, gameId, channelId)
   {
     meta1.set_reinit ("reinit 1");
     meta1.add_participants ()->set_address ("addr 0");

@@ -78,6 +78,8 @@ private:
   /** Signature verifier for state proofs.  */
   const SignatureVerifier& verifier;
 
+  /** The game ID of this application.  */
+  const std::string& gameId;
   /** The ID of the channel this is for.  */
   const uint256& channelId;
 
@@ -94,8 +96,8 @@ private:
 public:
 
   explicit RollingState (const BoardRules& r, const SignatureVerifier& v,
-                         const uint256& id)
-    : rules(r), verifier(v), channelId(id)
+                         const std::string& gId, const uint256& id)
+    : rules(r), verifier(v), gameId(gId), channelId(id)
   {}
 
   RollingState () = delete;

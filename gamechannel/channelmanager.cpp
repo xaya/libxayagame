@@ -17,9 +17,11 @@ ChannelManager::DisputeData::DisputeData ()
 
 ChannelManager::ChannelManager (const BoardRules& r, OpenChannel& oc,
                                 const SignatureVerifier& v, SignatureSigner& s,
-                                const uint256& id, const std::string& name)
-  : rules(r), game(oc), verifier(v), signer(s), channelId(id), playerName(name),
-    boardStates(rules, verifier, channelId)
+                                const std::string& gId, const uint256& id,
+                                const std::string& name)
+  : rules(r), game(oc), verifier(v), signer(s),
+    gameId(gId), channelId(id), playerName(name),
+    boardStates(rules, verifier, gameId, channelId)
 {
   blockHash.SetNull ();
   pendingPutStateOnChain.SetNull ();
@@ -270,7 +272,7 @@ ChannelManager::ApplyLocalMove (const BoardMove& mv)
   CHECK (exists);
 
   proto::StateProof newProof;
-  if (!ExtendStateProof (verifier, signer, rules, channelId,
+  if (!ExtendStateProof (verifier, signer, rules, gameId, channelId,
                          boardStates.GetMetadata (),
                          boardStates.GetStateProof (), mv, newProof))
     {

@@ -18,6 +18,9 @@ from google.protobuf import text_format
 import base64
 
 
+GAME_ID = "xs"
+
+
 class ShipsTest (channeltest.TestCase):
   """
   An integration test for the ships on-chain GSP and (potentially)
@@ -30,7 +33,7 @@ class ShipsTest (channeltest.TestCase):
       top_builddir = "../.."
     shipsd = os.path.join (top_builddir, "ships", "shipsd")
     channeld = os.path.join (top_builddir, "ships", "ships-channel")
-    super (ShipsTest, self).__init__ ("xs", shipsd, channeld)
+    super (ShipsTest, self).__init__ (GAME_ID, shipsd, channeld)
 
   def openChannel (self, names, addresses=None):
     """
@@ -69,7 +72,7 @@ class ShipsTest (channeltest.TestCase):
     stateBytes = state.SerializeToString ()
 
     res = stateproof_pb2.StateProof ()
-    signedData = signatures.createForChannel (self.rpc.xaya, channel,
+    signedData = signatures.createForChannel (self.rpc.xaya, GAME_ID, channel,
                                               "state", stateBytes)
     res.initial_state.CopyFrom (signedData)
 

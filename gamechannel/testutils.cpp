@@ -95,7 +95,8 @@ MockSignatureVerifier::SetValid (const std::string& sgn,
 }
 
 void
-MockSignatureVerifier::ExpectOne (const uint256& channelId,
+MockSignatureVerifier::ExpectOne (const std::string& gameId,
+                                  const uint256& channelId,
                                   const proto::ChannelMetadata& meta,
                                   const std::string& topic,
                                   const std::string& msg,
@@ -103,7 +104,7 @@ MockSignatureVerifier::ExpectOne (const uint256& channelId,
                                   const std::string& addr)
 {
   const std::string hashed
-      = GetChannelSignatureMessage (channelId, meta, topic, msg);
+      = GetChannelSignatureMessage (gameId, channelId, meta, topic, msg);
   EXPECT_CALL (*this, RecoverSigner (hashed, sgn)).WillOnce (Return (addr));
 }
 
