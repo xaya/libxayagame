@@ -9,6 +9,8 @@
 
 #include <glog/logging.h>
 
+#include <sstream>
+
 namespace xaya
 {
 
@@ -19,17 +21,21 @@ GetChannelSignatureMessage (const std::string& gameId,
                             const std::string& topic,
                             const std::string& data)
 {
-  CHECK_EQ (topic.find ('\0'), std::string::npos)
-      << "Topic string contains nul character";
-  const std::string nulByte("\0", 1);
+  for (const char t : topic)
+    CHECK ((t >= '0' && t <= '9')
+              || (t >= 'A' && t <= 'Z')
+              || (t >= 'a' && t <= 'z'))
+      << "Topic string contains invalid character: " << topic;
 
-  SHA256 hasher;
-  hasher << channelId;
-  hasher << EncodeBase64 (meta.reinit ()) << nulByte;
-  hasher << topic << nulByte;
-  hasher << data;
+  std::ostringstream res;
+  res << "Game-Channel Signature\n"
+      << "Game ID: " << gameId << "\n"
+      << "Channel: " << channelId.ToHex () << "\n"
+      << "Reinit: " << EncodeBase64 (meta.reinit ()) << "\n"
+      << "Topic: " << topic << "\n"
+      << "Data Hash: " << SHA256::Hash (data).ToHex ();
 
-  return hasher.Finalise ().ToHex ();
+  return res.str ();
 }
 
 std::set<int>

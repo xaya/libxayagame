@@ -23,16 +23,15 @@ def getChannelMessage (gameId, channelId, meta, topic, data):
   """
 
   assert len (channelId) == 32
-  hasher = hashlib.sha256 ()
 
-  hasher.update (channelId)
-  hasher.update (base64.b64encode (meta.reinit))
-  hasher.update (b"\0")
-  hasher.update (codecs.encode (topic, "ascii"))
-  hasher.update (b"\0")
-  hasher.update (data)
+  reinit = codecs.decode (base64.b64encode (meta.reinit), "ascii")
 
-  return hasher.hexdigest ()
+  return "Game-Channel Signature\n" \
+          + ("Game ID: %s\n" % gameId) \
+          + ("Channel: %s\n" % channelId.hex ()) \
+          + ("Reinit: %s\n" % reinit) \
+          + ("Topic: %s\n" % topic) \
+          + ("Data Hash: %s" % hashlib.sha256 (data).hexdigest ())
 
 
 def createForChannel (rpc, gameId, channel, topic, data):

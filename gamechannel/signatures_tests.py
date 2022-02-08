@@ -26,7 +26,12 @@ class SignaturesTest (unittest.TestCase):
     meta.reinit = b"re\0init"
 
     # This is logged by the C++ signatures test.
-    msg = "917ad3494da16c7728ef5f8f44f2285d7d7fd3ed7b78278be440fa644927d5cc"
+    msg = """Game-Channel Signature
+Game ID: game id
+Channel: 537e2fa2e3e5eafcb04ff353ff2a1984b7c1500419d322dcbec8b3613c224d57
+Reinit: cmUAaW5pdA==
+Topic: topic
+Data Hash: d6b681bfce7155d44721afb79c296ef4f0fa80a9dd6b43c5cf74dd0f64c85512"""
     actual = signatures.getChannelMessage ("game id", channelId, meta,
                                            "topic", b"foo\0bar")
     self.assertEqual (actual, msg)

@@ -75,9 +75,9 @@ public:
  *
  * The topic string describes what the data is, so that e.g. a signed state
  * cannot be mistaken as a signed message stating the winner.  This string
- * must not contain any nul bytes.  "state" and "move" are reserved for use
- * with a game-specific BoardState and BoardMove value, respectively.  Other
- * values can be used for game-specific needs.
+ * must only contain alpha-numeric characters (0-9, a-z, A-Z).  "state" and
+ * "move" are reserved for use with a game-specific BoardState and BoardMove
+ * value, respectively.  Other values can be used for game-specific needs.
  */
 std::string GetChannelSignatureMessage (const std::string& gameId,
                                         const uint256& channelId,

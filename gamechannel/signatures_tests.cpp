@@ -14,6 +14,8 @@
 
 #include <glog/logging.h>
 
+#include <sstream>
+
 namespace xaya
 {
 namespace
@@ -47,29 +49,27 @@ TEST_F (SignaturesTests, GetChannelSignatureMessage)
 {
   const std::string dataWithNul("foo\0bar", 7);
 
-  SHA256 hasher;
-  hasher << channelId;
-  hasher << EncodeBase64 (std::string ("re\0init", 7))
-         << std::string ("\0", 1);
-  hasher << std::string ("topic\0", 6);
-  hasher << dataWithNul;
+  std::stringstream expected;
+  expected << "Game-Channel Signature\n"
+           << "Game ID: " << gameId << "\n"
+           << "Channel: " << channelId.ToHex () << "\n"
+           << "Reinit: " << EncodeBase64 (std::string ("re\0init", 7)) << "\n"
+           << "Topic: topic\n"
+           << "Data Hash: " << SHA256::Hash (dataWithNul).ToHex ();
 
   const std::string actual
       = GetChannelSignatureMessage (gameId, channelId, meta,
                                     "topic", dataWithNul);
-  EXPECT_EQ (actual, hasher.Finalise ().ToHex ());
-  LOG (INFO) << "Signature message: " << actual;
+  EXPECT_EQ (actual, expected.str ());
+  LOG (INFO) << "Signature message:\n" << actual;
 }
 
 TEST_F (SignaturesTests, InvalidTopic)
 {
-  const std::string invalidTopic("a\0b", 3);
-  ASSERT_EQ (invalidTopic.size (), 3);
-  ASSERT_EQ (invalidTopic[1], '\0');
-
+  const std::string invalidTopic("a\nb");
   EXPECT_DEATH (GetChannelSignatureMessage (gameId, channelId, meta,
                                             invalidTopic, "foobar"),
-                "Topic string contains nul character");
+                "Topic string contains invalid character");
 }
 
 TEST_F (SignaturesTests, VerifyParticipantSignatures)
