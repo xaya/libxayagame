@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,9 +9,12 @@
 
 #include <gamechannel/boardrules.hpp>
 #include <gamechannel/channelgame.hpp>
+#include <gamechannel/ethsignatures.hpp>
 #include <gamechannel/proto/metadata.pb.h>
 #include <xayagame/sqlitestorage.hpp>
 #include <xayautil/uint256.hpp>
+
+#include <eth-utils/ecdsa.hpp>
 
 #include <json/json.h>
 
@@ -40,6 +43,9 @@ class ShipsLogic : public xaya::ChannelGame
 {
 
 private:
+
+  const ethutils::ECDSA ctx;
+  const xaya::EthSignatureVerifier verifier;
 
   ShipsBoardRules boardRules;
 
@@ -89,7 +95,17 @@ protected:
 
   Json::Value GetStateAsJson (const xaya::SQLiteDatabase& db) override;
 
+  const xaya::SignatureVerifier&
+  GetSignatureVerifier () override
+  {
+    return verifier;
+  }
+
 public:
+
+  ShipsLogic ()
+    : verifier(ctx)
+  {}
 
   const xaya::BoardRules& GetBoardRules () const override;
 

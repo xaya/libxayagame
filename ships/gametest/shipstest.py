@@ -80,9 +80,14 @@ class ShipsTest (channeltest.TestCase):
     ships-channel binary.
     """
 
+    # Look up the private key associated to the requested signing address.
+    assert address in self.signerAccounts, \
+        "%s is not a signing address" % address
+    privkey = self.signerAccounts[address].key.hex ()
+
     return super ().runChannelDaemon (playerName,
         channelid=channelId,
-        address=address,
+        privkey=privkey,
         xaya_rpc_url=self.xayanode.rpcurl)
 
   def getStateProof (self, cid, stateStr):
@@ -100,7 +105,8 @@ class ShipsTest (channeltest.TestCase):
     stateBytes = state.SerializeToString ()
 
     res = stateproof_pb2.StateProof ()
-    signedData = signatures.createForChannel (self.rpc.xaya, GAME_ID, channel,
+    signedData = signatures.createForChannel (self.getSigningProvider (),
+                                              GAME_ID, channel,
                                               "state", stateBytes)
     res.initial_state.CopyFrom (signedData)
 

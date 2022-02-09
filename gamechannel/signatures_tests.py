@@ -49,7 +49,7 @@ Data Hash: d6b681bfce7155d44721afb79c296ef4f0fa80a9dd6b43c5cf74dd0f64c85512"""
       def signmessage (self, addr, msg):
         for i in range (len (self.addresses)):
           if addr == self.addresses[i]:
-            return base64.b64encode (b"sgn %d" % i)
+            return b"sgn %d" % i
         raise AssertionError ("Invalid test address: %s" % addr)
 
     meta = metadata_pb2.ChannelMetadata ()

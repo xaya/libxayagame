@@ -11,6 +11,8 @@ from . import rpcbroadcast
 
 from xayagametest.testcase import XayaGameTest
 
+from eth_account import Account, messages
+
 from contextlib import contextmanager
 import jsonrpclib
 import logging
@@ -147,6 +149,10 @@ class TestCase (XayaGameTest):
     self.broadcastThread = threading.Thread (target=serveBroadcast)
     self.broadcastThread.start ()
 
+    # Ethereum account instances that have been constructed as signing
+    # addresses (indexed by address).
+    self.signerAccounts = {}
+
   def shutdown (self):
     self.broadcast.shutdown ()
     self.broadcastThread.join ()
@@ -181,11 +187,38 @@ class TestCase (XayaGameTest):
 
   def newSigningAddress (self):
     """
-    Returns a new address from the local wallet that can be used as signing
-    address in a channel.
+    Returns a new address that can be used for signing on the channel.
+    This constructs a new key pair, keeping the private key in memory
+    and ready to be looked up when a daemon is started with that address.
     """
 
-    return self.rpc.xaya.getnewaddress ("", "legacy")
+    account = Account.create ()
+    self.signerAccounts[account.address] = account
+    return account.address
+
+  def getSigningProvider (self):
+    """
+    Returns a fake "RPC" provider implementing validateaddress, getaddressinfo
+    and signmessage based on the signature addresses in this instance.
+    This can then be used with signatures.createForChannel.
+    """
+
+    class FakeRpc:
+      def __init__ (self, accounts):
+        self.accounts = accounts
+
+      def validateaddress (self, addr):
+        return {"isvalid": True}
+
+      def getaddressinfo (self, addr):
+        return {"ismine": addr in self.accounts}
+
+      def signmessage (self, addr, msg):
+        assert addr in self.accounts, "Invalid signing address: %s" % addr
+        encoded = messages.encode_defunct (text=msg)
+        return self.accounts[addr].sign_message (encoded).signature
+
+    return FakeRpc (self.signerAccounts)
 
   def getSyncedChannelState (self, daemons):
     """

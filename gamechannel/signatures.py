@@ -61,6 +61,6 @@ def createForChannel (rpc, gameId, channel, topic, data):
     info = rpc.getaddressinfo (p.address)
     if info["ismine"]:
       sgn = rpc.signmessage (p.address, msg)
-      res.signatures.append (base64.b64decode (sgn))
+      res.signatures.append (sgn)
 
   return res

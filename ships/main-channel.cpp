@@ -8,10 +8,13 @@
 #include "channelrpc.hpp"
 
 #include <gamechannel/daemon.hpp>
+#include <gamechannel/ethsignatures.hpp>
 #include <gamechannel/rpcbroadcast.hpp>
 #include <gamechannel/rpcwallet.hpp>
 #include <xayagame/rpc-stubs/xayarpcclient.h>
 #include <xayagame/rpc-stubs/xayawalletrpcclient.h>
+
+#include <eth-utils/ecdsa.hpp>
 
 #include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server.h>
@@ -49,8 +52,8 @@ DEFINE_bool (rpc_listen_locally, true,
 
 DEFINE_string (playername, "",
                "the Xaya name of the player for this channel (without p/)");
-DEFINE_string (address, "",
-               "the Xaya address used for signing on the channel");
+DEFINE_string (privkey, "",
+               "the Ethereum private key used for signing on the channel");
 DEFINE_string (channelid, "", "ID of the channel to manage as hex string");
 
 } // anonymous namespace
@@ -86,9 +89,9 @@ main (int argc, char** argv)
       std::cerr << "Error: --playername must be set" << std::endl;
       return EXIT_FAILURE;
     }
-  if (FLAGS_address.empty ())
+  if (FLAGS_privkey.empty ())
     {
-      std::cerr << "Error: --address must be set" << std::endl;
+      std::cerr << "Error: --privkey must be set" << std::endl;
       return EXIT_FAILURE;
     }
 
@@ -99,6 +102,7 @@ main (int argc, char** argv)
       return EXIT_FAILURE;
     }
 
+  // FIXME: Clean up completely once the move sender is migrated as well.
   const auto rpcVersion = (FLAGS_xaya_rpc_legacy_protocol
                               ? jsonrpc::JSONRPC_CLIENT_V1
                               : jsonrpc::JSONRPC_CLIENT_V2);
@@ -106,8 +110,9 @@ main (int argc, char** argv)
   XayaRpcClient xayaRpc(xayaClient, rpcVersion);
   XayaWalletRpcClient xayaWallet(xayaClient, rpcVersion);
 
-  const xaya::RpcSignatureVerifier verifier(xayaRpc);
-  xaya::RpcSignatureSigner signer(xayaWallet, FLAGS_address);
+  const ethutils::ECDSA ecdsaCtx;
+  const xaya::EthSignatureVerifier verifier(ecdsaCtx);
+  xaya::EthSignatureSigner signer(ecdsaCtx, FLAGS_privkey);
   xaya::RpcTransactionSender sender(xayaRpc, xayaWallet);
 
   ships::ShipsBoardRules rules;
