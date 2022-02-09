@@ -42,6 +42,7 @@ libchannelcore_la_SOURCES = \
   broadcast.cpp \
   channelmanager.cpp \
   channelstatejson.cpp \
+  ethsignatures.cpp \
   movesender.cpp \
   openchannel.cpp \
   protoversion.cpp \
@@ -54,6 +55,7 @@ CHANNELCOREHEADERS = \
   broadcast.hpp \
   channelmanager.hpp channelmanager.tpp \
   channelstatejson.hpp \
+  ethsignatures.hpp \
   movesender.hpp \
   openchannel.hpp \
   protoboard.hpp protoboard.tpp \
@@ -153,6 +155,7 @@ tests_SOURCES = \
   channelstatejson_tests.cpp \
   chaintochannel_tests.cpp \
   database_tests.cpp \
+  ethsignatures_tests.cpp \
   gamestatejson_tests.cpp \
   movesender_tests.cpp \
   protoboard_tests.cpp \
