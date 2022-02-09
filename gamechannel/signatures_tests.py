@@ -44,10 +44,7 @@ Data Hash: d6b681bfce7155d44721afb79c296ef4f0fa80a9dd6b43c5cf74dd0f64c85512"""
         return {"isvalid": True}
 
       def getaddressinfo (self, addr):
-        for a in self.addresses:
-          if a == addr:
-            return {"ismine": True}
-        return {"ismine": False}
+        return {"ismine": addr in self.addresses}
 
       def signmessage (self, addr, msg):
         for i in range (len (self.addresses)):

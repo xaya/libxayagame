@@ -177,14 +177,14 @@ class TestCase (XayaGameTest):
     self.broadcastThread.join ()
     super (TestCase, self).shutdown ()
 
-  def runChannelDaemon (self, channelId, address, playerName):
+  def runChannelDaemon (self, channelId, playerName, address):
     """
     Starts a new channel daemon for the given ID and player name.
     This returns a context manager instance, which returns the
     underlying Daemon instance when entered.
     """
 
-    daemon = Daemon (channelId, address, playerName, self.basedir,
+    daemon = Daemon (channelId, playerName, address, self.basedir,
                      next (self.ports), self.args.channel_daemon)
 
     return DaemonContext (daemon, self.xayanode.rpcurl, self.gamenode.rpcurl,
