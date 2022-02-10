@@ -53,7 +53,8 @@ class TxFailTest (ShipsTest):
 
       # Make sure it is foo's turn.  If not, miss a shot with bar.
       if state["current"]["state"]["whoseturn"] == 1:
-        bar.rpc._notify.shoot (row=7, column=0)
+        with self.waitForTurnIncrease (daemons, 2):
+          bar.rpc._notify.shoot (row=7, column=0)
         _, state = self.waitForPhase (daemons, ["shoot"])
       self.assertEqual (state["current"]["state"]["whoseturn"], 0)
 
@@ -82,7 +83,8 @@ class TxFailTest (ShipsTest):
       # Send a new move, but lock the wallet so that the resolution
       # transaction will not succeed.
       self.lockFunds ()
-      foo.rpc._notify.shoot (row=7, column=0)
+      with self.waitForTurnIncrease (daemons, 2):
+        foo.rpc._notify.shoot (row=7, column=0)
 
       # Unlock the wallet.  Then the resolution transaction should be
       # retried when another block comes in.
