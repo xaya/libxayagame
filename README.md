@@ -61,9 +61,12 @@ for the configuration and/or build to be successful:
   Available for Debian as `libgoogle-glog-dev`.
 - [`gflags`](https://github.com/gflags/gflags):
   The package (`libgflags-dev`) included with Debian can be used.
-- [Protocol buffers]((https://developers.google.com/protocol-buffers/)
+- [Protocol buffers](https://developers.google.com/protocol-buffers/)
   are used both in C++ and Python.  On Debian, the packages
   `libprotobuf-dev`, `protobuf-compiler` and `python-protobuf` can be used.
+- [`eth-utils`](https://github.com/xaya/eth-utils), which itself depends on
+  [`libsecp256k1`](https://github.com/bitcoin-core/secp256k1).
+  The latter is available on Debian as `libsecp256k1-dev`.
 
 For the unit tests, also the
 [Google test framework](https://github.com/google/googletest) is needed.

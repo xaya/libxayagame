@@ -33,15 +33,16 @@ CLEANFILES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOSOURCES) $(PROTOPY) schema.cpp
 
 libchannelcore_la_CXXFLAGS = \
   -I$(top_srcdir) \
-  $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
+  $(JSONCPP_CFLAGS) $(ETHUTILS_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
 libchannelcore_la_LIBADD = \
   $(top_builddir)/xayautil/libxayautil.la \
-  $(JSONCPP_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
+  $(JSONCPP_LIBS) $(ETHUTILS_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
 libchannelcore_la_SOURCES = \
   boardrules.cpp \
   broadcast.cpp \
   channelmanager.cpp \
   channelstatejson.cpp \
+  ethsignatures.cpp \
   movesender.cpp \
   openchannel.cpp \
   protoversion.cpp \
@@ -54,6 +55,7 @@ CHANNELCOREHEADERS = \
   broadcast.hpp \
   channelmanager.hpp channelmanager.tpp \
   channelstatejson.hpp \
+  ethsignatures.hpp \
   movesender.hpp \
   openchannel.hpp \
   protoboard.hpp protoboard.tpp \
@@ -153,6 +155,7 @@ tests_SOURCES = \
   channelstatejson_tests.cpp \
   chaintochannel_tests.cpp \
   database_tests.cpp \
+  ethsignatures_tests.cpp \
   gamestatejson_tests.cpp \
   movesender_tests.cpp \
   protoboard_tests.cpp \
