@@ -110,6 +110,21 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
           << entry.latestState->TurnCount ();
 
       reinits.emplace (reinitId, std::move (entry));
+
+      /* If we have any queued up off-chain updates for this reinit,
+         process them now.  */
+      const auto mit2 = unknownReinitMoves.find (reinitId);
+      if (mit2 != unknownReinitMoves.end ())
+        {
+          const auto& updateQueue = mit2->second;
+          LOG (INFO)
+              << "Processing " << updateQueue.size ()
+              << " queued off-chain updates for the new reinit";
+          for (const auto& sp : updateQueue)
+            UpdateWithMove (reinitId, sp);
+          unknownReinitMoves.erase (reinitId);
+        }
+
       return true;
     }
 
@@ -154,7 +169,13 @@ RollingState::UpdateWithMove (const std::string& updReinit,
      stay up-to-date as much as possible.  For instance, it could happen that
      we receive an off-chain move later than an on-chain update that changed
      the channel; then we still want to apply the off-chain update, in case
-     the on-chain move gets detached again or something like that.  */
+     the on-chain move gets detached again or something like that.
+
+     Similarly, if we receive an update for a reinit that is not known at all
+     yet, we queue it up so that we can process it later in case the reinit
+     gets created.  This is needed for situations where our peer might have
+     received an on-chain update earlier than us, and we receive their
+     off-chain move before the on-chain update.  */
 
   const auto mit = reinits.find (updReinit);
   if (mit == reinits.end ())
@@ -162,6 +183,7 @@ RollingState::UpdateWithMove (const std::string& updReinit,
       LOG (WARNING)
           << "Off-chain update for channel " << channelId.ToHex ()
           << " has unknown reinitialisation ID: " << EncodeBase64 (updReinit);
+      unknownReinitMoves[updReinit].push_back (proof);
       return false;
     }
   ReinitData& entry = mit->second;

@@ -15,6 +15,7 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 namespace xaya
 {
@@ -89,6 +90,19 @@ private:
    * this is done, GetLatestState and GetStateProof must not be called.
    */
   std::map<std::string, ReinitData> reinits;
+
+  /**
+   * For still unknown reinitialisations, we keep track of a list of
+   * received off-chain updates.  We can't process them when we receive them
+   * (as the reinit state is unknown), but we will process the full list once
+   * the corresponding reinit gets created on chain.
+   *
+   * FIXME: This is a potential DoS vector.  We should enforce a maximum
+   * number of entries stored in there, and discard old ones when we hit
+   * the limit.  After all, this is supposed to be just a fix for very short
+   * term delays in receiving on-chain updates from our GSP.
+   */
+  std::map<std::string, std::vector<proto::StateProof>> unknownReinitMoves;
 
   /** The reinit ID of the current reinitialisation.  */
   std::string reinitId;

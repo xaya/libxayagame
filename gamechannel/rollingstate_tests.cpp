@@ -143,23 +143,31 @@ TEST_F (RollingStateTests, OnChainUpdate)
 
 TEST_F (RollingStateTests, UpdateWithMoveUnknownReinit)
 {
-  state.UpdateWithMove ("reinit 1", ParseStateProof (R"(
-    initial_state: { data: "13 5" }
-    transitions:
-      {
-        move: "50"
-        new_state:
-          {
-            data: "63 6"
-            signatures: "sgn 1"
-          }
-      }
-  )"));
-
   state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
     initial_state: { data: "13 5" }
   )"));
   ExpectState ("13 5", "reinit 1");
+
+  /* This update gets queued initially, and then applied once
+     the on-chain update is there.  */
+  state.UpdateWithMove ("reinit 2", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+    transitions:
+      {
+        move: "40"
+        new_state:
+          {
+            data: "65 5"
+            signatures: "sgn 2"
+          }
+      }
+  )"));
+  ExpectState ("13 5", "reinit 1");
+
+  state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+  )"));
+  ExpectState ("65 5", "reinit 2");
 }
 
 TEST_F (RollingStateTests, UpdateWithMoveInvalidProof)
