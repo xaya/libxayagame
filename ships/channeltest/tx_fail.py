@@ -77,7 +77,7 @@ class TxFailTest (ShipsTest):
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
         "canresolve": False,
-        "height": self.rpc.xaya.getblockcount (),
+        "height": self.env.getChainTip ()[1],
       })
 
       # Send a new move, but lock the wallet so that the resolution
@@ -97,7 +97,7 @@ class TxFailTest (ShipsTest):
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
         "canresolve": True,
-        "height": self.rpc.xaya.getblockcount () - 1,
+        "height": self.env.getChainTip ()[1] - 1,
       })
       self.expectPendingMoves ("foo", ["r"])
       self.generate (1)

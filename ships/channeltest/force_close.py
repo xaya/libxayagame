@@ -65,14 +65,13 @@ class ForceCloseTest (ShipsTest):
 
       # Now unlock the wallet and "force close" the channel by requesting
       # a dispute (which will actually send a resolution move in this case).
-      # and we should get the move in.
       self.mainLogger.info ("Force closing the channel...")
       self.unlockFunds ()
       txid = bar.rpc.filedispute ()
-      self.lockFunds ()
       self.expectPendingMoves ("foo", [])
       pendingTxids = self.expectPendingMoves ("bar", ["r"])
       self.assertEqual (pendingTxids, [txid])
+      self.lockFunds ()
       self.generate (1)
       state = bar.getCurrentState ()
       self.assertEqual (state["existsonchain"], False)

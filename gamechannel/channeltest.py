@@ -53,7 +53,7 @@ class Daemon ():
 
     self.proc = None
 
-  def start (self, xayarpc, gsprpc, bcrpc, extraArgs=[]):
+  def start (self, env, xayarpc, gsprpc, bcrpc, extraArgs=[]):
     if self.proc is not None:
       self.log.error ("Channel process is already running, not starting again")
       return
@@ -73,7 +73,7 @@ class Daemon ():
     self.proc = subprocess.Popen (args, env=envVars)
 
     self.rpc = self.createRpc ()
-    self.xayaRpc = jsonrpclib.ServerProxy (xayarpc)
+    self.env = env
 
     self.log.info ("Waiting for the JSON-RPC server to be up...")
     while True:
@@ -114,8 +114,7 @@ class Daemon ():
 
     assert self.proc is not None
 
-    bestblk = self.xayaRpc.getbestblockhash ()
-    bestheight = self.xayaRpc.getblockcount ()
+    bestblk, bestheight = self.env.getChainTip ()
 
     while True:
       state = self.rpc.getcurrentstate ()
@@ -187,7 +186,8 @@ class TestCase (XayaGameTest):
     daemon = Daemon (channelId, playerName, address, self.basedir,
                      next (self.ports), self.args.channel_daemon)
 
-    return DaemonContext (daemon, self.xayanode.rpcurl, self.gamenode.rpcurl,
+    return DaemonContext (daemon, self.env,
+                          self.xayanode.rpcurl, self.gamenode.rpcurl,
                           self.bcurl)
 
   def newSigningAddress (self):

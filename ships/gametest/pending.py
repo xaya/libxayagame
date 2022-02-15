@@ -42,6 +42,12 @@ class PendingTest (ShipsTest):
   def run (self):
     self.generate (110)
 
+    # Pre-register all names we need later for pending.  This ensures that
+    # pending tracking also works on EVM chains.
+    for nm in ["foo", "bar", "xyz"]:
+      self.env.register ("p", nm)
+    self.generate (1)
+
     # Create a test channel with two participants, checking the
     # pending moves while we do it.
     self.mainLogger.info ("Opening a test channel...")

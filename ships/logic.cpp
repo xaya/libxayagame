@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -54,6 +54,13 @@ ShipsLogic::GetInitialStateBlock (unsigned& height, std::string& hashHex) const
       height = 0;
       hashHex
           = "6f750b36d22f1dc3d0a6e483af45301022646dfc3b3ba2187865f5a7d6d83ab1";
+      break;
+
+    case xaya::Chain::GANACHE:
+      height = 0;
+      /* Ganache does not have a fixed genesis block.  So leave the block
+         hash open and just accept any at height 0.  */
+      hashHex = "";
       break;
 
     default:

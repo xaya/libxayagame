@@ -25,7 +25,7 @@ class ReorgTest (ShipsTest):
     state = self.getStateProof (cid, "turn: 0")
     self.sendMove ("xyz", {"d": {"id": cid, "state": state}})
     self.generate (1)
-    disputeHeight = self.rpc.xaya.getblockcount ()
+    _, disputeHeight = self.env.getChainTip ()
     self.expectChannelState (cid, "first commitment", disputeHeight)
     self.generate (1)
     reorgBlock = self.rpc.xaya.getbestblockhash ()

@@ -61,7 +61,7 @@ class PendingTest (ShipsTest):
       # reattach that block.
       self.mainLogger.info ("Testing pending disputes...")
       self.generate (1)
-      blk = self.rpc.xaya.getbestblockhash ()
+      blk, _ = self.env.getChainTip ()
       self.rpc.xaya.invalidateblock (blk)
       txid = bar.rpc.filedispute ()
       self.assertEqual (self.expectPendingMoves ("bar", ["d"]), [txid])
@@ -78,7 +78,7 @@ class PendingTest (ShipsTest):
       # Now verify what happens in the same situation with a resolution.
       self.mainLogger.info ("Testing pending resolution...")
       self.generate (1)
-      blk = self.rpc.xaya.getbestblockhash ()
+      blk, _ = self.env.getChainTip ()
       self.rpc.xaya.invalidateblock (blk)
       foo.rpc._notify.shoot (row=7, column=0)
       txids = self.expectPendingMoves ("foo", ["r"])

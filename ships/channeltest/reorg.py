@@ -11,10 +11,16 @@ Tests how a game channel reacts to reorgs of important on-chain transactions
 from shipstest import ShipsTest
 
 
-class ReogTest (ShipsTest):
+class ReorgTest (ShipsTest):
 
   def run (self):
     self.generate (110)
+
+    # Pre-generate the names.  This ensures that pending tracking on EVM
+    # chains works (and doesn't hurt in other cases).
+    for nm in ["foo", "bar", "baz"]:
+      self.env.register ("p", nm)
+    self.generate (1)
 
     # Create a test channel with two participants.  Remember the block hashes
     # where it was created and joined by the second one, so that we can
@@ -25,13 +31,13 @@ class ReogTest (ShipsTest):
       "addr": addr[0],
     }})
     self.generate (1)
-    createBlk = self.rpc.xaya.getbestblockhash ()
+    createBlk, _ = self.env.getChainTip ()
     self.sendMove ("bar", {"j": {
       "id": channelId,
       "addr": addr[1],
     }})
     self.generate (1)
-    joinBlk = self.rpc.xaya.getbestblockhash ()
+    joinBlk, _ = self.env.getChainTip ()
 
     # Start up three channel daemons:  The two participants and
     # a third one, which will join the channel later in a reorged
@@ -76,7 +82,7 @@ class ReogTest (ShipsTest):
       self.assertEqual (state["existsonchain"], False)
       self.rpc.xaya.reconsiderblock (createBlk)
       self.rpc.xaya.invalidateblock (joinBlk)
-      self.assertEqual (self.rpc.xaya.getbestblockhash (), createBlk)
+      self.assertEqual (self.env.getChainTip ()[0], createBlk)
       state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["existsonchain"], True)
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
@@ -140,13 +146,13 @@ class ReogTest (ShipsTest):
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
         "canresolve": False,
-        "height": self.rpc.xaya.getblockcount (),
+        "height": self.env.getChainTip ()[1],
       })
       with self.waitForTurnIncrease (daemons, 2):
         foo.rpc._notify.shoot (row=0, column=0)
       self.expectPendingMoves ("foo", ["r"])
       self.generate (1)
-      resolutionBlk = self.rpc.xaya.getbestblockhash ()
+      resolutionBlk, _ = self.env.getChainTip ()
       state = self.getSyncedChannelState (daemons)
       assert "dispute" not in state
 
@@ -155,7 +161,7 @@ class ReogTest (ShipsTest):
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
         "canresolve": True,
-        "height": self.rpc.xaya.getblockcount (),
+        "height": self.env.getChainTip ()[1],
       })
 
       # A resolution is not resent if the previous transaction remained in
@@ -184,7 +190,7 @@ class ReogTest (ShipsTest):
       })
 
       self.mainLogger.info ("Detaching a block and ending the game normally...")
-      disputeTimeoutBlk = self.rpc.xaya.getbestblockhash ()
+      disputeTimeoutBlk, _ = self.env.getChainTip ()
       self.rpc.xaya.invalidateblock (disputeTimeoutBlk)
       state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["existsonchain"], True)
@@ -210,7 +216,7 @@ class ReogTest (ShipsTest):
       })
 
       self.mainLogger.info ("Reorg and resending of loss declaration...")
-      winnerStmtBlk = self.rpc.xaya.getbestblockhash ()
+      winnerStmtBlk, _ = self.env.getChainTip ()
       self.rpc.xaya.invalidateblock (winnerStmtBlk)
       state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
@@ -232,7 +238,7 @@ class ReogTest (ShipsTest):
 
       # Do a longer reorg, so that the original move will not be restored
       # to the mempool.  Verify that we send a new one.
-      winnerStmtBlk = self.rpc.xaya.getbestblockhash ()
+      winnerStmtBlk, _ = self.env.getChainTip ()
       self.generate (10)
       self.rpc.xaya.invalidateblock (winnerStmtBlk)
       state = self.getSyncedChannelState (daemons)
@@ -252,4 +258,4 @@ class ReogTest (ShipsTest):
 
 
 if __name__ == "__main__":
-  ReogTest ().main ()
+  ReorgTest ().main ()

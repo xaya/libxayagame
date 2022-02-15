@@ -25,7 +25,7 @@ class DisputeTest (ShipsTest):
     state = self.getStateProof (cid, "turn: 0")
     self.sendMove ("xyz", {"d": {"id": cid, "state": state}})
     self.generate (1)
-    disputeHeight = self.rpc.xaya.getblockcount ()
+    _, disputeHeight = self.env.getChainTip ()
     self.expectChannelState (cid, "first commitment", disputeHeight)
 
     # Resolving it without giving more moves won't work.
@@ -50,7 +50,7 @@ class DisputeTest (ShipsTest):
     """)
     self.sendMove ("xyz", {"r": {"id": cid, "state": state}})
     self.generate (1)
-    self.assertEqual (self.rpc.xaya.getblockcount (), disputeHeight + 10)
+    self.assertEqual (self.env.getChainTip ()[1], disputeHeight + 10)
     self.expectChannelState (cid, "second commitment", None)
 
     # File a dispute right after resolution, with the same state.
@@ -58,13 +58,13 @@ class DisputeTest (ShipsTest):
     self.mainLogger.info ("Disputing same state again...")
     self.sendMove ("xyz", {"d": {"id": cid, "state": state}})
     self.generate (1)
-    disputeHeight = self.rpc.xaya.getblockcount ()
+    disputeHeight = self.env.getChainTip ()[1]
     self.expectChannelState (cid, "second commitment", disputeHeight)
 
     # Let it expire and the first player win.
     self.mainLogger.info ("Letting dispute expire...")
     self.generate (10)
-    self.assertEqual (self.rpc.xaya.getblockcount (), disputeHeight + 10)
+    self.assertEqual (self.env.getChainTip ()[1], disputeHeight + 10)
     self.expectGameState ({
       "gamestats":
         {

@@ -72,7 +72,7 @@ class DisputesTest (ShipsTest):
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
         "canresolve": False,
-        "height": self.rpc.xaya.getblockcount () - 1,
+        "height": self.env.getChainTip ()[1] - 1,
       })
 
       # Resolve the dispute with a new move.
@@ -81,7 +81,7 @@ class DisputesTest (ShipsTest):
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
         "canresolve": True,
-        "height": self.rpc.xaya.getblockcount () - 1,
+        "height": self.env.getChainTip ()[1] - 1,
       })
       self.expectPendingMoves ("foo", ["r"])
       pending = self.rpc.xaya.name_pending ("p/foo")
@@ -108,7 +108,7 @@ class DisputesTest (ShipsTest):
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
         "canresolve": True,
-        "height": self.rpc.xaya.getblockcount (),
+        "height": self.env.getChainTip ()[1],
       })
 
       self.expectPendingMoves ("foo", ["r"])
@@ -123,7 +123,7 @@ class DisputesTest (ShipsTest):
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
         "canresolve": False,
-        "height": self.rpc.xaya.getblockcount () - 9,
+        "height": self.env.getChainTip ()[1] - 9,
       })
       self.generate (1)
       state = foo.getCurrentState ()
