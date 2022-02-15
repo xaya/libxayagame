@@ -62,7 +62,8 @@ class ReogTest (ShipsTest):
       for c in range (8):
         _, state = self.waitForPhase (daemons, ["shoot"])
         turn = state["current"]["state"]["whoseturn"]
-        daemons[turn].rpc._notify.shoot (row=7, column=c)
+        with self.waitForTurnIncrease (daemons, 2):
+          daemons[turn].rpc._notify.shoot (row=7, column=c)
       _, originalState = self.waitForPhase (daemons, ["shoot"])
 
       # Generate a couple of blocks to make sure this will be the longest
@@ -71,11 +72,12 @@ class ReogTest (ShipsTest):
 
       self.mainLogger.info ("Reorg to channel creation...")
       self.rpc.xaya.invalidateblock (createBlk)
-      self.assertEqual (foo.getCurrentState ()["existsonchain"], False)
+      state = self.getSyncedChannelState (daemons)
+      self.assertEqual (state["existsonchain"], False)
       self.rpc.xaya.reconsiderblock (createBlk)
       self.rpc.xaya.invalidateblock (joinBlk)
       self.assertEqual (self.rpc.xaya.getbestblockhash (), createBlk)
-      state = foo.getCurrentState ()
+      state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["existsonchain"], True)
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
                         "single participant")
@@ -93,7 +95,8 @@ class ReogTest (ShipsTest):
       self.mainLogger.info ("Building alternate reality...")
       _, state = self.waitForPhase (daemons, ["shoot"])
       if state["current"]["state"]["whoseturn"] == 0:
-        foo.rpc._notify.shoot (row=6, column=0)
+        with self.waitForTurnIncrease (daemons, 2):
+          foo.rpc._notify.shoot (row=6, column=0)
         _, state = self.waitForPhase (daemons, ["shoot"])
       self.assertEqual (state["current"]["state"]["whoseturn"], 1)
 
@@ -112,7 +115,7 @@ class ReogTest (ShipsTest):
 
       self.mainLogger.info ("Restoring original state...")
       self.rpc.xaya.reconsiderblock (joinBlk)
-      state = foo.getCurrentState ()
+      state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["current"]["meta"],
                         originalState["current"]["meta"])
       self.assertEqual (state["current"]["state"]["parsed"],
@@ -121,7 +124,8 @@ class ReogTest (ShipsTest):
       # Make sure it is foo's turn.
       _, state = self.waitForPhase (daemons, ["shoot"])
       if state["current"]["state"]["whoseturn"] == 1:
-        bar.rpc._notify.shoot (row=6, column=1)
+        with self.waitForTurnIncrease (daemons, 2):
+          bar.rpc._notify.shoot (row=6, column=1)
         _, state = self.waitForPhase (daemons, ["shoot"])
       self.assertEqual (state["current"]["state"]["whoseturn"], 0)
 
@@ -132,17 +136,18 @@ class ReogTest (ShipsTest):
       bar.rpc.filedispute ()
       self.expectPendingMoves ("bar", ["d"])
       self.generate (1)
-      state = foo.getCurrentState ()
+      state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
         "canresolve": False,
         "height": self.rpc.xaya.getblockcount (),
       })
-      foo.rpc._notify.shoot (row=0, column=0)
+      with self.waitForTurnIncrease (daemons, 2):
+        foo.rpc._notify.shoot (row=0, column=0)
       self.expectPendingMoves ("foo", ["r"])
       self.generate (1)
       resolutionBlk = self.rpc.xaya.getbestblockhash ()
-      state = foo.getCurrentState ()
+      state = self.getSyncedChannelState (daemons)
       assert "dispute" not in state
 
       self.rpc.xaya.invalidateblock (resolutionBlk)
@@ -163,7 +168,7 @@ class ReogTest (ShipsTest):
       # the little extra potential benefit in some edge cases.)
       self.expectPendingMoves ("foo", ["r", "r"])
       self.generate (1)
-      state = foo.getCurrentState ()
+      state = self.getSyncedChannelState (daemons)
       assert "dispute" not in state
 
       self.mainLogger.info ("Letting the game end with a dispute...")
@@ -181,12 +186,13 @@ class ReogTest (ShipsTest):
       self.mainLogger.info ("Detaching a block and ending the game normally...")
       disputeTimeoutBlk = self.rpc.xaya.getbestblockhash ()
       self.rpc.xaya.invalidateblock (disputeTimeoutBlk)
-      state = foo.getCurrentState ()
+      state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["existsonchain"], True)
 
       # We miss a shot with foo and reveal with bar, so that this time
       # foo wins the channel (but ordinarily).
-      foo.rpc._notify.shoot (row=6, column=2)
+      with self.waitForTurnIncrease (daemons, 2):
+        foo.rpc._notify.shoot (row=6, column=2)
       self.expectPendingMoves ("foo", ["r"])
       self.generate (1)
       self.waitForPhase (daemons, ["shoot"])
@@ -206,7 +212,7 @@ class ReogTest (ShipsTest):
       self.mainLogger.info ("Reorg and resending of loss declaration...")
       winnerStmtBlk = self.rpc.xaya.getbestblockhash ()
       self.rpc.xaya.invalidateblock (winnerStmtBlk)
-      state = foo.getCurrentState ()
+      state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
                         "finished")
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
@@ -229,7 +235,7 @@ class ReogTest (ShipsTest):
       winnerStmtBlk = self.rpc.xaya.getbestblockhash ()
       self.generate (10)
       self.rpc.xaya.invalidateblock (winnerStmtBlk)
-      state = foo.getCurrentState ()
+      state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
                         "finished")
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
