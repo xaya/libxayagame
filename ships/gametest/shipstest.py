@@ -110,6 +110,8 @@ class ShipsTest (channeltest.TestCase):
     actualTypes = []
     for p in pending:
       val = json.loads (p["value"])
+      if ("g" not in val) or ("xs" not in val["g"]):
+        continue
       mvKeys = list (val["g"]["xs"].keys ())
       self.assertEqual (len (mvKeys), 1)
       actualTypes.append (mvKeys[0])

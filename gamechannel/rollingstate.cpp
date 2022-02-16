@@ -18,6 +18,89 @@ using google::protobuf::util::MessageDifferencer;
 namespace xaya
 {
 
+namespace
+{
+
+/**
+ * Maximum size of the state-update queue for unknown reinits.  This protects
+ * against DoS.  In practice, the queue is needed only in rare edge cases
+ * at all, and then one or two entries in total are most likely more than
+ * enough.
+ */
+constexpr size_t STATE_UPDATE_QUEUE_SIZE = 100;
+
+} // anonymous namespace
+
+/* ************************************************************************** */
+
+void
+StateUpdateQueue::Insert (const std::string& reinit,
+                          const proto::StateProof& upd)
+{
+  /* If we are at capacity, drop all reinits apart from the current one
+     as a first step.  */
+  if (size == maxSize)
+    {
+      LOG_FIRST_N (WARNING, 10)
+          << "StateUpdateQueue has reached maximum size,"
+          << " we will drop some elements";
+
+      auto mit = updates.begin ();
+      while (mit != updates.end ())
+        {
+          if (mit->first == reinit)
+            ++mit;
+          else
+            {
+              CHECK_GE (size, mit->second.size ());
+              size -= mit->second.size ();
+              mit = updates.erase (mit);
+            }
+        }
+    }
+
+  /* If we are still at capacity, we only have the current reinit left,
+     and start dropping the oldest elements for it.  */
+  if (size == maxSize)
+    {
+      CHECK_EQ (updates.size (), 1);
+      const auto mit = updates.begin ();
+      CHECK_EQ (mit->first, reinit);
+      CHECK_EQ (mit->second.size (), size);
+      --size;
+      mit->second.pop_front ();
+    }
+
+  CHECK_LT (size, maxSize);
+  ++size;
+  updates[reinit].push_back (upd);
+}
+
+std::deque<proto::StateProof>
+StateUpdateQueue::ExtractQueue (const std::string& reinit)
+{
+  auto mit = updates.find (reinit);
+  if (mit == updates.end ())
+    return {};
+
+  auto res = std::move (mit->second);
+
+  CHECK_GE (size, res.size ());
+  size -= res.size ();
+
+  updates.erase (mit);
+
+  return res;
+}
+
+/* ************************************************************************** */
+
+RollingState::RollingState (const BoardRules& r, const SignatureVerifier& v,
+                            const std::string& gId, const uint256& id)
+  : rules(r), verifier(v), gameId(gId), channelId(id),
+    unknownReinitMoves(STATE_UPDATE_QUEUE_SIZE)
+{}
+
 const ParsedBoardState&
 RollingState::GetLatestState () const
 {
@@ -110,6 +193,19 @@ RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
           << entry.latestState->TurnCount ();
 
       reinits.emplace (reinitId, std::move (entry));
+
+      /* If we have any queued up off-chain updates for this reinit,
+         process them now.  */
+      const auto updateQueue = unknownReinitMoves.ExtractQueue (reinitId);
+      if (!updateQueue.empty ())
+        {
+          LOG (INFO)
+              << "Processing " << updateQueue.size ()
+              << " queued off-chain updates for the new reinit";
+          for (const auto& sp : updateQueue)
+            UpdateWithMove (reinitId, sp);
+        }
+
       return true;
     }
 
@@ -154,7 +250,13 @@ RollingState::UpdateWithMove (const std::string& updReinit,
      stay up-to-date as much as possible.  For instance, it could happen that
      we receive an off-chain move later than an on-chain update that changed
      the channel; then we still want to apply the off-chain update, in case
-     the on-chain move gets detached again or something like that.  */
+     the on-chain move gets detached again or something like that.
+
+     Similarly, if we receive an update for a reinit that is not known at all
+     yet, we queue it up so that we can process it later in case the reinit
+     gets created.  This is needed for situations where our peer might have
+     received an on-chain update earlier than us, and we receive their
+     off-chain move before the on-chain update.  */
 
   const auto mit = reinits.find (updReinit);
   if (mit == reinits.end ())
@@ -162,6 +264,7 @@ RollingState::UpdateWithMove (const std::string& updReinit,
       LOG (WARNING)
           << "Off-chain update for channel " << channelId.ToHex ()
           << " has unknown reinitialisation ID: " << EncodeBase64 (updReinit);
+      unknownReinitMoves.Insert (updReinit, proof);
       return false;
     }
   ReinitData& entry = mit->second;
@@ -216,5 +319,7 @@ RollingState::UpdateWithMove (const std::string& updReinit,
      when switching to that reinit ID).  */
   return (updReinit == reinitId);
 }
+
+/* ************************************************************************** */
 
 } // namespace xaya
