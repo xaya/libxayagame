@@ -10,6 +10,7 @@
 #include <xayautil/hash.hpp>
 
 #include <google/protobuf/text_format.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #include <gtest/gtest.h>
 
@@ -21,6 +22,7 @@ namespace
 {
 
 using google::protobuf::TextFormat;
+using google::protobuf::util::MessageDifferencer;
 
 /**
  * Parses a StateProof from text proto.
@@ -33,6 +35,101 @@ ParseStateProof (const std::string& str)
 
   return res;
 }
+
+/* ************************************************************************** */
+
+class StateUpdateQueueTests : public testing::Test
+{
+
+protected:
+
+  /**
+   * Constructs a test state proof based just on an integer.
+   */
+  static proto::StateProof
+  TestProof (const int i)
+  {
+    std::ostringstream str;
+    str << i;
+
+    proto::StateProof res;
+    res.mutable_initial_state ()->set_data (str.str ());
+    return res;
+  }
+
+  /**
+   * Checks that the returned list of state proofs equals the test
+   * proofs for the given numbers.
+   */
+  static void
+  ExpectTestProofs (const std::deque<proto::StateProof>& actual,
+                    const std::vector<int>& expected)
+  {
+    ASSERT_EQ (actual.size (), expected.size ());
+    for (unsigned i = 0; i < actual.size (); ++i)
+      ASSERT_TRUE (MessageDifferencer::Equals (actual[i],
+                                               TestProof (expected[i])));
+  }
+
+};
+
+TEST_F (StateUpdateQueueTests, BasicAddingAndExtracting)
+{
+  StateUpdateQueue q(3);
+
+  EXPECT_EQ (q.GetTotalSize (), 0);
+  ExpectTestProofs (q.ExtractQueue ("foo"), {});
+
+  q.Insert ("foo", TestProof (1));
+  q.Insert ("bar", TestProof (2));
+  q.Insert ("foo", TestProof (3));
+  EXPECT_EQ (q.GetTotalSize (), 3);
+  ExpectTestProofs (q.ExtractQueue ("foo"), {1, 3});
+  EXPECT_EQ (q.GetTotalSize (), 1);
+
+  q.Insert ("foo", TestProof (4));
+  EXPECT_EQ (q.GetTotalSize (), 2);
+  ExpectTestProofs (q.ExtractQueue ("foo"), {4});
+  ExpectTestProofs (q.ExtractQueue ("bar"), {2});
+  EXPECT_EQ (q.GetTotalSize (), 0);
+}
+
+TEST_F (StateUpdateQueueTests, OverflowClearsOtherReinits)
+{
+  StateUpdateQueue q(4);
+
+  q.Insert ("foo", TestProof (1));
+  q.Insert ("bar", TestProof (2));
+  q.Insert ("bar", TestProof (3));
+  q.Insert ("baz", TestProof (4));
+  EXPECT_EQ (q.GetTotalSize (), 4);
+
+  q.Insert ("baz", TestProof (5));
+  EXPECT_EQ (q.GetTotalSize (), 2);
+  ExpectTestProofs (q.ExtractQueue ("foo"), {});
+  ExpectTestProofs (q.ExtractQueue ("bar"), {});
+  ExpectTestProofs (q.ExtractQueue ("baz"), {4, 5});
+}
+
+TEST_F (StateUpdateQueueTests, OverflowRemovesOldestEntries)
+{
+  StateUpdateQueue q(3);
+
+  q.Insert ("foo", TestProof (1));
+  q.Insert ("bar", TestProof (2));
+  q.Insert ("baz", TestProof (3));
+  EXPECT_EQ (q.GetTotalSize (), 3);
+
+  q.Insert ("baz", TestProof (4));
+  q.Insert ("baz", TestProof (5));
+  q.Insert ("baz", TestProof (6));
+  EXPECT_EQ (q.GetTotalSize (), 3);
+  ExpectTestProofs (q.ExtractQueue ("foo"), {});
+  ExpectTestProofs (q.ExtractQueue ("bar"), {});
+  ExpectTestProofs (q.ExtractQueue ("baz"), {4, 5, 6});
+}
+
+/* ************************************************************************** */
 
 class RollingStateTests : public TestGameFixture
 {
@@ -287,6 +384,8 @@ TEST_F (RollingStateTests, UpdateWithMoveSuccessful)
   ExpectState ("60 7", "reinit 1");
   EXPECT_EQ (state.GetOnChainTurnCount (), 6);
 }
+
+/* ************************************************************************** */
 
 } // anonymous namespace
 } // namespace xaya

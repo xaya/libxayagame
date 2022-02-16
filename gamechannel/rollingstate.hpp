@@ -13,12 +13,79 @@
 
 #include <xayautil/uint256.hpp>
 
+#include <deque>
 #include <map>
 #include <memory>
-#include <vector>
+#include <string>
 
 namespace xaya
 {
+
+/**
+ * A helper class that keeps track of a queue of off-chain state updates
+ * for their corresponding reinitialisations.  The total number of updates
+ * kept is limited, to avoid DoS attacks that try to fill our memory
+ * with bogus messages for invalid reinit IDs.
+ *
+ * When a new message comes in while the maximum size is already reached,
+ * first other reinit's are removed (so that the "current" reinit, based
+ * on how messages are received, is kept as much as possible).  If that is
+ * not enough, the oldest messages for the current reinit are removed as well.
+ *
+ * This logic ensures that we will potentially keep the latest states (highest
+ * turn count) for the current reinit in a situation where the peers are honest.
+ * If a peer is trying to DoS us, there is nothing we can really do about it
+ * anyway; in that case, the limit will ensure we do not run out of memory,
+ * and in the unlikely case that we also received a valid off-chain message
+ * before the corresponding reinit on-chain, the game will fall back to
+ * a dispute and resolution in the worst case.
+ */
+class StateUpdateQueue
+{
+
+private:
+
+  /** The maximum number of elements to keep.  */
+  const size_t maxSize;
+
+  /** Current number of elements in total (for all reinits).  */
+  size_t size = 0;
+
+  /** The queued updates for each reinit.  */
+  std::map<std::string, std::deque<proto::StateProof>> updates;
+
+public:
+
+  explicit StateUpdateQueue (const size_t ms)
+    : maxSize(ms)
+  {}
+
+  StateUpdateQueue () = delete;
+  StateUpdateQueue (const StateUpdateQueue&) = delete;
+  void operator= (const StateUpdateQueue&) = delete;
+
+  /**
+   * Inserts a new element (taking our limitations into account).
+   */
+  void Insert (const std::string& reinit, const proto::StateProof& upd);
+
+  /**
+   * Splices out all updates for the given reinit ID.  If there is a queue
+   * for it, then it is removed internally and returned to the caller.
+   * If there is not yet a queue, then an empty list is returned.
+   */
+  std::deque<proto::StateProof> ExtractQueue (const std::string& reinit);
+
+  /**
+   * Returns the current total size.
+   */
+  size_t
+  GetTotalSize () const
+  {
+    return size;
+  }
+
+};
 
 /**
  * All data about the current board state of a channel game.  This keeps track
@@ -96,13 +163,8 @@ private:
    * received off-chain updates.  We can't process them when we receive them
    * (as the reinit state is unknown), but we will process the full list once
    * the corresponding reinit gets created on chain.
-   *
-   * FIXME: This is a potential DoS vector.  We should enforce a maximum
-   * number of entries stored in there, and discard old ones when we hit
-   * the limit.  After all, this is supposed to be just a fix for very short
-   * term delays in receiving on-chain updates from our GSP.
    */
-  std::map<std::string, std::vector<proto::StateProof>> unknownReinitMoves;
+  StateUpdateQueue unknownReinitMoves;
 
   /** The reinit ID of the current reinitialisation.  */
   std::string reinitId;
@@ -110,9 +172,7 @@ private:
 public:
 
   explicit RollingState (const BoardRules& r, const SignatureVerifier& v,
-                         const std::string& gId, const uint256& id)
-    : rules(r), verifier(v), gameId(gId), channelId(id)
-  {}
+                         const std::string& gId, const uint256& id);
 
   RollingState () = delete;
   RollingState (const RollingState&) = delete;
