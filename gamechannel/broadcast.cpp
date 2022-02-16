@@ -16,6 +16,18 @@
 namespace xaya
 {
 
+namespace
+{
+
+/**
+ * The maximum size (in bytes) of an off-chain message that gets accepted
+ * and processed.  This is a measure against DoS by a peer; real messages
+ * should in practice always be (much) smaller than this anyway.
+ */
+constexpr size_t MAX_MESSAGE_SIZE = 1'024 * 1'024;
+
+} // anonymous namespace
+
 void
 OffChainBroadcast::SetParticipants (const proto::ChannelMetadata& meta)
 {
@@ -55,6 +67,14 @@ void
 OffChainBroadcast::ProcessIncoming (ChannelManager& m,
                                     const std::string& msg) const
 {
+  if (msg.size () > MAX_MESSAGE_SIZE)
+    {
+      LOG (ERROR)
+          << "Discarding too large off-chain message (size "
+          << msg.size () << " bytes)";
+      return;
+    }
+
   VLOG (1) << "Processing received broadcast message...";
   CHECK (m.GetChannelId () == id) << "Channel ID mismatch";
 
