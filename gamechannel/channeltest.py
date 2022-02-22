@@ -31,17 +31,13 @@ class Daemon ():
   This class is used for the Xayaships and game-channel integration tests,
   but other games can use it as well if their channel daemons:
 
-  * Have the --xaya_rpc_url, --gsp_rpc_url, --broadcast_rpc_url,
-    --rpc_port, --playername, -address and --channelid flags of ships-channel,
-    and
+  * Have the --playername and --rpc_port flags of ships-channel, and
   * provide the "stop" and "getcurrentstate" RPC methods.
   """
 
-  def __init__ (self, channelId, playerName, addr, basedir, port, binary):
+  def __init__ (self, playerName, basedir, port, binary):
     self.log = logging.getLogger ("gamechannel.channeltest.Daemon")
-    self.channelId = channelId
     self.playerName = playerName
-    self.address = addr
     self.datadir = os.path.join (basedir, "channel_%s" % playerName)
     self.port = port
     self.binary = binary
@@ -53,21 +49,19 @@ class Daemon ():
 
     self.proc = None
 
-  def start (self, env, xayarpc, gsprpc, bcrpc, extraArgs=[]):
+  def start (self, env, **kwargs):
     if self.proc is not None:
       self.log.error ("Channel process is already running, not starting again")
       return
 
     self.log.info ("Starting channel daemon for %s" % self.playerName)
     args = [self.binary]
-    args.append ("--xaya_rpc_url=%s" % xayarpc)
-    args.append ("--gsp_rpc_url=%s" % gsprpc)
-    args.append ("--broadcast_rpc_url=%s" % bcrpc)
     args.append ("--rpc_port=%d" % self.port)
-    args.append ("--channelid=%s" % self.channelId)
     args.append ("--playername=%s" % self.playerName)
-    args.append ("--address=%s" % self.address)
-    args.extend (extraArgs)
+    args.extend ([
+      "--%s=%s" % (k, v)
+      for k, v in kwargs.items ()
+    ])
     envVars = dict (os.environ)
     envVars["GLOG_log_dir"] = self.datadir
     self.proc = subprocess.Popen (args, env=envVars)
@@ -128,24 +122,6 @@ class Daemon ():
       time.sleep (0.01)
 
 
-class DaemonContext ():
-  """
-  A context manager that runs a channel daemon and shuts it down upon exit.
-  """
-
-  def __init__ (self, daemon, *args, **kwargs):
-    self.daemon = daemon
-    self.args = args
-    self.kwargs = kwargs
-
-  def __enter__ (self):
-    self.daemon.start (*self.args, **self.kwargs)
-    return self.daemon
-
-  def __exit__ (self, excType, excValue, traceback):
-    self.daemon.stop ()
-
-
 class TestCase (XayaGameTest):
   """
   Integration test case for channel games, which may include testing
@@ -176,19 +152,32 @@ class TestCase (XayaGameTest):
     self.broadcastThread.join ()
     super (TestCase, self).shutdown ()
 
-  def runChannelDaemon (self, channelId, playerName, address):
+  @contextmanager
+  def runChannelDaemon (self, playerName, **kwargs):
     """
-    Starts a new channel daemon for the given ID and player name.
+    Starts a new channel daemon for the given player name and with
+    the given extra arguments for the channel-daemon binary.
+
+    The --playername, --rpc_port, --gsp_rpc_url and --broadcast_rpc_url
+    flags are set automatically, all others are just forwarded from kwargs
+    to the binary.
+
     This returns a context manager instance, which returns the
     underlying Daemon instance when entered.
     """
 
-    daemon = Daemon (channelId, playerName, address, self.basedir,
-                     next (self.ports), self.args.channel_daemon)
+    daemon = Daemon (playerName, self.basedir, next (self.ports),
+                     self.args.channel_daemon)
 
-    return DaemonContext (daemon, self.env,
-                          self.xayanode.rpcurl, self.gamenode.rpcurl,
-                          self.bcurl)
+    daemon.start (self.env, playername=playerName,
+                  gsp_rpc_url=self.gamenode.rpcurl,
+                  broadcast_rpc_url=self.bcurl,
+                  **kwargs)
+
+    try:
+      yield daemon
+    finally:
+      daemon.stop ()
 
   def newSigningAddress (self):
     """

@@ -57,6 +57,17 @@ class ShipsTest (channeltest.TestCase):
 
     return cid, addresses
 
+  def runChannelDaemon (self, channelId, playerName, address):
+    """
+    Runs a channel daemon with the arguments set for the
+    ships-channel binary.
+    """
+
+    return super ().runChannelDaemon (playerName,
+        channelid=channelId,
+        address=address,
+        xaya_rpc_url=self.xayanode.rpcurl)
+
   def getStateProof (self, cid, stateStr):
     """
     Constructs a base64-encoded, serialised StateProof for the board state
