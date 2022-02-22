@@ -1,5 +1,5 @@
 AM_TESTS_ENVIRONMENT = \
-  PYTHONPATH=$(top_srcdir):$(top_srcdir)/ships:$(top_srcdir)/ships/gametest
+  PYTHONPATH=$(top_srcdir):$(top_srcdir)/ships:$(top_srcdir)/ships/gametest:$(PYTHONPATH)
 
 REGTESTS = \
   disputes.py \
