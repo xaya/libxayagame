@@ -13,8 +13,6 @@ from shipstest import ShipsTest
 class TxFailTest (ShipsTest):
 
   def run (self):
-    myAddr = self.rpc.xaya.getnewaddress ()
-    self.rpc.xaya.generatetoaddress (10, myAddr)
     self.generate (150)
 
     # Create a test channel with two participants.
@@ -90,14 +88,12 @@ class TxFailTest (ShipsTest):
       # retried when another block comes in.
       self.mainLogger.info ("Resolving it with unlocked wallet...")
       self.unlockFunds ()
-      self.expectPendingMoves ("foo", [])
-      self.assertEqual (foo.getCurrentState ()["pending"], {})
       self.generate (1)
       state = foo.getCurrentState ()
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
         "canresolve": True,
-        "height": self.env.getChainTip ()[1] - 1,
+        "height": self.env.getChainTip ()[1] - 3,
       })
       self.expectPendingMoves ("foo", ["r"])
       self.generate (1)
@@ -110,12 +106,12 @@ class TxFailTest (ShipsTest):
       self.lockFunds ()
       foo.rpc._notify.revealposition ()
       self.waitForPhase (daemons, ["finished"])
+      self.expectPendingMoves ("foo", [])
 
       # Now unlock the wallet.  Then the next block should re-trigger an update
       # and we should get the move in.
       self.mainLogger.info ("Loser declaration retrial succeeds...")
       self.unlockFunds ()
-      self.expectPendingMoves ("foo", [])
       self.generate (1)
       state = bar.getCurrentState ()
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 1)
@@ -130,16 +126,6 @@ class TxFailTest (ShipsTest):
           "bar": {"won": 1, "lost": 0},
         },
       })
-
-  def generate (self, n):
-    """
-    Mines n blocks, but to an address not owned by the test wallet.
-    This ensures that we keep control over locked/unlocked outputs as
-    needed in this test, and not new outputs get added when mining blocks.
-    """
-
-    notMine = "cdpSgeapVR8ZgRkqA8zF3fDJ2NgaUqm2pu"
-    self.rpc.xaya.generatetoaddress (n, notMine)
 
 
 if __name__ == "__main__":

@@ -55,17 +55,12 @@ class PendingTest (ShipsTest):
         _, state = self.waitForPhase (daemons, ["shoot"])
       self.assertEqual (state["current"]["state"]["whoseturn"], 0)
 
-      # We want to verify what happens if a dispute does not get mined
-      # immediately and is still pending after a new block.  For this,
-      # we first mine a block, detach it, then send the move, and then
-      # reattach that block.
+      # On Xaya Core, we test here what happens if a move is pending
+      # and a new block gets attached that doesn't confirm it.  We can't
+      # easily replicate this on Ganache, so test something simpler.
       self.mainLogger.info ("Testing pending disputes...")
-      self.generate (1)
-      blk, _ = self.env.getChainTip ()
-      self.rpc.xaya.invalidateblock (blk)
       txid = bar.rpc.filedispute ()
       self.assertEqual (self.expectPendingMoves ("bar", ["d"]), [txid])
-      self.rpc.xaya.reconsiderblock (blk)
       self.assertEqual (bar.rpc.filedispute (), "")
       self.assertEqual (self.expectPendingMoves ("bar", ["d"]), [txid])
       self.assertEqual (bar.getCurrentState ()["pending"], {
@@ -77,12 +72,8 @@ class PendingTest (ShipsTest):
 
       # Now verify what happens in the same situation with a resolution.
       self.mainLogger.info ("Testing pending resolution...")
-      self.generate (1)
-      blk, _ = self.env.getChainTip ()
-      self.rpc.xaya.invalidateblock (blk)
       foo.rpc._notify.shoot (row=7, column=0)
       txids = self.expectPendingMoves ("foo", ["r"])
-      self.rpc.xaya.reconsiderblock (blk)
       self.assertEqual (self.expectPendingMoves ("foo", ["r"]), txids)
       self.assertEqual (foo.getCurrentState ()["pending"], {
         "resolution": txids[0],

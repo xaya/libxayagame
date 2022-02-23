@@ -84,7 +84,7 @@ class DisputesTest (ShipsTest):
         "height": self.env.getChainTip ()[1] - 1,
       })
       self.expectPendingMoves ("foo", ["r"])
-      pending = self.rpc.xaya.name_pending ("p/foo")
+      pending = self.namePending ("p/foo")
       self.assertEqual (len (pending), 1)
       self.assertEqual (state["pending"], {
         "resolution": pending[0]["txid"],

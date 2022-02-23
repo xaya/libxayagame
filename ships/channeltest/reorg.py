@@ -28,8 +28,8 @@ class ReorgTest (ShipsTest):
     self.mainLogger.info ("Creating test channel...")
     addr = [self.newSigningAddress () for _ in range (3)]
     self.sendMove ("foo", {"c": {"addr": addr[0]}})
+    beforeCreate = self.env.snapshot ()
     self.generate (1)
-    createBlk, _ = self.env.getChainTip ()
     # Note that the mvid will be the same after reorg and resending of the
     # same move, so the channel daemons will pick it up correctly.
     [channelId] = self.getChannelIds ()
@@ -38,7 +38,6 @@ class ReorgTest (ShipsTest):
       "addr": addr[1],
     }})
     self.generate (1)
-    joinBlk, _ = self.env.getChainTip ()
 
     # Start up three channel daemons:  The two participants and
     # a third one, which will join the channel later in a reorged
@@ -78,12 +77,11 @@ class ReorgTest (ShipsTest):
       self.generate (10)
 
       self.mainLogger.info ("Reorg to channel creation...")
-      self.rpc.xaya.invalidateblock (createBlk)
+      beforeCreate.restore ()
       state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["existsonchain"], False)
-      self.rpc.xaya.reconsiderblock (createBlk)
-      self.rpc.xaya.invalidateblock (joinBlk)
-      self.assertEqual (self.env.getChainTip ()[0], createBlk)
+      self.sendMove ("foo", {"c": {"addr": addr[0]}})
+      self.generate (1)
       state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["existsonchain"], True)
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
@@ -96,6 +94,7 @@ class ReorgTest (ShipsTest):
       }})
       self.expectPendingMoves ("bar", [])
       self.expectPendingMoves ("baz", ["j"])
+      beforeJoin = self.env.snapshot ()
       self.generate (1)
 
       # Make sure it is baz' turn.  If not, miss a shot with foo.
@@ -121,7 +120,12 @@ class ReorgTest (ShipsTest):
       })
 
       self.mainLogger.info ("Restoring original state...")
-      self.rpc.xaya.reconsiderblock (joinBlk)
+      beforeJoin.restore ()
+      self.sendMove ("bar", {"j": {
+        "id": channelId,
+        "addr": addr[1],
+      }})
+      self.generate (1)
       state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["current"]["meta"],
                         originalState["current"]["meta"])
@@ -152,12 +156,12 @@ class ReorgTest (ShipsTest):
       with self.waitForTurnIncrease (daemons, 2):
         foo.rpc._notify.shoot (row=0, column=0)
       self.expectPendingMoves ("foo", ["r"])
+      beforeResolution = self.env.snapshot ()
       self.generate (1)
-      resolutionBlk, _ = self.env.getChainTip ()
       state = self.getSyncedChannelState (daemons)
       assert "dispute" not in state
 
-      self.rpc.xaya.invalidateblock (resolutionBlk)
+      beforeResolution.restore ()
       state = foo.getCurrentState ()
       self.assertEqual (state["dispute"], {
         "whoseturn": 0,
@@ -165,15 +169,9 @@ class ReorgTest (ShipsTest):
         "height": self.env.getChainTip ()[1],
       })
 
-      # A resolution is not resent if the previous transaction remained in
-      # the mempool.  But in our case here, we actually resolved the dispute
-      # and thus cleared the pending flag, and only then "reopened" it due
-      # to the reorg.  For this case, at least the current implementation
-      # sends a second resolution.  (To fix this, we would have to keep
-      # track of previous resolutions even if their corresponding disputes
-      # have been cleared already, which seems not worth the trouble for
-      # the little extra potential benefit in some edge cases.)
-      self.expectPendingMoves ("foo", ["r", "r"])
+      # Unlike with Xaya, old transactions are not restored to the mempool,
+      # and we just resend one resolution.
+      self.expectPendingMoves ("foo", ["r"])
       self.generate (1)
       state = self.getSyncedChannelState (daemons)
       assert "dispute" not in state
@@ -181,7 +179,9 @@ class ReorgTest (ShipsTest):
       self.mainLogger.info ("Letting the game end with a dispute...")
       bar.rpc.filedispute ()
       self.expectPendingMoves ("bar", ["d"])
-      self.generate (11)
+      self.generate (10)
+      beforeTimeout = self.env.snapshot ()
+      self.generate (1)
       self.expectGameState ({
         "channels": {},
         "gamestats": {
@@ -191,8 +191,7 @@ class ReorgTest (ShipsTest):
       })
 
       self.mainLogger.info ("Detaching a block and ending the game normally...")
-      disputeTimeoutBlk, _ = self.env.getChainTip ()
-      self.rpc.xaya.invalidateblock (disputeTimeoutBlk)
+      beforeTimeout.restore ()
       state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["existsonchain"], True)
 
@@ -207,6 +206,7 @@ class ReorgTest (ShipsTest):
       _, state = self.waitForPhase (daemons, ["finished"])
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
       txids = self.expectPendingMoves ("bar", ["l"])
+      beforeLossDecl = self.env.snapshot ()
       self.generate (1)
       self.expectGameState ({
         "channels": {},
@@ -217,17 +217,12 @@ class ReorgTest (ShipsTest):
       })
 
       self.mainLogger.info ("Reorg and resending of loss declaration...")
-      winnerStmtBlk, _ = self.env.getChainTip ()
-      self.rpc.xaya.invalidateblock (winnerStmtBlk)
+      beforeLossDecl.restore ()
       state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
                         "finished")
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
-      # The old transaction should have been restored to the mempool, and
-      # we should not resend another one (but detect that it is still there
-      # and just wait).
-      newTxids = self.expectPendingMoves ("bar", ["l"])
-      self.assertEqual (newTxids, txids)
+      self.expectPendingMoves ("bar", ["l"])
       self.generate (1)
       self.expectGameState ({
         "channels": {},
@@ -239,15 +234,13 @@ class ReorgTest (ShipsTest):
 
       # Do a longer reorg, so that the original move will not be restored
       # to the mempool.  Verify that we send a new one.
-      winnerStmtBlk, _ = self.env.getChainTip ()
       self.generate (10)
-      self.rpc.xaya.invalidateblock (winnerStmtBlk)
+      beforeLossDecl.restore ()
       state = self.getSyncedChannelState (daemons)
       self.assertEqual (state["current"]["state"]["parsed"]["phase"],
                         "finished")
       self.assertEqual (state["current"]["state"]["parsed"]["winner"], 0)
-      newTxids = self.expectPendingMoves ("bar", ["l"])
-      assert txids != newTxids
+      self.expectPendingMoves ("bar", ["l"])
       self.generate (1)
       self.expectGameState ({
         "channels": {},

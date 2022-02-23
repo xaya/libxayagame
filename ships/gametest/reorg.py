@@ -28,13 +28,12 @@ class ReorgTest (ShipsTest):
     _, disputeHeight = self.env.getChainTip ()
     self.expectChannelState (cid, "first commitment", disputeHeight)
     self.generate (1)
-    reorgBlock = self.rpc.xaya.getbestblockhash ()
+    snapshot = self.env.snapshot ()
 
     # Let the dispute expire.
     self.mainLogger.info ("Letting the dispute expire...")
     self.generate (50)
-    originalState = self.getGameState ()
-    self.assertEqual (originalState, {
+    self.assertEqual (self.getGameState (), {
       "gamestats":
         {
           "foo": {"won": 0, "lost": 1},
@@ -45,7 +44,7 @@ class ReorgTest (ShipsTest):
 
     # Reorg back and close the channel through a loss declaration.
     self.mainLogger.info ("Reorg and create alternate reality...")
-    self.rpc.xaya.invalidateblock (reorgBlock)
+    snapshot.restore ()
     self.expectChannelState (cid, "first commitment", disputeHeight)
     ch = self.getGameState ()["channels"][cid]
     self.sendMove ("bar", {"l": {"id": cid, "r": ch["meta"]["reinit"]}})
@@ -58,11 +57,6 @@ class ReorgTest (ShipsTest):
         },
       "channels": {},
     })
-
-    # Get back to the original chain.
-    self.mainLogger.info ("Revert to original reality...")
-    self.rpc.xaya.reconsiderblock (reorgBlock)
-    self.expectGameState (originalState)
 
 
 if __name__ == "__main__":

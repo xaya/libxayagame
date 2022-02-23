@@ -14,8 +14,6 @@ from shipstest import ShipsTest
 class ForceCloseTest (ShipsTest):
 
   def run (self):
-    myAddr = self.rpc.xaya.getnewaddress ()
-    self.rpc.xaya.generatetoaddress (10, myAddr)
     self.generate (150)
 
     self.mainLogger.info ("Creating test channel...")
@@ -66,12 +64,11 @@ class ForceCloseTest (ShipsTest):
       # Now unlock the wallet and "force close" the channel by requesting
       # a dispute (which will actually send a resolution move in this case).
       self.mainLogger.info ("Force closing the channel...")
-      self.unlockFunds ()
+      self.unlockFunds ("bar")
       txid = bar.rpc.filedispute ()
       self.expectPendingMoves ("foo", [])
       pendingTxids = self.expectPendingMoves ("bar", ["r"])
       self.assertEqual (pendingTxids, [txid])
-      self.lockFunds ()
       self.generate (1)
       state = bar.getCurrentState ()
       self.assertEqual (state["existsonchain"], False)
@@ -82,16 +79,6 @@ class ForceCloseTest (ShipsTest):
           "bar": {"won": 1, "lost": 0},
         },
       })
-
-  def generate (self, n):
-    """
-    Mines n blocks, but to an address not owned by the test wallet.
-    This ensures that we keep control over locked/unlocked outputs as
-    needed in this test, and not new outputs get added when mining blocks.
-    """
-
-    notMine = "cdpSgeapVR8ZgRkqA8zF3fDJ2NgaUqm2pu"
-    self.rpc.xaya.generatetoaddress (n, notMine)
 
 
 if __name__ == "__main__":
