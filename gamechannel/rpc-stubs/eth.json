@@ -1,0 +1,17 @@
+[
+  {
+    "name": "eth_getTransactionByHash",
+    "params": ["hash"],
+    "returns": {}
+  },
+  {
+    "name": "eth_estimateGas",
+    "params": [{}],
+    "returns": "0x123"
+  },
+  {
+    "name": "eth_sendTransaction",
+    "params": [{}],
+    "returns": "txid"
+  }
+]

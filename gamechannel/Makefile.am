@@ -12,6 +12,7 @@ pkgconfig_DATA = channelcore.pc gamechannel.pc
 RPC_STUBS = \
   rpc-stubs/channelgsprpcclient.h \
   rpc-stubs/channelgsprpcserverstub.h \
+  rpc-stubs/ethrpcclient.h \
   rpc-stubs/rpcbroadcastclient.h
 
 PROTOS = \
@@ -80,6 +81,7 @@ libgamechannel_la_SOURCES = \
   chaintochannel.cpp \
   daemon.cpp \
   database.cpp \
+  ethmover.cpp \
   gamestatejson.cpp \
   gsprpc.cpp \
   recvbroadcast.cpp \
@@ -92,6 +94,7 @@ GAMECHANNELHEADERS = \
   chaintochannel.hpp \
   daemon.hpp \
   database.hpp \
+  ethmover.hpp \
   gamestatejson.hpp \
   gsprpc.hpp \
   recvbroadcast.hpp \
@@ -200,6 +203,9 @@ rpc-stubs/channelgsprpcserverstub.h: $(srcdir)/rpc-stubs/channel-gsp-rpc.json
 	jsonrpcstub "$<" \
 	  --cpp-server=ChannelGspRpcServerStub \
 	  --cpp-server-file="$@"
+
+rpc-stubs/ethrpcclient.h: $(srcdir)/rpc-stubs/eth.json
+	jsonrpcstub "$<" --cpp-client=EthRpcClient --cpp-client-file="$@"
 
 rpc-stubs/rpcbroadcastclient.h: $(srcdir)/rpc-stubs/rpcbroadcast.json
 	jsonrpcstub "$<" --cpp-client=RpcBroadcastClient --cpp-client-file="$@"

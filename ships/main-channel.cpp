@@ -8,11 +8,11 @@
 #include "channelrpc.hpp"
 
 #include <gamechannel/daemon.hpp>
+#include <gamechannel/ethmover.hpp>
 #include <gamechannel/ethsignatures.hpp>
 #include <gamechannel/rpcbroadcast.hpp>
 #include <gamechannel/rpcwallet.hpp>
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
+#include <gamechannel/rpc-stubs/ethrpcclient.h>
 
 #include <eth-utils/ecdsa.hpp>
 
@@ -31,13 +31,13 @@
 namespace
 {
 
-DEFINE_string (xaya_rpc_url, "",
-               "URL at which Xaya Core's JSON-RPC interface is available"
+DEFINE_string (eth_rpc_url, "",
+               "URL at which the Ethereum JSON-RPC interface is available"
                " including a wallet");
-DEFINE_bool (xaya_rpc_legacy_protocol, true,
-             "whether to use JSON-RPC 1.0 instead of 2.0 for the Xaya RPC;"
-             " this is needed for Xaya Core, whereas other servers"
-             " like Electrum-CHI should use JSON-RPC 2.0");
+DEFINE_string (from_address, "",
+               "ETH address from which to send move commands");
+DEFINE_string (accounts_contract, "",
+               "Address of the XayaAccounts contract");
 DEFINE_string (gsp_rpc_url, "",
                "URL at which the shipsd JSON-RPC interface is available");
 DEFINE_string (broadcast_rpc_url, "",
@@ -68,9 +68,19 @@ main (int argc, char** argv)
   gflags::SetVersionString (PACKAGE_VERSION);
   gflags::ParseCommandLineFlags (&argc, &argv, true);
 
-  if (FLAGS_xaya_rpc_url.empty ())
+  if (FLAGS_eth_rpc_url.empty ())
     {
-      std::cerr << "Error: --xaya_rpc_url must be set" << std::endl;
+      std::cerr << "Error: --eth_rpc_url must be set" << std::endl;
+      return EXIT_FAILURE;
+    }
+  if (FLAGS_from_address.empty ())
+    {
+      std::cerr << "Error: --from_address must be set" << std::endl;
+      return EXIT_FAILURE;
+    }
+  if (FLAGS_accounts_contract.empty ())
+    {
+      std::cerr << "Error: --accounts_contract must be set" << std::endl;
       return EXIT_FAILURE;
     }
   if (FLAGS_gsp_rpc_url.empty ())
@@ -102,18 +112,14 @@ main (int argc, char** argv)
       return EXIT_FAILURE;
     }
 
-  // FIXME: Clean up completely once the move sender is migrated as well.
-  const auto rpcVersion = (FLAGS_xaya_rpc_legacy_protocol
-                              ? jsonrpc::JSONRPC_CLIENT_V1
-                              : jsonrpc::JSONRPC_CLIENT_V2);
-  jsonrpc::HttpClient xayaClient(FLAGS_xaya_rpc_url);
-  XayaRpcClient xayaRpc(xayaClient, rpcVersion);
-  XayaWalletRpcClient xayaWallet(xayaClient, rpcVersion);
+  jsonrpc::HttpClient ethClient(FLAGS_eth_rpc_url);
+  EthRpcClient ethRpc(ethClient);
 
   const ethutils::ECDSA ecdsaCtx;
   const xaya::EthSignatureVerifier verifier(ecdsaCtx);
   xaya::EthSignatureSigner signer(ecdsaCtx, FLAGS_privkey);
-  xaya::RpcTransactionSender sender(xayaRpc, xayaWallet);
+  xaya::EthTransactionSender sender(ethRpc, FLAGS_from_address,
+                                    FLAGS_accounts_contract);
 
   ships::ShipsBoardRules rules;
   ships::ShipsChannel channel(FLAGS_playername);
