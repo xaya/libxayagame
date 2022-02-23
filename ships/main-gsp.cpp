@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -79,6 +79,9 @@ main (int argc, char** argv)
     }
   config.EnablePruning = FLAGS_enable_pruning;
   config.DataDirectory = FLAGS_datadir;
+
+  /* We use Xaya X Eth, which reports its version as 1.0.0.0 initially.  */
+  config.MinXayaVersion = 1'00'00'00;
 
   ships::ShipsLogic rules;
   xaya::ChannelGspInstanceFactory instanceFact(rules);

@@ -2,6 +2,7 @@
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+from contextlib import contextmanager
 import json
 import os
 import os.path
@@ -34,6 +35,21 @@ class ShipsTest (channeltest.TestCase):
     shipsd = os.path.join (top_builddir, "ships", "shipsd")
     channeld = os.path.join (top_builddir, "ships", "ships-channel")
     super (ShipsTest, self).__init__ (GAME_ID, shipsd, channeld)
+
+  @contextmanager
+  def runBaseChainEnvironment (self):
+    with self.runXayaXEthEnvironment () as env:
+      # In order to support locking and unlocking of the ability to send
+      # moves, we use another account (not the owner) that is approved
+      # on the default address' names.
+      self.fromAddr = self.w3.eth.accounts[1]
+      assert self.fromAddr != self.contracts.account
+
+      self.contracts.registry.functions.setApprovalForAll (self.fromAddr, True)\
+          .transact ({"from": self.contracts.account})
+      env.generate (1)
+
+      yield env
 
   def getChannelIds (self):
     """
@@ -88,7 +104,9 @@ class ShipsTest (channeltest.TestCase):
     return super ().runChannelDaemon (playerName,
         channelid=channelId,
         privkey=privkey,
-        xaya_rpc_url=self.xayanode.rpcurl)
+        eth_rpc_url=self.ethnode.rpcurl,
+        from_address=self.fromAddr,
+        accounts_contract=self.contracts.registry.address)
 
   def getStateProof (self, cid, stateStr):
     """
@@ -144,7 +162,7 @@ class ShipsTest (channeltest.TestCase):
     # to avoid tests being flaky.
     time.sleep (1)
 
-    pending = self.rpc.xaya.name_pending ("p/" + name)
+    pending = self.namePending ("p/" + name)
     actualTypes = []
     for p in pending:
       val = json.loads (p["value"])
@@ -177,17 +195,54 @@ class ShipsTest (channeltest.TestCase):
 
   def lockFunds (self):
     """
-    Locks all UTXO's in the wallet, so that no name_update transactions
-    can be made temporarily.  This does not affect signing messages.
+    Disapproves the "from" address from the test names.  This will result
+    in channel-daemon-sent transactions to fail.
     """
 
-    outputs = self.rpc.xaya.listunspent ()
-    self.rpc.xaya.lockunspent (False, outputs)
+    self.contracts.registry.functions.setApprovalForAll (self.fromAddr, False)\
+        .transact ({"from": self.contracts.account})
+    self.generate (1)
 
-  def unlockFunds (self):
+  def unlockFunds (self, name=None):
     """
-    Unlocks all outputs in the wallet, so that name_update's can be done
-    again successfully.
+    Re-approves the "from" address used by channel daemons to operate
+    on the test names.
+
+    If an explicit name is given, then we only give explicit approval
+    for that one name.
     """
 
-    self.rpc.xaya.lockunspent (True)
+    if name is None:
+      self.contracts.registry.functions.setApprovalForAll (self.fromAddr, True)\
+          .transact ({"from": self.contracts.account})
+    else:
+      tokenId = self.contracts.registry.functions.tokenIdForName ("p", name)\
+          .call ()
+      self.contracts.registry.functions.approve (self.fromAddr, tokenId)\
+          .transact ({"from": self.contracts.account})
+
+    self.generate (1)
+
+  def namePending (self, nm):
+    """
+    Returns the pending move transactions for the given name from the mempool.
+    """
+
+    res = []
+
+    allTx = self.w3.geth.txpool.content ()["pending"]
+    for perAddress in allTx.values ():
+      for tx in perAddress.values ():
+        if tx["to"].lower () != self.contracts.registry.address.lower ():
+          continue
+        fcn, args = self.contracts.registry.decode_function_input (tx["input"])
+        if fcn.function_identifier != "move":
+          continue
+        if "%s/%s" % (args["ns"], args["name"]) != nm:
+          continue
+        res.append ({
+          "value": args["mv"],
+          "txid": tx["hash"][2:],
+        })
+
+    return res
