@@ -117,6 +117,10 @@ class ShipsTest (channeltest.TestCase):
 
     self.log.info ("Expecting pending moves for %s: %s" % (name, types))
 
+    # Make sure to wait a bit before requesting the pending moves,
+    # to avoid tests being flaky.
+    time.sleep (1)
+
     pending = self.rpc.xaya.name_pending ("p/" + name)
     actualTypes = []
     for p in pending:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2021 The Xaya developers
+# Copyright (C) 2019-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,7 +20,7 @@ class PendingTest (ShipsTest):
     it is synced up.
     """
 
-    time.sleep (0.1)
+    time.sleep (1)
     return super ().getPendingState ()
 
   def expectPendingChannels (self, expected):
