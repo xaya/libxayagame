@@ -172,12 +172,17 @@ public:
 
 /**
  * Updates the reinitialisation ID in the given metadata proto for an update
- * done by the passed-in txid.  This is one way to update the reinit IDs and
+ * done by the passed-in move ID.  This is one way to update the reinit IDs and
  * make sure that they yield a unique sequence that does not allow for any
  * replay attacks.  It need not be used by games, though, in case they have
  * a more suitable update mechanism.
+ *
+ * The mvid should be a unique identifier for the move / the operation
+ * performed.  It can be the txid on Xaya Core, but should be something else
+ * (e.g. a hash of the actual operation, like "bob joins") if a single
+ * transaction can trigger multiple moves (e.g. on EVM chains).
  */
-void UpdateMetadataReinit (const uint256& txid, proto::ChannelMetadata& meta);
+void UpdateMetadataReinit (const uint256& mvid, proto::ChannelMetadata& meta);
 
 } // namespace xaya
 

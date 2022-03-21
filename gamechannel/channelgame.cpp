@@ -241,11 +241,11 @@ ChannelGame::PendingMoves::ToJson () const
 }
 
 void
-UpdateMetadataReinit (const uint256& txid, proto::ChannelMetadata& meta)
+UpdateMetadataReinit (const uint256& mvid, proto::ChannelMetadata& meta)
 {
   SHA256 hasher;
   hasher << meta.reinit ();
-  hasher << txid;
+  hasher << mvid;
 
   meta.set_reinit (hasher.Finalise ().GetBinaryString ());
 }
