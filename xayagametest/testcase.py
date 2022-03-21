@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2021 The Xaya developers
+# Copyright (C) 2018-2022 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -360,6 +360,14 @@ class XayaGameTest (object):
 
     return self.env.move (ns, base, value, *args, **kwargs)
 
+  def formatMove (self, move):
+    """
+    Formats a given move JSON value to a string, adding the game ID
+    on the outside.
+    """
+
+    return json.dumps ({"g": {self.gameId: move}})
+
   def sendMove (self, name, move, *args, **kwargs):
     """
     Sends a given move for the name.  This calls name_register or name_update,
@@ -367,8 +375,8 @@ class XayaGameTest (object):
     full name value from self.gameId and move.
     """
 
-    value = json.dumps ({"g": {self.gameId: move}})
-    return self.registerOrUpdateName ("p/" + name, value, *args, **kwargs)
+    return self.registerOrUpdateName ("p/" + name, self.formatMove (move),
+                                      *args, **kwargs)
 
   def adminCommand (self, cmd, *args, **kwargs):
     """
