@@ -8,6 +8,7 @@ REGTESTS = \
   disputes.py \
   force_close.py \
   getchannel.py \
+  multi_moves.py \
   pending.py \
   reorg.py
 
