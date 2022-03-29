@@ -26,10 +26,15 @@ class ChannelManagementTest (ShipsTest):
     # Create three channels with single participants for now.
     self.mainLogger.info ("Creating two channels...")
     addr = [self.newSigningAddress () for _ in range (4)]
-    id1 = self.sendMove ("foo", {"c": {"addr": addr[0]}})
-    id2 = self.sendMove ("bar", {"c": {"addr": addr[1]}})
-    id3 = self.sendMove ("baz", {"c": {"addr": addr[2]}})
+    self.sendMove ("foo", {"c": {"addr": addr[0]}})
     self.generate (1)
+    [id1] = self.getChannelIds ()
+    self.sendMove ("bar", {"c": {"addr": addr[1]}})
+    self.generate (1)
+    [id2] = self.getChannelIds () - set ([id1])
+    self.sendMove ("baz", {"c": {"addr": addr[2]}})
+    self.generate (1)
+    [id3] = self.getChannelIds () - set ([id1, id2])
 
     state = self.getGameState ()
     self.assertEqual (state["gamestats"], {})

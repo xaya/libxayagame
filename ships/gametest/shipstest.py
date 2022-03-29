@@ -35,6 +35,13 @@ class ShipsTest (channeltest.TestCase):
     channeld = os.path.join (top_builddir, "ships", "ships-channel")
     super (ShipsTest, self).__init__ (GAME_ID, shipsd, channeld)
 
+  def getChannelIds (self):
+    """
+    Returns a set of all channel IDs that are currently open.
+    """
+
+    return set (self.getGameState ()["channels"].keys ())
+
   def openChannel (self, names, addresses=None):
     """
     Creates a channel and joins it, so that we end up with a fully set-up
@@ -47,8 +54,18 @@ class ShipsTest (channeltest.TestCase):
 
     self.assertEqual (len (names), 2)
     self.assertEqual (len (addresses), 2)
-    cid = self.sendMove (names[0], {"c": {"addr": addresses[0]}})
+    self.sendMove (names[0], {"c": {"addr": addresses[0]}})
+
+    # Take a snapshot of channels before and after the creation, to
+    # determine which the new channel's ID is (so that the code is flexible
+    # and does not assume it is necessarily the txid).  This assumes that
+    # none of the other channels is closed right in that block, but hopefully
+    # that's not happening for our tests.
+    idsBefore = self.getChannelIds ()
     self.generate (1)
+    idsAfter = self.getChannelIds ()
+    [cid] = idsAfter - idsBefore
+
     self.sendMove (names[1], {"j": {"id": cid, "addr": addresses[1]}})
     self.generate (1)
 

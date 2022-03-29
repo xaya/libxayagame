@@ -285,7 +285,30 @@ TEST_F (CreateChannelTests, CreationSuccessful)
   EXPECT_EQ (h->GetMetadata ().participants (0).address (), "address 2");
 }
 
-TEST_F (CreateChannelTests, FailsForTxidCollision)
+TEST_F (CreateChannelTests, MvidIfAvailable)
+{
+  const auto txid = xaya::SHA256::Hash ("txid");
+  const auto id1 = xaya::SHA256::Hash ("mvid 1");
+  const auto id2 = xaya::SHA256::Hash ("mvid 2");
+
+  auto mv1 = Move ("domob", txid, ParseJson (R"(
+    {"c": {"addr": "address 1"}}
+  )"));
+  mv1["mvid"] = id1.ToHex ();
+
+  auto mv2 = Move ("domob", txid, ParseJson (R"(
+    {"c": {"addr": "address 2"}}
+  )"));
+  mv2["mvid"] = id2.ToHex ();
+
+  UpdateState (10, {mv1, mv2});
+
+  ExpectNumberOfChannels (2);
+  ExpectChannel (id1);
+  ExpectChannel (id2);
+}
+
+TEST_F (CreateChannelTests, FailsForIdCollision)
 {
   const auto data = ParseJson (R"(
     {"c": {"addr": "address"}}

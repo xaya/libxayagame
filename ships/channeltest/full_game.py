@@ -21,10 +21,11 @@ class FullGameTest (ShipsTest):
     # not yet confirmed on chain).
     self.mainLogger.info ("Creating test channel...")
     addr = [self.newSigningAddress () for _ in range (2)]
-    channelId = self.sendMove ("foo", {"c": {
+    self.sendMove ("foo", {"c": {
       "addr": addr[0],
     }})
     self.generate (1)
+    [channelId] = self.getChannelIds ()
     self.sendMove ("bar", {"j": {
       "id": channelId,
       "addr": addr[1],

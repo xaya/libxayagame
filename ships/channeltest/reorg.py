@@ -27,11 +27,12 @@ class ReorgTest (ShipsTest):
     # later invalidate those.
     self.mainLogger.info ("Creating test channel...")
     addr = [self.newSigningAddress () for _ in range (3)]
-    channelId = self.sendMove ("foo", {"c": {
-      "addr": addr[0],
-    }})
+    self.sendMove ("foo", {"c": {"addr": addr[0]}})
     self.generate (1)
     createBlk, _ = self.env.getChainTip ()
+    # Note that the mvid will be the same after reorg and resending of the
+    # same move, so the channel daemons will pick it up correctly.
+    [channelId] = self.getChannelIds ()
     self.sendMove ("bar", {"j": {
       "id": channelId,
       "addr": addr[1],

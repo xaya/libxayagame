@@ -108,24 +108,25 @@ ParseCreateChannelMove (const Json::Value& obj, std::string& addr)
 void
 HandleCreateChannel (xaya::SQLiteDatabase& db,
                      const Json::Value& obj, const unsigned height,
-                     const std::string& name, const xaya::uint256& txid)
+                     const std::string& name, const xaya::uint256& id)
 {
   std::string addr;
   if (!ParseCreateChannelMove (obj, addr))
     return;
 
   LOG (INFO)
-      << "Creating channel with ID " << txid.ToHex ()
+      << "Creating channel with ID " << id.ToHex ()
       << " for user " << name << " with address " << addr;
 
   xaya::ChannelsTable tbl(db);
 
   /* Verify that this is indeed a new instance and not an existing one.  That
-     should never happen, assuming that txid's do not collide.  */
-  auto h = tbl.GetById (txid);
-  CHECK (h == nullptr) << "Already have channel with ID " << txid.ToHex ();
+     should never happen, assuming that id's do not collide (which must
+     be guaranteed by choosing a proper source of id's).  */
+  auto h = tbl.GetById (id);
+  CHECK (h == nullptr) << "Already have channel with ID " << id.ToHex ();
 
-  h = tbl.CreateNew (txid);
+  h = tbl.CreateNew (id);
   xaya::proto::ChannelMetadata meta;
   auto* p = meta.add_participants ();
   p->set_name (name);
@@ -225,7 +226,7 @@ ParseJoinChannelMove (const Json::Value& obj, const std::string& name,
 void
 HandleJoinChannel (xaya::SQLiteDatabase& db,
                    const Json::Value& obj, const std::string& name,
-                   const xaya::uint256& txid)
+                   const xaya::uint256& id)
 {
   xaya::ChannelsTable tbl(db);
 
@@ -239,7 +240,7 @@ HandleJoinChannel (xaya::SQLiteDatabase& db,
       << " with address " << addr;
 
   xaya::proto::ChannelMetadata newMeta = h->GetMetadata ();
-  xaya::UpdateMetadataReinit (txid, newMeta);
+  xaya::UpdateMetadataReinit (id, newMeta);
   auto* p = newMeta.add_participants ();
   p->set_name (name);
   p->set_address (addr);
@@ -647,6 +648,30 @@ TimeOutChannels (xaya::SQLiteDatabase& db, const unsigned height)
       << "Timed out " << num << " channels at height " << height;
 }
 
+/**
+ * Extracts the move ID from a JSON representation.  These are used as
+ * channel IDs for created channels, and to update the reinit on joins.
+ * When an explicit "mvid" field is available (e.g. on Xaya-X-on-Eth),
+ * it is used; otherwise we fall back to the txid (e.g. on Xaya Core).
+ */
+xaya::uint256
+GetIdFromMove (const Json::Value& mv)
+{
+  CHECK (mv.isObject ());
+
+  const Json::Value* field;
+  if (mv.isMember ("mvid"))
+    field = &mv["mvid"];
+  else
+    field = &mv["txid"];
+
+  CHECK (field->isString ());
+  xaya::uint256 id;
+  CHECK (id.FromHex (field->asString ()));
+
+  return id;
+}
+
 } // anonymous namespace
 
 void
@@ -669,10 +694,7 @@ ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
       CHECK (nameVal.isString ());
       const std::string name = nameVal.asString ();
 
-      const auto& txidVal = mv["txid"];
-      CHECK (txidVal.isString ());
-      xaya::uint256 txid;
-      CHECK (txid.FromHex (txidVal.asString ()));
+      const auto id = GetIdFromMove (mv);
 
       const auto& data = mv["move"];
       if (!data.isObject ())
@@ -693,8 +715,8 @@ ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
           continue;
         }
 
-      HandleCreateChannel (db, data["c"], height, name, txid);
-      HandleJoinChannel (db, data["j"], name, txid);
+      HandleCreateChannel (db, data["c"], height, name, id);
+      HandleJoinChannel (db, data["j"], name, id);
       HandleAbortChannel (db, data["a"], name);
       HandleDeclareLoss (db, data["l"], name);
       HandleDisputeResolution (db, data["d"], height, true);
@@ -725,7 +747,7 @@ ShipsPending::ClearShips ()
 void
 ShipsPending::HandleCreateChannel (const Json::Value& obj,
                                    const std::string& name,
-                                   const xaya::uint256& txid)
+                                   const xaya::uint256& id)
 {
   std::string addr;
   if (!ParseCreateChannelMove (obj, addr))
@@ -733,12 +755,12 @@ ShipsPending::HandleCreateChannel (const Json::Value& obj,
 
   LOG (INFO)
       << "New pending create-channel move from " << name
-      << ": " << txid.ToHex ();
+      << ": " << id.ToHex ();
 
   Json::Value cur(Json::objectValue);
   cur["name"] = name;
   cur["address"] = addr;
-  cur["id"] = txid.ToHex ();
+  cur["id"] = id.ToHex ();
   create.append (cur);
 }
 
@@ -810,10 +832,7 @@ ShipsPending::AddPendingMoveUnsafe (const xaya::SQLiteDatabase& db,
   CHECK (nameVal.isString ());
   const std::string name = nameVal.asString ();
 
-  const auto& txidVal = mv["txid"];
-  CHECK (txidVal.isString ());
-  xaya::uint256 txid;
-  CHECK (txid.FromHex (txidVal.asString ()));
+  const auto id = GetIdFromMove (mv);
 
   const auto& data = mv["move"];
   if (!data.isObject ())
@@ -836,7 +855,7 @@ ShipsPending::AddPendingMoveUnsafe (const xaya::SQLiteDatabase& db,
      its pending StateProof in case it is valid.  */
 
   auto& mutableDb = const_cast<xaya::SQLiteDatabase&> (db);
-  HandleCreateChannel (data["c"], name, txid);
+  HandleCreateChannel (data["c"], name, id);
   HandleJoinChannel (mutableDb, data["j"], name);
   HandleAbortChannel (mutableDb, data["a"], name);
   HandleDisputeResolution (mutableDb, data["d"]);

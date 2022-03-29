@@ -53,11 +53,15 @@ class PendingTest (ShipsTest):
     self.mainLogger.info ("Opening a test channel...")
     addr1 = self.newSigningAddress ()
     addr2 = self.newSigningAddress ()
-    cid = self.sendMove ("foo", {"c": {"addr": addr1}})
-    self.assertEqual (self.getPendingState ()["create"], [
+    self.sendMove ("foo", {"c": {"addr": addr1}})
+    # We assert the value only after confirming the move, when we can
+    # more easily get the channel ID to expect.
+    pendingCreate = self.getPendingState ()["create"]
+    self.generate (1)
+    [cid] = self.getChannelIds ()
+    self.assertEqual (pendingCreate, [
       {"name": "foo", "address": addr1, "id": cid},
     ])
-    self.generate (1)
     self.sendMove ("bar", {"j": {"id": cid, "addr": addr2}})
     self.assertEqual (self.getPendingState ()["join"], [
       {"name": "bar", "address": addr2, "id": cid},

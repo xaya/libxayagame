@@ -129,7 +129,7 @@ private:
    * Tries to process a pending "create channel" move.
    */
   void HandleCreateChannel (const Json::Value& obj, const std::string& name,
-                            const xaya::uint256& txid);
+                            const xaya::uint256& id);
 
   /**
    * Tries to process a pending "join channel" move.
