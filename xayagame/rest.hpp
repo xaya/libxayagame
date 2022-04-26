@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,6 +6,7 @@
 #define XAYAGAME_REST_HPP
 
 #include "defaultmain.hpp"
+#include "game.hpp"
 
 #include <curl/curl.h>
 
@@ -48,6 +49,23 @@ protected:
    * we want to send on success, or throw an HttpError instance.
    */
   virtual SuccessResult Process (const std::string& url) = 0;
+
+  /**
+   * Default handler for the /state endpoint (essentially the same as default
+   * getnullstate).  Returns true if it matched and the output result has
+   * been set, and false if the endpoint did not match (nothing happens
+   * to result).
+   */
+  bool HandleState (const std::string& url, const Game& game,
+                    SuccessResult& result);
+
+  /**
+   * Default handler for the /healthz endpoint (similar to HandleState).
+   * This returns HTTP code 200 if the Game instance considers itself
+   * healthy (up-to-date and all fine), and HTTP code 500 if not.
+   */
+  bool HandleHealthz (const std::string& url, const Game& game,
+                      SuccessResult& result);
 
   /**
    * Utility method for matching a full path against a particular API endpoint.
@@ -97,9 +115,9 @@ private:
   /** The raw payload data.  */
   std::string payload;
 
-  SuccessResult () = default;
-
 public:
+
+  SuccessResult () = default;
 
   explicit SuccessResult (const std::string& t, const std::string& p)
     : type(t), payload(p)

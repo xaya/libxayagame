@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -442,6 +442,13 @@ public:
    * in the Xaya Core notifications, then this raises a JSON-RPC error.
    */
   Json::Value GetPendingJsonState () const;
+
+  /**
+   * Checks to see if the instance considers itself "healthy", i.e. able
+   * to properly serve clients.  This means that it is up-to-date (to its
+   * best knowledge).
+   */
+  bool IsHealthy () const;
 
   /**
    * Blocks the calling thread until a change to the game state has

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -677,6 +677,13 @@ Game::UnlockedPendingJsonState () const
   res["pending"] = pending->ToJson ();
 
   return res;
+}
+
+bool
+Game::IsHealthy () const
+{
+  std::unique_lock<std::mutex> lock(mut);
+  return state == State::UP_TO_DATE;
 }
 
 void

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -294,6 +294,33 @@ RestApi::MatchEndpoint (const std::string& path, const std::string& endpoint,
 
   CHECK_GE (path.size (), endpoint.size ());
   remainder = path.substr (endpoint.size ());
+  return true;
+}
+
+bool
+RestApi::HandleState (const std::string& url, const Game& game,
+                      SuccessResult& result)
+{
+  std::string remainder;
+  if (!MatchEndpoint (url, "/state", remainder) || remainder != "")
+    return false;
+
+  result = SuccessResult (game.GetNullJsonState ());
+  return true;
+}
+
+bool
+RestApi::HandleHealthz (const std::string& url, const Game& game,
+                        SuccessResult& result)
+{
+  std::string remainder;
+  if (!MatchEndpoint (url, "/healthz", remainder) || remainder != "")
+    return false;
+
+  if (!game.IsHealthy ())
+    throw HttpError (MHD_HTTP_INTERNAL_SERVER_ERROR, "not ok");
+
+  result = SuccessResult ("text/plain", "ok");
   return true;
 }
 
