@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -59,6 +59,16 @@ public:
   virtual void PendingMove (const std::string& gameId,
                             const Json::Value& data) = 0;
 
+  /**
+   * Callback that is invoked when the ZMQ subscriber has stopped its
+   * listening thread (i.e. when the thread stops, independent of whether
+   * or not Stop() has actually been called and the listining thread will
+   * be joined or not yet).
+   */
+  virtual void
+  HasStopped ()
+  {}
+
 };
 
 /**
@@ -96,6 +106,11 @@ private:
 
   /** Signals the listener to stop.  */
   std::atomic<bool> shouldStop;
+  /**
+   * Set to true while the listener thread is actually running, and reset
+   * when it stops (independent of whether or not we joined it yet in Stop()).
+   */
+  std::atomic<bool> running;
 
   /**
    * Special flag for testing:  If true, then the listening thread stops
@@ -122,7 +137,7 @@ private:
 
 public:
 
-  ZmqSubscriber () = default;
+  ZmqSubscriber ();
   ~ZmqSubscriber ();
 
   ZmqSubscriber (const ZmqSubscriber&) = delete;
@@ -154,7 +169,7 @@ public:
   bool
   IsRunning () const
   {
-    return worker != nullptr;
+    return running;
   }
 
   /**
@@ -169,9 +184,16 @@ public:
   /**
    * Starts the ZMQ subscriber in a new thread.  Must only be called after
    * the ZMQ endpoint has been configured, and must not be called when
-   * ZMQ is already running.
+   * ZMQ is already running.  Note that it may be called if the listener
+   * thread has stopped by itself to restart everything.
    */
   void Start ();
+
+  /**
+   * Signals the subscriber to stop.  This just tells the listening thread to
+   * stop as soon as possible, but does not try to wait for it / join it.
+   */
+  void RequestStop ();
 
   /**
    * Stops the ZMQ subscriber.  Must only be called if it is currently running.

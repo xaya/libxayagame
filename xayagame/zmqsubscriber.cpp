@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,9 +14,13 @@ namespace xaya
 namespace internal
 {
 
+ZmqSubscriber::ZmqSubscriber ()
+  : running(false)
+{}
+
 ZmqSubscriber::~ZmqSubscriber ()
 {
-  if (IsRunning ())
+  if (worker != nullptr)
     Stop ();
   CHECK (sockets.empty ());
 }
@@ -239,14 +243,23 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
             LOG (FATAL) << "Invalid topic type: " << static_cast<int> (type);
           }
     }
+
+  self->running = false;
+  for (auto& l : self->listeners)
+    l.second->HasStopped ();
 }
 
 void
 ZmqSubscriber::Start ()
 {
   CHECK (!addrBlocks.empty ()) << "ZMQ endpoint is not yet set";
-
   CHECK (!IsRunning ());
+
+  /* If the listening thread is stopped but Stop() has not been called,
+     we clean up for a restart.  */
+  if (worker != nullptr)
+    Stop ();
+
   CHECK (sockets.empty ());
 
   LOG (INFO) << "Starting ZMQ subscriber for blocks: " << addrBlocks;
@@ -289,16 +302,24 @@ ZmqSubscriber::Start ()
   lastSeq.clear ();
 
   shouldStop = false;
+  running = true;
   worker = std::make_unique<std::thread> (&ZmqSubscriber::Listen, this);
+}
+
+void
+ZmqSubscriber::RequestStop ()
+{
+  CHECK (worker != nullptr);
+  shouldStop = true;
 }
 
 void
 ZmqSubscriber::Stop ()
 {
-  CHECK (IsRunning ());
+  CHECK (worker != nullptr);
   LOG (INFO) << "Stopping ZMQ subscriber at address " << addrBlocks;
 
-  shouldStop = true;
+  RequestStop ();
 
   worker->join ();
   worker.reset ();
