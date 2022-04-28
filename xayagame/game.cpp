@@ -37,7 +37,7 @@ constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
 } // anonymous namespace
 
 Game::Game (const std::string& id)
-  : gameId(id), genesisHeight(-1)
+  : gameId(id), state(State::UNKNOWN), genesisHeight(-1)
 {
   genesisHash.SetNull ();
   zmq.AddListener (gameId, this);
@@ -358,7 +358,7 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
 
   if (state == State::UP_TO_DATE && pending != nullptr)
     {
-      /* The heigh tpassed to the PendingMoveProcessor should be the "confirmed"
+      /* The height passed to the PendingMoveProcessor should be the "confirmed"
          height for processing moves, which means that it is one less than the
          currently detached height.  */
       const unsigned height = data["block"]["height"].asUInt ();
@@ -682,7 +682,6 @@ Game::UnlockedPendingJsonState () const
 bool
 Game::IsHealthy () const
 {
-  std::unique_lock<std::mutex> lock(mut);
   return state == State::UP_TO_DATE;
 }
 

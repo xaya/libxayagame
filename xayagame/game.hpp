@@ -21,6 +21,7 @@
 #include <json/json.h>
 #include <jsonrpccpp/client.h>
 
+#include <atomic>
 #include <condition_variable>
 #include <functional>
 #include <memory>
@@ -109,8 +110,13 @@ private:
   /** The chain type to which the game is connected.  */
   Chain chain = Chain::UNKNOWN;
 
-  /** The game's current state.  */
-  State state = State::UNKNOWN;
+  /**
+   * The game's current state.  For any changes and most access in general,
+   * we still protect it with mut.  But we use an atomic so that the state
+   * can be read without mutex lock from the health check (so that one
+   * is responsive).
+   */
+  std::atomic<State> state;
 
   /**
    * The game's genesis height, if known already.  We cache that from the
