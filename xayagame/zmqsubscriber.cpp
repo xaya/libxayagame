@@ -6,7 +6,6 @@
 
 #include <glog/logging.h>
 
-#include <chrono>
 #include <sstream>
 
 namespace xaya
@@ -216,6 +215,16 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
           mit->second = seq;
         }
 
+      switch (type)
+        {
+        case TopicType::ATTACH:
+        case TopicType::DETACH:
+          self->lastBlockUpdate = Clock::now ();
+          break;
+        default:
+          break;
+        }
+
       const auto range = self->listeners.equal_range (gameId);
       if (range.first == self->listeners.end ())
         continue;
@@ -313,6 +322,7 @@ ZmqSubscriber::Start ()
 
   shouldStop = false;
   running = true;
+  lastBlockUpdate = Clock::now ();
   worker = std::make_unique<std::thread> (&ZmqSubscriber::Listen, this);
 }
 

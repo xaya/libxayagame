@@ -13,6 +13,7 @@
 #include <json/json.h>
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <thread>
@@ -82,6 +83,9 @@ class ZmqSubscriber
 
 private:
 
+  /** The clock used to measure time since last block notification.  */
+  using Clock = std::chrono::steady_clock;
+
   /** The ZMQ endpoint to connect to for block updates.  */
   std::string addrBlocks;
   /** The ZMQ endpoint to connect to for pending moves.  */
@@ -102,6 +106,9 @@ private:
 
   /** Last sequence numbers for each topic.  */
   std::unordered_map<std::string, uint32_t> lastSeq;
+
+  /** The time-point when the last block notification was received.  */
+  Clock::time_point lastBlockUpdate;
 
   /** The running ZMQ listener thread, if any.  */
   std::unique_ptr<std::thread> worker;
@@ -181,6 +188,17 @@ public:
   IsPendingEnabled () const
   {
     return !addrPending.empty ();
+  }
+
+  /**
+   * Returns the time since last block update, cast to the given
+   * duration type.
+   */
+  template <typename D>
+    D
+    GetBlockStaleness () const
+  {
+    return std::chrono::duration_cast<D> (Clock::now () - lastBlockUpdate);
   }
 
   /**
