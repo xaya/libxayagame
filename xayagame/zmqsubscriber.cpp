@@ -227,21 +227,31 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
           << "Error parsing notification JSON: " << parseErrs
           << "\n" << payload;
 
-      for (auto i = range.first; i != range.second; ++i)
-        switch (type)
-          {
-          case TopicType::ATTACH:
-            i->second->BlockAttach (gameId, data, seqMismatch);
-            break;
-          case TopicType::DETACH:
-            i->second->BlockDetach (gameId, data, seqMismatch);
-            break;
-          case TopicType::PENDING:
-            i->second->PendingMove (gameId, data);
-            break;
-          default:
-            LOG (FATAL) << "Invalid topic type: " << static_cast<int> (type);
-          }
+      try
+        {
+          for (auto i = range.first; i != range.second; ++i)
+            switch (type)
+              {
+              case TopicType::ATTACH:
+                i->second->BlockAttach (gameId, data, seqMismatch);
+                break;
+              case TopicType::DETACH:
+                i->second->BlockDetach (gameId, data, seqMismatch);
+                break;
+              case TopicType::PENDING:
+                i->second->PendingMove (gameId, data);
+                break;
+              default:
+                LOG (FATAL)
+                    << "Invalid topic type: " << static_cast<int> (type);
+              }
+        }
+      catch (const std::exception& exc)
+        {
+          LOG (ERROR)
+              << "Exception while processing ZMQ update: " << exc.what ();
+          break;
+        }
     }
 
   self->running = false;

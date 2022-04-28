@@ -73,6 +73,11 @@ private:
    * UP_TO_DATE:  As far as is known, we are at the current tip of the daemon.
    * Ordinary ZMQ notifications are processed as they come in for changes
    * to the tip, and we expect them to match the current block hash.
+   *
+   * DISCONNECTED:  The GSP is currently not actively connected to Xaya Core.
+   * This state occurs when the RPC connection to Xaya Core throws, or if
+   * we detect that the ZeroMQ connection seems to have stalled.  In this state,
+   * the GSP tries to reconnect / re-establish the ZMQ sockets and sync back up.
    */
   enum class State
   {
@@ -81,6 +86,7 @@ private:
     OUT_OF_SYNC,
     CATCHING_UP,
     UP_TO_DATE,
+    DISCONNECTED,
   };
 
   /** This game's game ID.  */
@@ -190,6 +196,7 @@ private:
   void BlockDetach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
   void PendingMove (const std::string& id, const Json::Value& data) override;
+  void HasStopped () override;
 
   /**
    * Adds this game's ID to the tracked games of the core daemon.

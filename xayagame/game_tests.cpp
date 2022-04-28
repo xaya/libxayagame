@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -51,7 +51,7 @@ constexpr bool NO_SEQ_MISMATCH = false;
 /**
  * Mock RPC server that takes the place of the Xaya Core daemon in unit tests.
  * Some methods are mocked using GMock, while others (in particular,
- * getblockchaininfo) have an explicit fake implemlentation.
+ * getblockchaininfo) have an explicit fake implementation.
  */
 class MockXayaRpcServerWithState : public MockXayaRpcServer
 {
@@ -708,7 +708,7 @@ TEST_F (GetCurrentJsonStateTests, NoStateYet)
   const Json::Value state = g.GetCurrentJsonState ();
   EXPECT_EQ (state["gameid"], GAME_ID);
   EXPECT_EQ (state["chain"], "main");
-  EXPECT_EQ (state["state"], "unknown");
+  EXPECT_EQ (state["state"], "disconnected");
   EXPECT_FALSE (state.isMember ("blockhash"));
   EXPECT_FALSE (state.isMember ("height"));
   EXPECT_FALSE (state.isMember ("gamestate"));

@@ -29,6 +29,8 @@ namespace internal
 
 /**
  * Interface that is used to receive updates from the ZmqSubscriber class.
+ * The processing callbacks are allowed to throw exceptions; in that case,
+ * the ZMQ subscriber assumes something is wrong and stops.
  */
 class ZmqListener
 {

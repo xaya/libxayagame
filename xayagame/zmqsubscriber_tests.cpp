@@ -24,6 +24,7 @@ namespace
 
 using testing::_;
 using testing::InSequence;
+using testing::Throw;
 
 constexpr const char IPC_ENDPOINT[] = "ipc:///tmp/xayagame_zmqsubscriber_tests";
 constexpr const char IPC_ENDPOINT_PENDING[]
@@ -520,6 +521,20 @@ TEST_F (ZmqSubscriberTests, InvalidJson)
       SendMultipart ({topic, "{} // Junk", "1234"});
       SleepSome ();
     }, "Error parsing");
+}
+
+TEST_F (ZmqSubscriberTests, ExceptionInHandler)
+{
+  Json::Value payload;
+  payload["test"] = 42;
+
+  EXPECT_CALL (mockListener, BlockAttach (GAME_ID, _, _))
+      .WillOnce (Throw (std::runtime_error ("test")));
+
+  SendAttach (GAME_ID, payload, 1);
+
+  while (mockListener.stopCalls < 1)
+    SleepSome ();
 }
 
 /* ************************************************************************** */

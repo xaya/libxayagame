@@ -37,7 +37,7 @@ constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
 } // anonymous namespace
 
 Game::Game (const std::string& id)
-  : gameId(id), state(State::UNKNOWN), genesisHeight(-1)
+  : gameId(id), state(State::DISCONNECTED), genesisHeight(-1)
 {
   genesisHash.SetNull ();
   zmq.AddListener (gameId, this);
@@ -58,6 +58,8 @@ Game::StateToString (const State s)
       return "catching-up";
     case State::UP_TO_DATE:
       return "up-to-date";
+    case State::DISCONNECTED:
+      return "disconnected";
     }
 
   std::ostringstream out;
@@ -246,6 +248,7 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
           break;
 
         case State::UNKNOWN:
+        case State::DISCONNECTED:
         case State::OUT_OF_SYNC:
         default:
           LOG (FATAL) << "Unexpected state: " << StateToString (state);
@@ -337,6 +340,7 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
           break;
 
         case State::UNKNOWN:
+        case State::DISCONNECTED:
         case State::OUT_OF_SYNC:
         default:
           LOG (FATAL) << "Unexpected state: " << StateToString (state);
@@ -389,6 +393,14 @@ Game::PendingMove (const std::string& id, const Json::Value& data)
       VLOG (1) << "Ignoring pending move while not up-to-date";
       VLOG (2) << "Full data: " << data;
     }
+}
+
+void
+Game::HasStopped ()
+{
+  std::lock_guard<std::mutex> lock(mut);
+  state = State::DISCONNECTED;
+  LOG (INFO) << "ZMQ subscriber has stopped listening";
 }
 
 void
@@ -805,6 +817,7 @@ Game::Stop ()
 {
   zmq.Stop ();
   UntrackGame ();
+  CHECK (state == State::DISCONNECTED);
 
   /* Make sure to wake up all listeners waiting for a state update (as there
      won't be one anymore).  */
