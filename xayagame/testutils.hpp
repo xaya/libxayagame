@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -307,6 +307,18 @@ protected:
   {
     std::lock_guard<std::mutex> lock(g.mut);
     g.state = s;
+  }
+
+  static void
+  ProbeAndFixConnection (Game& g)
+  {
+    g.ProbeAndFixConnection ();
+  }
+
+  static internal::ZmqSubscriber&
+  GetZmq (Game& g)
+  {
+    return g.zmq;
   }
 
   /**

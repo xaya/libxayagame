@@ -255,6 +255,14 @@ private:
   void ReinitialiseState ();
 
   /**
+   * Checks if the connection seems fine (e.g. ZMQ staleness), marks the
+   * state as disconnected if not, and tries to reconnect if the state
+   * is disconnected.  This is run periodically by a background thread
+   * while the GSP is supposed to be running.
+   */
+  void ProbeAndFixConnection ();
+
+  /**
    * Notifies potentially-waiting threads that the state has changed.  Callers
    * must hold the mut lock.
    */

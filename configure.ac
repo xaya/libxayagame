@@ -46,6 +46,7 @@ AX_PKG_CHECK_MODULES([GLOG], [libglog])
 # Private dependencies of the library itself.
 AX_PKG_CHECK_MODULES([OPENSSL], [], [openssl])
 AX_PKG_CHECK_MODULES([MHD], [], [libmicrohttpd])
+AX_PKG_CHECK_MODULES([GFLAGS], [], [gflags])
 # We use deflateGetDictionary from zlib, which was introduced in version
 # 1.2.9.  Since zlib itself recommends using 1.2.11 over .9 and .10, let's
 # make sure we have at least this version.
@@ -56,7 +57,6 @@ AX_PKG_CHECK_MODULES([ZMQ], [], [libzmq >= 4.3.1])
 
 # Private dependencies that are not needed for libxayagame, but only for
 # the unit tests and the example binaries.
-PKG_CHECK_MODULES([GFLAGS], [gflags])
 PKG_CHECK_MODULES([GTEST], [gmock gtest_main])
 
 AC_CONFIG_FILES([
