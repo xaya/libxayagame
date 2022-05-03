@@ -30,6 +30,13 @@ DEFINE_int32 (xaya_waitforchange_timeout_ms, 5'000,
 DEFINE_int32 (xaya_zmq_staleness_ms, 120'000,
               "ZeroMQ staleness before reconnection attempt");
 
+/**
+ * If set to non-zero, this indicates the interval (in milliseconds)
+ * at which a running Game should probe its connection to Xaya Core.
+ */
+DEFINE_int32 (xaya_connection_check_ms, 0,
+              "if non-zero, interval between connection checks");
+
 namespace xaya
 {
 
@@ -46,12 +53,81 @@ constexpr const char* CALLBACK_DURATION_UNIT = "us";
 
 } // anonymous namespace
 
+/* ************************************************************************** */
+
+/**
+ * Helper class that runs a background thread.  At regular intervals,
+ * it calls Game::ProbeAndFixConnection.
+ */
+class Game::ConnectionCheckerThread
+{
+
+private:
+
+  /** The Game instance to call the check on.  */
+  Game& game;
+
+  /** The interval for checks.  */
+  const std::chrono::milliseconds intv;
+
+  /** Mutex for this instance.  */
+  std::mutex mut;
+
+  /** Condition variable to wait on / signal a stop request.  */
+  std::condition_variable cv;
+
+  /** The actual thread running.  */
+  std::unique_ptr<std::thread> runner;
+
+  /** Set to true if the thread should stop.  */
+  bool shouldStop;
+
+  /**
+   * Runs the thread's main loop.
+   */
+  void
+  Run ()
+  {
+    std::unique_lock<std::mutex> lock(mut);
+    while (!shouldStop)
+      {
+        cv.wait_for (lock, intv);
+        game.ProbeAndFixConnection ();
+      }
+  }
+
+public:
+
+  explicit ConnectionCheckerThread (Game& g)
+    : game(g), intv(FLAGS_xaya_connection_check_ms), shouldStop(false)
+  {
+    runner = std::make_unique<std::thread> ([this] () { Run (); });
+  }
+
+  ~ConnectionCheckerThread ()
+  {
+    {
+      std::lock_guard<std::mutex> lock(mut);
+      shouldStop = true;
+      cv.notify_all ();
+    }
+
+    runner->join ();
+    runner.reset ();
+  }
+
+};
+
+/* ************************************************************************** */
+
 Game::Game (const std::string& id)
   : gameId(id), state(State::DISCONNECTED), genesisHeight(-1)
 {
   genesisHash.SetNull ();
   zmq.AddListener (gameId, this);
 }
+
+Game::~Game () = default;
 
 std::string
 Game::StateToString (const State s)
@@ -836,11 +912,16 @@ Game::Start ()
 
   std::lock_guard<std::mutex> lock(mut);
   ReinitialiseState ();
+
+  if (FLAGS_xaya_connection_check_ms > 0)
+    connectionChecker = std::make_unique<ConnectionCheckerThread> (*this);
 }
 
 void
 Game::Stop ()
 {
+  connectionChecker.reset ();
+
   zmq.Stop ();
   UntrackGame ();
   CHECK (state == State::DISCONNECTED);
@@ -1082,5 +1163,7 @@ Game::ProbeAndFixConnection ()
       zmq.RequestStop ();
     }
 }
+
+/* ************************************************************************** */
 
 } // namespace xaya

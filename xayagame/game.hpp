@@ -45,6 +45,8 @@ class Game : private internal::ZmqListener
 
 private:
 
+  class ConnectionCheckerThread;
+
   /**
    * States for the game engine during syncing / operation.  The basic states
    * and transitions between states are as follows:
@@ -191,6 +193,9 @@ private:
   /** The pruning queue if we are pruning.  */
   std::unique_ptr<internal::PruningQueue> pruningQueue;
 
+  /** The background thread running regular connection checks, if any.  */
+  std::unique_ptr<ConnectionCheckerThread> connectionChecker;
+
   void BlockAttach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
   void BlockDetach (const std::string& id, const Json::Value& data,
@@ -320,6 +325,7 @@ public:
     = std::function<Json::Value (const GameStateData& state)>;
 
   explicit Game (const std::string& id);
+  ~Game ();
 
   Game () = delete;
   Game (const Game&) = delete;
