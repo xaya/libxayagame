@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,6 +13,7 @@
 #include <json/json.h>
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
 #include <thread>
@@ -29,6 +30,8 @@ namespace internal
 
 /**
  * Interface that is used to receive updates from the ZmqSubscriber class.
+ * The processing callbacks are allowed to throw exceptions; in that case,
+ * the ZMQ subscriber assumes something is wrong and stops.
  */
 class ZmqListener
 {
@@ -59,6 +62,16 @@ public:
   virtual void PendingMove (const std::string& gameId,
                             const Json::Value& data) = 0;
 
+  /**
+   * Callback that is invoked when the ZMQ subscriber has stopped its
+   * listening thread (i.e. when the thread stops, independent of whether
+   * or not Stop() has actually been called and the listining thread will
+   * be joined or not yet).
+   */
+  virtual void
+  HasStopped ()
+  {}
+
 };
 
 /**
@@ -69,6 +82,9 @@ class ZmqSubscriber
 {
 
 private:
+
+  /** The clock used to measure time since last block notification.  */
+  using Clock = std::chrono::steady_clock;
 
   /** The ZMQ endpoint to connect to for block updates.  */
   std::string addrBlocks;
@@ -91,11 +107,19 @@ private:
   /** Last sequence numbers for each topic.  */
   std::unordered_map<std::string, uint32_t> lastSeq;
 
+  /** The time-point when the last block notification was received.  */
+  Clock::time_point lastBlockUpdate;
+
   /** The running ZMQ listener thread, if any.  */
   std::unique_ptr<std::thread> worker;
 
   /** Signals the listener to stop.  */
   std::atomic<bool> shouldStop;
+  /**
+   * Set to true while the listener thread is actually running, and reset
+   * when it stops (independent of whether or not we joined it yet in Stop()).
+   */
+  std::atomic<bool> running;
 
   /**
    * Special flag for testing:  If true, then the listening thread stops
@@ -122,7 +146,7 @@ private:
 
 public:
 
-  ZmqSubscriber () = default;
+  ZmqSubscriber ();
   ~ZmqSubscriber ();
 
   ZmqSubscriber (const ZmqSubscriber&) = delete;
@@ -154,7 +178,7 @@ public:
   bool
   IsRunning () const
   {
-    return worker != nullptr;
+    return running;
   }
 
   /**
@@ -167,11 +191,29 @@ public:
   }
 
   /**
+   * Returns the time since last block update, cast to the given
+   * duration type.
+   */
+  template <typename D>
+    D
+    GetBlockStaleness () const
+  {
+    return std::chrono::duration_cast<D> (Clock::now () - lastBlockUpdate);
+  }
+
+  /**
    * Starts the ZMQ subscriber in a new thread.  Must only be called after
    * the ZMQ endpoint has been configured, and must not be called when
-   * ZMQ is already running.
+   * ZMQ is already running.  Note that it may be called if the listener
+   * thread has stopped by itself to restart everything.
    */
   void Start ();
+
+  /**
+   * Signals the subscriber to stop.  This just tells the listening thread to
+   * stop as soon as possible, but does not try to wait for it / join it.
+   */
+  void RequestStop ();
 
   /**
    * Stops the ZMQ subscriber.  Must only be called if it is currently running.

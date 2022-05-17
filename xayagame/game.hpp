@@ -45,6 +45,8 @@ class Game : private internal::ZmqListener
 
 private:
 
+  class ConnectionCheckerThread;
+
   /**
    * States for the game engine during syncing / operation.  The basic states
    * and transitions between states are as follows:
@@ -73,6 +75,11 @@ private:
    * UP_TO_DATE:  As far as is known, we are at the current tip of the daemon.
    * Ordinary ZMQ notifications are processed as they come in for changes
    * to the tip, and we expect them to match the current block hash.
+   *
+   * DISCONNECTED:  The GSP is currently not actively connected to Xaya Core.
+   * This state occurs when the RPC connection to Xaya Core throws, or if
+   * we detect that the ZeroMQ connection seems to have stalled.  In this state,
+   * the GSP tries to reconnect / re-establish the ZMQ sockets and sync back up.
    */
   enum class State
   {
@@ -81,6 +88,7 @@ private:
     OUT_OF_SYNC,
     CATCHING_UP,
     UP_TO_DATE,
+    DISCONNECTED,
   };
 
   /** This game's game ID.  */
@@ -185,11 +193,15 @@ private:
   /** The pruning queue if we are pruning.  */
   std::unique_ptr<internal::PruningQueue> pruningQueue;
 
+  /** The background thread running regular connection checks, if any.  */
+  std::unique_ptr<ConnectionCheckerThread> connectionChecker;
+
   void BlockAttach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
   void BlockDetach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
   void PendingMove (const std::string& id, const Json::Value& data) override;
+  void HasStopped () override;
 
   /**
    * Adds this game's ID to the tracked games of the core daemon.
@@ -246,6 +258,14 @@ private:
    * daemon with getblockchaininfo and then determines what needs to be done.
    */
   void ReinitialiseState ();
+
+  /**
+   * Checks if the connection seems fine (e.g. ZMQ staleness), marks the
+   * state as disconnected if not, and tries to reconnect if the state
+   * is disconnected.  This is run periodically by a background thread
+   * while the GSP is supposed to be running.
+   */
+  void ProbeAndFixConnection ();
 
   /**
    * Notifies potentially-waiting threads that the state has changed.  Callers
@@ -305,6 +325,7 @@ public:
     = std::function<Json::Value (const GameStateData& state)>;
 
   explicit Game (const std::string& id);
+  ~Game ();
 
   Game () = delete;
   Game (const Game&) = delete;

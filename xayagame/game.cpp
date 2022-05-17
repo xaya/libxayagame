@@ -7,11 +7,35 @@
 #include <jsonrpccpp/common/errors.h>
 #include <jsonrpccpp/common/exception.h>
 
+#include <gflags/gflags.h>
 #include <glog/logging.h>
 
 #include <chrono>
 #include <sstream>
 #include <thread>
+
+/**
+ * Timeout for WaitForChange (i.e. return after this time even if there
+ * has not been any change).  Having a timeout in the first place avoids
+ * collecting more and more blocked threads in the worst case.
+ */
+DEFINE_int32 (xaya_waitforchange_timeout_ms, 5'000,
+              "timeout for waitforchange calls");
+
+/**
+ * The maximum accepted staleness of ZMQ.  If no block updates have been
+ * received in that time frame, we assume the connection is broken, and
+ * try to reconnect.
+ */
+DEFINE_int32 (xaya_zmq_staleness_ms, 120'000,
+              "ZeroMQ staleness before reconnection attempt");
+
+/**
+ * If set to non-zero, this indicates the interval (in milliseconds)
+ * at which a running Game should probe its connection to Xaya Core.
+ */
+DEFINE_int32 (xaya_connection_check_ms, 0,
+              "if non-zero, interval between connection checks");
 
 namespace xaya
 {
@@ -27,21 +51,83 @@ using CallbackDuration = std::chrono::microseconds;
 /** Unit (as string) for the callback timings.  */
 constexpr const char* CALLBACK_DURATION_UNIT = "us";
 
-/**
- * Timeout for WaitForChange (i.e. return after this time even if there
- * has not been any change).  Having a timeout in the first place avoids
- * collecting more and more blocked threads in the worst case.
- */
-constexpr auto WAITFORCHANGE_TIMEOUT = std::chrono::seconds (5);
-
 } // anonymous namespace
 
+/* ************************************************************************** */
+
+/**
+ * Helper class that runs a background thread.  At regular intervals,
+ * it calls Game::ProbeAndFixConnection.
+ */
+class Game::ConnectionCheckerThread
+{
+
+private:
+
+  /** The Game instance to call the check on.  */
+  Game& game;
+
+  /** The interval for checks.  */
+  const std::chrono::milliseconds intv;
+
+  /** Mutex for this instance.  */
+  std::mutex mut;
+
+  /** Condition variable to wait on / signal a stop request.  */
+  std::condition_variable cv;
+
+  /** The actual thread running.  */
+  std::unique_ptr<std::thread> runner;
+
+  /** Set to true if the thread should stop.  */
+  bool shouldStop;
+
+  /**
+   * Runs the thread's main loop.
+   */
+  void
+  Run ()
+  {
+    std::unique_lock<std::mutex> lock(mut);
+    while (!shouldStop)
+      {
+        cv.wait_for (lock, intv);
+        game.ProbeAndFixConnection ();
+      }
+  }
+
+public:
+
+  explicit ConnectionCheckerThread (Game& g)
+    : game(g), intv(FLAGS_xaya_connection_check_ms), shouldStop(false)
+  {
+    runner = std::make_unique<std::thread> ([this] () { Run (); });
+  }
+
+  ~ConnectionCheckerThread ()
+  {
+    {
+      std::lock_guard<std::mutex> lock(mut);
+      shouldStop = true;
+      cv.notify_all ();
+    }
+
+    runner->join ();
+    runner.reset ();
+  }
+
+};
+
+/* ************************************************************************** */
+
 Game::Game (const std::string& id)
-  : gameId(id), state(State::UNKNOWN), genesisHeight(-1)
+  : gameId(id), state(State::DISCONNECTED), genesisHeight(-1)
 {
   genesisHash.SetNull ();
   zmq.AddListener (gameId, this);
 }
+
+Game::~Game () = default;
 
 std::string
 Game::StateToString (const State s)
@@ -58,6 +144,8 @@ Game::StateToString (const State s)
       return "catching-up";
     case State::UP_TO_DATE:
       return "up-to-date";
+    case State::DISCONNECTED:
+      return "disconnected";
     }
 
   std::ostringstream out;
@@ -246,6 +334,7 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
           break;
 
         case State::UNKNOWN:
+        case State::DISCONNECTED:
         case State::OUT_OF_SYNC:
         default:
           LOG (FATAL) << "Unexpected state: " << StateToString (state);
@@ -337,6 +426,7 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
           break;
 
         case State::UNKNOWN:
+        case State::DISCONNECTED:
         case State::OUT_OF_SYNC:
         default:
           LOG (FATAL) << "Unexpected state: " << StateToString (state);
@@ -389,6 +479,14 @@ Game::PendingMove (const std::string& id, const Json::Value& data)
       VLOG (1) << "Ignoring pending move while not up-to-date";
       VLOG (2) << "Full data: " << data;
     }
+}
+
+void
+Game::HasStopped ()
+{
+  std::lock_guard<std::mutex> lock(mut);
+  state = State::DISCONNECTED;
+  LOG (INFO) << "ZMQ subscriber has stopped listening";
 }
 
 void
@@ -576,8 +674,22 @@ Game::GetCustomStateData (
 
   uint256 hash;
   unsigned height;
-  if (!storage->GetCurrentBlockHashWithHeight (hash, height))
-    return res;
+
+  /* Getting the height for the hash value might throw, if we revert
+     back to Xaya RPC and that is down.  We want to handle this case
+     gracefully, so we can detect and recover from a temporarily
+     down Xaya Core.  This code might be called in that case e.g.
+     to actually check the GSP state, so it should not crash.  */
+  try
+    {
+      if (!storage->GetCurrentBlockHashWithHeight (hash, height))
+        return res;
+    }
+  catch (const std::exception& exc)
+    {
+      LOG (ERROR) << "Exception getting block hash and height: " << exc.what ();
+      return res;
+    }
 
   res["blockhash"] = hash.ToHex ();
   res["height"] = height;
@@ -724,7 +836,8 @@ Game::WaitForChange (const uint256& oldBlock, uint256& newBlock) const
   if (zmq.IsRunning ())
     {
       VLOG (1) << "Waiting for state change on condition variable...";
-      cvStateChanged.wait_for (lock, WAITFORCHANGE_TIMEOUT);
+      cvStateChanged.wait_for (lock,
+          std::chrono::milliseconds (FLAGS_xaya_waitforchange_timeout_ms));
       VLOG (1) << "Potential state change detected in WaitForChange";
     }
   else
@@ -753,7 +866,8 @@ Game::WaitForPendingChange (const int oldVersion) const
   if (zmq.IsRunning () && zmq.IsPendingEnabled ())
     {
       VLOG (1) << "Waiting for pending state change on condition variable...";
-      cvPendingStateChanged.wait_for (lock, WAITFORCHANGE_TIMEOUT);
+      cvPendingStateChanged.wait_for (lock,
+          std::chrono::milliseconds (FLAGS_xaya_waitforchange_timeout_ms));
       VLOG (1) << "Potential state change detected in WaitForPendingChange";
     }
   else
@@ -798,13 +912,19 @@ Game::Start ()
 
   std::lock_guard<std::mutex> lock(mut);
   ReinitialiseState ();
+
+  if (FLAGS_xaya_connection_check_ms > 0)
+    connectionChecker = std::make_unique<ConnectionCheckerThread> (*this);
 }
 
 void
 Game::Stop ()
 {
+  connectionChecker.reset ();
+
   zmq.Stop ();
   UntrackGame ();
+  CHECK (state == State::DISCONNECTED);
 
   /* Make sure to wake up all listeners waiting for a state update (as there
      won't be one anymore).  */
@@ -974,5 +1094,76 @@ Game::ReinitialiseState ()
   state = State::OUT_OF_SYNC;
   SyncFromCurrentState (data, genesisHash);
 }
+
+void
+Game::ProbeAndFixConnection ()
+{
+  VLOG (1) << "Probing game connection to Xaya...";
+
+  if (state == State::DISCONNECTED)
+    {
+      LOG (INFO) << "Attempting to re-establish the Xaya connection...";
+      try
+        {
+          CHECK (DetectZmqEndpoint ())
+              << "ZMQ endpoints not configured in Xaya";
+          /* If we reconnect to a potentially restarted Xaya Core, make sure
+             that we track our game again (just in case).  */
+          TrackGame ();
+          zmq.Start ();
+
+          std::lock_guard<std::mutex> lock(mut);
+          ReinitialiseState ();
+        }
+      catch (const std::exception& exc)
+        {
+          LOG_FIRST_N (ERROR, 10) << "Exception caught: " << exc.what ();
+          zmq.RequestStop ();
+          return;
+        }
+    }
+
+  const auto maxStaleness
+      = std::chrono::milliseconds (FLAGS_xaya_zmq_staleness_ms);
+  /* If we haven't received an update in this timeframe, we try to
+     trigger one (even if no actual blocks have been mined since) by
+     requesting a game_sendupdates just for that purpose.  With this being
+     half the maximum allowed staleness, we (except for edge cases) ensure
+     that we will ping & process the ping before attempting a reconnect
+     in case the connection is still working fine.  */
+  const auto pingStaleness = maxStaleness / 2;
+  const auto staleness = zmq.GetBlockStaleness<std::chrono::milliseconds> ();
+
+  if (staleness < pingStaleness)
+    return;
+
+  if (staleness > maxStaleness)
+    {
+      LOG (ERROR) << "ZMQ connection is stale, disconnecting...";
+      zmq.RequestStop ();
+      return;
+    }
+
+  try
+    {
+      LOG (WARNING) << "ZMQ connection seems stale, requesting a block";
+      /* Request some updates to be sent, so we get out of staleness
+         in case the ZMQ connection still works.  We want to request an
+         update that is as cheap as possible.  So try to request just the
+         last block (or thereabouts).  */
+      std::lock_guard<std::mutex> lock(mut);
+      const auto data = rpcClient->getblockchaininfo ();
+      const std::string fromHash
+          = rpcClient->getblockhash (data["blocks"].asInt () - 1);
+      rpcClient->game_sendupdates (fromHash, gameId);
+    }
+  catch (const std::exception& exc)
+    {
+      LOG_FIRST_N (ERROR, 10) << "Exception caught: " << exc.what ();
+      zmq.RequestStop ();
+    }
+}
+
+/* ************************************************************************** */
 
 } // namespace xaya

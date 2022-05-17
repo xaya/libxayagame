@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -23,7 +23,9 @@ namespace
 {
 
 using testing::_;
+using testing::AnyNumber;
 using testing::InSequence;
+using testing::Throw;
 
 constexpr const char IPC_ENDPOINT[] = "ipc:///tmp/xayagame_zmqsubscriber_tests";
 constexpr const char IPC_ENDPOINT_PENDING[]
@@ -37,13 +39,22 @@ class MockZmqListener : public ZmqListener
 
 public:
 
+  std::atomic<unsigned> stopCalls;
+
   MockZmqListener ()
+    : stopCalls(0)
   {
     /* By default, expect no calls to be made.  The calls that we expect
        should explicitly be specified in the individual tests.  */
     EXPECT_CALL (*this, BlockAttach (_, _, _)).Times (0);
     EXPECT_CALL (*this, BlockDetach (_, _, _)).Times (0);
     EXPECT_CALL (*this, PendingMove (_, _)).Times (0);
+  }
+
+  void
+  HasStopped () override
+  {
+    ++stopCalls;
   }
 
   MOCK_METHOD3 (BlockAttach, void (const std::string& gameId,
@@ -216,13 +227,36 @@ TEST_F (BasicZmqSubscriberTests, StartedTwice)
     }, "!IsRunning");
 }
 
+TEST_F (BasicZmqSubscriberTests, RequestStopAndRestart)
+{
+  ZmqSubscriber zmq;
+  zmq.SetEndpoint (IPC_ENDPOINT);
+  zmq.AddListener (GAME_ID, &mockListener);
+
+  zmq.Start ();
+  SleepSome ();
+  ASSERT_TRUE (zmq.IsRunning ());
+  ASSERT_EQ (mockListener.stopCalls, 0);
+
+  zmq.RequestStop ();
+  while (mockListener.stopCalls < 1)
+    SleepSome ();
+  ASSERT_FALSE (zmq.IsRunning ());
+  ASSERT_EQ (mockListener.stopCalls, 1);
+
+  zmq.Start ();
+  SleepSome ();
+  ASSERT_TRUE (zmq.IsRunning ());
+  ASSERT_EQ (mockListener.stopCalls, 1);
+}
+
 TEST_F (BasicZmqSubscriberTests, StopWithoutStart)
 {
   EXPECT_DEATH (
     {
       ZmqSubscriber zmq;
       zmq.Stop ();
-    }, "IsRunning");
+    }, "worker != nullptr");
 }
 
 /* ************************************************************************** */
@@ -472,8 +506,12 @@ TEST_F (ZmqSubscriberTests, MultipleListeners)
   SendAttach (GAME_ID, payload1, 2);
   SendAttach (OTHER_GAME_ID, payload2, 2);
 
-  /* Give the worker time before the mocks are destructed.  */
+  /* Give the worker time before the mocks are destructed, but also make sure
+     we stop the thread already before the mocks get out of scope.  */
   SleepSome ();
+  zmq.RequestStop ();
+  while (gameListener.stopCalls + otherListener.stopCalls < 2)
+    SleepSome ();
 }
 
 TEST_F (ZmqSubscriberTests, InvalidJson)
@@ -484,6 +522,45 @@ TEST_F (ZmqSubscriberTests, InvalidJson)
       SendMultipart ({topic, "{} // Junk", "1234"});
       SleepSome ();
     }, "Error parsing");
+}
+
+TEST_F (ZmqSubscriberTests, ExceptionInHandler)
+{
+  Json::Value payload;
+  payload["test"] = 42;
+
+  EXPECT_CALL (mockListener, BlockAttach (GAME_ID, _, _))
+      .WillOnce (Throw (std::runtime_error ("test")));
+
+  SendAttach (GAME_ID, payload, 1);
+
+  while (mockListener.stopCalls < 1)
+    SleepSome ();
+}
+
+TEST_F (ZmqSubscriberTests, StalenessTimer)
+{
+  Json::Value payload;
+  payload["test"] = 42;
+
+  EXPECT_CALL (mockListener, BlockAttach (GAME_ID, payload, _))
+      .Times (AnyNumber ());
+  EXPECT_CALL (mockListener, BlockDetach (GAME_ID, payload, _))
+      .Times (AnyNumber ());
+
+  SendAttach (GAME_ID, payload, 1);
+  SleepSome ();
+  EXPECT_LT (zmq.GetBlockStaleness<std::chrono::milliseconds> (),
+             std::chrono::milliseconds (100));
+
+  std::this_thread::sleep_for (std::chrono::milliseconds (200));
+  EXPECT_GT (zmq.GetBlockStaleness<std::chrono::milliseconds> (),
+             std::chrono::milliseconds (200));
+
+  SendDetach (GAME_ID, payload, 2);
+  SleepSome ();
+  EXPECT_LT (zmq.GetBlockStaleness<std::chrono::milliseconds> (),
+             std::chrono::milliseconds (100));
 }
 
 /* ************************************************************************** */

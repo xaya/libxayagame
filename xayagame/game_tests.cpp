@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,6 +19,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <gflags/gflags.h>
 #include <glog/logging.h>
 
 #include <atomic>
@@ -28,6 +29,8 @@
 #include <sstream>
 #include <string>
 #include <thread>
+
+DECLARE_int32 (xaya_zmq_staleness_ms);
 
 namespace xaya
 {
@@ -51,7 +54,7 @@ constexpr bool NO_SEQ_MISMATCH = false;
 /**
  * Mock RPC server that takes the place of the Xaya Core daemon in unit tests.
  * Some methods are mocked using GMock, while others (in particular,
- * getblockchaininfo) have an explicit fake implemlentation.
+ * getblockchaininfo) have an explicit fake implementation.
  */
 class MockXayaRpcServerWithState : public MockXayaRpcServer
 {
@@ -708,7 +711,7 @@ TEST_F (GetCurrentJsonStateTests, NoStateYet)
   const Json::Value state = g.GetCurrentJsonState ();
   EXPECT_EQ (state["gameid"], GAME_ID);
   EXPECT_EQ (state["chain"], "main");
-  EXPECT_EQ (state["state"], "unknown");
+  EXPECT_EQ (state["state"], "disconnected");
   EXPECT_FALSE (state.isMember ("blockhash"));
   EXPECT_FALSE (state.isMember ("height"));
   EXPECT_FALSE (state.isMember ("gamestate"));
@@ -2041,6 +2044,100 @@ TEST_F (GameStorageRetryTests, DetachBlock)
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (retryStorage, TestGame::GenesisBlockHash (), "");
 
+}
+
+/* ************************************************************************** */
+
+/**
+ * Test fixture for the probe-and-reconnect logic in Game.
+ */
+class GameProbeAndFixConnectionTests : public SyncingTests
+{
+
+protected:
+
+  static constexpr auto MAX_STALENESS = std::chrono::milliseconds (1'000);
+  static constexpr auto PING_STALENESS = MAX_STALENESS / 2;
+
+  GameProbeAndFixConnectionTests ()
+  {
+    FLAGS_xaya_zmq_staleness_ms = MAX_STALENESS.count ();
+
+    AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+    EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+    mockXayaServer->SetBestBlock (11, BlockHash (11));
+
+    /* We need to be able to start the ZMQ subscriber, even if for the test
+       no publisher is connected to it.  */
+    const Json::Value notifications = ParseJson (R"(
+      [
+        {"type": "pubgameblocks", "address": "ipc:///tmp/xayagame_game_tests"}
+      ]
+    )");
+    EXPECT_CALL (*mockXayaServer, getzmqnotifications ())
+        .WillRepeatedly (Return (notifications));
+
+    g.DetectZmqEndpoint ();
+    GameTestFixture::GetZmq (g).Start ();
+  }
+
+  void
+  ProbeAndFix ()
+  {
+    LOG (INFO) << "Probing game connection...";
+    GameTestFixture::ProbeAndFixConnection (g);
+    /* Sleep some time (short compared to staleness) to make sure any
+       potential stop request for ZMQ would be processed by now.  */
+    std::this_thread::sleep_for (MAX_STALENESS / 5);
+  }
+
+  /**
+   * Sets mock expectations for n "ping" calls to game_sendupdates.
+   */
+  void
+  ExpectPings (const unsigned n)
+  {
+    auto& call =
+      EXPECT_CALL (*mockXayaServer,
+                   game_sendupdates (TestGame::GenesisBlockHash ().ToHex (),
+                                     GAME_ID))
+          .Times (n);
+    if (n > 0)
+      call.WillRepeatedly (Return (Json::Value (Json::objectValue)));
+  }
+
+};
+
+TEST_F (GameProbeAndFixConnectionTests, TooEarlyForPing)
+{
+  ExpectPings (0);
+  ProbeAndFix ();
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  EXPECT_TRUE (GameTestFixture::GetZmq (g).IsRunning ());
+}
+
+TEST_F (GameProbeAndFixConnectionTests, SendsPing)
+{
+  ExpectPings (1);
+  std::this_thread::sleep_for (3 * MAX_STALENESS / 4);
+  ProbeAndFix ();
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  EXPECT_TRUE (GameTestFixture::GetZmq (g).IsRunning ());
+}
+
+TEST_F (GameProbeAndFixConnectionTests, DisconnectAndReconnect)
+{
+  ExpectPings (0);
+  EXPECT_CALL (*mockXayaServer, trackedgames ("add", GAME_ID));
+
+  std::this_thread::sleep_for (2 * MAX_STALENESS);
+  ProbeAndFix ();
+  EXPECT_EQ (GetState (g), State::DISCONNECTED);
+  EXPECT_FALSE (GameTestFixture::GetZmq (g).IsRunning ());
+
+  ProbeAndFix ();
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  EXPECT_TRUE (GameTestFixture::GetZmq (g).IsRunning ());
 }
 
 /* ************************************************************************** */
