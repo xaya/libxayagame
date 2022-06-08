@@ -268,6 +268,13 @@ private:
   void ProbeAndFixConnection ();
 
   /**
+   * Connects the GSP daemon to the ZMQ server and initialises everything
+   * for starting it up.  This is shared logic between the Start() method
+   * and connection recovery from ProbeAndFixConnection.
+   */
+  void ConnectToZmq ();
+
+  /**
    * Notifies potentially-waiting threads that the state has changed.  Callers
    * must hold the mut lock.
    */

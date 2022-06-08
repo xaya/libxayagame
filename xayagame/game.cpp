@@ -897,7 +897,7 @@ Game::UntrackGame ()
 }
 
 void
-Game::Start ()
+Game::ConnectToZmq ()
 {
   if (pending == nullptr)
     {
@@ -912,6 +912,12 @@ Game::Start ()
 
   std::lock_guard<std::mutex> lock(mut);
   ReinitialiseState ();
+}
+
+void
+Game::Start ()
+{
+  ConnectToZmq ();
 
   if (FLAGS_xaya_connection_check_ms > 0)
     connectionChecker = std::make_unique<ConnectionCheckerThread> (*this);
@@ -1107,13 +1113,7 @@ Game::ProbeAndFixConnection ()
         {
           CHECK (DetectZmqEndpoint ())
               << "ZMQ endpoints not configured in Xaya";
-          /* If we reconnect to a potentially restarted Xaya Core, make sure
-             that we track our game again (just in case).  */
-          TrackGame ();
-          zmq.Start ();
-
-          std::lock_guard<std::mutex> lock(mut);
-          ReinitialiseState ();
+          ConnectToZmq ();
         }
       catch (const std::exception& exc)
         {
