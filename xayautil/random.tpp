@@ -13,15 +13,21 @@ template <typename Iterator>
   void
   Random::Shuffle (Iterator begin, Iterator end)
 {
-  if (begin == end)
+  ShuffleN (begin, end, end - begin);
+}
+
+template <typename Iterator>
+  void
+  Random::ShuffleN (Iterator begin, Iterator end, const size_t n)
+{
+  if (end - begin <= 1 || n == 0)
     return;
 
-  for (Iterator i = begin; i + 1 != end; ++i)
-    {
-      const Iterator j = i + NextInt (end - i);
-      if (i != j)
-        std::swap (*i, *j);
-    }
+  const Iterator mid = begin + NextInt (end - begin);
+  if (begin != mid)
+    std::swap (*begin, *mid);
+
+  ShuffleN (begin + 1, end, n - 1);
 }
 
 } // namespace xaya

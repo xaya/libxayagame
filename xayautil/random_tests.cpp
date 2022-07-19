@@ -11,6 +11,7 @@
 
 #include <limits>
 #include <map>
+#include <sstream>
 #include <vector>
 
 namespace xaya
@@ -207,6 +208,13 @@ protected:
     return vec;
   }
 
+  std::vector<int>
+  ShuffleN (std::vector<int> vec, const size_t n)
+  {
+    rnd.ShuffleN (vec.begin (), vec.end (), n);
+    return vec;
+  }
+
 };
 
 TEST_F (ShuffleTests, Basic)
@@ -237,6 +245,89 @@ TEST_F (ShuffleTests, AllPermutationsPossible)
   EXPECT_EQ (found.size (), factorial);
   for (const auto& entry : found)
     EXPECT_GE (entry.second, threshold);
+}
+
+TEST_F (ShuffleTests, DegenerateShuffleN)
+{
+  EXPECT_THAT (ShuffleN ({}, 10), ElementsAre ());
+  EXPECT_THAT (ShuffleN ({42}, 1), ElementsAre (42));
+  EXPECT_THAT (ShuffleN ({1, 2, 3, 4, 5}, 0), ElementsAre (1, 2, 3, 4, 5));
+}
+
+class SelectSubsetTests : public RandomTests
+{
+
+protected:
+
+  /**
+   * Computes and returns a subset of the range [0, n) consisting of
+   * m elements.  This is based on ShuffleN.
+   */
+  std::set<int>
+  SelectSubset (const int m, const int n)
+  {
+    std::vector<int> range;
+    for (int i = 0; i < n; ++i)
+      range.push_back (i);
+
+    rnd.ShuffleN (range.begin (), range.end (), m);
+
+    std::set<int> res;
+    for (int i = 0; i < m; ++i)
+      res.insert (range[i]);
+
+    return res;
+  }
+
+};
+
+TEST_F (SelectSubsetTests, Degenerate)
+{
+  EXPECT_THAT (SelectSubset (0, 0), ElementsAre ());
+  EXPECT_THAT (SelectSubset (0, 1), ElementsAre ());
+  EXPECT_THAT (SelectSubset (0, 1'000), ElementsAre ());
+
+  EXPECT_THAT (SelectSubset (1, 1), ElementsAre (0));
+  EXPECT_THAT (SelectSubset (5, 5), ElementsAre (0, 1, 2, 3, 4));
+}
+
+TEST_F (SelectSubsetTests, GoldenData)
+{
+  /* Ensure that we have not accidentally changed the algorithm.  */
+  EXPECT_THAT (SelectSubset (5, 100), ElementsAre (9, 45, 71, 92, 95));
+}
+
+TEST_F (SelectSubsetTests, AllSubsetsPossible)
+{
+  /* We select 3-out-of-7, and ensure that we get all possible combinations.  */
+  constexpr unsigned trials = 100'000;
+  constexpr unsigned possible = (7 * 6 * 5) / (1 * 2 * 3);
+  constexpr unsigned threshold = 95 * trials / possible / 100;
+
+  std::map<std::string, unsigned> found;
+  std::map<unsigned, unsigned> perNumber;
+  for (unsigned i = 0; i < trials; ++i)
+    {
+      const auto cur = SelectSubset (3, 7);
+      std::ostringstream str;
+      for (const auto x : cur)
+        {
+          ++perNumber[x];
+          str << x << " ";
+        }
+      ++found[str.str ()];
+    }
+
+  ASSERT_EQ (found.size (), possible);
+  for (const auto& entry : found)
+    EXPECT_GE (entry.second, threshold);
+
+  ASSERT_EQ (perNumber.size (), 7);
+  for (unsigned i = 0; i < 7; ++i)
+    {
+      EXPECT_GT (perNumber[i], 0);
+      LOG (INFO) << "Number " << i << ": " << perNumber[i];
+    }
 }
 
 } // anonymous namespace

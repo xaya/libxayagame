@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -95,10 +95,18 @@ public:
   size_t SelectByWeight (const std::vector<uint32_t>& weights);
 
   /**
-   * Randomly permutes the given range of iterators.
+   * Randomly permutes the given range of random-access iterators.
    */
   template <typename Iterator>
     void Shuffle (Iterator begin, Iterator end);
+
+  /**
+   * Randomly permutes the given range of random-access iterators, with
+   * at most N operations performed.  In other words, [begin, begin+N) will
+   * be a random subset (in random permutation) of the initial range.
+   */
+  template <typename Iterator>
+    void ShuffleN (Iterator begin, Iterator end, size_t n);
 
 };
 
