@@ -78,9 +78,9 @@ RUN cp zmq.hpp /usr/local/include
 
 # Build and install sqlite3 from source with the session extension
 # enabled as needed.
-ARG SQLITE_VERSION="3360000"
+ARG SQLITE_VERSION="3380500"
 WORKDIR /usr/src
-RUN wget https://www.sqlite.org/2021/sqlite-autoconf-${SQLITE_VERSION}.tar.gz
+RUN wget https://www.sqlite.org/2022/sqlite-autoconf-${SQLITE_VERSION}.tar.gz
 RUN tar zxvf sqlite-autoconf-${SQLITE_VERSION}.tar.gz
 WORKDIR /usr/src/sqlite-autoconf-${SQLITE_VERSION}
 RUN ./configure CFLAGS="-DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"
