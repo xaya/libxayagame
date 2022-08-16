@@ -29,6 +29,9 @@ RUN apk add --no-cache \
   libtool \
   pkgconfig
 
+# Number of parallel cores to use for make builds.
+ARG N=1
+
 # Build and install libargtable2 from source, which is not available
 # as Alpine package.
 ARG ARGTABLE_VERSION="2-13"
@@ -36,7 +39,7 @@ WORKDIR /usr/src
 RUN wget http://prdownloads.sourceforge.net/argtable/argtable2-13.tar.gz
 RUN tar zxvf argtable${ARGTABLE_VERSION}.tar.gz
 WORKDIR /usr/src/argtable${ARGTABLE_VERSION}
-RUN ./configure && make && make install-strip
+RUN ./configure && make -j${N} && make install-strip
 
 # Build and install jsoncpp from source.  We need at least version >= 1.7.5,
 # which includes an important fix for JSON parsing in some GSPs.
@@ -47,7 +50,7 @@ RUN git clone -b ${JSONCPP_VERSION} \
 RUN cmake ../source \
   -DJSONCPP_WITH_PKGCONFIG_SUPPORT=ON \
   -DBUILD_SHARED_LIBS=ON -DBUILD_STATIC_LIBS=OFF
-RUN make && make install/strip
+RUN make -j${N} && make install/strip
 
 # We need to install libjson-rpc-cpp from source.
 WORKDIR /usr/src/libjson-rpc-cpp
@@ -56,19 +59,19 @@ RUN cmake . \
   -DREDIS_SERVER=NO -DREDIS_CLIENT=NO \
   -DCOMPILE_TESTS=NO -DCOMPILE_EXAMPLES=NO \
   -DWITH_COVERAGE=NO
-RUN make && make install/strip
+RUN make -j${N} && make install/strip
 
 # Install glog from source.
 WORKDIR /usr/src/glog
 RUN git clone https://github.com/google/glog .
 RUN cmake . \
   -DBUILD_SHARED_LIBS=ON
-RUN make && make install/strip
+RUN make -j${N} && make install/strip
 
 # We also need to install googletest from source.
 WORKDIR /usr/src/googletest
 RUN git clone https://github.com/google/googletest .
-RUN cmake . && make && make install/strip
+RUN cmake . && make -j${N} && make install/strip
 
 # The ZMQ C++ bindings need to be installed from source.
 ARG CPPZMQ_VERSION="4.8.1"
@@ -84,7 +87,7 @@ RUN wget https://www.sqlite.org/2022/sqlite-autoconf-${SQLITE_VERSION}.tar.gz
 RUN tar zxvf sqlite-autoconf-${SQLITE_VERSION}.tar.gz
 WORKDIR /usr/src/sqlite-autoconf-${SQLITE_VERSION}
 RUN ./configure CFLAGS="-DSQLITE_ENABLE_SESSION -DSQLITE_ENABLE_PREUPDATE_HOOK"
-RUN make && make install-strip
+RUN make -j${N} && make install-strip
 
 # Build and install libsecp256k1.
 ARG SECP256K1_VERSION="master"
@@ -94,14 +97,14 @@ RUN git clone -b ${SECP256K1_VERSION} \
 RUN ./autogen.sh \
     && ./configure --disable-tests --disable-benchmark  \
                    --enable-module-recovery \
-    && make && make install-strip
+    && make -j${N} && make install-strip
 
 # Build and install eth-utils.
 ARG ETHUTILS_VERSION="master"
 WORKDIR /usr/src/ethutils
 RUN git clone -b ${ETHUTILS_VERSION} \
   https://github.com/xaya/eth-utils .
-RUN ./autogen.sh && ./configure && make && make install-strip
+RUN ./autogen.sh && ./configure && make -j${N} && make install-strip
 
 # Also add a utility script for copying dynamic libraries needed for
 # a given binary.  This can be used by GSP images based on this one
@@ -120,7 +123,7 @@ ENV LD_LIBRARY_PATH "/usr/local/lib:/usr/local/lib64"
 WORKDIR /usr/src/libxayagame
 COPY . .
 RUN make distclean || true
-RUN ./autogen.sh && ./configure && make && make install-strip
+RUN ./autogen.sh && ./configure && make -j${N} && make install-strip
 
 # For the final image, just copy over all built / installed stuff and
 # add in the non-dev libraries needed (where we installed the dev version
