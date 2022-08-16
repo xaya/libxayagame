@@ -16,6 +16,7 @@
 
 #include <sqlite3.h>
 
+#include <gflags/gflags.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -28,6 +29,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+DECLARE_int32 (xaya_sqlite_wal_truncate_ms);
 
 namespace xaya
 {
@@ -906,6 +909,11 @@ protected:
 
 TEST_F (UnblockedStateExtractionTests, UnblockedCallbackOnSnapshot)
 {
+  /* We need to disable WAL checkpointing for this test.  Otherwise the
+     AttachBlock might do a checkpoint, waiting for the snapshot, which
+     defeates the test's purpose.  */
+  FLAGS_xaya_sqlite_wal_truncate_ms = 0;
+
   std::atomic<bool> firstStarted;
   std::atomic<bool> firstDone;
   firstStarted = false;

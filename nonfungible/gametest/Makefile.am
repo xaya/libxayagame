@@ -8,6 +8,7 @@ REGTESTS = \
   burn.py \
   minting.py \
   reorg.py \
+  sqlite_wal.py \
   transfers.py
 
 EXTRA_DIST = $(REGTESTS) $(TEST_LIBRARY)

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,6 +9,7 @@
 
 #include "xayautil/hash.hpp"
 
+#include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -17,6 +18,8 @@
 #include <limits>
 #include <memory>
 #include <thread>
+
+DECLARE_int32 (xaya_sqlite_wal_truncate_ms);
 
 namespace xaya
 {
@@ -428,6 +431,12 @@ TEST_F (SQLiteStorageSnapshotTests, SnapshotsAreReadonly)
 
 TEST_F (SQLiteStorageSnapshotTests, MultipleSnapshots)
 {
+  /* For this test, we need to disable WAL checkpointing.  Unlike real
+     usage, this test has snapshots and transaction-commits (triggering
+     checkpoints) mixed up into a single thread, so it might deadlock if
+     the checkpointing attempted to wait for all outstanding snapshots.  */
+  FLAGS_xaya_sqlite_wal_truncate_ms = 0;
+
   Storage storage(filename);
   storage.Initialise ();
 

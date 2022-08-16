@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -88,6 +88,11 @@ private:
    * snapshot with the parent.
    */
   void SetReadonlySnapshot (const SQLiteStorage& p);
+
+  /**
+   * Clears the cache of prepared statements.
+   */
+  void ClearStatementCache ();
 
   /**
    * Returns whether or not the database is using WAL mode.
@@ -358,6 +363,11 @@ private:
   /** Condition variable for waiting for snapshot unrefs.  */
   mutable std::condition_variable cvSnapshots;
 
+  /** Clock used for timing the WAL checkpointing.  */
+  using Clock = std::chrono::steady_clock;
+  /** Last time when we did a WAL checkpoint.  */
+  Clock::time_point lastWalCheckpoint = Clock::time_point::min ();
+
   /**
    * Opens the database at filename into db.  It is an error if the
    * database is already opened.
@@ -370,9 +380,19 @@ private:
   void CloseDatabase ();
 
   /**
+   * Blocks until no read snapshots are open.
+   */
+  void WaitForSnapshots ();
+
+  /**
    * Decrements the count of outstanding snapshots.
    */
   void UnrefSnapshot () const;
+
+  /**
+   * Performs an explicit WAL checkpoint.
+   */
+  void WalCheckpoint ();
 
   friend class SQLiteDatabase;
 

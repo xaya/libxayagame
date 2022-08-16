@@ -1,13 +1,25 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "sqlitestorage.hpp"
 
+#include <gflags/gflags.h>
 #include <glog/logging.h>
 
+#include <chrono>
 #include <cstdio>
 #include <limits>
+
+/**
+ * The interval (in milliseconds) at which the database WAL file will
+ * be checkpointed and truncated.  If set to zero, we will not do any
+ * explicit checkpointing.  To do a checkpoint, all readers must finish
+ * first, and then the database remains blocked for any processing until
+ * the checkpoint is finished.
+ */
+DEFINE_int32 (xaya_sqlite_wal_truncate_ms, 0,
+              "if non-zero, interval between explicit WAL checkpoints");
 
 namespace xaya
 {
@@ -325,7 +337,7 @@ SQLiteDatabase::~SQLiteDatabase ()
       PrepareRo ("ROLLBACK").Execute ();
     }
 
-  preparedStatements.clear ();
+  ClearStatementCache ();
 
   std::lock_guard<std::mutex> lock(mutDb);
   CHECK (db != nullptr);
@@ -363,6 +375,13 @@ SQLiteDatabase::SetReadonlySnapshot (const SQLiteStorage& p)
   auto stmt = PrepareRo ("SELECT COUNT(*) FROM `sqlite_master`");
   CHECK (stmt.Step ());
   CHECK (!stmt.Step ());
+}
+
+void
+SQLiteDatabase::ClearStatementCache ()
+{
+  std::lock_guard<std::mutex> lock(mutPreparedStatements);
+  preparedStatements.clear ();
 }
 
 namespace
@@ -465,16 +484,20 @@ SQLiteStorage::OpenDatabase ()
 }
 
 void
-SQLiteStorage::CloseDatabase ()
+SQLiteStorage::WaitForSnapshots ()
 {
-  CHECK (db != nullptr);
-
   std::unique_lock<std::mutex> lock(mutSnapshots);
   LOG_IF (INFO, snapshots > 0)
       << "Waiting for outstanding snapshots to be finished...";
   while (snapshots > 0)
     cvSnapshots.wait (lock);
+}
 
+void
+SQLiteStorage::CloseDatabase ()
+{
+  CHECK (db != nullptr);
+  WaitForSnapshots ();
   db.reset ();
 }
 
@@ -708,6 +731,44 @@ SQLiteStorage::CommitTransaction ()
   db->Prepare ("RELEASE `xayagame-sqlitegame`").Execute ();
   CHECK (startedTransaction);
   startedTransaction = false;
+
+  /* Check if a periodic checkpointing of the WAL file is due.  */
+  if (FLAGS_xaya_sqlite_wal_truncate_ms > 0)
+    {
+      const auto intv
+          = std::chrono::milliseconds (FLAGS_xaya_sqlite_wal_truncate_ms);
+      if (lastWalCheckpoint + intv <= Clock::now ())
+        WalCheckpoint ();
+    }
+}
+
+void
+SQLiteStorage::WalCheckpoint ()
+{
+  CHECK (db != nullptr);
+  CHECK (!startedTransaction);
+
+  LOG (INFO) << "Attempting periodic WAL checkpointing...";
+  lastWalCheckpoint = Clock::now ();
+
+  if (!db->IsWalMode ())
+    {
+      LOG_FIRST_N (WARNING, 1) << "Database is not in WAL mode";
+      return;
+    }
+
+  WaitForSnapshots ();
+  /* Make sure to clear also all prepared statements, so that the
+     database does not consider some operations still in progress
+     that might contradict the WAL truncation.  */
+  db->ClearStatementCache ();
+
+  CHECK_EQ (sqlite3_wal_checkpoint_v2 (db->db, nullptr,
+                                       SQLITE_CHECKPOINT_TRUNCATE,
+                                       nullptr, nullptr),
+            SQLITE_OK)
+      << "Error checkpointing the WAL file";
+  LOG (INFO) << "Checkpointed and truncated WAL file successfully";
 }
 
 void
