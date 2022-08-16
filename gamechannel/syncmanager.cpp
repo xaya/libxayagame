@@ -95,7 +95,9 @@ SynchronisedChannelManager::WaitForChange (const int knownVersion) const
     }
 
   if (stopped)
-    VLOG (1) << "ChannelManager is stopped, not waiting for changes";
+    {
+      VLOG (1) << "ChannelManager is stopped, not waiting for changes";
+    }
   else
     {
       VLOG (1) << "Waiting for state change on condition variable...";
