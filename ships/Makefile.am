@@ -1,6 +1,6 @@
 SUBDIRS = gametest channeltest
 
-noinst_LTLIBRARIES = libships.la
+noinst_LTLIBRARIES = libshipscore.la libships.la
 bin_PROGRAMS = shipsd ships-channel
 
 RPC_STUBS = \
@@ -20,39 +20,51 @@ EXTRA_DIST = $(PROTOS) \
 BUILT_SOURCES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOPY)
 CLEANFILES = $(RPC_STUBS) $(PROTOHEADERS) $(PROTOSOURCES) $(PROTOPY) schema.cpp
 
+libshipscore_la_CXXFLAGS = \
+  -I$(top_srcdir) \
+  $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
+libshipscore_la_LIBADD = \
+  $(top_builddir)/xayautil/libxayautil.la \
+  $(top_builddir)/gamechannel/libchannelcore.la \
+  $(JSONCPP_LIBS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
+libshipscore_la_SOURCES = \
+  board.cpp \
+  channel.cpp \
+  coord.cpp \
+  grid.cpp \
+  $(PROTOSOURCES)
+SHIPSCOREHEADERS = \
+  board.hpp \
+  channel.hpp \
+  coord.hpp \
+  grid.hpp \
+  $(PROTOHEADERS)
+
 libships_la_CXXFLAGS = \
   -I$(top_srcdir) \
   $(JSONCPP_CFLAGS) $(SQLITE3_CFLAGS) $(GLOG_CFLAGS) $(PROTOBUF_CFLAGS)
 libships_la_LIBADD = \
+  $(builddir)/libshipscore.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
   $(top_builddir)/gamechannel/libchannelcore.la \
   $(top_builddir)/gamechannel/libgamechannel.la \
   $(JSONCPP_LIBS) $(SQLITE3_CFLAGS) $(GLOG_LIBS) $(PROTOBUF_LIBS)
 libships_la_SOURCES = \
-  board.cpp \
-  channel.cpp \
-  coord.cpp \
   gamestatejson.cpp \
-  grid.cpp \
   logic.cpp \
-  schema.cpp \
-  $(PROTOSOURCES)
+  schema.cpp
 LIBSHIPSHEADERS = \
-  board.hpp \
-  channel.hpp \
-  coord.hpp \
   gamestatejson.hpp \
-  grid.hpp \
   logic.hpp \
   schema.hpp \
-  $(RPC_STUBS) \
-  $(PROTOHEADERS)
+  $(RPC_STUBS)
 
 shipsd_CXXFLAGS = \
   -I$(top_srcdir) \
   $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(GFLAGS_CFLAGS) $(PROTOBUF_CFLAGS)
 shipsd_LDADD = \
+  $(builddir)/libshipscore.la \
   $(builddir)/libships.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
@@ -66,6 +78,7 @@ ships_channel_CXXFLAGS = \
   $(JSONCPP_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
   $(GLOG_CFLAGS) $(GFLAGS_CFLAGS) $(PROTOBUF_CFLAGS)
 ships_channel_LDADD = \
+  $(builddir)/libshipscore.la \
   $(builddir)/libships.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
@@ -78,7 +91,7 @@ ships_channel_SOURCES = main-channel.cpp \
 CHANNELHEADERS = \
   channelrpc.hpp
 
-noinst_HEADERS = $(LIBSHIPSHEADERS) $(CHANNELHEADERS)
+noinst_HEADERS = $(SHIPSCOREHEADERS) $(LIBSHIPSHEADERS) $(CHANNELHEADERS)
 
 noinst_PYTHON = proto/__init__.py $(PROTOPY)
 
@@ -89,6 +102,7 @@ tests_CXXFLAGS = \
   -I$(top_srcdir) \
   $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(PROTOBUF_CFLAGS)
 tests_LDADD = \
+  $(builddir)/libshipscore.la \
   $(builddir)/libships.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libtestutils.la \
