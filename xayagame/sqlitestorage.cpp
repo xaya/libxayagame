@@ -229,9 +229,9 @@ template <>
   uint256
   SQLiteDatabase::Statement::Get<uint256> (const int ind) const
 {
+  const void* data = sqlite3_column_blob (ro (), ind);
   const int len = sqlite3_column_bytes (ro (), ind);
   CHECK_EQ (len, uint256::NUM_BYTES);
-  const void* data = sqlite3_column_blob (ro (), ind);
 
   uint256 res;
   res.FromBlob (static_cast<const unsigned char*> (data));
@@ -243,11 +243,11 @@ template <>
   std::string
   SQLiteDatabase::Statement::Get<std::string> (const int ind) const
 {
+  const unsigned char* str = sqlite3_column_text (ro (), ind);
   const int len = sqlite3_column_bytes (ro (), ind);
   if (len == 0)
     return std::string ();
 
-  const unsigned char* str = sqlite3_column_text (ro (), ind);
   CHECK (str != nullptr);
   return std::string (reinterpret_cast<const char*> (str), len);
 }
@@ -255,11 +255,11 @@ template <>
 std::string
 SQLiteDatabase::Statement::GetBlob (const int ind) const
 {
+  const void* data = sqlite3_column_blob (ro (), ind);
   const int len = sqlite3_column_bytes (ro (), ind);
   if (len == 0)
     return std::string ();
 
-  const void* data = sqlite3_column_blob (ro (), ind);
   CHECK (data != nullptr);
   return std::string (reinterpret_cast<const char*> (data), len);
 }
