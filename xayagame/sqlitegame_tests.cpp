@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -27,6 +27,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -957,7 +958,8 @@ TEST_F (UnblockedStateExtractionTests, UncommittedChanges)
  * Example game where each name that sends a move is simply inserted into
  * two database tables with a generated integer ID.  This is used to verify
  * that database rollbacks and transaction atomicity with exceptions work fine
- * for auto-generated IDs.
+ * for auto-generated IDs as well as AUTOINCREMENT primary keys from SQLite
+ * (tracked in sqlite_sequence).
  */
 class InsertGame : public TestGame
 {
@@ -994,7 +996,11 @@ protected:
           `name` TEXT
       );
       CREATE TABLE IF NOT EXISTS `second` (
-          `id` INTEGER PRIMARY KEY,
+          `id` INTEGER NOT NULL PRIMARY KEY,
+          `name` TEXT
+      );
+      CREATE TABLE IF NOT EXISTS `third` (
+          `id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
           `name` TEXT
       );
     )");
@@ -1012,6 +1018,7 @@ protected:
     db.Execute (R"(
       INSERT INTO `first` (`id`, `name`) VALUES (2, 'domob');
       INSERT INTO `second` (`id`, `name`) VALUES (5, 'domob');
+      INSERT INTO `third` (`id`, `name`) VALUES (10, 'domob');
     )");
 
     Ids ("first").ReserveUpTo (2);
@@ -1043,6 +1050,9 @@ protected:
         db.Execute (R"(
           INSERT INTO `second` (`id`, `name`) VALUES
         ()" + secondId.str () + ", '" + name + "')");
+        db.Execute (R"(
+          INSERT INTO `third` (`name`) VALUES
+        (')" + name + "')");
       }
 
     if (shouldFail)
@@ -1052,8 +1062,8 @@ protected:
   Json::Value
   GetStateAsJson (const SQLiteDatabase& db) override
   {
-    Map first, second;
-    db.ReadDatabase ([&first, &second] (sqlite3* h)
+    Map first, second, third;
+    db.ReadDatabase ([&first, &second, &third] (sqlite3* h)
       {
         int rc = sqlite3_exec (h, R"(
           SELECT `id`, `name` FROM `first`
@@ -1064,20 +1074,29 @@ protected:
           SELECT `id`, `name` FROM `second`
         )", &SaveToMap, &second, nullptr);
         CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve second table";
+
+        rc = sqlite3_exec (h, R"(
+          SELECT `id`, `name` FROM `third`
+        )", &SaveToMap, &third, nullptr);
+        CHECK_EQ (rc, SQLITE_OK) << "Failed to retrieve third table";
       });
     CHECK_EQ (first.size (), second.size ());
+    CHECK_EQ (first.size (), third.size ());
 
     Json::Value res(Json::objectValue);
     for (const auto& entry : first)
       {
         const auto mitSecond = second.find (entry.first);
         CHECK (mitSecond != second.end ());
+        const auto mitThird = third.find (entry.first);
+        CHECK (mitThird != third.end ());
 
-        Json::Value pair(Json::arrayValue);
-        pair.append (entry.second);
-        pair.append (mitSecond->second);
+        Json::Value tuple(Json::arrayValue);
+        tuple.append (entry.second);
+        tuple.append (mitSecond->second);
+        tuple.append (mitThird->second);
 
-        res[entry.first] = pair;
+        res[entry.first] = tuple;
       }
     return res;
   }
@@ -1086,9 +1105,9 @@ public:
 
   /**
    * Type holding a game state as in-memory map (for easy handling).  The state
-   * is characterised by a map from names to the IDs in the two tables.
+   * is characterised by a map from names to the IDs in the tables.
    */
-  using State = std::map<std::string, std::pair<int, int>>;
+  using State = std::map<std::string, std::tuple<int, int, int>>;
 
   /**
    * Convenience type to hold moves before they are converted to JSON using
@@ -1113,11 +1132,12 @@ public:
       {
         ASSERT_TRUE (jsonState.isMember (entry.first));
 
-        const auto& pair = jsonState[entry.first];
-        ASSERT_TRUE (pair.isArray ());
-        ASSERT_EQ (pair.size (), 2);
-        EXPECT_EQ (pair[0].asInt (), entry.second.first);
-        EXPECT_EQ (pair[1].asInt (), entry.second.second);;
+        const auto& tuple = jsonState[entry.first];
+        ASSERT_TRUE (tuple.isArray ());
+        ASSERT_EQ (tuple.size (), 3);
+        EXPECT_EQ (tuple[0].asInt (), std::get<0> (entry.second));
+        EXPECT_EQ (tuple[1].asInt (), std::get<1> (entry.second));
+        EXPECT_EQ (tuple[2].asInt (), std::get<2> (entry.second));
       }
   }
 
@@ -1145,37 +1165,43 @@ using GeneratedIdTests = SQLiteGameTests<InsertGame>;
 
 TEST_F (GeneratedIdTests, ForwardAndBackward)
 {
-  ExpectState ({{"domob", {2, 5}}});
+  ExpectState ({{"domob", {2, 5, 10}}});
 
   AttachBlock (game, BlockHash (11), InsertGame::Moves ({"foo", "bar"}));
   ExpectState ({
-    {"domob", {2, 5}},
-    {"foo", {3, 10}},
-    {"bar", {4, 11}},
+    {"domob", {2, 5, 10}},
+    {"foo", {3, 10, 11}},
+    {"bar", {4, 11, 12}},
   });
 
   DetachBlock (game);
-  ExpectState ({{"domob", {2, 5}}});
+  ExpectState ({{"domob", {2, 5, 10}}});
+
+  /* FIXME: Undoing of implicit AUTOINCREMENT values does not work,
+     as the sqlite_sequence table is not included automatically in the
+     sessions extension.  We would need to manually query, diff and restore it
+     to support this, which may be too costly for not enough value (as users
+     should explicitly set all IDs anyway).  */
 
   AttachBlock (game, BlockHash (11), InsertGame::Moves ({"foo", "baz"}));
   ExpectState ({
-    {"domob", {2, 5}},
-    {"foo", {3, 10}},
-    {"baz", {4, 11}},
+    {"domob", {2, 5, 10}},
+    {"foo", {3, 10, /*11*/ 13}},
+    {"baz", {4, 11, /*12*/ 14}},
   });
 
   AttachBlock (game, BlockHash (11), InsertGame::Moves ({"abc"}));
   ExpectState ({
-    {"domob", {2, 5}},
-    {"foo", {3, 10}},
-    {"baz", {4, 11}},
-    {"abc", {5, 12}},
+    {"domob", {2, 5, 10}},
+    {"foo", {3, 10, /*11*/ 13}},
+    {"baz", {4, 11, /*12*/ 14}},
+    {"abc", {5, 12, /*13*/ 15}},
   });
 }
 
 TEST_F (GeneratedIdTests, ErrorHandling)
 {
-  ExpectState ({{"domob", {2, 5}}});
+  ExpectState ({{"domob", {2, 5, 10}}});
 
   rules.SetShouldFail (true);
   try
@@ -1185,14 +1211,14 @@ TEST_F (GeneratedIdTests, ErrorHandling)
     }
   catch (const Failure& exc)
     {}
-  ExpectState ({{"domob", {2, 5}}});
+  ExpectState ({{"domob", {2, 5, 10}}});
 
   rules.SetShouldFail (false);
   AttachBlock (game, BlockHash (11), InsertGame::Moves ({"foo", "bar"}));
   ExpectState ({
-    {"domob", {2, 5}},
-    {"foo", {3, 10}},
-    {"bar", {4, 11}},
+    {"domob", {2, 5, 10}},
+    {"foo", {3, 10, 11}},
+    {"bar", {4, 11, 12}},
   });
 }
 
