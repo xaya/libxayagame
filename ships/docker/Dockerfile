@@ -5,7 +5,7 @@
 # Note:  This image is based on xaya/charon, which itself is based on
 # xaya/libxayagame, not on the libxayagame image directly!
 
-FROM xaya/charon AS build
+FROM xaya/charon:ships-on-eth AS build
 
 # Collect the binaries and required libraries.  Also add in the Charon
 # binaries.
