@@ -56,6 +56,18 @@ ShipsLogic::GetInitialStateBlock (unsigned& height, std::string& hashHex) const
           = "6f750b36d22f1dc3d0a6e483af45301022646dfc3b3ba2187865f5a7d6d83ab1";
       break;
 
+    case xaya::Chain::POLYGON:
+      height = 36'500'000;
+      hashHex
+          = "7330add6385f12fa3050e9abe040900283df0b5c8f94003bf713ac9cc8cf0442";
+      break;
+
+    case xaya::Chain::MUMBAI:
+      height = 29'520'000;
+      hashHex
+        = "ca20c39d7e9de4a46319327154eec865cdc02990c7bf17a3543ac86c5499cb58";
+      break;
+
     case xaya::Chain::GANACHE:
       height = 0;
       /* Ganache does not have a fixed genesis block.  So leave the block
