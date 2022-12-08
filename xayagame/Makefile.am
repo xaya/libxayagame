@@ -60,7 +60,7 @@ xayagame_HEADERS = \
   rest.hpp \
   signatures.hpp \
   sqlitegame.hpp \
-  sqliteintro.hpp \
+  sqliteintro.hpp sqliteintro.tpp \
   sqlitestorage.hpp \
   storage.hpp \
   transactionmanager.hpp \

@@ -34,6 +34,27 @@ std::set<std::string> GetPrimaryKeyColumns (
     const SQLiteDatabase& db, const std::string& table,
     const std::set<std::string>& columns);
 
+/**
+ * Writes a deterministic "description" of the content of the given
+ * table onto the output stream.  This will contain the table's schema
+ * (from sqlite_master) as well as all content sorted by primary key.
+ *
+ * The stream must support writing of strings, but nothing else is required.
+ */
+template <typename Out>
+  Out& WriteTableContent (Out& s, const SQLiteDatabase& db,
+                          const std::string& table);
+
+/**
+ * Writes a deterministic representation of all tables in the given
+ * database (with the same behaviour as GetSqliteTables including "internal")
+ * to the output stream.
+ */
+template <typename Out>
+  Out& WriteAllTables (Out& s, const SQLiteDatabase& db, bool internal = false);
+
 } // namespace xaya
+
+#include "sqliteintro.tpp"
 
 #endif // XAYAGAME_SQLITEINTRO_HPP

@@ -4,7 +4,12 @@
 
 #include "sqliteintro.hpp"
 
+#include <xayautil/hash.hpp>
+
 #include <glog/logging.h>
+
+#include <cinttypes>
+#include <sstream>
 
 namespace xaya
 {
@@ -83,5 +88,74 @@ GetPrimaryKeyColumns (const SQLiteDatabase& db, const std::string& table,
 
   return res;
 }
+
+namespace internal
+{
+
+SQLiteDatabase::Statement
+QueryAllRows (const SQLiteDatabase& db, const std::string& table)
+{
+  const auto columns = GetTableColumns (db, table);
+  const auto pk = GetPrimaryKeyColumns (db, table, columns);
+  CHECK (!pk.empty ()) << "Primary key for table '" << table << "' is empty";
+
+  std::ostringstream pkColumns;
+  bool first = true;
+  for (const auto& p : pk)
+    {
+      if (!first)
+        pkColumns << ", ";
+      first = false;
+      pkColumns << "`" << p << "`";
+    }
+
+  std::ostringstream sql;
+  sql << "SELECT * FROM `" << table << "` ORDER BY " << pkColumns.str ();
+
+  return db.PrepareRo (sql.str ());
+}
+
+void
+TableRowContent (std::string& out, const SQLiteDatabase::Statement& stmt)
+{
+  auto* raw = stmt.ro ();
+
+  char numBuf[64];
+
+  const int cnt = sqlite3_column_count (raw);
+  for (int i = 0; i < cnt; ++i)
+    {
+      out += "  ";
+      out += sqlite3_column_name (raw, i);
+      out += ": ";
+      switch (sqlite3_column_type (raw, i))
+        {
+        case SQLITE_INTEGER:
+          std::snprintf (numBuf, sizeof (numBuf),
+                         "%" PRId64, stmt.Get<int64_t> (i));
+          out += "INTEGER ";
+          out += numBuf;
+          break;
+
+        case SQLITE_NULL:
+          out += "NULL";
+          break;
+
+        case SQLITE_TEXT:
+        case SQLITE_BLOB:
+          out += "DATA-SHA256 ";
+          out += SHA256::Hash (stmt.Get<std::string> (i)).ToHex ();
+          break;
+
+        case SQLITE_FLOAT:
+          LOG (FATAL) << "Database column must not be FLOAT";
+        default:
+          LOG (FATAL) << "Unexpected column default type";
+        }
+      out += "\n";
+    }
+}
+
+} // namespace internal
 
 } // namespace xaya
