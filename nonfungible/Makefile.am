@@ -59,13 +59,13 @@ TESTS = tests
 tests_CXXFLAGS = \
   -I$(top_srcdir) \
   $(GTEST_CFLAGS) \
-  $(JSONCPP_CFLAGS) $(SQLITE_CFLAGS) $(GLOG_CFLAGS)
+  $(JSONCPP_CFLAGS) $(SQLITE3_CFLAGS) $(GLOG_CFLAGS)
 tests_LDADD = \
   $(builddir)/libnonfungible.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(top_builddir)/xayagame/libxayagame.la \
   $(GTEST_LIBS) \
-  $(JSONCPP_LIBS) $(SQLITE_LIBS) $(GLOG_LIBS)
+  $(JSONCPP_LIBS) $(SQLITE3_LIBS) $(GLOG_LIBS)
 tests_SOURCES = \
   assets_tests.cpp \
   moveprocessor_tests.cpp \
