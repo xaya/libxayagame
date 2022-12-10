@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,7 +7,6 @@
 #include <glog/logging.h>
 
 #include <algorithm>
-#include <cstdio>
 
 namespace xaya
 {
@@ -15,9 +14,15 @@ namespace xaya
 std::string
 uint256::ToHex () const
 {
+  static constexpr char DIGITS[] = "0123456789abcdef";
+
   std::string result(NUM_BYTES * 2, 'x');
   for (size_t i = 0; i < NUM_BYTES; ++i)
-    std::sprintf (&result[2 * i], "%02x", static_cast<uint8_t> (data[i]));
+    {
+      const uint8_t val = data[i];
+      result[2 * i] = DIGITS[val >> 4];
+      result[2 * i + 1] = DIGITS[val % 0x10];
+    }
   return result;
 }
 
