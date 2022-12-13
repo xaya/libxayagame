@@ -1,4 +1,5 @@
 lib_LTLIBRARIES = libxayagame.la
+bin_PROGRAMS = dumpxayadb
 xayagamedir = $(includedir)/xayagame
 rpcstubdir = $(xayagamedir)/rpc-stubs
 
@@ -42,6 +43,7 @@ libxayagame_la_SOURCES = \
   rest.cpp \
   signatures.cpp \
   sqlitegame.cpp \
+  sqliteintro.cpp \
   sqlitestorage.cpp \
   storage.cpp \
   transactionmanager.cpp \
@@ -59,11 +61,21 @@ xayagame_HEADERS = \
   rest.hpp \
   signatures.hpp \
   sqlitegame.hpp \
+  sqliteintro.hpp sqliteintro.tpp \
   sqlitestorage.hpp \
   storage.hpp \
   transactionmanager.hpp \
   zmqsubscriber.hpp
 rpcstub_HEADERS = $(RPC_STUBS)
+
+dumpxayadb_CXXFLAGS = \
+  -I$(top_srcdir) \
+  $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(GFLAGS_CFLAGS)
+dumpxayadb_LDADD = \
+  $(builddir)/libxayagame.la \
+  $(top_builddir)/xayautil/libxayautil.la \
+  $(GLOG_LIBS) $(SQLITE3_LIBS) $(GFLAGS_LIBS)
+dumpxayadb_SOURCES = main-dumpdb.cpp
 
 check_LTLIBRARIES = libtestutils.la
 check_PROGRAMS = tests
@@ -103,6 +115,7 @@ tests_SOURCES = \
   rest_tests.cpp \
   signatures_tests.cpp \
   sqlitegame_tests.cpp \
+  sqliteintro_tests.cpp \
   sqlitestorage_tests.cpp \
   storage_tests.cpp \
   transactionmanager_tests.cpp \
