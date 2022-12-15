@@ -9,9 +9,16 @@ from contextlib import contextmanager
 import json
 import logging
 import threading
+import time
 
 import jsonrpclib
 from websocket_server import WebsocketServer
+
+
+# Time (in seconds) to sleep between checks for "should stop"
+# while waiting for a retry.  This is the latency that killing the
+# process might incur.
+SLEEP_TIME = 0.1
 
 
 class Server:
@@ -51,14 +58,29 @@ class Server:
 
     def loop (rpc, firstKnown, pusher):
       known = firstKnown
+      toSleep = 0
       while True:
         with mut:
           if shouldStop:
             return
-        new = rpc (known)
-        if new != known:
-          pusher (new)
-          known = new
+
+        if toSleep > 0:
+          # Sleep only a shorter duration at a time, so that we can detect
+          # a shutdown request in-between.
+          time.sleep (SLEEP_TIME)
+          toSleep -= SLEEP_TIME
+          continue
+
+        try:
+          new = rpc (known)
+          if new != known:
+            pusher (new)
+            known = new
+        except Exception as exc:
+          # In case of an error (RPC or websocket sending), we wait for a
+          # predefined time before retrying again.
+          self.log.exception (exc)
+          toSleep = args.retry_ms / 1_000.0
 
     threads = []
 
@@ -121,6 +143,8 @@ if __name__ == "__main__":
                        help="URL for the GSP's JSON-RPC interface")
   parser.add_argument ("--enable_pending", action="store_true",
                        help="Also track and push updates to pending moves")
+  parser.add_argument ("--retry_ms", type=int, default=10_000,
+                       help="Time to wait before retrying on errors")
   args = parser.parse_args ()
 
   srv = Server (args.host, args.port, args.gsp_rpc_url)
