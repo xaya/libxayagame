@@ -44,6 +44,7 @@ libxayagame_la_SOURCES = \
   signatures.cpp \
   sqlitegame.cpp \
   sqliteintro.cpp \
+  sqliteproc.cpp \
   sqlitestorage.cpp \
   storage.cpp \
   transactionmanager.cpp \
@@ -62,6 +63,7 @@ xayagame_HEADERS = \
   signatures.hpp \
   sqlitegame.hpp \
   sqliteintro.hpp sqliteintro.tpp \
+  sqliteproc.hpp \
   sqlitestorage.hpp \
   storage.hpp \
   transactionmanager.hpp \
@@ -116,6 +118,7 @@ tests_SOURCES = \
   signatures_tests.cpp \
   sqlitegame_tests.cpp \
   sqliteintro_tests.cpp \
+  sqliteproc_tests.cpp \
   sqlitestorage_tests.cpp \
   storage_tests.cpp \
   transactionmanager_tests.cpp \
