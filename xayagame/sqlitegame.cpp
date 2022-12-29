@@ -135,6 +135,14 @@ private:
 protected:
 
   void
+  CloseDatabase () override
+  {
+    for (auto* p : game.processors)
+      p->Finish ();
+    SQLiteStorage::CloseDatabase ();
+  }
+
+  void
   SetupSchema () override
   {
     SQLiteStorage::SetupSchema ();
@@ -189,6 +197,11 @@ protected:
         )");
         LOG (INFO) << "Enabled mess-for-debug in the database";
       }
+
+    /* Set up the processor schemas here explicitly.  This protects against
+       a SQLiteGame subclass not calling the parent class' SetupSchema.  */
+    for (auto* p : game.processors)
+      p->SetupSchema (db);
 
     ActiveAutoIds ids(game);
     game.SetupSchema (db);
@@ -370,6 +383,13 @@ SQLiteGame::GetInitialStateInternal (unsigned& height, std::string& hashHex)
   database->InitialiseGame ();
 
   return INITIAL_STATE;
+}
+
+void
+SQLiteGame::AddProcessor (SQLiteProcessor& proc)
+{
+  CHECK (database == nullptr) << "SQLiteGame has already been initialised";
+  processors.insert (&proc);
 }
 
 void
@@ -573,6 +593,15 @@ SQLiteGame::SetSchemaVersion (const std::string& version)
 {
   CHECK (database != nullptr) << "SQLiteGame has not been initialised";
   database->SetSchemaVersion (version);
+}
+
+void
+SQLiteGame::GameStateUpdated (const GameStateData& state,
+                              const Json::Value& blockData)
+{
+  EnsureCurrentState (state);
+  for (auto* p : processors)
+    p->Process (blockData, database->GetDatabase ());
 }
 
 Json::Value

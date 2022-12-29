@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -288,6 +288,16 @@ public:
   GameStateData ProcessBackwards (const GameStateData& newState,
                                   const Json::Value& blockData,
                                   const UndoData& undoData);
+
+  /**
+   * A notification method that gets called whenever the Game instance
+   * updated the game state, when the new state has been committed to storage.
+   * The blockData will contain the main block information to which the
+   * new state corresponds, like "height" and "hash".
+   */
+  virtual void
+  GameStateUpdated (const GameStateData& state, const Json::Value& blockData)
+  {}
 
   /**
    * Converts an encoded game state to JSON format, which can be returned as

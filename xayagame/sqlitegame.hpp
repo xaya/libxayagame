@@ -8,6 +8,7 @@
 #include "game.hpp"
 #include "gamelogic.hpp"
 #include "pendingmoves.hpp"
+#include "sqliteproc.hpp"
 #include "sqlitestorage.hpp"
 
 #include <json/json.h>
@@ -15,6 +16,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 
 namespace xaya
@@ -75,6 +77,12 @@ private:
    * to UpdateState).  It is set to null when no set is active.
    */
   ActiveAutoIds* activeIds = nullptr;
+
+  /**
+   * Any processors attached, that will be called for state updates.  They
+   * are not owned by this instance.
+   */
+  std::set<SQLiteProcessor*> processors;
 
   /**
    * If set to true, then we enable 'PRAGMA reverse_unordered_selects' in the
@@ -245,6 +253,11 @@ public:
   StorageInterface& GetStorage ();
 
   /**
+   * Attaches a processor.
+   */
+  void AddProcessor (SQLiteProcessor& proc);
+
+  /**
    * Sets a flag (off by default) that determines whether to set
    * 'PRAGMA reverse_unordered_selects' in SQLite (and potentially
    * other related features).  Changing this flag "should" not affect
@@ -255,6 +268,8 @@ public:
    */
   void SetMessForDebug (bool val);
 
+  void GameStateUpdated (const GameStateData& state,
+                         const Json::Value& blockData) override;
   Json::Value GameStateToJson (const GameStateData& state) override;
 
 };
