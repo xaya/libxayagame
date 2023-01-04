@@ -1,4 +1,4 @@
-# Copyright (C) 2020 The Xaya developers
+# Copyright (C) 2020-2023 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,6 +19,16 @@ class NonFungibleTest (XayaGameTest):
       top_builddir = "../.."
     nfd = os.path.join (top_builddir, "nonfungible", "nonfungibled")
     super ().__init__ ("nf", nfd)
+
+  def setup (self):
+    super ().setup ()
+
+    self.collectPremine ()
+    sendTo = {}
+    for _ in range (10):
+      sendTo[self.rpc.xaya.getnewaddress ()] = 10
+    self.rpc.xaya.sendmany ("", sendTo)
+    self.generate (1)
 
   def getRpc (self, method, *args, **kwargs):
     """

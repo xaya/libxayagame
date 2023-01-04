@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2021 The Xaya developers
+// Copyright (C) 2020-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,12 +9,14 @@
 #include "rpcserver.hpp"
 
 #include "xayagame/defaultmain.hpp"
+#include "xayagame/sqliteproc.hpp"
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 
 namespace
 {
@@ -35,6 +37,9 @@ DEFINE_bool (game_rpc_listen_locally, true,
 DEFINE_int32 (enable_pruning, -1,
               "if non-negative (including zero), old undo data will be pruned"
               " and only as many blocks as specified will be kept");
+DEFINE_int32 (statehash_interval, 0,
+              "if set to a positive number N, hash the game state"
+              " every N blocks");
 
 DEFINE_string (datadir, "",
                "base data directory for state data"
@@ -54,18 +59,30 @@ private:
    */
   nf::NonFungibleLogic& logic;
 
+  /** The game-state hasher used, if hashing is enabled.  */
+  std::unique_ptr<xaya::SQLiteHasher> hasher;
+
 public:
 
   explicit NFInstanceFactory (nf::NonFungibleLogic& l)
     : logic(l)
-  {}
+  {
+    if (FLAGS_statehash_interval > 0)
+      {
+        hasher = std::make_unique<xaya::SQLiteHasher> ();
+        hasher->SetInterval (FLAGS_statehash_interval);
+        logic.AddProcessor (*hasher);
+      }
+  }
 
   std::unique_ptr<xaya::RpcServerInterface>
   BuildRpcServer (xaya::Game& game,
                   jsonrpc::AbstractServerConnector& conn) override
   {
     std::unique_ptr<xaya::RpcServerInterface> res;
-    res.reset (new xaya::WrappedRpcServer<nf::RpcServer> (game, logic, conn));
+    auto* h = hasher.get ();
+    res.reset (new xaya::WrappedRpcServer<nf::RpcServer> (
+        game, logic, h, conn));
     return res;
   }
 

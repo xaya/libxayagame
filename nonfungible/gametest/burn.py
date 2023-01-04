@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2020 The Xaya developers
+# Copyright (C) 2020-2023 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,8 +14,6 @@ from nftest import NonFungibleTest
 class BurnTest (NonFungibleTest):
 
   def run (self):
-    self.collectPremine ()
-
     self.sendMove ("domob", [
       {"m": {"a": "foo", "n": 10}},
       {"b": {"a": {"m": "domob", "a": "foo"}, "n": 11}},

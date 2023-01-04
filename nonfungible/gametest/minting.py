@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # coding=utf8
 
-# Copyright (C) 2020 The Xaya developers
+# Copyright (C) 2020-2023 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,7 +15,6 @@ from nftest import NonFungibleTest
 class MintingTest (NonFungibleTest):
 
   def run (self):
-    self.collectPremine ()
     self.assertEqual (self.getRpc ("listassets"), [])
 
     self.sendMove ("domob", [
