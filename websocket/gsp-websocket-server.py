@@ -8,6 +8,7 @@ import argparse
 from contextlib import contextmanager
 import json
 import logging
+import sys
 import threading
 import time
 
@@ -146,6 +147,8 @@ if __name__ == "__main__":
   parser.add_argument ("--retry_ms", type=int, default=10_000,
                        help="Time to wait before retrying on errors")
   args = parser.parse_args ()
+
+  logging.basicConfig (stream=sys.stderr, level=logging.INFO)
 
   srv = Server (args.host, args.port, args.gsp_rpc_url)
   if args.enable_pending:
