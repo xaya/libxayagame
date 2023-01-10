@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -338,7 +338,7 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
           /* If we are now at the last catching-up's target block hash,
              reinitialise the state as well.  This will check the current best
              tip and set the state to UP_TO_DATE or request more updates.  */
-          if (hash == targetBlockHash)
+          if (hash == catchingUpTarget)
             needReinit = true;
 
           break;
@@ -430,7 +430,7 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
              at the same time (*or if this was the very first detach
              notification*!), then the client is catching-up while only
              detaching.  */
-          if (parent == targetBlockHash)
+          if (parent == catchingUpTarget)
             needReinit = true;
 
           break;
@@ -1006,7 +1006,7 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
   state = State::CATCHING_UP;
   transactionManager.SetBatchSize (transactionBatchSize);
 
-  CHECK (targetBlockHash.FromHex (upd["toblock"].asString ()));
+  CHECK (catchingUpTarget.FromHex (upd["toblock"].asString ()));
   reqToken = upd["reqtoken"].asString ();
 }
 

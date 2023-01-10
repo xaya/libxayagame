@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -148,7 +148,7 @@ private:
    * This is compared against the CHILD hashes of block-attach notifications
    * to know when we've finished catching up to the current target.
    */
-  uint256 targetBlockHash;
+  uint256 catchingUpTarget;
 
   /**
    * The reqtoken value for the currently processed game_sendupdates request
