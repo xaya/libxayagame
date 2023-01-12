@@ -123,6 +123,7 @@ public:
 Game::Game (const std::string& id)
   : gameId(id), state(State::DISCONNECTED), genesisHeight(-1)
 {
+  targetBlock.SetNull ();
   genesisHash.SetNull ();
   zmq.AddListener (gameId, this);
 }
@@ -142,6 +143,8 @@ Game::StateToString (const State s)
       return "out-of-sync";
     case State::CATCHING_UP:
       return "catching-up";
+    case State::AT_TARGET:
+      return "at-target";
     case State::UP_TO_DATE:
       return "up-to-date";
     case State::DISCONNECTED:
@@ -297,6 +300,13 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
 
   std::lock_guard<std::mutex> lock(mut);
 
+  /* If we are at the desired sync target, do nothing.  */
+  if (state == State::AT_TARGET)
+    {
+      VLOG (1) << "Ignoring attach, we are at sync target";
+      return;
+    }
+
   /* If we missed notifications, always reinitialise the state to make sure
      that all is again consistent.  */
   if (seqMismatch)
@@ -367,8 +377,19 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
       needReinit = true;
     }
 
+  /* If UpdateStateForAttach failed to attach the block, then hash might
+     not actually correspond to the current game state.  But in that case,
+     needReinit is true, and then ReinitialiseState() below will ensure that
+     we fix everything "from scratch", no matter what we do now.  */
+  if (hash == targetBlock)
+    state = State::AT_TARGET;
+
   if (needReinit)
     ReinitialiseState ();
+
+  LOG_IF (INFO, state == State::AT_TARGET)
+      << "Reached target block " << targetBlock.ToHex ()
+      << ", pausing sync for now";
 
   if (state == State::UP_TO_DATE && pending != nullptr)
     {
@@ -391,6 +412,13 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
   VLOG (1) << "Detaching block " << hash.ToHex ();
 
   std::lock_guard<std::mutex> lock(mut);
+
+  /* If we are at the desired sync target, do nothing.  */
+  if (state == State::AT_TARGET)
+    {
+      VLOG (1) << "Ignoring detach, we are at sync target";
+      return;
+    }
 
   /* If we missed notifications, always reinitialise the state to make sure
      that all is again consistent.  */
@@ -458,8 +486,19 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
       needReinit = true;
     }
 
+  /* If UpdateStateForDetach failed to attach the block, then parent might
+     not actually correspond to the current game state.  But in that case,
+     needReinit is true, and then ReinitialiseState() below will ensure that
+     we fix everything "from scratch", no matter what we do now.  */
+  if (parent == targetBlock)
+    state = State::AT_TARGET;
+
   if (needReinit)
     ReinitialiseState ();
+
+  LOG_IF (INFO, state == State::AT_TARGET)
+      << "Reached target block " << targetBlock.ToHex ()
+      << ", pausing sync for now";
 
   if (state == State::UP_TO_DATE && pending != nullptr)
     {
@@ -626,6 +665,18 @@ Game::EnablePruning (const unsigned nBlocks)
                                                              nBlocks);
   else
     pruningQueue->SetDesiredSize (nBlocks);
+}
+
+void
+Game::SetTargetBlock (const uint256& blk)
+{
+  LOG (INFO) << "Setting desired target block to " << blk.ToHex ();
+
+  std::lock_guard<std::mutex> lock(mut);
+  targetBlock = blk;
+
+  if (state != State::DISCONNECTED)
+    ReinitialiseState ();
 }
 
 bool
@@ -974,6 +1025,14 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
 {
   CHECK (state == State::OUT_OF_SYNC);
 
+  /* If we are at the desired target, then nothing is to be done.  */
+  if (currentHash == targetBlock)
+    {
+      LOG (INFO) << "Game state matches sync target";
+      state = State::AT_TARGET;
+      return;
+    }
+
   uint256 daemonBestHash;
   CHECK (daemonBestHash.FromHex (blockchainInfo["bestblockhash"].asString ()));
 
@@ -994,6 +1053,11 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
      once game_sendupdates and the code here are done.  This ensures that
      we won't ignore ZMQ messages that we just requested simply because we
      are not yet aware of the associated reqtoken.  */
+  /* FIXME:  If we have a sync target block, we should pass it as explicit
+     "to" block here.  For now, though, this is not supported by Xaya X,
+     so don't do that.  This means that a target block only works by
+     stopping at it, not to "explicitly" force sync including a reorg back
+     to the desired block.  */
   const Json::Value upd
       = rpcClient->game_sendupdates (currentHash.ToHex (), gameId);
 
