@@ -10,6 +10,7 @@ REGTESTS = \
   reorg.py \
   sqlite_wal.py \
   statehash.py \
+  targetblock.py \
   transfers.py
 
 EXTRA_DIST = $(REGTESTS) $(TEST_LIBRARY)

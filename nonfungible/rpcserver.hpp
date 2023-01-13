@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2022 The Xaya developers
+// Copyright (C) 2020-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -51,6 +51,8 @@ public:
 
   Json::Value hashcurrentstate () override;
   Json::Value getstatehash (const std::string& block) override;
+
+  void settargetblock (const std::string& block) override;
 
   std::string waitforchange (const std::string& knownBlock) override;
   Json::Value waitforpendingchange (int knownVersion) override;
