@@ -5,6 +5,8 @@
 #include "sqlitegame.hpp"
 
 #include "game.hpp"
+#include "sqliteintro.hpp"
+#include "sqliteproc.hpp"
 
 #include "testutils.hpp"
 
@@ -382,6 +384,18 @@ protected:
     : GameTestWithBlockchain(GAME_ID),
       game(GAME_ID)
   {
+    /* The constructor does not yet automatically initialise the Game
+       instance, so that tests can do more things pre-init (like add
+       a processor).  They need to call InitialiseGame() before doing
+       any game operations, though.  */
+  }
+
+  /**
+   * Initialises the Game instance and related things.
+   */
+  void
+  InitialiseGame ()
+  {
     rules.Initialise (":memory:");
     rules.InitialiseGameContext (Chain::MAIN, GAME_ID, nullptr);
 
@@ -417,9 +431,11 @@ protected:
 
   using UninitialisedSQLiteGameTests<G>::game;
   using UninitialisedSQLiteGameTests<G>::rules;
+  using UninitialisedSQLiteGameTests<G>::InitialiseGame;
 
   SQLiteGameTests ()
   {
+    InitialiseGame ();
     InitialiseState (game, rules);
   }
 
@@ -427,7 +443,17 @@ protected:
 
 /* ************************************************************************** */
 
-using StateInitialisationTests = UninitialisedSQLiteGameTests<ChatGame>;
+class StateInitialisationTests : public UninitialisedSQLiteGameTests<ChatGame>
+{
+
+protected:
+
+  StateInitialisationTests ()
+  {
+    InitialiseGame ();
+  }
+
+};
 
 TEST_F (StateInitialisationTests, HeightAndHash)
 {
@@ -724,6 +750,115 @@ using SchemaVersionTests = SQLiteGameTests<ChatWithSchemaVersion>;
 TEST_F (SchemaVersionTests, VersionSet)
 {
   EXPECT_EQ (rules.GetSchemaVersion (), "schema");
+}
+
+/* ************************************************************************** */
+
+class SQLiteGameHashingTests : public UninitialisedSQLiteGameTests<ChatGame>
+{
+
+protected:
+
+  using UninitialisedSQLiteGameTests<ChatGame>::game;
+  using UninitialisedSQLiteGameTests<ChatGame>::rules;
+
+  SQLiteHasher hasher;
+
+  SQLiteGameHashingTests ()
+  {
+    rules.AddProcessor (hasher);
+
+    InitialiseGame ();
+    InitialiseState (game, rules);
+  }
+
+  /**
+   * Computes the current database hash directly.
+   */
+  uint256
+  GetDatabaseHash ()
+  {
+    SHA256 h;
+    WriteAllTables (h, rules.GetDatabaseForTesting ());
+    return h.Finalise ();
+  }
+
+  /**
+   * Returns the hash value for the given block stored from the processor.
+   * Returns zero uint256 if none.
+   */
+  uint256
+  GetStoredHash (const uint256& blk)
+  {
+    uint256 value;
+    if (!hasher.GetHash (rules.GetDatabaseForTesting (), blk, value))
+      value.SetNull ();
+    return value;
+  }
+
+};
+
+TEST_F (SQLiteGameHashingTests, AttachingBlocks)
+{
+  hasher.SetInterval (2);
+
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({
+    {"domob", "11"},
+  }));
+  AttachBlock (game, BlockHash (12), ChatGame::Moves ({
+    {"domob", "12"},
+  }));
+  const auto hash12 = GetDatabaseHash ();
+  AttachBlock (game, BlockHash (13), ChatGame::Moves ({
+    {"domob", "13"},
+  }));
+  AttachBlock (game, BlockHash (14), ChatGame::Moves ({
+    {"domob", "14"},
+  }));
+  const auto hash14 = GetDatabaseHash ();
+  ASSERT_NE (hash12, hash14);
+
+  EXPECT_TRUE (GetStoredHash (BlockHash (11)).IsNull ());
+  EXPECT_EQ (GetStoredHash (BlockHash (12)), hash12);
+  EXPECT_TRUE (GetStoredHash (BlockHash (13)).IsNull ());
+  EXPECT_EQ (GetStoredHash (BlockHash (14)), hash14);
+}
+
+TEST_F (SQLiteGameHashingTests, Reorg)
+{
+  hasher.SetInterval (1);
+
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({
+    {"domob", "value"},
+  }));
+  const auto hash1 = GetDatabaseHash ();
+
+  DetachBlock (game);
+  EXPECT_EQ (GetStoredHash (BlockHash (11)), hash1);
+
+  /* Attaching the same block is fine.  */
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({
+    {"domob", "value"},
+  }));
+  EXPECT_EQ (GetStoredHash (BlockHash (11)), hash1);
+  DetachBlock (game);
+
+  /* Attaching the same block hash with different state is not ok.  */
+  EXPECT_DEATH (
+      AttachBlock (game, BlockHash (11), ChatGame::Moves ({
+        {"domob", "other value"},
+      })),
+      "Already stored game-state differs");
+
+  /* Another block hash and value is fine at the previous height.  */
+  AttachBlock (game, BlockHash (42), ChatGame::Moves ({
+    {"domob", "other value"},
+  }));
+  const auto hash2 = GetDatabaseHash ();
+
+  EXPECT_NE (hash1, hash2);
+  EXPECT_EQ (GetStoredHash (BlockHash (11)), hash1);
+  EXPECT_EQ (GetStoredHash (BlockHash (42)), hash2);
 }
 
 /* ************************************************************************** */

@@ -3,6 +3,7 @@
     "name": "stop",
     "params": {}
   },
+
   {
     "name": "getcurrentstate",
     "params": {},
@@ -18,6 +19,18 @@
     "params": {},
     "returns": {}
   },
+
+  {
+    "name": "hashcurrentstate",
+    "params": [],
+    "returns": {}
+  },
+  {
+    "name": "getstatehash",
+    "params": ["blockhash"],
+    "returns": {}
+  },
+
   {
     "name": "waitforchange",
     "params": ["known block"],

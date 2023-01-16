@@ -46,6 +46,13 @@ template <typename Out>
                           const std::string& table);
 
 /**
+ * Writes a deterministic representation of the given tables to the stream.
+ */
+template <typename Out>
+  Out& WriteTables (Out& s, const SQLiteDatabase& db,
+                    const std::set<std::string>& tables);
+
+/**
  * Writes a deterministic representation of all tables in the given
  * database (with the same behaviour as GetSqliteTables including "internal")
  * to the output stream.

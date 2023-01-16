@@ -1,4 +1,4 @@
-// Copyright (C) 2020 The Xaya developers
+// Copyright (C) 2020-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -57,6 +57,10 @@ public:
    * StateJsonExtractor instance.
    */
   Json::Value GetCustomStateData (xaya::Game& game, const StateCallback& cb);
+
+  /* Expose the super-class variant as well, which is used for
+     state hashing.  */
+  using SQLiteGame::GetCustomStateData;
 
 };
 

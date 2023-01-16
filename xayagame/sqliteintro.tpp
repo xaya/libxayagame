@@ -65,10 +65,9 @@ template <typename Out>
 
 template <typename Out>
   Out&
-  WriteAllTables (Out& s, const SQLiteDatabase& db, const bool internal)
+  WriteTables (Out& s, const SQLiteDatabase& db,
+               const std::set<std::string>& tables)
 {
-  const auto tables = GetSqliteTables (db, internal);
-
   bool first = true;
   for (const auto& t : tables)
     {
@@ -79,6 +78,13 @@ template <typename Out>
     }
 
   return s;
+}
+
+template <typename Out>
+  Out&
+  WriteAllTables (Out& s, const SQLiteDatabase& db, const bool internal)
+{
+  return WriteTables (s, db, GetSqliteTables (db, internal));
 }
 
 } // namespace xaya

@@ -168,7 +168,11 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
     }
 
   const GameStateData oldState = storage->GetCurrentGameState ();
-  const unsigned height = blockData["block"]["height"].asUInt ();
+
+  CHECK (blockData.isObject ());
+  const auto& blockHeader = blockData["block"];
+  CHECK (blockHeader.isObject ());
+  const unsigned height = blockHeader["height"].asUInt ();
 
   {
     internal::ActiveTransaction tx(transactionManager);
@@ -187,6 +191,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
     storage->SetCurrentGameStateWithHeight (hash, height, newState);
 
     tx.Commit ();
+    rules->GameStateUpdated (newState, blockHeader);
   }
 
   LOG (INFO)
@@ -232,7 +237,10 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
         = rules->ProcessBackwards (newState, blockData, undo);
     const auto end = PerformanceTimer::now ();
 
-    const unsigned height = blockData["block"]["height"].asUInt ();
+    CHECK (blockData.isObject ());
+    const auto& blockHeader = blockData["block"];
+    CHECK (blockHeader.isObject ());
+    const unsigned height = blockHeader["height"].asUInt ();
     CHECK_GT (height, 0);
 
     LOG (INFO)
@@ -244,6 +252,13 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
     storage->ReleaseUndoData (hash);
 
     tx.Commit ();
+
+    /* The new state's block data is not directly known, but we can conclude
+       some information about it.  */
+    Json::Value stateBlockHeader(Json::objectValue);
+    stateBlockHeader["height"] = static_cast<Json::Int64> (height - 1);
+    stateBlockHeader["hash"] = parent.ToHex ();
+    rules->GameStateUpdated (oldState, stateBlockHeader);
   }
 
   LOG (INFO)
@@ -1085,6 +1100,12 @@ Game::ReinitialiseState ()
         storage->SetCurrentGameStateWithHeight (genesisHash, genesisHeight,
                                                 genesisData);
         tx.Commit ();
+
+        Json::Value stateBlockHeader(Json::objectValue);
+        stateBlockHeader["height"] = static_cast<Json::Int64> (genesisHeight);
+        stateBlockHeader["hash"] = genesisHash.ToHex ();
+        rules->GameStateUpdated (genesisData, stateBlockHeader);
+
         break;
       }
     catch (const StorageInterface::RetryWithNewTransaction& exc)

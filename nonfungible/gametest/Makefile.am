@@ -9,6 +9,7 @@ REGTESTS = \
   minting.py \
   reorg.py \
   sqlite_wal.py \
+  statehash.py \
   transfers.py
 
 EXTRA_DIST = $(REGTESTS) $(TEST_LIBRARY)

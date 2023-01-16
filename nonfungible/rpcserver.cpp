@@ -1,4 +1,4 @@
-// Copyright (C) 2020 The Xaya developers
+// Copyright (C) 2020-2022 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,6 +7,8 @@
 #include "statejson.hpp"
 
 #include "xayagame/gamerpcserver.hpp"
+#include "xayagame/sqliteintro.hpp"
+#include "xayautil/hash.hpp"
 
 #include <jsonrpccpp/common/errors.h>
 #include <jsonrpccpp/common/exception.h>
@@ -66,6 +68,43 @@ RpcServer::getpendingstate ()
 {
   LOG (INFO) << "RPC method called: getpendingstate";
   return game.GetPendingJsonState ();
+}
+
+Json::Value
+RpcServer::hashcurrentstate ()
+{
+  LOG (INFO) << "RPC method called: hashcurrentstate";
+  return logic.GetCustomStateData (game, "data",
+      [] (const xaya::SQLiteDatabase& db)
+        {
+          xaya::SHA256 h;
+          WriteAllTables (h, db);
+          return h.Finalise ().ToHex ();
+        });
+}
+
+Json::Value
+RpcServer::getstatehash (const std::string& block)
+{
+  LOG (INFO) << "RPC method called: getstatehash " << block;
+  if (hasher == nullptr)
+    throw jsonrpc::JsonRpcException (
+        jsonrpc::Errors::ERROR_RPC_METHOD_NOT_FOUND,
+        "state hashing is not enabled");
+
+  xaya::uint256 blockHash;
+  if (!blockHash.FromHex (block))
+    throw jsonrpc::JsonRpcException (
+        jsonrpc::Errors::ERROR_RPC_INVALID_PARAMS, "invalid block hash");
+
+  return logic.GetCustomStateData (game, "data",
+      [this, &blockHash] (const xaya::SQLiteDatabase& db) -> Json::Value
+        {
+          xaya::uint256 value;
+          if (!hasher->GetHash (db, blockHash, value))
+            return Json::Value ();
+          return value.ToHex ();
+        });
 }
 
 std::string

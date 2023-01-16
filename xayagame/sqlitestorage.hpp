@@ -375,11 +375,6 @@ private:
   void OpenDatabase ();
 
   /**
-   * Closes the database, making sure to wait for all outstanding snapshots.
-   */
-  void CloseDatabase ();
-
-  /**
    * Blocks until no read snapshots are open.
    */
   void WaitForSnapshots ();
@@ -397,6 +392,12 @@ private:
   friend class SQLiteDatabase;
 
 protected:
+
+  /**
+   * Closes the database, making sure to wait for all outstanding snapshots.
+   * The method is overridden (extended) in the SQLiteGame::Storage subclass.
+   */
+  virtual void CloseDatabase ();
 
   /**
    * Sets up the database schema if it does not already exist.  This function is
