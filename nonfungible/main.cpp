@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2022 The Xaya developers
+// Copyright (C) 2020-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -40,6 +40,8 @@ DEFINE_int32 (enable_pruning, -1,
 DEFINE_int32 (statehash_interval, 0,
               "if set to a positive number N, hash the game state"
               " every N blocks");
+DEFINE_string (target_block, "",
+               "if set to a block hash, sync to this block and then stop");
 
 DEFINE_string (datadir, "",
                "base data directory for state data"
@@ -84,6 +86,22 @@ public:
     res.reset (new xaya::WrappedRpcServer<nf::RpcServer> (
         game, logic, h, conn));
     return res;
+  }
+
+  std::vector<std::unique_ptr<xaya::GameComponent>>
+  BuildGameComponents (xaya::Game& g)
+  {
+    /* We don't actually use any custom game components, but we can use this
+       method to set up the target block on Game.  */
+    if (!FLAGS_target_block.empty ())
+      {
+        xaya::uint256 hash;
+        CHECK (hash.FromHex (FLAGS_target_block))
+            << "Invalid block hash set as target: " << FLAGS_target_block;
+        g.SetTargetBlock (hash);
+      }
+
+    return xaya::CustomisedInstanceFactory::BuildGameComponents (g);
   }
 
 };

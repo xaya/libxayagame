@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -72,6 +72,9 @@ private:
    * updates to be sent.  Those are processed based on a particular reqtoken
    * for now to bring us up-to-date.
    *
+   * AT_TARGET:  We are synced to an explicitly specified target block,
+   * and will remain there until it gets changed.
+   *
    * UP_TO_DATE:  As far as is known, we are at the current tip of the daemon.
    * Ordinary ZMQ notifications are processed as they come in for changes
    * to the tip, and we expect them to match the current block hash.
@@ -87,6 +90,7 @@ private:
     PREGENESIS,
     OUT_OF_SYNC,
     CATCHING_UP,
+    AT_TARGET,
     UP_TO_DATE,
     DISCONNECTED,
   };
@@ -119,6 +123,14 @@ private:
   Chain chain = Chain::UNKNOWN;
 
   /**
+   * If this is set to non-null, then it is a block hash that we try to
+   * sync to (exactly).  If we reach it, then the sync will stop, and
+   * the state be frozen as AT_TARGET (at least until the target
+   * is changed again).
+   */
+  uint256 targetBlock;
+
+  /**
    * The game's current state.  For any changes and most access in general,
    * we still protect it with mut.  But we use an atomic so that the state
    * can be read without mutex lock from the health check (so that one
@@ -148,7 +160,7 @@ private:
    * This is compared against the CHILD hashes of block-attach notifications
    * to know when we've finished catching up to the current target.
    */
-  uint256 targetBlockHash;
+  uint256 catchingUpTarget;
 
   /**
    * The reqtoken value for the currently processed game_sendupdates request
@@ -393,6 +405,12 @@ public:
    * Must be called after the storage is set already.
    */
   void EnablePruning (unsigned nBlocks);
+
+  /**
+   * Sets an explicit block hash to sync to (and then stop as AT_TARGET),
+   * or disables one (i.e. sync to tip) if the value is null.
+   */
+  void SetTargetBlock (const uint256& blk);
 
   /**
    * Detects the ZMQ endpoint(s) by calling getzmqnotifications on the Xaya

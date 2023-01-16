@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2022 The Xaya developers
+// Copyright (C) 2020-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -105,6 +105,21 @@ RpcServer::getstatehash (const std::string& block)
             return Json::Value ();
           return value.ToHex ();
         });
+}
+
+void
+RpcServer::settargetblock (const std::string& block)
+{
+  LOG (INFO) << "RPC method called: settargetblock " << block;
+
+  xaya::uint256 hash;
+  if (block.empty ())
+    hash.SetNull ();
+  else if (!hash.FromHex (block))
+    throw jsonrpc::JsonRpcException (
+        jsonrpc::Errors::ERROR_RPC_INVALID_PARAMS, "invalid block hash");
+
+  game.SetTargetBlock (hash);
 }
 
 std::string

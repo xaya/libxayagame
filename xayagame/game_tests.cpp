@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -1599,6 +1599,42 @@ TEST_F (SyncingTests, GameStateUpdatedNotifications)
   DetachBlock (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   ExpectGameState (TestGame::GenesisBlockHash (), "");
+}
+
+/* ************************************************************************** */
+
+using TargetBlockTests = SyncingTests;
+
+TEST_F (TargetBlockTests, StopsWhileAttaching)
+{
+  g.SetTargetBlock (BlockHash (12));
+
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  AttachBlock (g, BlockHash (12), Moves ("a2"));
+  AttachBlock (g, BlockHash (13), Moves ("c3"));
+
+  EXPECT_EQ (GetState (g), State::AT_TARGET);
+  ExpectGameState (BlockHash (12), "a2b1");
+}
+
+TEST_F (TargetBlockTests, StopsWhileDetaching)
+{
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  AttachBlock (g, BlockHash (12), Moves ("a2"));
+  AttachBlock (g, BlockHash (13), Moves ("c3"));
+
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  ExpectGameState (BlockHash (13), "a2b1c3");
+
+  mockXayaServer->SetBestBlock (13, BlockHash (13));
+  g.SetTargetBlock (BlockHash (12));
+
+  DetachBlock (g);
+  DetachBlock (g);
+  DetachBlock (g);
+
+  EXPECT_EQ (GetState (g), State::AT_TARGET);
+  ExpectGameState (BlockHash (12), "a2b1");
 }
 
 /* ************************************************************************** */
