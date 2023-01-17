@@ -116,8 +116,10 @@ RpcServer::settargetblock (const std::string& block)
   if (block.empty ())
     hash.SetNull ();
   else if (!hash.FromHex (block))
-    throw jsonrpc::JsonRpcException (
-        jsonrpc::Errors::ERROR_RPC_INVALID_PARAMS, "invalid block hash");
+    {
+      LOG (WARNING) << "Invalid block hash for settargetblock";
+      return;
+    }
 
   game.SetTargetBlock (hash);
 }

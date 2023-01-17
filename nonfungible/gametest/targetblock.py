@@ -64,6 +64,9 @@ class TargetBlockTest (NonFungibleTest):
       },
     ])
 
+    # Invalid block hashes should just be ignored.
+    self.rpc.game._notify.settargetblock ("invalid")
+
     # Test setting the target block by RPC.
     self.mainLogger.info ("Testing target block by RPC...")
     self.rpc.game._notify.settargetblock (blk2)
