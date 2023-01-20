@@ -19,6 +19,7 @@ class TransfersTest (NonFungibleTest):
       {"m": {"a": "bar", "n": 10}},
       {"t": {"a": {"m": "domob", "a": "foo"}, "n": 5, "r": "andy"}},
     ])
+    self.generate (1)
     self.sendMove ("andy", [
       {"t": {"a": {"m": "domob", "a": "foo"}, "n": 10, "r": "wrong"}},
       {"t": {"a": {"m": "domob", "a": "foo"}, "n": 3, "r": "andy"}},
