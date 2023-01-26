@@ -1,4 +1,4 @@
-// Copyright (C) 2022 The Xaya developers
+// Copyright (C) 2022-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,6 +9,7 @@
 
 #include <json/json.h>
 
+#include <memory>
 #include <set>
 #include <string>
 
@@ -97,14 +98,24 @@ public:
    * stays valid, so a new call to Process can be made afterwards as desired
    * (if the database is opened again), and then Finish called again.
    */
-  void Finish ();
+  void Finish (SQLiteDatabase& db);
 
   /**
    * Checks if the processor should be executed for the given block,
    * and if so, triggers it by calling the subclass-specific Compute and
    * Store methods accordingly.
+   *
+   * baseDb is always a reference to the "real" database instance, owned
+   * by the calling SQLiteGame.  If it was possible to get a read-only snapshot
+   * that can be used for async processing, then snapshot will be non-null,
+   * and the underlying logic may run async using this snapshot.
+   *
+   * The snapshot may be shared between multiple processors running in
+   * parallel.
    */
-  void Process (const Json::Value& blockData, SQLiteDatabase& db);
+  void Process (const Json::Value& blockData,
+                SQLiteDatabase& db,
+                std::shared_ptr<SQLiteDatabase> snapshot);
 
   /**
    * Enables the processor to run every X blocks (with modulo value M).

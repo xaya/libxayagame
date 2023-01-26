@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -138,7 +138,7 @@ protected:
   CloseDatabase () override
   {
     for (auto* p : game.processors)
-      p->Finish ();
+      p->Finish (GetDatabase ());
     SQLiteStorage::CloseDatabase ();
   }
 
@@ -600,8 +600,16 @@ SQLiteGame::GameStateUpdated (const GameStateData& state,
                               const Json::Value& blockData)
 {
   EnsureCurrentState (state);
+
+  /* See if we can get a snapshot.  */
+  auto uniqueSnapshot = database->GetSnapshot ();
+  std::shared_ptr<SQLiteDatabase> snapshot;
+  if (uniqueSnapshot != nullptr
+        && database->CheckCurrentState (*uniqueSnapshot, state))
+    snapshot.reset (uniqueSnapshot.release ());
+
   for (auto* p : processors)
-    p->Process (blockData, database->GetDatabase ());
+    p->Process (blockData, database->GetDatabase (), snapshot);
 }
 
 Json::Value

@@ -1,4 +1,4 @@
-// Copyright (C) 2022 The Xaya developers
+// Copyright (C) 2022-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -140,7 +140,7 @@ protected:
   void
   ExpectValues (const std::map<std::string, std::string>& expected)
   {
-    proc.Finish ();
+    proc.Finish (db);
     ExpectRecords (db, "xayagame_procvalues", "value", expected);
   }
 
@@ -163,12 +163,12 @@ TEST_F (SQLiteProcTests, RunsAtDefinedInterval)
 {
   proc.SetInterval (3, 1);
 
-  proc.Process (BlockData (0, "zero"), db);
-  proc.Process (BlockData (1, "one"), db);
-  proc.Process (BlockData (2, "two"), db);
+  proc.Process (BlockData (0, "zero"), db, nullptr);
+  proc.Process (BlockData (1, "one"), db, nullptr);
+  proc.Process (BlockData (2, "two"), db, nullptr);
   SetValue ("changed");
-  proc.Process (BlockData (3, "three"), db);
-  proc.Process (BlockData (4, "four"), db);
+  proc.Process (BlockData (3, "three"), db, nullptr);
+  proc.Process (BlockData (4, "four"), db, nullptr);
 
   ExpectValues ({{"one", "initial"}, {"four", "changed"}});
 }
@@ -206,15 +206,15 @@ TEST_F (SQLiteHasherTests, Works)
   WriteAllTables (hasher1, db);
   const uint256 hash1 = hasher1.Finalise ();
 
-  hasher.Process (BlockData (0, "zero"), db);
-  hasher.Process (BlockData (1, "one"), db);
+  hasher.Process (BlockData (0, "zero"), db, nullptr);
+  hasher.Process (BlockData (1, "one"), db, nullptr);
 
   SetValue ("bar");
   SHA256 hasher2;
   WriteAllTables (hasher2, db);
   const uint256 hash2 = hasher2.Finalise ();
 
-  hasher.Process (BlockData (2, "two"), db);
+  hasher.Process (BlockData (2, "two"), db, nullptr);
 
   ExpectHashes ({{"zero", hash1}, {"one", hash1}, {"two", hash2}});
 
@@ -229,15 +229,15 @@ TEST_F (SQLiteHasherTests, Works)
 TEST_F (SQLiteHasherTests, SameBlock)
 {
   SetValue ("foo");
-  hasher.Process (BlockData (0, "zero"), db);
+  hasher.Process (BlockData (0, "zero"), db, nullptr);
 
   SetValue ("bar");
-  EXPECT_DEATH (hasher.Process (BlockData (0, "zero"), db),
+  EXPECT_DEATH (hasher.Process (BlockData (0, "zero"), db, nullptr),
                 "differs from computed");
-  hasher.Process (BlockData (0, "other zero"), db);
+  hasher.Process (BlockData (0, "other zero"), db, nullptr);
 
   SetValue ("foo");
-  hasher.Process (BlockData (0, "zero"), db);
+  hasher.Process (BlockData (0, "zero"), db, nullptr);
 }
 
 /* ************************************************************************** */

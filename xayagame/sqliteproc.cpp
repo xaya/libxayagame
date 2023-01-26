@@ -1,4 +1,4 @@
-// Copyright (C) 2022 The Xaya developers
+// Copyright (C) 2022-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -34,13 +34,15 @@ SQLiteProcessor::SetupSchema (SQLiteDatabase& db)
 {}
 
 void
-SQLiteProcessor::Finish ()
+SQLiteProcessor::Finish (SQLiteDatabase& db)
 {
   /* Nothing needs to be done for now while processing runs synchronously.  */
 }
 
 void
-SQLiteProcessor::Process (const Json::Value& blockData, SQLiteDatabase& db)
+SQLiteProcessor::Process (const Json::Value& blockData,
+                          SQLiteDatabase& db,
+                          std::shared_ptr<SQLiteDatabase> snapshot)
 {
   if (!ShouldRun (blockData))
     return;
