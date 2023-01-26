@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -394,12 +394,6 @@ private:
 protected:
 
   /**
-   * Closes the database, making sure to wait for all outstanding snapshots.
-   * The method is overridden (extended) in the SQLiteGame::Storage subclass.
-   */
-  virtual void CloseDatabase ();
-
-  /**
    * Sets up the database schema if it does not already exist.  This function is
    * called after opening the database, including when it was first created (but
    * not only then).  It creates the required tables if they do not yet exist.
@@ -449,6 +443,12 @@ public:
   void operator= (const SQLiteStorage&) = delete;
 
   void Initialise () override;
+
+  /**
+   * Closes the database, making sure to wait for all outstanding snapshots.
+   * The method is overridden (extended) in the SQLiteGame::Storage subclass.
+   */
+  virtual void CloseDatabase ();
 
   /**
    * Clears the storage.  This deletes and re-creates the full database,

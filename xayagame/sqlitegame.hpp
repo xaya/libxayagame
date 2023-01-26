@@ -250,7 +250,7 @@ public:
    * Returns the storage implementation used internally, which should be set
    * as main storage in Game.
    */
-  StorageInterface& GetStorage ();
+  SQLiteStorage& GetStorage ();
 
   /**
    * Attaches a processor.

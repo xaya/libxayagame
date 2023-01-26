@@ -367,7 +367,7 @@ SQLiteGame::SetupSchema (SQLiteDatabase& db)
      is done in Storage::SetupSchema already before calling here.  */
 }
 
-StorageInterface&
+SQLiteStorage&
 SQLiteGame::GetStorage ()
 {
   CHECK (database != nullptr) << "SQLiteGame has not been initialised";

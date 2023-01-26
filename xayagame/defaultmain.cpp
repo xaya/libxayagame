@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -329,6 +329,11 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
          may still cause some batched transactions to be flushed, and this
          needs the storage intact.  */
       game.reset ();
+
+      /* Also explicitly close the database here to make this explicit and
+         make sure all is run properly.  This also ensures for instance
+         that all still running processors are waited for.  */
+      rules.GetStorage ().CloseDatabase ();
     }
   catch (const std::exception& exc)
     {
