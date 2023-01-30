@@ -9,9 +9,11 @@
 
 #include <json/json.h>
 
+#include <atomic>
 #include <memory>
 #include <set>
 #include <string>
+#include <thread>
 
 namespace xaya
 {
@@ -56,6 +58,22 @@ private:
    */
   uint64_t blockModulo;
 
+  /**
+   * Set to true while the processing is still running.  When the thread
+   * finishes (even if it is not yet joined), this flag will be turned
+   * to false.
+   */
+  std::atomic<bool> processing;
+
+  /** The active processing thread, if any.  */
+  std::unique_ptr<std::thread> runner;
+
+  /**
+   * Helper function to store the current result, with a savepoint
+   * wrapped around the operation to make it atomic in the DB.
+   */
+  void StoreResult (SQLiteDatabase& db);
+
 protected:
 
   /**
@@ -83,7 +101,7 @@ protected:
 public:
 
   SQLiteProcessor () = default;
-  virtual ~SQLiteProcessor () = default;
+  virtual ~SQLiteProcessor ();
 
   /**
    * This is called when setting up the processor and database, and gives

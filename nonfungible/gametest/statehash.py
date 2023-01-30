@@ -10,6 +10,8 @@ Tests game-state hashing in the GSP.
 
 from nftest import NonFungibleTest
 
+import time
+
 
 class StatehashTest (NonFungibleTest):
 
@@ -37,7 +39,7 @@ class StatehashTest (NonFungibleTest):
     # This is the chain structure we will build:
     # baseBlk
     #   |-- reorgBlk -- blk0p -- x -- blk1
-    #   \--- oddBlk --- blk2
+    #   \--- oddBlk --- blk2 -- y
 
     # Without automatic hashing turned on, build up a chain and manually
     # hash the state at some points.
@@ -106,6 +108,11 @@ class StatehashTest (NonFungibleTest):
     # since yet.
     self.assertEqual (self.getRpc ("getstatehash", blk1), None)
     self.assertEqual (self.getRpc ("getstatehash", oddBlk), None)
+    # Due to async processing, we need to wait and also trigger
+    # another run of the processor before it gets done.
+    time.sleep (0.1)
+    self.generate (1)
+    self.syncGame ()
     self.assertEqual (self.getRpc ("getstatehash", blk2), hash2)
 
     # Reorg back to the original chain.
@@ -114,6 +121,10 @@ class StatehashTest (NonFungibleTest):
     self.assertEqual (self.env.getChainTip ()[0], blk1)
 
     # Check stored hashes again.  Now all should be there.
+    # We restart the GSP to make sure all running processes are done
+    # and stored.
+    self.stopGameDaemon ()
+    self.startGameDaemon (extraArgs=["--statehash_interval=2"])
     self.assertEqual (self.getRpc ("getstatehash", baseBlk), hash0)
     self.assertEqual (self.getRpc ("getstatehash", blk0p), hash0)
     self.assertEqual (self.getRpc ("getstatehash", blk1), hash1)

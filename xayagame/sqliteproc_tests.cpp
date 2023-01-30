@@ -5,14 +5,17 @@
 #include "sqliteproc.hpp"
 
 #include "sqliteintro.hpp"
+#include "testutils.hpp"
 
 #include <xayautil/hash.hpp>
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <map>
 #include <sstream>
+#include <thread>
 
 namespace xaya
 {
@@ -59,11 +62,15 @@ private:
   uint256 block;
   std::string value;
 
+  /** Sleep this long in Compute() before running the actual logic.  */
+  std::chrono::milliseconds delay{0};
+
 protected:
 
   void
   Compute (const Json::Value& blockData, const SQLiteDatabase& db) override
   {
+    std::this_thread::sleep_for (delay);
     CHECK (block.FromHex (blockData["hash"].asString ()));
     auto stmt = db.PrepareRo (R"(
       SELECT `text` FROM `onerow`
@@ -98,19 +105,56 @@ public:
     )");
   }
 
+  /**
+   * Configures the processor to delay Compute() by a given duration
+   * before actually processing the query.
+   */
+  void
+  SetDelay (const std::chrono::milliseconds d)
+  {
+    delay = d;
+  }
+
+};
+
+/**
+ * Helper SQLiteStorage, which exposes the raw database used.
+ */
+class TestSQLiteStorage : public SQLiteStorage
+{
+
+public:
+
+  TestSQLiteStorage (const std::string& file)
+    : SQLiteStorage(file)
+  {
+    Initialise ();
+  }
+
+  using SQLiteStorage::GetDatabase;
+  using SQLiteStorage::GetSnapshot;
+
 };
 
 class SQLiteProcTests : public testing::Test
 {
 
+private:
+
+  TempFileName file;
+  TestSQLiteStorage storage;
+
 protected:
 
-  SQLiteDatabase db;
+  SQLiteDatabase& db;
   TestProcessor proc;
 
   SQLiteProcTests ()
-    : db("foo", SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_MEMORY)
+    : storage(file.GetName ()),
+      db(storage.GetDatabase ())
   {
+    LOG (INFO) << "Using temporary file as database: " << file.GetName ();
+
     /* We use a single table with a single row and just some value
        as the underlying "game state" database, so that it is easy to
        create / modify / restore for testing.  */
@@ -140,8 +184,24 @@ protected:
   void
   ExpectValues (const std::map<std::string, std::string>& expected)
   {
-    proc.Finish (db);
     ExpectRecords (db, "xayagame_procvalues", "value", expected);
+  }
+
+  /**
+   * Runs the processor with the given block data on the test database.
+   * Optionally a snapshot can be passed (for testing async processing).
+   */
+  void
+  Process (const Json::Value& blockData, const bool useSnapshot)
+  {
+    std::shared_ptr<SQLiteDatabase> snapshot;
+    if (useSnapshot)
+      {
+        auto uniqueSnapshot = storage.GetSnapshot ();
+        CHECK (uniqueSnapshot != nullptr);
+        snapshot.reset (uniqueSnapshot.release ());
+      }
+    proc.Process (blockData, db, snapshot);
   }
 
   /**
@@ -163,14 +223,50 @@ TEST_F (SQLiteProcTests, RunsAtDefinedInterval)
 {
   proc.SetInterval (3, 1);
 
-  proc.Process (BlockData (0, "zero"), db, nullptr);
-  proc.Process (BlockData (1, "one"), db, nullptr);
-  proc.Process (BlockData (2, "two"), db, nullptr);
+  Process (BlockData (0, "zero"), false);
+  Process (BlockData (1, "one"), false);
+  Process (BlockData (2, "two"), false);
   SetValue ("changed");
-  proc.Process (BlockData (3, "three"), db, nullptr);
-  proc.Process (BlockData (4, "four"), db, nullptr);
+  Process (BlockData (3, "three"), false);
+  Process (BlockData (4, "four"), false);
 
+  proc.Finish (db);
   ExpectValues ({{"one", "initial"}, {"four", "changed"}});
+}
+
+TEST_F (SQLiteProcTests, WorksAsyncOnSnapshot)
+{
+  constexpr auto DELAY = std::chrono::milliseconds (100);
+
+  proc.SetInterval (2);
+  proc.SetDelay (DELAY);
+
+  Process (BlockData (0, "zero"), false);
+  SetValue ("foo");
+  Process (BlockData (2, "two"), true);
+  SetValue ("bar");
+  Process (BlockData (4, "four"), true);
+
+  /* The second snapshot processing will have waited for the first one,
+     and then started its own processing async, so it is not finished yet.  */
+  Process (BlockData (5, "five"), true);
+  ExpectValues ({{"zero", "initial"}, {"two", "foo"}});
+
+  /* After waiting and triggering another run (even if not actually processing
+     the block), it will be done.  */
+  std::this_thread::sleep_for (2 * DELAY);
+  Process (BlockData (7, "seven"), true);
+  ExpectValues ({{"zero", "initial"}, {"two", "foo"}, {"four", "bar"}});
+
+  /* Also Finish() will wait for the pending processor.  */
+  Process (BlockData (8, "eight"), true);
+  proc.Finish (db);
+  ExpectValues ({
+    {"zero", "initial"},
+    {"two", "foo"},
+    {"four", "bar"},
+    {"eight", "bar"},
+  });
 }
 
 /* ************************************************************************** */

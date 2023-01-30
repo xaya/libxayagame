@@ -24,9 +24,11 @@
 
 #include <glog/logging.h>
 
+#include <chrono>
 #include <map>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -392,9 +394,9 @@ protected:
    * Initialises the Game instance and related things.
    */
   void
-  InitialiseGame ()
+  InitialiseGame (const std::string& dbFile)
   {
-    rules.Initialise (":memory:");
+    rules.Initialise (dbFile);
     rules.InitialiseGameContext (Chain::MAIN, GAME_ID, nullptr);
 
     SetStartingBlock (GENESIS_HEIGHT, GenesisHash ());
@@ -433,7 +435,7 @@ protected:
 
   SQLiteGameTests ()
   {
-    InitialiseGame ();
+    InitialiseGame (":memory:");
     InitialiseState (game, rules);
   }
 
@@ -448,7 +450,7 @@ protected:
 
   StateInitialisationTests ()
   {
-    InitialiseGame ();
+    InitialiseGame (":memory:");
   }
 
 };
@@ -752,21 +754,81 @@ TEST_F (SchemaVersionTests, VersionSet)
 
 /* ************************************************************************** */
 
+/**
+ * Helper class that is essentially SQLiteHasher, except that it has a
+ * configurable delay in the Compute() routine, so we can test async
+ * processing.
+ */
+class DelayedHasher : public SQLiteHasher
+{
+
+private:
+
+  /** The delay added in Compute().  */
+  std::chrono::milliseconds delay{0};
+
+protected:
+
+  void
+  Compute (const Json::Value& blockData, const SQLiteDatabase& db) override
+  {
+    std::this_thread::sleep_for (delay);
+    SQLiteHasher::Compute (blockData, db);
+  }
+
+public:
+
+  using SQLiteHasher::SQLiteHasher;
+
+  /**
+   * Sets the delay to apply in Compute().  The delay is applied before
+   * the actual computation takes place.
+   */
+  void
+  SetDelay (const std::chrono::milliseconds d)
+  {
+    delay = d;
+  }
+
+};
+
 class SQLiteGameHashingTests : public UninitialisedSQLiteGameTests<ChatGame>
 {
+
+private:
+
+  /** The temporary file used for the database.  */
+  TempFileName file;
 
 protected:
 
   using UninitialisedSQLiteGameTests<ChatGame>::game;
   using UninitialisedSQLiteGameTests<ChatGame>::rules;
 
-  SQLiteHasher hasher;
+  DelayedHasher hasher;
 
   SQLiteGameHashingTests ()
   {
     rules.AddProcessor (hasher);
+  }
 
-    InitialiseGame ();
+  ~SQLiteGameHashingTests ()
+  {
+    hasher.Finish (rules.GetDatabaseForTesting ());
+  }
+
+  /**
+   * Sets up the game and storage, either using an in-memory database
+   * (if async is false) or a temporary file on disk for async testing
+   * (so we can use database snapshots).
+   */
+  void
+  SetUp (const bool async)
+  {
+    if (async)
+      InitialiseGame (file.GetName ());
+    else
+      InitialiseGame (":memory:");
     InitialiseState (game, rules);
   }
 
@@ -798,6 +860,7 @@ protected:
 
 TEST_F (SQLiteGameHashingTests, AttachingBlocks)
 {
+  SetUp (false);
   hasher.SetInterval (2);
 
   AttachBlock (game, BlockHash (11), ChatGame::Moves ({
@@ -824,6 +887,7 @@ TEST_F (SQLiteGameHashingTests, AttachingBlocks)
 
 TEST_F (SQLiteGameHashingTests, Reorg)
 {
+  SetUp (false);
   hasher.SetInterval (1);
 
   AttachBlock (game, BlockHash (11), ChatGame::Moves ({
@@ -857,6 +921,38 @@ TEST_F (SQLiteGameHashingTests, Reorg)
   EXPECT_NE (hash1, hash2);
   EXPECT_EQ (GetStoredHash (BlockHash (11)), hash1);
   EXPECT_EQ (GetStoredHash (BlockHash (42)), hash2);
+}
+
+TEST_F (SQLiteGameHashingTests, AsyncProcessing)
+{
+  using Clock = std::chrono::steady_clock;
+
+  constexpr auto DELAY = std::chrono::milliseconds (100);
+  SetUp (true);
+  hasher.SetInterval (3);
+  hasher.SetDelay (DELAY);
+
+  /* Attaching block 12 will start an async hashing process, which
+     should return the correct value when done even if we modify the
+     database in the mean time with block 13.  Attaching block 13 should
+     be possible before the processing is done.  */
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({}));
+  const auto before = Clock::now ();
+  AttachBlock (game, BlockHash (12), ChatGame::Moves ({
+    {"domob", "foo"},
+  }));
+  const auto hash12 = GetDatabaseHash ();
+  AttachBlock (game, BlockHash (13), ChatGame::Moves ({
+    {"domob", "bar"},
+  }));
+  const auto after = Clock::now ();
+  EXPECT_LT (after - before, DELAY / 2);
+
+  /* Wait for the process to finish and check the hash.  */
+  EXPECT_TRUE (GetStoredHash (BlockHash (12)).IsNull ());
+  std::this_thread::sleep_for (2 * DELAY);
+  AttachBlock (game, BlockHash (14), ChatGame::Moves ({}));
+  EXPECT_EQ (GetStoredHash (BlockHash (12)), hash12);
 }
 
 /* ************************************************************************** */

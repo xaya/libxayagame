@@ -15,6 +15,21 @@ namespace xaya
 
 /* ************************************************************************** */
 
+SQLiteProcessor::~SQLiteProcessor ()
+{
+  /* If we had async processes started, they should have been closed
+     already in Finish().  */
+  CHECK (runner == nullptr);
+}
+
+void
+SQLiteProcessor::StoreResult (SQLiteDatabase& db)
+{
+  db.Prepare ("SAVEPOINT `xayagame-processor`").Execute ();
+  Store (db);
+  db.Prepare ("RELEASE `xayagame-processor`").Execute ();
+}
+
 bool
 SQLiteProcessor::ShouldRun (const Json::Value& blockData) const
 {
@@ -36,7 +51,13 @@ SQLiteProcessor::SetupSchema (SQLiteDatabase& db)
 void
 SQLiteProcessor::Finish (SQLiteDatabase& db)
 {
-  /* Nothing needs to be done for now while processing runs synchronously.  */
+  /* Make sure to wait for and store the result of any running process.  */
+  if (runner != nullptr)
+    {
+      runner->join ();
+      runner.reset ();
+      StoreResult (db);
+    }
 }
 
 void
@@ -44,20 +65,37 @@ SQLiteProcessor::Process (const Json::Value& blockData,
                           SQLiteDatabase& db,
                           std::shared_ptr<SQLiteDatabase> snapshot)
 {
-  if (!ShouldRun (blockData))
+  const bool shouldRun = ShouldRun (blockData);
+
+  /* If we have a finished thread, store its result.  Also if we start
+     a run now, make sure to always wait for the previous one to be done.  */
+  if (runner != nullptr && (shouldRun || !processing))
+    {
+      runner->join ();
+      runner.reset ();
+      StoreResult (db);
+    }
+
+  if (!shouldRun)
     return;
 
-  /* TODO:  Actually make Compute() run on a snapshot asynchronously,
-     rather than blocking the entire GSP process for a long-running computation
-     (like hashing of a large game state).
+  CHECK (runner == nullptr);
 
-     For now we just run it synchronously here for simplicity.  */
+  /* If we don't have a snapshot, run synchronously.  */
+  if (snapshot == nullptr)
+    {
+      Compute (blockData, db);
+      StoreResult (db);
+      return;
+    }
 
-  Compute (blockData, db);
-
-  db.Prepare ("SAVEPOINT `xayagame-processor`").Execute ();
-  Store (db);
-  db.Prepare ("RELEASE `xayagame-processor`").Execute ();
+  /* We have a snapshot, on which we can run synchronous processing.  */
+  runner = std::make_unique<std::thread> ([this, blockData, snapshot] ()
+    {
+      processing = true;
+      Compute (blockData, *snapshot);
+      processing = false;
+    });
 }
 
 void
