@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -24,8 +24,6 @@
 
 #include <glog/logging.h>
 
-#include <cstdio>
-#include <cstdlib>
 #include <map>
 #include <sstream>
 #include <string>
@@ -868,8 +866,8 @@ class PersistenceTests : public GameTestWithBlockchain
 
 private:
 
-  /** The filename of the temporary on-disk database.  */
-  std::string filename;
+  /** The temporary file used for the database.  */
+  TempFileName file;
 
 protected:
 
@@ -886,8 +884,7 @@ protected:
     : GameTestWithBlockchain(GAME_ID),
       game(GAME_ID)
   {
-    filename = std::tmpnam (nullptr);
-    LOG (INFO) << "Using temporary database file: " << filename;
+    LOG (INFO) << "Using temporary database file: " << file.GetName ();
 
     CreateChatGame (false);
 
@@ -898,10 +895,8 @@ protected:
 
   ~PersistenceTests ()
   {
+    /* Explicitly clear the game instance before the temporary file.  */
     rules.reset ();
-
-    LOG (INFO) << "Cleaning up temporary file: " << filename;
-    std::remove (filename.c_str ());
   }
 
   /**
@@ -914,7 +909,7 @@ protected:
     rules = std::make_unique<ChatGame> ();
     rules->SetMessForDebug (mess);
 
-    rules->Initialise (filename);
+    rules->Initialise (file.GetName ());
     rules->InitialiseGameContext (Chain::MAIN, GAME_ID, nullptr);
 
     game.SetStorage (rules->GetStorage ());

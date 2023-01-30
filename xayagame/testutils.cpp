@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <sstream>
 #include <thread>
 
@@ -44,6 +45,16 @@ ParseJson (const std::string& str)
   std::istringstream in(str);
   in >> val;
   return val;
+}
+
+TempFileName::TempFileName ()
+  : name(std::tmpnam (nullptr))
+{}
+
+TempFileName::~TempFileName ()
+{
+  LOG (INFO) << "Removing temporary file: " << name;
+  std::remove (name.c_str ());
 }
 
 MockXayaRpcServer::MockXayaRpcServer (jsonrpc::AbstractServerConnector& conn)

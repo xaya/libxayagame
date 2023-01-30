@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,7 +14,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <cstdio>
 #include <limits>
 #include <memory>
 #include <thread>
@@ -299,20 +298,12 @@ protected:
   const UndoData undo = "some undo data";
 
   /** Name of the temporary file used for the database.  */
-  std::string filename;
+  TempFileName file;
 
   PersistentSQLiteStorageTests ()
   {
     CHECK (hash.FromHex ("99" + std::string (62, '0')));
-
-    filename = std::tmpnam (nullptr);
-    LOG (INFO) << "Using temporary database file: " << filename;
-  }
-
-  ~PersistentSQLiteStorageTests ()
-  {
-    LOG (INFO) << "Cleaning up temporary file: " << filename;
-    std::remove (filename.c_str ());
+    LOG (INFO) << "Using temporary database file: " << file.GetName ();
   }
 
 };
@@ -320,7 +311,7 @@ protected:
 TEST_F (PersistentSQLiteStorageTests, PersistsData)
 {
   {
-    SQLiteStorage storage(filename);
+    SQLiteStorage storage(file.GetName ());
     storage.Initialise ();
 
     storage.BeginTransaction ();
@@ -330,7 +321,7 @@ TEST_F (PersistentSQLiteStorageTests, PersistsData)
   }
 
   {
-    SQLiteStorage storage(filename);
+    SQLiteStorage storage(file.GetName ());
     storage.Initialise ();
 
     uint256 h;
@@ -346,7 +337,7 @@ TEST_F (PersistentSQLiteStorageTests, PersistsData)
 
 TEST_F (PersistentSQLiteStorageTests, ClearWithOnDiskFile)
 {
-  SQLiteStorage storage(filename);
+  SQLiteStorage storage(file.GetName ());
   storage.Initialise ();
 
   storage.BeginTransaction ();
@@ -417,7 +408,7 @@ TEST_F (SQLiteStorageSnapshotTests, SnapshotNotSupported)
 
 TEST_F (SQLiteStorageSnapshotTests, SnapshotsAreReadonly)
 {
-  Storage storage(filename);
+  Storage storage(file.GetName ());
   storage.Initialise ();
 
   auto snapshot = storage.GetSnapshot ();
@@ -437,7 +428,7 @@ TEST_F (SQLiteStorageSnapshotTests, MultipleSnapshots)
      the checkpointing attempted to wait for all outstanding snapshots.  */
   FLAGS_xaya_sqlite_wal_truncate_ms = 0;
 
-  Storage storage(filename);
+  Storage storage(file.GetName ());
   storage.Initialise ();
 
   storage.BeginTransaction ();
@@ -461,7 +452,7 @@ TEST_F (SQLiteStorageSnapshotTests, MultipleSnapshots)
 
 TEST_F (SQLiteStorageSnapshotTests, CloseWaitsForOutstandingSnapshots)
 {
-  Storage storage(filename);
+  Storage storage(file.GetName ());
   storage.Initialise ();
 
   storage.BeginTransaction ();
@@ -492,7 +483,7 @@ TEST_F (SQLiteStorageSnapshotTests, CloseWaitsForOutstandingSnapshots)
 
 TEST_F (SQLiteStorageSnapshotTests, StatementsMustAllBeDestructed)
 {
-  Storage storage(filename);
+  Storage storage(file.GetName ());
   storage.Initialise ();
 
   storage.BeginTransaction ();

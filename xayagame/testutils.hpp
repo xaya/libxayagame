@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -49,6 +49,30 @@ void SleepSome ();
  * Parses a given string as JSON and returns the JSON object.
  */
 Json::Value ParseJson (const std::string& str);
+
+/**
+ * A temporary file(name), which gets deleted using RAII semantics.
+ */
+class TempFileName
+{
+
+private:
+
+  /** The filename itself.  */
+  const std::string name;
+
+public:
+
+  TempFileName ();
+  ~TempFileName ();
+
+  const std::string&
+  GetName () const
+  {
+    return name;
+  }
+
+};
 
 /**
  * Mock server for Xaya Core's JSON-RPC interface.
