@@ -22,13 +22,15 @@ libxayagame_la_CXXFLAGS = \
   $(OPENSSL_CFLAGS) \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
   $(ZLIB_CFLAGS) $(CURL_CFLAGS) $(MHD_CFLAGS) \
-  $(GLOG_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
+  $(GLOG_CFLAGS) $(GFLAGS_CFLAGS) \
+  $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
 libxayagame_la_LIBADD = \
   $(top_builddir)/xayautil/libxayautil.la \
   $(OPENSSL_LIBS) \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
   $(ZLIB_LIBS) $(CURL_LIBS) $(MHD_LIBS) \
-  $(GLOG_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS) \
+  $(GLOG_LIBS) $(GFLAGS_LIBS) \
+  $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS) \
   -lstdc++fs
 libxayagame_la_SOURCES = \
   defaultmain.cpp \
@@ -99,13 +101,15 @@ TESTUTILHEADERS = testutils.hpp
 tests_CXXFLAGS = \
   -I$(top_srcdir) \
   $(JSONCPP_CFLAGS) $(JSONRPCCLIENT_CFLAGS) $(JSONRPCSERVER_CFLAGS) \
-  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
+  $(GLOG_CFLAGS) $(GTEST_CFLAGS) $(GFLAGS_CFLAGS) \
+  $(SQLITE3_CFLAGS) $(LMDB_CFLAGS) $(ZMQ_CFLAGS)
 tests_LDADD = \
   $(builddir)/libtestutils.la \
   $(builddir)/libxayagame.la \
   $(top_builddir)/xayautil/libxayautil.la \
   $(JSONCPP_LIBS) $(JSONRPCCLIENT_LIBS) $(JSONRPCSERVER_LIBS) \
-  $(GLOG_LIBS) $(GTEST_LIBS) $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS)
+  $(GLOG_LIBS) $(GTEST_LIBS) $(GFLAGS_LIBS) \
+  $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS)
 tests_SOURCES = \
   game_tests.cpp \
   gamelogic_tests.cpp \
