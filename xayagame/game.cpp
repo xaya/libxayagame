@@ -1030,6 +1030,7 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
     {
       LOG (INFO) << "Game state matches sync target";
       state = State::AT_TARGET;
+      transactionManager.SetBatchSize (1);
       return;
     }
 
