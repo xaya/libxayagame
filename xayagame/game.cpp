@@ -44,7 +44,7 @@ namespace
 {
 
 /** Clock used for timing the callbacks.  */
-using PerformanceTimer = std::chrono::high_resolution_clock;
+using PerformanceTimer = std::chrono::steady_clock;
 
 /** Duration type used for reporting callback timings.  */
 using CallbackDuration = std::chrono::microseconds;

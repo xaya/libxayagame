@@ -1,4 +1,4 @@
-// Copyright (C) 2022 The Xaya developers
+// Copyright (C) 2022-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,8 +9,11 @@
 
 #include <json/json.h>
 
+#include <atomic>
+#include <memory>
 #include <set>
 #include <string>
+#include <thread>
 
 namespace xaya
 {
@@ -43,6 +46,9 @@ class SQLiteProcessor
 
 private:
 
+  /** The name of the processor, used in logs.  */
+  const std::string name;
+
   /**
    * If the default rule of "every X blocks" is used to determine when
    * processing is done, this is set to the block interval (X).  If zero,
@@ -54,6 +60,28 @@ private:
    * (i.e. at all blocks N where (N % X) == M).
    */
   uint64_t blockModulo;
+
+  /**
+   * Set to true while the processing is still running.  When the thread
+   * finishes (even if it is not yet joined), this flag will be turned
+   * to false.
+   */
+  std::atomic<bool> processing;
+
+  /** The active processing thread, if any.  */
+  std::unique_ptr<std::thread> runner;
+
+  /**
+   * Helper function to store the current result, with a savepoint
+   * wrapped around the operation to make it atomic in the DB.
+   */
+  void StoreResult (SQLiteDatabase& db);
+
+  /**
+   * Runs Compute internally, but with a timer running for logging
+   * the result.
+   */
+  void TimedCompute (const Json::Value& blockData, const SQLiteDatabase& db);
 
 protected:
 
@@ -81,8 +109,11 @@ protected:
 
 public:
 
-  SQLiteProcessor () = default;
-  virtual ~SQLiteProcessor () = default;
+  SQLiteProcessor (const std::string& nm)
+    : name(nm)
+  {}
+
+  virtual ~SQLiteProcessor ();
 
   /**
    * This is called when setting up the processor and database, and gives
@@ -97,14 +128,24 @@ public:
    * stays valid, so a new call to Process can be made afterwards as desired
    * (if the database is opened again), and then Finish called again.
    */
-  void Finish ();
+  void Finish (SQLiteDatabase& db);
 
   /**
    * Checks if the processor should be executed for the given block,
    * and if so, triggers it by calling the subclass-specific Compute and
    * Store methods accordingly.
+   *
+   * baseDb is always a reference to the "real" database instance, owned
+   * by the calling SQLiteGame.  If it was possible to get a read-only snapshot
+   * that can be used for async processing, then snapshot will be non-null,
+   * and the underlying logic may run async using this snapshot.
+   *
+   * The snapshot may be shared between multiple processors running in
+   * parallel.
    */
-  void Process (const Json::Value& blockData, SQLiteDatabase& db);
+  void Process (const Json::Value& blockData,
+                SQLiteDatabase& db,
+                std::shared_ptr<SQLiteDatabase> snapshot);
 
   /**
    * Enables the processor to run every X blocks (with modulo value M).
@@ -141,6 +182,10 @@ protected:
   virtual std::set<std::string> GetTables (const SQLiteDatabase& db);
 
 public:
+
+  SQLiteHasher ()
+    : SQLiteProcessor ("game-state hash")
+  {}
 
   void SetupSchema (SQLiteDatabase& db) override;
 
