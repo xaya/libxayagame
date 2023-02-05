@@ -94,6 +94,10 @@ protected:
 
 public:
 
+  TestProcessor ()
+    : SQLiteProcessor ("test")
+  {}
+
   void
   SetupSchema (SQLiteDatabase& db) override
   {

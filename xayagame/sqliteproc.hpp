@@ -46,6 +46,9 @@ class SQLiteProcessor
 
 private:
 
+  /** The name of the processor, used in logs.  */
+  const std::string name;
+
   /**
    * If the default rule of "every X blocks" is used to determine when
    * processing is done, this is set to the block interval (X).  If zero,
@@ -74,6 +77,12 @@ private:
    */
   void StoreResult (SQLiteDatabase& db);
 
+  /**
+   * Runs Compute internally, but with a timer running for logging
+   * the result.
+   */
+  void TimedCompute (const Json::Value& blockData, const SQLiteDatabase& db);
+
 protected:
 
   /**
@@ -100,7 +109,10 @@ protected:
 
 public:
 
-  SQLiteProcessor () = default;
+  SQLiteProcessor (const std::string& nm)
+    : name(nm)
+  {}
+
   virtual ~SQLiteProcessor ();
 
   /**
@@ -170,6 +182,10 @@ protected:
   virtual std::set<std::string> GetTables (const SQLiteDatabase& db);
 
 public:
+
+  SQLiteHasher ()
+    : SQLiteProcessor ("game-state hash")
+  {}
 
   void SetupSchema (SQLiteDatabase& db) override;
 

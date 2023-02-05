@@ -10,8 +10,23 @@
 
 #include <glog/logging.h>
 
+#include <chrono>
+
 namespace xaya
 {
+
+namespace
+{
+
+/** Clock used for timing the processors.  */
+using PerformanceTimer = std::chrono::steady_clock;
+
+/** Duration type used for the timings.  */
+using TimerDuration = std::chrono::milliseconds;
+/** Unit (as string) for the timings.  */
+constexpr const char* TIMER_DURATION_UNIT = "ms";
+
+} // anonymous namespace
 
 /* ************************************************************************** */
 
@@ -28,6 +43,21 @@ SQLiteProcessor::StoreResult (SQLiteDatabase& db)
   db.Prepare ("SAVEPOINT `xayagame-processor`").Execute ();
   Store (db);
   db.Prepare ("RELEASE `xayagame-processor`").Execute ();
+}
+
+void
+SQLiteProcessor::TimedCompute (const Json::Value& blockData,
+                               const SQLiteDatabase& db)
+{
+  const auto start = PerformanceTimer::now ();
+  Compute (blockData, db);
+  const auto end = PerformanceTimer::now ();
+
+  LOG (INFO)
+      << "Processor '" << name << "' on block " << blockData["hash"].asString ()
+      << " took "
+      << std::chrono::duration_cast<TimerDuration> (end - start).count ()
+      << " " << TIMER_DURATION_UNIT;
 }
 
 bool
@@ -71,6 +101,10 @@ SQLiteProcessor::Process (const Json::Value& blockData,
      a run now, make sure to always wait for the previous one to be done.  */
   if (runner != nullptr && (shouldRun || !processing))
     {
+      LOG_IF (WARNING, processing)
+          << "Previous instance of '" << name << "' is still running,"
+             " waiting for it synchronously now...";
+
       runner->join ();
       runner.reset ();
       StoreResult (db);
@@ -84,7 +118,11 @@ SQLiteProcessor::Process (const Json::Value& blockData,
   /* If we don't have a snapshot, run synchronously.  */
   if (snapshot == nullptr)
     {
-      Compute (blockData, db);
+      LOG (INFO)
+          << "Running '" << name << "' on block "
+          << blockData["hash"].asString ()
+          << " synchronously";
+      TimedCompute (blockData, db);
       StoreResult (db);
       return;
     }
@@ -92,8 +130,12 @@ SQLiteProcessor::Process (const Json::Value& blockData,
   /* We have a snapshot, on which we can run synchronous processing.  */
   runner = std::make_unique<std::thread> ([this, blockData, snapshot] ()
     {
+      LOG (INFO)
+          << "Running '" << name << "' on block "
+          << blockData["hash"].asString ()
+          << " asynchronously";
       processing = true;
-      Compute (blockData, *snapshot);
+      TimedCompute (blockData, *snapshot);
       processing = false;
     });
 }
@@ -131,7 +173,6 @@ SQLiteHasher::Compute (const Json::Value& blockData, const SQLiteDatabase& db)
   CHECK (hashVal.isString ());
   CHECK (block.FromHex (hashVal.asString ()));
 
-  VLOG (1) << "Computing game-state hash for block " << block.ToHex ();
   SHA256 hasher;
   WriteTables (hasher, db, GetTables (db));
   hash = hasher.Finalise ();
