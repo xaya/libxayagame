@@ -37,6 +37,14 @@ DEFINE_int32 (xaya_zmq_staleness_ms, 120'000,
 DEFINE_int32 (xaya_connection_check_ms, 0,
               "if non-zero, interval between connection checks");
 
+/**
+ * If set to true, crash (CHECK-fail) when a block detach happens beyond
+ * pruning depth instead of resetting and syncing from scratch.
+ */
+DEFINE_bool (xaya_crash_without_undo, false,
+             "if true, crash instead of syncing from scratch for a reorg"
+             " beyond pruning depth");
+
 namespace xaya
 {
 
@@ -226,6 +234,9 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
           << "Failed to retrieve undo data for block " << hash.ToHex ()
           << ".  Need to resync from scratch.";
       transactionManager.TryAbortTransaction ();
+      CHECK (!FLAGS_xaya_crash_without_undo)
+          << "Block " << hash.ToHex ()
+          << " is being detached without undo data";
       storage->Clear ();
       return false;
     }
