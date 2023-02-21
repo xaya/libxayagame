@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,12 +6,19 @@
 
 #include <glog/logging.h>
 
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 
 #include <cstddef>
 
 namespace xaya
 {
+
+namespace
+{
+
+constexpr size_t SHA256_DIGEST_LEN = 32;
+
+} // anonymous namespace
 
 /**
  * The actual implementation for the SHA256 state.  This is just a wrapper
@@ -22,12 +29,16 @@ class SHA256::State
 
 private:
 
+  /** The digest to use (SHA-256).  */
+  const EVP_MD* const digest;
+
   /** The underlying OpenSSL SHA256 state.  */
-  SHA256_CTX ctx;
+  EVP_MD_CTX* ctx;
 
 public:
 
   State ();
+  ~State ();
 
   State (const State&) = delete;
   void operator= (const State&) = delete;
@@ -38,20 +49,30 @@ public:
 };
 
 SHA256::State::State ()
+  : digest(EVP_sha256 ()), ctx(EVP_MD_CTX_new ())
 {
-  SHA256_Init (&ctx);
+  CHECK (digest != nullptr);
+  CHECK (ctx != nullptr);
+  CHECK_EQ (EVP_DigestInit_ex (ctx, digest, nullptr), 1);
+}
+
+SHA256::State::~State ()
+{
+  EVP_MD_CTX_free (ctx);
 }
 
 void
 SHA256::State::Update (const unsigned char* data, const size_t len)
 {
-  SHA256_Update (&ctx, data, len);
+  CHECK_EQ (EVP_DigestUpdate (ctx, data, len), 1);
 }
 
 void
 SHA256::State::Finalise (unsigned char* out)
 {
-  SHA256_Final (out, &ctx);
+  unsigned outlen;
+  CHECK_EQ (EVP_DigestFinal_ex (ctx, out, &outlen), 1);
+  CHECK_EQ (outlen, SHA256_DIGEST_LEN);
 }
 
 SHA256::SHA256 ()
@@ -81,12 +102,12 @@ SHA256::operator<< (const uint256& data)
 uint256
 SHA256::Finalise ()
 {
-  static_assert (SHA256_DIGEST_LENGTH == uint256::NUM_BYTES,
+  static_assert (SHA256_DIGEST_LEN == uint256::NUM_BYTES,
                  "uint256 is not a valid output for SHA-256");
 
   CHECK (state != nullptr);
 
-  unsigned char data[SHA256_DIGEST_LENGTH];
+  unsigned char data[SHA256_DIGEST_LEN];
   state->Finalise (data);
 
   uint256 res;
