@@ -1045,19 +1045,23 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
       return;
     }
 
-  uint256 daemonBestHash;
-  CHECK (daemonBestHash.FromHex (blockchainInfo["bestblockhash"].asString ()));
-
-  if (daemonBestHash == currentHash)
+  if (targetBlock.IsNull ())
     {
-      LOG (INFO) << "Game state matches current tip, we are up-to-date";
-      state = State::UP_TO_DATE;
-      transactionManager.SetBatchSize (1);
-      return;
+      const std::string bestHash = blockchainInfo["bestblockhash"].asString ();
+      uint256 daemonBestHash;
+      CHECK (daemonBestHash.FromHex (bestHash));
+      if (daemonBestHash == currentHash)
+        {
+          LOG (INFO) << "Game state matches current tip, we are up-to-date";
+          state = State::UP_TO_DATE;
+          transactionManager.SetBatchSize (1);
+          return;
+        }
     }
 
   LOG (INFO)
-      << "Game state does not match current tip, requesting updates from "
+      << "Game state does not match current tip or target,"
+         " requesting updates from "
       << currentHash.ToHex ();
   /* At this point, mut is locked.  This means that even if game_sendupdates
      pushes ZMQ notifications before returning from the RPC, the ZMQ thread
@@ -1065,13 +1069,19 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
      once game_sendupdates and the code here are done.  This ensures that
      we won't ignore ZMQ messages that we just requested simply because we
      are not yet aware of the associated reqtoken.  */
-  /* FIXME:  If we have a sync target block, we should pass it as explicit
-     "to" block here.  For now, though, this is not supported by Xaya X,
-     so don't do that.  This means that a target block only works by
-     stopping at it, not to "explicitly" force sync including a reorg back
-     to the desired block.  */
-  const Json::Value upd
-      = rpcClient->game_sendupdates (currentHash.ToHex (), gameId);
+  Json::Value upd;
+  {
+    Json::Value params;
+    params["fromblock"] = currentHash.ToHex ();
+    params["gameid"] = gameId;
+    if (!targetBlock.IsNull ())
+      params["toblock"] = targetBlock.ToHex ();
+    upd = rpcClient->CallMethod ("game_sendupdates", params);
+    if (!upd.isObject ())
+      throw jsonrpc::JsonRpcException (
+          jsonrpc::Errors::ERROR_CLIENT_INVALID_RESPONSE,
+          upd.toStyledString ());
+  }
 
   LOG (INFO)
       << "Retrieving " << upd["steps"]["detach"].asInt () << " detach and "

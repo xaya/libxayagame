@@ -102,11 +102,7 @@ class TargetBlockTest (NonFungibleTest):
     ])
 
     # Test a target state in the past.
-    # FIXME:  For now, the GSP does not explicitly trigger ZMQ notifications
-    # to the target state.  So this only works if we trigger detaches
-    # externally.
     self.rpc.game._notify.settargetblock (blk2)
-    self.rpc.xaya.invalidateblock (blk1)
     self.assertEqual (self.getStateAtTarget (blk2), [
       {
         "asset": {"m": "domob", "a": "foo"},

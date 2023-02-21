@@ -345,6 +345,13 @@ protected:
     return g.zmq;
   }
 
+  static void
+  SetTargetBlock (Game& g, const uint256& blk)
+  {
+    std::lock_guard<std::mutex> lock(g.mut);
+    g.targetBlock = blk;
+  }
+
   /**
    * Calls BlockAttach on the given Game instance.  The function takes care
    * of setting up the blockData JSON object correctly based on the building
