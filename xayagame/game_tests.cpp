@@ -1607,7 +1607,7 @@ using TargetBlockTests = SyncingTests;
 
 TEST_F (TargetBlockTests, StopsWhileAttaching)
 {
-  g.SetTargetBlock (BlockHash (12));
+  SetTargetBlock (g, BlockHash (12));
 
   AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   AttachBlock (g, BlockHash (12), Moves ("a2"));
@@ -1627,7 +1627,7 @@ TEST_F (TargetBlockTests, StopsWhileDetaching)
   ExpectGameState (BlockHash (13), "a2b1c3");
 
   mockXayaServer->SetBestBlock (13, BlockHash (13));
-  g.SetTargetBlock (BlockHash (12));
+  SetTargetBlock (g, BlockHash (12));
 
   DetachBlock (g);
   DetachBlock (g);
