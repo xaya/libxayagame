@@ -124,12 +124,12 @@ TESTS = tests $(PYTHONTESTS)
 
 libtestutils_la_CXXFLAGS = \
   -I$(top_srcdir) \
-  $(GLOG_CFLAGS) $(GTEST_CFLAGS)
+  $(JSONCPP_CFLAGS) $(GLOG_CFLAGS) $(GTEST_CFLAGS)
 libtestutils_la_LIBADD = \
   $(builddir)/libgamechannel.la \
   $(builddir)/libchannelcore.la \
   $(top_builddir)/xayautil/libxayautil.la \
-  $(GLOG_LIBS) $(GTEST_LIBS)
+  $(JSONCPP_LIBS) $(GLOG_LIBS) $(GTEST_LIBS)
 libtestutils_la_SOURCES = \
   testutils.cpp
 TESTUTILHEADERS = \
