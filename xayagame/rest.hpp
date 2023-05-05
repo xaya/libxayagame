@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -197,6 +197,9 @@ private:
   /** If set, the CA file to use for TLS verification.  */
   std::string caFile;
 
+  /** If false, disable TLS verification.  */
+  bool tlsVerification = true;
+
 public:
 
   class Request;
@@ -217,6 +220,18 @@ public:
   SetCaFile (const std::string& f)
   {
     caFile = f;
+  }
+
+  /**
+   * Disables TLS verification.  This is dangerous for obvious reasons,
+   * but might be useful in some situations where the data is already
+   * authenticated differently, for instance, and there is then no need
+   * to mess around with CA files.
+   */
+  void
+  DisableTlsVerification ()
+  {
+    tlsVerification = false;
   }
 
 };

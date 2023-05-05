@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -357,20 +357,29 @@ RestClient::Request::Request (const RestClient& c)
   errBuffer.resize (CURL_ERROR_SIZE);
   SetCurlOption (handle, CURLOPT_ERRORBUFFER, errBuffer.data ());
 
-  /* Enforce TLS verification.  */
-  SetCurlOption (handle, CURLOPT_SSL_VERIFYPEER, 1L);
-  SetCurlOption (handle, CURLOPT_SSL_VERIFYHOST, 2L);
-
-  /* Set a CAINFO path if we have an explicit one.  */
-  if (client.caFile.empty ())
+  if (client.tlsVerification)
     {
-      LOG_FIRST_N (WARNING, 1) << "Using default cURL CA bundle";
+      /* Enforce TLS verification.  */
+      SetCurlOption (handle, CURLOPT_SSL_VERIFYPEER, 1L);
+      SetCurlOption (handle, CURLOPT_SSL_VERIFYHOST, 2L);
+
+      /* Set a CAINFO path if we have an explicit one.  */
+      if (client.caFile.empty ())
+        {
+          LOG_FIRST_N (WARNING, 1) << "Using default cURL CA bundle";
+        }
+      else
+        {
+          LOG_FIRST_N (INFO, 1) << "Using CA bundle from " << client.caFile;
+          SetCurlOption (handle, CURLOPT_CAINFO, client.caFile.c_str ());
+          SetCurlOption (handle, CURLOPT_CAPATH, nullptr);
+        }
     }
   else
     {
-      LOG_FIRST_N (INFO, 1) << "Using CA bundle from " << client.caFile;
-      SetCurlOption (handle, CURLOPT_CAINFO, client.caFile.c_str ());
-      SetCurlOption (handle, CURLOPT_CAPATH, nullptr);
+      LOG_FIRST_N (WARNING, 1) << "TLS verification is disabled";
+      SetCurlOption (handle, CURLOPT_SSL_VERIFYPEER, 0L);
+      SetCurlOption (handle, CURLOPT_SSL_VERIFYHOST, 0L);
     }
 
   /* Install our write callback.  */
@@ -562,7 +571,7 @@ RestClient::Request::ProcessJson ()
       return false;
     }
 
-    return true;
+  return true;
 }
 
 /* ************************************************************************** */
