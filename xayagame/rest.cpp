@@ -28,6 +28,9 @@ namespace fs = std::experimental::filesystem;
 /** Buffer size for IO with temporary files (to use zlib's gzip interface).  */
 constexpr size_t TEMP_BUF_SIZE = 4'096;
 
+/** Default timeout for the REST client.  */
+constexpr auto REST_CLIENT_DEFAULT_TIMEOUT = std::chrono::seconds (10);
+
 /**
  * RAII helper that generates the name for a temporary file and removes the
  * file again on destruction.
@@ -330,6 +333,7 @@ RestClient::RestClient (const std::string& url)
   : endpoint(url)
 {
   CHECK_EQ (curl_global_init (CURL_GLOBAL_ALL), 0);
+  SetTimeout (REST_CLIENT_DEFAULT_TIMEOUT);
 }
 
 namespace
@@ -385,6 +389,9 @@ RestClient::Request::Request (const RestClient& c)
   /* Install our write callback.  */
   SetCurlOption (handle, CURLOPT_WRITEFUNCTION, &WriteCallback);
   SetCurlOption (handle, CURLOPT_WRITEDATA, this);
+
+  /* Make sure we time out instead of waiting indefinitely.  */
+  SetCurlOption (handle, CURLOPT_TIMEOUT_MS, client.timeout.count ());
 }
 
 size_t

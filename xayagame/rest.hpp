@@ -12,6 +12,7 @@
 
 #include <json/json.h>
 
+#include <chrono>
 #include <stdexcept>
 #include <string>
 
@@ -200,6 +201,9 @@ private:
   /** If false, disable TLS verification.  */
   bool tlsVerification = true;
 
+  /** The timeout to use on requests.  */
+  std::chrono::milliseconds timeout;
+
 public:
 
   class Request;
@@ -232,6 +236,16 @@ public:
   DisableTlsVerification ()
   {
     tlsVerification = false;
+  }
+
+  /**
+   * Sets a timeout on the connection.
+   */
+  template <typename Rep, typename Period>
+    void
+    SetTimeout (const std::chrono::duration<Rep, Period>& val)
+  {
+    timeout = std::chrono::duration_cast<decltype (timeout)> (val);
   }
 
 };
