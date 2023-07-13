@@ -29,7 +29,7 @@ class Node ():
   * provide at least the "stop" and "getcurrentstate" RPC methods.
   """
 
-  def __init__ (self, basedir, port, binary):
+  def __init__ (self, basedir, port, binary, baseArgs):
     """
     Initialises the instance for using the given basedir, port and GSP binary.
     binary can be an array, in which case it is passed as such (with arguments
@@ -50,6 +50,8 @@ class Node ():
       self.binaryCmd = [binary]
       self.realBinary = binary
 
+    self.baseArgs = baseArgs
+
     self.log.info ("Creating fresh data directory for the game node in %s"
                     % self.datadir)
     shutil.rmtree (self.datadir, ignore_errors=True)
@@ -67,6 +69,7 @@ class Node ():
     args.append ("--xaya_rpc_url=%s" % xayarpc)
     args.append ("--game_rpc_port=%d" % self.port)
     args.append ("--datadir=%s" % self.datadir)
+    args.extend (self.baseArgs)
     args.extend (extraArgs)
     envVars = dict (os.environ)
     envVars["GLOG_log_dir"] = self.datadir

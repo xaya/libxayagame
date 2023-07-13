@@ -94,6 +94,16 @@ class XayaGameTest (object):
 
     pass
 
+  def gameBaseArgs (self):
+    """
+    This function can be overridden by subclasses.  It should return an array
+    of extra arguments that should (always) be passed to the GSP binary
+    when it is started, in addition to explicitly set "extra args"
+    when starting it.
+    """
+
+    return []
+
   def main (self):
     """
     Executes the testcase, including setup and cleanup.
@@ -242,7 +252,8 @@ class XayaGameTest (object):
     gameCmd = list (self.runGameWith)
     gameCmd.append (gameBinary)
 
-    return game.Node (self.basedir, next (self.ports), gameCmd)
+    return game.Node (self.basedir, next (self.ports),
+                      gameCmd, self.gameBaseArgs ())
 
   ##############################################################################
   # Methods for setting up the base-chain environment.
