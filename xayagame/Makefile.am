@@ -33,6 +33,7 @@ libxayagame_la_LIBADD = \
   $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS) \
   -lstdc++fs
 libxayagame_la_SOURCES = \
+  coprocessor.cpp \
   defaultmain.cpp \
   game.cpp \
   gamelogic.cpp \
@@ -52,6 +53,7 @@ libxayagame_la_SOURCES = \
   transactionmanager.cpp \
   zmqsubscriber.cpp
 xayagame_HEADERS = \
+  coprocessor.hpp \
   defaultmain.hpp \
   game.hpp \
   gamelogic.hpp \
@@ -112,6 +114,7 @@ tests_LDADD = \
   $(GLOG_LIBS) $(GTEST_LIBS) $(GFLAGS_LIBS) \
   $(SQLITE3_LIBS) $(LMDB_LIBS) $(ZMQ_LIBS)
 tests_SOURCES = \
+  coprocessor_tests.cpp \
   game_tests.cpp \
   gamelogic_tests.cpp \
   heightcache_tests.cpp \
