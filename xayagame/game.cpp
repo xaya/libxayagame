@@ -4,13 +4,14 @@
 
 #include "game.hpp"
 
+#include "perftimer.hpp"
+
 #include <jsonrpccpp/common/errors.h>
 #include <jsonrpccpp/common/exception.h>
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
-#include <chrono>
 #include <sstream>
 #include <thread>
 
@@ -47,19 +48,6 @@ DEFINE_bool (xaya_crash_without_undo, false,
 
 namespace xaya
 {
-
-namespace
-{
-
-/** Clock used for timing the callbacks.  */
-using PerformanceTimer = std::chrono::steady_clock;
-
-/** Duration type used for reporting callback timings.  */
-using CallbackDuration = std::chrono::microseconds;
-/** Unit (as string) for the callback timings.  */
-constexpr const char* CALLBACK_DURATION_UNIT = "us";
-
-} // anonymous namespace
 
 /* ************************************************************************** */
 
@@ -189,14 +177,12 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
     internal::ActiveTransaction tx(transactionManager);
 
     UndoData undo;
-    const auto start = PerformanceTimer::now ();
+    PerformanceTimer timer;
     const GameStateData newState
         = rules->ProcessForward (oldState, blockData, undo);
-    const auto end = PerformanceTimer::now ();
+    timer.Stop ();
     LOG (INFO)
-        << "Processing block " << height << " forward took "
-        << std::chrono::duration_cast<CallbackDuration> (end - start).count ()
-        << " " << CALLBACK_DURATION_UNIT;
+        << "Processing block " << height << " forward took " << timer;
 
     storage->AddUndoData (hash, height, undo);
     storage->SetCurrentGameStateWithHeight (hash, height, newState);
@@ -246,10 +232,10 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
   {
     internal::ActiveTransaction tx(transactionManager);
 
-    const auto start = PerformanceTimer::now ();
+    PerformanceTimer timer;
     const GameStateData oldState
         = rules->ProcessBackwards (newState, blockData, undo);
-    const auto end = PerformanceTimer::now ();
+    timer.Stop ();
 
     CHECK (blockData.isObject ());
     const auto& blockHeader = blockData["block"];
@@ -258,9 +244,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
     CHECK_GT (height, 0);
 
     LOG (INFO)
-        << "Undoing block " << height << " took "
-        << std::chrono::duration_cast<CallbackDuration> (end - start).count ()
-        << " " << CALLBACK_DURATION_UNIT;
+        << "Undoing block " << height << " took " << timer;
 
     storage->SetCurrentGameStateWithHeight (parent, height - 1, oldState);
     storage->ReleaseUndoData (hash);

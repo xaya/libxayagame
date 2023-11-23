@@ -60,6 +60,7 @@ xayagame_HEADERS = \
   lmdbstorage.hpp \
   mainloop.hpp \
   pendingmoves.hpp \
+  perftimer.hpp \
   pruningqueue.hpp \
   rest.hpp \
   signatures.hpp \

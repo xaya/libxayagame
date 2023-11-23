@@ -1,8 +1,10 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "sqlitestorage.hpp"
+
+#include "perftimer.hpp"
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -20,6 +22,14 @@
  */
 DEFINE_int32 (xaya_sqlite_wal_truncate_ms, 0,
               "if non-zero, interval between explicit WAL checkpoints");
+
+/**
+ * A duration threshold above which SQLite queries are assumed to be "slow".
+ * If a query is slow, it will be WARNING-logged together with timing, instead
+ * of just VLOGs.
+ */
+DEFINE_int32 (xaya_sqlite_slow_query_ms, 0,
+              "if non-zero, warn about queries taking longer than this");
 
 namespace xaya
 {
@@ -86,7 +96,27 @@ SQLiteDatabase::Statement::Step ()
   CHECK (db != nullptr) << "Statement has no associated database";
   std::lock_guard<std::mutex> lock(db->mutDb);
 
+  PerformanceTimer timer;
   const int rc = sqlite3_step (**this);
+  timer.Stop ();
+
+  const auto slow = std::chrono::milliseconds (FLAGS_xaya_sqlite_slow_query_ms);
+  if (FLAGS_xaya_sqlite_slow_query_ms > 0
+        && timer.Get<std::chrono::milliseconds> () >= slow)
+    LOG (WARNING)
+        << "SQLite statement slow query (step " << (steps + 1) << "): " << timer
+        << "\n" << GetSql ();
+  else if (steps == 0)
+    VLOG (1)
+        << "SQLite statement initial step: " << timer
+        << "\n" << GetSql ();
+  else
+    VLOG (2)
+        << "SQLite statement step " << (steps + 1) << ": " << timer
+        << "\n" << GetSql ();
+
+  ++steps;
+
   switch (rc)
     {
     case SQLITE_ROW:
@@ -104,6 +134,13 @@ SQLiteDatabase::Statement::Reset ()
   /* sqlite3_reset returns an error code if the last execution of the
      statement had an error.  We don't care about that here.  */
   sqlite3_reset (**this);
+  steps = 0;
+}
+
+std::string
+SQLiteDatabase::Statement::GetSql () const
+{
+  return sqlite3_sql (ro ());
 }
 
 void

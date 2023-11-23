@@ -223,6 +223,9 @@ private:
    */
   CachedStatement* entry = nullptr;
 
+  /** Number of times the statement has been stepped already.  */
+  unsigned steps = 0;
+
   /**
    * Constructs a statement instance based on the cache entry.  The entry's
    * used flag must already be set by the caller, but will be cleared after this
@@ -278,6 +281,11 @@ public:
    * Resets the statement without clearing the parameter bindings.
    */
   void Reset ();
+
+  /**
+   * Returns the original SQL statement as a string (for debugging/logging).
+   */
+  std::string GetSql () const;
 
   /**
    * Binds a numbered parameter to NULL.
