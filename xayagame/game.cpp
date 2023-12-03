@@ -176,10 +176,14 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
   {
     internal::ActiveTransaction tx(transactionManager);
 
+    CoprocessorBatch::Block coprocBlk(coproc, blockHeader,
+                                      Coprocessor::Op::FORWARD);
+    coprocBlk.Begin ();
+
     UndoData undo;
     PerformanceTimer timer;
     const GameStateData newState
-        = rules->ProcessForward (oldState, blockData, undo);
+        = rules->ProcessForward (oldState, blockData, undo, &coprocBlk);
     timer.Stop ();
     LOG (INFO)
         << "Processing block " << height << " forward took " << timer;
@@ -187,6 +191,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
     storage->AddUndoData (hash, height, undo);
     storage->SetCurrentGameStateWithHeight (hash, height, newState);
 
+    coprocBlk.Commit ();
     tx.Commit ();
     rules->GameStateUpdated (newState, blockHeader);
   }
@@ -232,30 +237,36 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
   {
     internal::ActiveTransaction tx(transactionManager);
 
-    PerformanceTimer timer;
-    const GameStateData oldState
-        = rules->ProcessBackwards (newState, blockData, undo);
-    timer.Stop ();
-
     CHECK (blockData.isObject ());
     const auto& blockHeader = blockData["block"];
     CHECK (blockHeader.isObject ());
     const unsigned height = blockHeader["height"].asUInt ();
     CHECK_GT (height, 0);
 
+    /* Note that here (unlike GameStateUpdated below), we want to pass the block
+       that is being undone, not the new best block (its parent).  */
+    CoprocessorBatch::Block coprocBlk(coproc, blockHeader,
+                                      Coprocessor::Op::BACKWARD);
+    coprocBlk.Begin ();
+
+    PerformanceTimer timer;
+    const GameStateData oldState
+        = rules->ProcessBackwards (newState, blockData, undo, &coprocBlk);
+    timer.Stop ();
     LOG (INFO)
         << "Undoing block " << height << " took " << timer;
 
     storage->SetCurrentGameStateWithHeight (parent, height - 1, oldState);
     storage->ReleaseUndoData (hash);
 
-    tx.Commit ();
-
     /* The new state's block data is not directly known, but we can conclude
        some information about it.  */
     Json::Value stateBlockHeader(Json::objectValue);
     stateBlockHeader["height"] = static_cast<Json::Int64> (height - 1);
     stateBlockHeader["hash"] = parent.ToHex ();
+
+    coprocBlk.Commit ();
+    tx.Commit ();
     rules->GameStateUpdated (oldState, stateBlockHeader);
   }
 
@@ -672,6 +683,12 @@ Game::SetTargetBlock (const uint256& blk)
 
   if (state != State::DISCONNECTED)
     ReinitialiseState ();
+}
+
+void
+Game::AddCoprocessor (const std::string& name, Coprocessor& p)
+{
+  coproc.Add (name, p);
 }
 
 bool
@@ -1113,7 +1130,7 @@ Game::ReinitialiseState ()
 
       std::string genesisHashHex;
       unsigned genesisHeightFromGame;
-      rules->GetInitialState (genesisHeightFromGame, genesisHashHex);
+      rules->GetInitialState (genesisHeightFromGame, genesisHashHex, nullptr);
       genesisHeight = genesisHeightFromGame;
       LOG (INFO) << "Got genesis height from game: " << genesisHeight;
     }
@@ -1139,15 +1156,25 @@ Game::ReinitialiseState ()
   transactionManager.TryAbortTransaction ();
   storage->Clear ();
 
-  std::string genesisHashHex;
-  unsigned genesisHeightDummy;
-  const GameStateData genesisData
-      = rules->GetInitialState (genesisHeightDummy, genesisHashHex);
-  CHECK_EQ (genesisHeight, genesisHeightDummy);
-
   const std::string blockHashHex = rpcClient->getblockhash (genesisHeight);
   uint256 blockHash;
   CHECK (blockHash.FromHex (blockHashHex));
+
+  Json::Value stateBlockHeader(Json::objectValue);
+  stateBlockHeader["height"] = static_cast<Json::Int64> (genesisHeight);
+  stateBlockHeader["hash"] = blockHash.ToHex ();
+
+  /* The coprocessor batch is started before we call GetInitialState, which
+     will be able to access coprocessors from the Context.  */
+  CoprocessorBatch::Block coprocBlk(coproc, stateBlockHeader,
+                                    Coprocessor::Op::INITIALISATION);
+  coprocBlk.Begin ();
+
+  std::string genesisHashHex;
+  unsigned genesisHeightDummy;
+  const GameStateData genesisData
+      = rules->GetInitialState (genesisHeightDummy, genesisHashHex, &coprocBlk);
+  CHECK_EQ (genesisHeight, genesisHeightDummy);
 
   if (genesisHashHex.empty ())
     {
@@ -1167,13 +1194,12 @@ Game::ReinitialiseState ()
     try
       {
         internal::ActiveTransaction tx(transactionManager);
+
         storage->SetCurrentGameStateWithHeight (genesisHash, genesisHeight,
                                                 genesisData);
-        tx.Commit ();
 
-        Json::Value stateBlockHeader(Json::objectValue);
-        stateBlockHeader["height"] = static_cast<Json::Int64> (genesisHeight);
-        stateBlockHeader["hash"] = genesisHash.ToHex ();
+        coprocBlk.Commit ();
+        tx.Commit ();
         rules->GameStateUpdated (genesisData, stateBlockHeader);
 
         break;

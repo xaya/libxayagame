@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -67,8 +67,9 @@ ChainFromString (const std::string& name)
 
 /* ************************************************************************** */
 
-Context::Context (const GameLogic& l, const uint256& rndSeed)
-  : logic(l)
+Context::Context (const GameLogic& l, const uint256& rndSeed,
+                  CoprocessorBatch::Block* cb)
+  : logic(l), coprocBlk(cb)
 {
   rnd.Seed (rndSeed);
 }
@@ -185,12 +186,13 @@ GameLogic::GetContext () const
 }
 
 GameStateData
-GameLogic::GetInitialState (unsigned& height, std::string& hashHex)
+GameLogic::GetInitialState (unsigned& height, std::string& hashHex,
+                            CoprocessorBatch::Block* cb)
 {
   SHA256 rndSeed;
   rndSeed << "initial state" << GetGameId ();
 
-  Context context(*this, rndSeed.Finalise ());
+  Context context(*this, rndSeed.Finalise (), cb);
   ContextSetter setter(*this, context);
 
   return GetInitialStateInternal (height, hashHex);
@@ -226,9 +228,10 @@ BlockRngSeed (const std::string& gameId, const Json::Value& blockData)
 GameStateData
 GameLogic::ProcessForward (const GameStateData& oldState,
                            const Json::Value& blockData,
-                           UndoData& undoData)
+                           UndoData& undoData,
+                           CoprocessorBatch::Block* cb)
 {
-  Context context(*this, BlockRngSeed (GetGameId (), blockData));
+  Context context(*this, BlockRngSeed (GetGameId (), blockData), cb);
   ContextSetter setter(*this, context);
 
   return ProcessForwardInternal (oldState, blockData, undoData);
@@ -237,9 +240,10 @@ GameLogic::ProcessForward (const GameStateData& oldState,
 GameStateData
 GameLogic::ProcessBackwards (const GameStateData& newState,
                              const Json::Value& blockData,
-                             const UndoData& undoData)
+                             const UndoData& undoData,
+                             CoprocessorBatch::Block* cb)
 {
-  Context context(*this, BlockRngSeed (GetGameId (), blockData));
+  Context context(*this, BlockRngSeed (GetGameId (), blockData), cb);
   ContextSetter setter(*this, context);
 
   return ProcessBackwardsInternal (newState, blockData, undoData);

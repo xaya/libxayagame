@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -39,7 +39,8 @@ TEST (InitialStateTests, IsEmpty)
 
       unsigned height;
       std::string hashHex;
-      const GameStateData state = rules.GetInitialState (height, hashHex);
+      const GameStateData state
+          = rules.GetInitialState (height, hashHex, nullptr);
 
       proto::GameState actualState;
       ASSERT_TRUE (actualState.ParseFromString (state));
@@ -101,7 +102,7 @@ protected:
 
     unsigned height;
     std::string hashHex;
-    initialState = rules.GetInitialState (height, hashHex);
+    initialState = rules.GetInitialState (height, hashHex, nullptr);
     currentState = initialState;
   }
 
@@ -113,7 +114,8 @@ protected:
       {
         const auto& d = blocks.top ();
         VerifyStatesEqual (currentState, d.newState);
-        currentState = rules.ProcessBackwards (d.newState, d.blockData, d.undo);
+        currentState = rules.ProcessBackwards (d.newState, d.blockData,
+                                               d.undo, nullptr);
         blocks.pop ();
       }
     VerifyStatesEqual (currentState, initialState);
@@ -162,7 +164,8 @@ protected:
     GameStateData expectedState;
     ASSERT_TRUE (expectedStatePb.SerializeToString (&expectedState));
 
-    d.newState = rules.ProcessForward (currentState, d.blockData, d.undo);
+    d.newState = rules.ProcessForward (currentState, d.blockData,
+                                       d.undo, nullptr);
     VerifyStatesEqual (d.newState, expectedState);
 
     currentState = d.newState;

@@ -5,6 +5,7 @@
 #ifndef XAYAGAME_GAME_HPP
 #define XAYAGAME_GAME_HPP
 
+#include "coprocessor.hpp"
 #include "gamelogic.hpp"
 #include "heightcache.hpp"
 #include "mainloop.hpp"
@@ -207,6 +208,9 @@ private:
 
   /** The background thread running regular connection checks, if any.  */
   std::unique_ptr<ConnectionCheckerThread> connectionChecker;
+
+  /** The coprocessor batch we use to handle coprocessors during blocks.  */
+  CoprocessorBatch coproc;
 
   void BlockAttach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
@@ -411,6 +415,11 @@ public:
    * or disables one (i.e. sync to tip) if the value is null.
    */
   void SetTargetBlock (const uint256& blk);
+
+  /**
+   * Adds a coprocessor to the batch that is updated on each block.
+   */
+  void AddCoprocessor (const std::string& name, Coprocessor& p);
 
   /**
    * Detects the ZMQ endpoint(s) by calling getzmqnotifications on the Xaya

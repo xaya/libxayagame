@@ -361,7 +361,7 @@ InitialiseState (Game& game, SQLiteGame& rules)
 {
   unsigned height;
   std::string hashHex;
-  const GameStateData state = rules.GetInitialState (height, hashHex);
+  const GameStateData state = rules.GetInitialState (height, hashHex, nullptr);
 
   uint256 hash;
   ASSERT_TRUE (hash.FromHex (hashHex));
@@ -461,7 +461,7 @@ TEST_F (StateInitialisationTests, HeightAndHash)
 
   unsigned height;
   std::string hashHex;
-  const GameStateData state = rules.GetInitialState (height, hashHex);
+  const GameStateData state = rules.GetInitialState (height, hashHex, nullptr);
   EXPECT_EQ (height, GENESIS_HEIGHT);
   EXPECT_EQ (hashHex, GenesisHash ().ToHex ());
 }

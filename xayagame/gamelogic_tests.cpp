@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -71,7 +71,7 @@ protected:
 
     unsigned dummyHeight;
     std::string dummyHashHex;
-    state = game.GetInitialState (dummyHeight, dummyHashHex);
+    state = game.GetInitialState (dummyHeight, dummyHashHex, nullptr);
   }
 
   /**
@@ -90,7 +90,7 @@ protected:
     blockStack.push (blockData);
 
     UndoData undo;
-    state = game.ProcessForward (state, blockData, undo);
+    state = game.ProcessForward (state, blockData, undo, nullptr);
     undoStack.push (undo);
   }
 
@@ -100,7 +100,8 @@ protected:
   void
   DetachBlock ()
   {
-    state = game.ProcessBackwards (state, blockStack.top (), undoStack.top ());
+    state = game.ProcessBackwards (state, blockStack.top (),
+                                   undoStack.top (), nullptr);
 
     undoStack.pop ();
     blockStack.pop ();

@@ -1639,6 +1639,214 @@ TEST_F (TargetBlockTests, StopsWhileDetaching)
 
 /* ************************************************************************** */
 
+/**
+ * A basic coprocessor, which just records all actions seen (initial state,
+ * forward, backward) in memory (when those get committed).  It also verifies
+ * that the block hashes seen match the test block hashes (and records just
+ * the heights for simplicity).
+ */
+class GameTestCoprocessor : public Coprocessor
+{
+
+public:
+
+  /**
+   * A recorded (or expected) operation.
+   */
+  struct Record
+  {
+
+    Coprocessor::Op op;
+    uint64_t height;
+
+    friend bool
+    operator== (const Record& a, const Record& b)
+    {
+      return a.op == b.op && a.height == b.height;
+    }
+
+    friend bool
+    operator!= (const Record& a, const Record& b)
+    {
+      return !(a == b);
+    }
+
+  };
+
+private:
+
+  /** The records saved.  */
+  std::vector<Record> records;
+
+public:
+
+  class TestBlock;
+
+  GameTestCoprocessor () = default;
+
+  /**
+   * Expects that the records match.
+   */
+  void
+  ExpectRecords (const std::vector<Record>& expected) const
+  {
+    EXPECT_EQ (records, expected);
+  }
+
+  std::unique_ptr<Block> ForBlock (const Json::Value& blockData,
+                                   Op op) override;
+
+};
+
+class GameTestCoprocessor::TestBlock : public Coprocessor::Block
+{
+
+private:
+
+  /** The coprocessor this is attached to, so it can record there.  */
+  GameTestCoprocessor& parent;
+
+  /**
+   * To mimic a more "realistic" setting similar to how coprocessors will be
+   * used in a real game, we let the GameLogic actually call into this
+   * instance to initiate saving of the record.  For this a flag is enough,
+   * since the actual data is present on the Block already.
+   */
+  bool write = false;
+
+protected:
+
+  void
+  Commit () override
+  {
+    if (!write)
+      {
+        LOG (ERROR) << "Commit() called but 'write' on TestBlock is false";
+        return;
+      }
+
+    if (GetBlockHeight () == GAME_GENESIS_HEIGHT)
+      EXPECT_EQ (GetBlockHash (), TestGame::GenesisBlockHash ());
+    else
+      EXPECT_EQ (GetBlockHash (), BlockHash (GetBlockHeight ()));
+
+    parent.records.push_back ({GetOperation (), GetBlockHeight ()});
+  }
+
+public:
+
+  TestBlock (const Json::Value& blockData, const Coprocessor::Op o,
+             GameTestCoprocessor& p)
+    : Block(blockData, o), parent(p)
+  {}
+
+  /**
+   * Signals this instance to write a record if Commit() is called.
+   */
+  void
+  WriteRecord ()
+  {
+    write = true;
+  }
+
+};
+
+std::unique_ptr<Coprocessor::Block>
+GameTestCoprocessor::ForBlock (const Json::Value& blockData, const Op op)
+{
+  return std::make_unique<TestBlock> (blockData, op, *this);
+}
+
+/**
+ * Subclass of TestGame that calls into the coprocessor (if it is available).
+ */
+class CoprocessorTestGame : public TestGame
+{
+
+private:
+
+  /**
+   * Gets the coprocessor from the context, and if it is set,
+   * calls WriteRecord on it.
+   */
+  void
+  WriteRecord ()
+  {
+    ASSERT_EQ (
+        GetContext ().GetCoprocessor<GameTestCoprocessor::TestBlock> ("foo"),
+        nullptr);
+    auto* coproc
+        = GetContext ().GetCoprocessor<GameTestCoprocessor::TestBlock> ("test");
+    if (coproc != nullptr)
+      coproc->WriteRecord ();
+  }
+
+protected:
+
+  GameStateData
+  GetInitialStateInternal (unsigned& height, std::string& hashHex) override
+  {
+    WriteRecord ();
+    return TestGame::GetInitialStateInternal (height, hashHex);
+  }
+
+  GameStateData
+  ProcessForwardInternal (const GameStateData& oldState,
+                          const Json::Value& blockData,
+                          UndoData& undoData) override
+  {
+    WriteRecord ();
+    return TestGame::ProcessForwardInternal (oldState, blockData, undoData);
+  }
+
+  GameStateData
+  ProcessBackwardsInternal (const GameStateData& newState,
+                            const Json::Value& blockData,
+                            const UndoData& undoData) override
+  {
+    WriteRecord ();
+    return TestGame::ProcessBackwardsInternal (newState, blockData, undoData);
+  }
+
+};
+
+class GameCoprocessorTests : public SyncingTests
+{
+
+protected:
+
+  /** The coprocessor used.  */
+  GameTestCoprocessor coproc;
+
+  /** The modified test game.  */
+  CoprocessorTestGame rules;
+
+  GameCoprocessorTests ()
+  {
+    g.AddCoprocessor ("test", coproc);
+    g.SetGameLogic (rules);
+    storage.Clear ();
+    ReinitialiseState (g);
+  }
+
+};
+
+TEST_F (GameCoprocessorTests, CoprocessorCalled)
+{
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  AttachBlock (g, BlockHash (12), Moves ("a2c3"));
+  DetachBlock (g);
+
+  coproc.ExpectRecords ({
+    {Coprocessor::Op::INITIALISATION, GAME_GENESIS_HEIGHT},
+    {Coprocessor::Op::FORWARD, 11},
+    {Coprocessor::Op::FORWARD, 12},
+    {Coprocessor::Op::BACKWARD, 12},
+  });
+}
+
+/* ************************************************************************** */
+
 class PendingMoveUpdateTests : public SyncingTests
 {
 
