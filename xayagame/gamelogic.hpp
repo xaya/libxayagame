@@ -1,10 +1,11 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2023 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef XAYAGAME_GAMELOGIC_HPP
 #define XAYAGAME_GAMELOGIC_HPP
 
+#include "coprocessor.hpp"
 #include "storage.hpp"
 
 #include "rpc-stubs/xayarpcclient.h"
@@ -142,9 +143,16 @@ private:
   Random rnd;
 
   /**
+   * Coprocessor batch that the implementation can use to access individual
+   * coprocessors by name.
+   */
+  CoprocessorBatch::Block* coprocBlk;
+
+  /**
    * Constructs a context.  This is done by the GameLogic class.
    */
-  Context (const GameLogic& l, const uint256& rndSeed);
+  Context (const GameLogic& l, const uint256& rndSeed,
+           CoprocessorBatch::Block* cb);
 
   friend class GameLogic;
 
@@ -176,6 +184,19 @@ public:
   GetRandom ()
   {
     return rnd;
+  }
+
+  /**
+   * Returns the coprocessor with the given name, casted to the given
+   * type.  Returns null if no such coprocessor is registered.
+   */
+  template <typename T>
+    T*
+    GetCoprocessor (const std::string& name)
+  {
+    if (coprocBlk == nullptr)
+      return nullptr;
+    return coprocBlk->Get<T> (name);
   }
 
 };
@@ -267,9 +288,12 @@ public:
   /**
    * Returns the initial state for the game.  This is the function that is
    * called externally.  It sets up a Context instance and then calls
-   * through to GetInitialStateInternal.
+   * through to GetInitialStateInternal.  The coprocessor batch is optional,
+   * and will not be set when this method is called to determine the
+   * genesis height initially.
    */
-  GameStateData GetInitialState (unsigned& height, std::string& hashHex);
+  GameStateData GetInitialState (unsigned& height, std::string& hashHex,
+                                 CoprocessorBatch::Block* cb);
 
   /**
    * Processes the game state forward in time.  This method should be
@@ -278,7 +302,8 @@ public:
    */
   GameStateData ProcessForward (const GameStateData& oldState,
                                 const Json::Value& blockData,
-                                UndoData& undoData);
+                                UndoData& undoData,
+                                CoprocessorBatch::Block* cb);
 
   /**
    * Processes the game state backwards in time (for reorgs).  This function
@@ -287,7 +312,8 @@ public:
    */
   GameStateData ProcessBackwards (const GameStateData& newState,
                                   const Json::Value& blockData,
-                                  const UndoData& undoData);
+                                  const UndoData& undoData,
+                                  CoprocessorBatch::Block* cb);
 
   /**
    * A notification method that gets called whenever the Game instance
