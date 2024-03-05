@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2021 The Xaya developers
+# Copyright (C) 2018-2024 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -59,6 +59,7 @@ class Node:
     self.log.info ("Starting new Xaya process")
     args = [self.binary]
     args.append ("-datadir=%s" % self.datadir)
+    args.append ("-deprecatedrpc=create_bdb")
     args.append ("-noprinttoconsole")
     args.append ("-regtest")
     self.proc = subprocess.Popen (args)

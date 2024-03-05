@@ -24,6 +24,8 @@ Makefile.in
 *.trs
 *.pyc
 *.pc
+*.o
+*.log
 
 *.pb.h
 *.pb.cc
