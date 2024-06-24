@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -323,6 +323,20 @@ public:
    */
   virtual void
   GameStateUpdated (const GameStateData& state, const Json::Value& blockData)
+  {}
+
+  /**
+   * A notification method that gets called whenever the instance
+   * state (not necessarily the game state) changes.  This could be changes
+   * to the game state, but also things like losing connection to the
+   * blockchain node, reaching the target block and things like that.
+   *
+   * The argument passed is a basic representation of the instance
+   * state as returned also from GetCustomStateData, in particular with the
+   * gameid, chain and state fields.
+   */
+  virtual void
+  InstanceStateChanged (const Json::Value& newState)
   {}
 
   /**

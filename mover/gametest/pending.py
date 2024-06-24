@@ -1,4 +1,4 @@
-# Copyright (C) 2019 The Xaya developers
+# Copyright (C) 2019-2024 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -24,6 +24,9 @@ class PendingMovesTest (MoverTest):
     self.log.info ("Testing ZMQ pending mode '%s'..." % self.zmqPending)
 
     self.generate (101)
+    # Make sure all notifications and updates have been processed for now.
+    self.syncGame ()
+
     self.move ("a", "k", 5)
     self.move ("b", "j", 5)
     self.generate (1)

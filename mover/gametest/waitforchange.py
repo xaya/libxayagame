@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2018-2020 The Xaya developers
+# Copyright (C) 2018-2024 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -67,6 +67,10 @@ class WaitForChangeTest (MoverTest):
 
   def run (self):
     self.generate (101)
+
+    # Make sure that all notifications up to now and all other
+    # updates have been done before proceeding with the test.
+    self.syncGame ()
 
     self.test_attach ()
     self.test_detach ()

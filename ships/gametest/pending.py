@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2019-2022 The Xaya developers
+# Copyright (C) 2019-2024 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -41,6 +41,11 @@ class PendingTest (ShipsTest):
 
   def run (self):
     self.generate (110)
+
+    # Ensures that all notifications have been sent and all updates done
+    # until now before we proceed with the test (that may otherwise be
+    # sensible to race conditions).
+    self.syncGame ()
 
     # Pre-register all names we need later for pending.  This ensures that
     # pending tracking also works on EVM chains.
