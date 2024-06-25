@@ -8,6 +8,7 @@
 FROM alpine AS base
 RUN apk add --no-cache \
   curl-dev \
+  glog-dev \
   lmdb-dev \
   libmicrohttpd-dev \
   protobuf-dev \
@@ -59,13 +60,6 @@ RUN cmake . \
   -DREDIS_SERVER=NO -DREDIS_CLIENT=NO \
   -DCOMPILE_TESTS=NO -DCOMPILE_EXAMPLES=NO \
   -DWITH_COVERAGE=NO
-RUN make -j${N} && make install/strip
-
-# Install glog from source.
-WORKDIR /usr/src/glog
-RUN git clone https://github.com/google/glog .
-RUN cmake . \
-  -DBUILD_SHARED_LIBS=ON
 RUN make -j${N} && make install/strip
 
 # We also need to install googletest from source.
