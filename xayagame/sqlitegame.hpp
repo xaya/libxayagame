@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2020 The Xaya developers
+// Copyright (C) 2018-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -64,6 +64,11 @@ private:
      holds a set of currently activate AutoId values.  */
   class ActiveAutoIds;
 
+  /* Internal helper class (defined and implemented in sqlitegame.cpp) that
+     holds a state snapshot to be used for retrieving (read-only) state
+     data without needing the main lock.  */
+  class StateSnapshot;
+
   /**
    * The storage instance that is used.  std::unique_ptr is used so that we
    * can use the forward-declared type and do not need to define Storage right
@@ -77,6 +82,16 @@ private:
    * to UpdateState).  It is set to null when no set is active.
    */
   ActiveAutoIds* activeIds = nullptr;
+
+  /**
+   * This helper class may (or may not if we were not able to create a database
+   * snapshot) hold a full "state snapshot" that can be used to retrieve
+   * read-only state information, such as for answering RPC calls.  It has
+   * a lock that protects the instance, such as when the state is updated to
+   * a new one, but otherwise the snapshot (if present) can be used without
+   * requiring the main Game lock.
+   */
+  std::unique_ptr<StateSnapshot> stateSnapshot;
 
   /**
    * Any processors attached, that will be called for state updates.  They
@@ -183,10 +198,9 @@ protected:
 
   /**
    * Extracts custom state data from the database (as done by a callback
-   * that queries the data).  This calls GetCustomStateData on the Game
-   * instance and provides a callback that handles the "game state" string
-   * in the same way as GameStateToJson does, before calling the user function
-   * to actually retrieve the data.
+   * that queries the data).  This uses the instance state provided by
+   * Game and retrieves a snapshot of the game state database, which is
+   * then passed on to the user function to retrieve the custom data.
    */
   Json::Value GetCustomStateData (
       const Game& game, const std::string& jsonField,
@@ -270,6 +284,7 @@ public:
 
   void GameStateUpdated (const GameStateData& state,
                          const Json::Value& blockData) override;
+  void InstanceStateChanged (const Json::Value& state) override;
   Json::Value GameStateToJson (const GameStateData& state) override;
 
 };

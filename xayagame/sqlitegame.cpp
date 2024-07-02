@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -77,6 +77,101 @@ SQLiteGame::ActiveAutoIds::Get (const std::string& key)
 
 /* ************************************************************************** */
 
+/**
+ * This class holds an updatable snapshot of the full instance state (including
+ * a read-only database snapshot), which can be used to answer state reads
+ * without requiring the Game main lock.  It has its own lock to synchronise
+ * just updates to the snapshot with readers requesting access to it.  But
+ * it will not be blocked during computation of the state update in the GSP,
+ * nor during the entire operation extracting some state from it.
+ */
+class SQLiteGame::StateSnapshot
+{
+
+private:
+
+  /** Mutex for locking this instance.  */
+  mutable std::mutex mut;
+
+  /** Whether or not there is a current snapshot.  */
+  bool hasSnapshot = false;
+
+  /** The instance state JSON.  */
+  Json::Value instanceState;
+
+  /**
+   * The database snapshot for reading the game state.  May be null even if
+   * there is a current snapshot, in which case it means that there is no game
+   * state, just an instance state.
+   */
+  std::shared_ptr<const SQLiteDatabase> database;
+
+  /** If there is a game state, the corresponding height.  */
+  uint64_t height;
+
+  /** If there is a game state, the corresponding hash.  */
+  uint256 hash;
+
+public:
+
+  explicit StateSnapshot () = default;
+
+  /**
+   * Returns a "copy" (that can then be used without locks) of the current
+   * snapshot data.  If no snapshot is stored, returns false.
+   */
+  bool
+  Get (Json::Value& inst, std::shared_ptr<const SQLiteDatabase>& db,
+       uint64_t& he, uint256& ha) const
+  {
+    std::lock_guard<std::mutex> lock(mut);
+
+    if (!hasSnapshot)
+      return false;
+
+    inst = instanceState;
+    db = database;
+
+    if (database != nullptr)
+      {
+        he = height;
+        ha = hash;
+      }
+
+    return true;
+  }
+
+  /**
+   * Clears the snapshot, such that afterwards there will be none inside.
+   */
+  void
+  Clear ()
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    hasSnapshot = false;
+    database.reset ();
+  }
+
+  /**
+   * Sets the state to be based on the given database snapshot (which is taken
+   * over from the unique_ptr).
+   */
+  void
+  Set (const Json::Value& inst, std::unique_ptr<SQLiteDatabase> db,
+       const uint64_t he, const uint256& ha)
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    hasSnapshot = true;
+    instanceState = inst;
+    height = he;
+    hash = ha;
+    database.reset (db.release ());
+  }
+
+};
+
+/* ************************************************************************** */
+
 namespace
 {
 
@@ -140,6 +235,13 @@ protected:
     for (auto* p : game.processors)
       p->Finish (GetDatabase ());
     SQLiteStorage::CloseDatabase ();
+  }
+
+  void
+  WaitForSnapshots () override
+  {
+    game.stateSnapshot->Clear ();
+    SQLiteStorage::WaitForSnapshots ();
   }
 
   void
@@ -340,9 +442,10 @@ SQLiteGame::Storage::CheckCurrentState (const SQLiteDatabase& db,
 
 /* ************************************************************************** */
 
-/* These cannot be =default'ed in the header, since Storage is an incomplete
-   type at that stage.  */
-SQLiteGame::SQLiteGame () = default;
+SQLiteGame::SQLiteGame ()
+  : stateSnapshot(std::make_unique<StateSnapshot> ())
+{}
+
 SQLiteGame::~SQLiteGame () = default;
 
 void
@@ -612,6 +715,37 @@ SQLiteGame::GameStateUpdated (const GameStateData& state,
     p->Process (blockData, database->GetDatabase (), snapshot);
 }
 
+void
+SQLiteGame::InstanceStateChanged (const Json::Value& state)
+{
+  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
+
+  std::unique_ptr<SQLiteDatabase> snapshot;
+  uint64_t height = std::numeric_limits<uint64_t>::max ();
+  uint256 hash;
+  if (database->GetCurrentBlockHash (hash))
+    {
+      CHECK_EQ (hash.ToHex (), state["blockhash"].asString ());
+      CHECK (state.isMember ("height"));
+      height = state["height"].asUInt64 ();
+
+      const auto state = database->GetCurrentGameState ();
+      EnsureCurrentState (state);
+      snapshot = database->GetSnapshot ();
+      if (snapshot == nullptr
+            || !database->CheckCurrentState (*snapshot, state))
+        {
+          /* We weren't able to get a state snapshot, even though there should
+             be a game state.  In this case, record that we do not have
+             a state snapshot to use.  */
+          stateSnapshot->Clear ();
+          return;
+        }
+    }
+
+  stateSnapshot->Set (state, std::move (snapshot), height, hash);
+}
+
 Json::Value
 SQLiteGame::GameStateToJson (const GameStateData& state)
 {
@@ -624,27 +758,32 @@ SQLiteGame::GetCustomStateData (
     const Game& game, const std::string& jsonField,
     const ExtractJsonFromDbWithBlock& cb)
 {
+  /* If we have a state snapshot, use it to retrieve the data without
+     locking the Game's lock at all.  */
+  Json::Value res;
+  std::shared_ptr<const SQLiteDatabase> snapshotDb;
+  uint64_t snapshotHeight = std::numeric_limits<uint64_t>::max ();
+  uint256 snapshotHash;
+  if (stateSnapshot->Get (res, snapshotDb, snapshotHeight, snapshotHash))
+    {
+      VLOG (1) << "Using state snapshot for GetCustomStateData";
+
+      if (snapshotDb != nullptr)
+        {
+          CHECK_LT (snapshotHeight, std::numeric_limits<uint64_t>::max ());
+          res[jsonField] = cb (*snapshotDb, snapshotHash, snapshotHeight);
+        }
+
+      return res;
+    }
+
+  /* Otherwise use Game::GetCustomStateData to retrieve the state
+     directly from the Game instance and main database.  */
   return game.GetCustomStateData (jsonField,
       [this, &cb] (const GameStateData& state, const uint256& hash,
-                   const unsigned height, std::unique_lock<std::mutex> lock)
+                   const unsigned height)
         {
           CHECK (database != nullptr) << "SQLiteGame has not been initialised";
-
-          auto snapshot = database->GetSnapshot ();
-          if (snapshot != nullptr
-                && database->CheckCurrentState (*snapshot, state))
-            {
-              /* We have a valid snapshot matching the expected block hash,
-                 so we can release the main lock and extract the custom state
-                 data from the snapshot instead.  */
-              lock.unlock ();
-              return cb (*snapshot, hash, height);
-            }
-
-          /* Otherwise keep the lock and extract from the main database
-             connection instead.  This may be needed e.g. if there are
-             batched and uncommitted changes on the database during initial
-             catching up.  */
           LOG (WARNING) << "Using main database for GetCustomStateData";
           EnsureCurrentState (state);
           return cb (database->GetDatabase (), hash, height);

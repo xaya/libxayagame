@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -90,6 +90,12 @@ protected:
    */
   bool shouldFail = false;
 
+  /**
+   * Make the state update function pause for the given duration, to test
+   * how multiple threads work together in the case of long block updates.
+   */
+  std::chrono::milliseconds blockSleep{0};
+
   void
   GetInitialStateBlock (unsigned& height, std::string& hashHex) const override
   {
@@ -114,6 +120,16 @@ public:
   {
     shouldFail = v;
     LOG (INFO) << "Should fail is now: " << shouldFail;
+  }
+
+  /**
+   * Sets the duration that each state update should take / sleep for.
+   */
+  template<typename Rep, typename Period>
+    void
+    SetBlockSleep (const std::chrono::duration<Rep, Period>& val)
+  {
+    blockSleep = std::chrono::duration_cast<decltype (blockSleep)> (val);
   }
 
   using SQLiteGame::GetCustomStateData;
@@ -184,6 +200,8 @@ protected:
   void
   UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override
   {
+    std::this_thread::sleep_for (blockSleep);
+
     for (const auto& m : blockData["moves"])
       {
         const std::string name = m["name"].asString ();
@@ -1178,6 +1196,36 @@ TEST_F (UnblockedStateExtractionTests, UncommittedChanges)
   EXPECT_EQ (GetLastMessage ("domob", 1), "new");
 }
 
+TEST_F (UnblockedStateExtractionTests, LongBlockUpdate)
+{
+  rules->SetBlockSleep (std::chrono::milliseconds (100));
+
+  std::atomic<bool> updStarted;
+  std::atomic<bool> updDone;
+  updStarted = false;
+  updDone = false;
+
+  std::thread upd([&] ()
+    {
+      updStarted = true;
+      LOG (INFO) << "Long block update started";
+      AttachBlock (game, BlockHash (12), ChatGame::Moves ({{"domob", "new"}}));
+      LOG (INFO) << "Long block update done";
+      updDone = true;
+    });
+
+  while (!updStarted)
+    std::this_thread::sleep_for (std::chrono::milliseconds (1));
+
+  LOG (INFO) << "Starting state read";
+  EXPECT_EQ (GetLastMessage ("domob", 1), "old");
+  LOG (INFO) << "State read done";
+
+  EXPECT_FALSE (updDone);
+  upd.join ();
+  EXPECT_EQ (GetLastMessage ("domob", 1), "new");
+}
+
 /* ************************************************************************** */
 
 /**
@@ -1261,6 +1309,8 @@ protected:
   void
   UpdateState (SQLiteDatabase& db, const Json::Value& blockData) override
   {
+    std::this_thread::sleep_for (blockSleep);
+
     for (const auto& m : blockData["moves"])
       {
         const std::string name = m["name"].asString ();
