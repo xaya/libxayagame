@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -321,6 +321,7 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
       ReinitialiseState ();
       if (pruningQueue != nullptr)
         pruningQueue->Reset ();
+      NotifyInstanceStateChanged ();
       return;
     }
 
@@ -402,6 +403,8 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
       pending->ProcessAttachedBlock (storage->GetCurrentGameState (), data);
       NotifyPendingStateChange ();
     }
+
+  NotifyInstanceStateChanged ();
 }
 
 void
@@ -434,6 +437,7 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
       ReinitialiseState ();
       if (pruningQueue != nullptr)
         pruningQueue->Reset ();
+      NotifyInstanceStateChanged ();
       return;
     }
 
@@ -517,6 +521,8 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
       pending->ProcessDetachedBlock (storage->GetCurrentGameState (), data);
       NotifyPendingStateChange ();
     }
+
+  NotifyInstanceStateChanged ();
 }
 
 void
@@ -547,6 +553,7 @@ Game::HasStopped ()
   std::lock_guard<std::mutex> lock(mut);
   state = State::DISCONNECTED;
   LOG (INFO) << "ZMQ subscriber has stopped listening";
+  NotifyInstanceStateChanged ();
 }
 
 void
@@ -682,7 +689,10 @@ Game::SetTargetBlock (const uint256& blk)
   targetBlock = blk;
 
   if (state != State::DISCONNECTED)
-    ReinitialiseState ();
+    {
+      ReinitialiseState ();
+      NotifyInstanceStateChanged ();
+    }
 }
 
 void
@@ -739,19 +749,12 @@ Game::DetectZmqEndpoint ()
 }
 
 Json::Value
-Game::GetCustomStateData (
-    const std::string& jsonField,
-    const ExtractJsonFromStateWithLock& cb) const
+Game::UnlockedGetInstanceStateJson (uint256& hash, unsigned& height) const
 {
-  std::unique_lock<std::mutex> lock(mut);
-
   Json::Value res(Json::objectValue);
   res["gameid"] = gameId;
   res["chain"] = ChainToString (chain);
   res["state"] = StateToString (state);
-
-  uint256 hash;
-  unsigned height;
 
   /* Getting the height for the hash value might throw, if we revert
      back to Xaya RPC and that is down.  We want to handle this case
@@ -761,16 +764,47 @@ Game::GetCustomStateData (
   try
     {
       if (!storage->GetCurrentBlockHashWithHeight (hash, height))
-        return res;
+        {
+          hash.SetNull ();
+          return res;
+        }
     }
   catch (const std::exception& exc)
     {
       LOG (ERROR) << "Exception getting block hash and height: " << exc.what ();
+      hash.SetNull ();
       return res;
     }
 
+  CHECK (!hash.IsNull ());
   res["blockhash"] = hash.ToHex ();
   res["height"] = height;
+
+  return res;
+}
+
+void
+Game::NotifyInstanceStateChanged () const
+{
+  uint256 hash;
+  unsigned height;
+  const auto state = UnlockedGetInstanceStateJson (hash, height);
+  rules->InstanceStateChanged (state);
+}
+
+Json::Value
+Game::GetCustomStateData (
+    const std::string& jsonField,
+    const ExtractJsonFromStateWithLock& cb) const
+{
+  std::unique_lock<std::mutex> lock(mut);
+
+  uint256 hash;
+  unsigned height;
+  auto res = UnlockedGetInstanceStateJson (hash, height);
+
+  if (hash.IsNull ())
+    return res;
 
   const GameStateData gameState = storage->GetCurrentGameState ();
   res[jsonField] = cb (gameState, hash, height, std::move (lock));
@@ -990,6 +1024,7 @@ Game::ConnectToZmq ()
 
   std::lock_guard<std::mutex> lock(mut);
   ReinitialiseState ();
+  NotifyInstanceStateChanged ();
 }
 
 void

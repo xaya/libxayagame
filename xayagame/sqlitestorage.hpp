@@ -383,11 +383,6 @@ private:
   void OpenDatabase ();
 
   /**
-   * Blocks until no read snapshots are open.
-   */
-  void WaitForSnapshots ();
-
-  /**
    * Decrements the count of outstanding snapshots.
    */
   void UnrefSnapshot () const;
@@ -412,6 +407,13 @@ protected:
    * implementation.
    */
   virtual void SetupSchema ();
+
+  /**
+   * Blocks until no read snapshots are open.  This method is overwritten
+   * in the SQLiteGame::Storage class, to add logic for explicitly closing
+   * snapshots retained by the class itself.
+   */
+  virtual void WaitForSnapshots ();
 
   /**
    * Returns the underlying SQLiteDatabase instance.

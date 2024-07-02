@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -177,6 +177,11 @@ private:
    */
   std::string genesisHash = GAME_GENESIS_HASH;
 
+  /** Mutex locking lastInstanceState.  */
+  mutable std::mutex mutInstanceState;
+  /** The last state passed to the InstanceStateChanged() notification.  */
+  Json::Value lastInstanceState;
+
   /**
    * Parses a string of the game state / undo format into a map holding
    * the name/value pairs.
@@ -284,6 +289,23 @@ public:
     Json::Value res(Json::objectValue);
     res["state"] = state;
     return res;
+  }
+
+  void
+  InstanceStateChanged (const Json::Value& state) override
+  {
+    std::lock_guard<std::mutex> lock(mutInstanceState);
+    lastInstanceState = state;
+  }
+
+  Json::Value
+  GetLastInstanceState () const
+  {
+    std::lock_guard<std::mutex> lock(mutInstanceState);
+    /* Return a copy (by value) on purpose to make sure the caller can then
+       use the object without worrying about race conditions and other
+       threads / locking.  */
+    return lastInstanceState;
   }
 
   void
@@ -640,10 +662,13 @@ TEST_F (InitialStateTests, WaitingForGenesis)
   SetStartingBlock (8, BlockHash (8));
   AttachBlock (g, BlockHash (9), emptyMoves);
   EXPECT_EQ (GetState (g), State::PREGENESIS);
+  EXPECT_EQ (rules.GetLastInstanceState ()["state"].asString (), "pregenesis");
 
   mockXayaServer->SetBestBlock (10, TestGame::GenesisBlockHash ());
   AttachBlock (g, TestGame::GenesisBlockHash (), emptyMoves);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  EXPECT_EQ (rules.GetLastInstanceState ()["state"].asString (), "up-to-date");
+  EXPECT_EQ (rules.GetLastInstanceState ()["height"].asInt64 (), 10);
   ExpectInitialStateInStorage ();
 }
 
@@ -1346,18 +1371,22 @@ TEST_F (SyncingTests, UpToDateOperation)
 {
   AttachBlock (g, BlockHash (11), Moves ("a0b1"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  EXPECT_EQ (rules.GetLastInstanceState ()["height"].asInt64 (), 11);
   ExpectGameState (BlockHash (11), "a0b1");
 
   AttachBlock (g, BlockHash (12), Moves ("a2c3"));
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  EXPECT_EQ (rules.GetLastInstanceState ()["height"].asInt64 (), 12);
   ExpectGameState (BlockHash (12), "a2b1c3");
 
   DetachBlock (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  EXPECT_EQ (rules.GetLastInstanceState ()["height"].asInt64 (), 11);
   ExpectGameState (BlockHash (11), "a0b1");
 
   DetachBlock (g);
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  EXPECT_EQ (rules.GetLastInstanceState ()["height"].asInt64 (), 10);
   ExpectGameState (TestGame::GenesisBlockHash (), "");
 }
 
@@ -1635,6 +1664,23 @@ TEST_F (TargetBlockTests, StopsWhileDetaching)
 
   EXPECT_EQ (GetState (g), State::AT_TARGET);
   ExpectGameState (BlockHash (12), "a2b1");
+}
+
+TEST_F (TargetBlockTests, AtTargetWhileSetting)
+{
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  AttachBlock (g, BlockHash (12), Moves ("a2"));
+
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  EXPECT_EQ (rules.GetLastInstanceState ()["state"].asString (), "up-to-date");
+
+  /* Use the publicly exposed method rather than the internal one to ensure
+     that all the logic there (in particular, notifying about the state
+     change) is executed.  */
+  g.SetTargetBlock (BlockHash (12));
+
+  EXPECT_EQ (GetState (g), State::AT_TARGET);
+  EXPECT_EQ (rules.GetLastInstanceState ()["state"].asString (), "at-target");
 }
 
 /* ************************************************************************** */
@@ -2291,6 +2337,11 @@ TEST_F (GameStorageRetryTests, InitialState)
 
 TEST_F (GameStorageRetryTests, AttachBlock)
 {
+  Json::Value mockHeader(Json::objectValue);
+  mockHeader["height"] = GAME_GENESIS_HEIGHT;
+  EXPECT_CALL (*mockXayaServer, getblockheader (GAME_GENESIS_HASH))
+      .WillRepeatedly (Return (mockHeader));
+
   EXPECT_CALL (*mockXayaServer, game_sendupdates (GAME_GENESIS_HASH, GAME_ID))
       .WillOnce (Return (SendupdatesResponse (BlockHash (11), "reqtoken")));
   mockXayaServer->SetBestBlock (11, BlockHash (11));
@@ -2313,6 +2364,11 @@ TEST_F (GameStorageRetryTests, AttachBlock)
 
 TEST_F (GameStorageRetryTests, DetachBlock)
 {
+  Json::Value mockHeader(Json::objectValue);
+  mockHeader["height"] = 11;
+  EXPECT_CALL (*mockXayaServer, getblockheader (BlockHash (11).ToHex ()))
+      .WillRepeatedly (Return (mockHeader));
+
   EXPECT_CALL (*mockXayaServer,
                game_sendupdates (BlockHash (11).ToHex (), GAME_ID))
       .WillOnce (Return (SendupdatesResponse (TestGame::GenesisBlockHash (),
@@ -2426,10 +2482,13 @@ TEST_F (GameProbeAndFixConnectionTests, DisconnectAndReconnect)
   std::this_thread::sleep_for (2 * MAX_STALENESS);
   ProbeAndFix ();
   EXPECT_EQ (GetState (g), State::DISCONNECTED);
+  EXPECT_EQ (rules.GetLastInstanceState ()["state"].asString (),
+             "disconnected");
   EXPECT_FALSE (GameTestFixture::GetZmq (g).IsRunning ());
 
   ProbeAndFix ();
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+  EXPECT_EQ (rules.GetLastInstanceState ()["state"].asString (), "up-to-date");
   EXPECT_TRUE (GameTestFixture::GetZmq (g).IsRunning ());
 }
 

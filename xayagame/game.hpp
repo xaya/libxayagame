@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -300,6 +300,28 @@ private:
    * Notifies potentially-waiting threads that the pending state has changed.
    */
   void NotifyPendingStateChange ();
+
+  /**
+   * Constructs a JSON object representing the basic instance state (with
+   * gameid, chain and state) as returned by GetCustomStateData and used
+   * in other places.  Expects the caller to hold the mut lock.
+   *
+   * Returns also the current block hash and height if it can be retrieved.
+   * Might return the hash as null if it cannot be retrieved (e.g. due to
+   * an RPC exception from the blockchain node).
+   */
+  Json::Value UnlockedGetInstanceStateJson (uint256& hash,
+                                            unsigned& height) const;
+
+  /**
+   * Calls the InstanceStateChanged method on rules based on the current
+   * instance state.  Expects the caller to hold the mut lock.
+   *
+   * As an implementation detail / rule, this method gets called from the
+   * place that actually holds the mut lock, and not methods further down
+   * the call stack (which might do the actual changes to "state" for instance).
+   */
+  void NotifyInstanceStateChanged () const;
 
   /**
    * Returns the current pending state as JSON, but assuming that the caller
