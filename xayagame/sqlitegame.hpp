@@ -84,6 +84,14 @@ private:
   ActiveAutoIds* activeIds = nullptr;
 
   /**
+   * This flag is set based on InstanceStateChanged depending on whether or
+   * not the current Game state is "up-to-date".  This then controls whether
+   * or not we try to take database snapshots, so we can avoid this IO overhead
+   * while syncing.
+   */
+  bool upToDate = false;
+
+  /**
    * This helper class may (or may not if we were not able to create a database
    * snapshot) hold a full "state snapshot" that can be used to retrieve
    * read-only state information, such as for answering RPC calls.  It has

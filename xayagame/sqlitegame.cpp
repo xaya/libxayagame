@@ -705,11 +705,18 @@ SQLiteGame::GameStateUpdated (const GameStateData& state,
   EnsureCurrentState (state);
 
   /* See if we can get a snapshot.  */
-  auto uniqueSnapshot = database->GetSnapshot ();
   std::shared_ptr<SQLiteDatabase> snapshot;
-  if (uniqueSnapshot != nullptr
-        && database->CheckCurrentState (*uniqueSnapshot, state))
-    snapshot.reset (uniqueSnapshot.release ());
+  if (upToDate)
+    {
+      auto uniqueSnapshot = database->GetSnapshot ();
+      if (uniqueSnapshot != nullptr
+            && database->CheckCurrentState (*uniqueSnapshot, state))
+        snapshot.reset (uniqueSnapshot.release ());
+    }
+  else
+    VLOG (1)
+        << "Not attempting to create a snapshot for processors"
+        << " as the game is not up-to-date";
 
   for (auto* p : processors)
     p->Process (blockData, database->GetDatabase (), snapshot);
@@ -719,6 +726,18 @@ void
 SQLiteGame::InstanceStateChanged (const Json::Value& state)
 {
   CHECK (database != nullptr) << "SQLiteGame has not been initialised";
+
+  CHECK (state.isObject ()) << "Invalid instance state: " << state;
+  const auto& stateStr = state["state"];
+  CHECK (stateStr.isString ());
+  upToDate = (stateStr.asString () == "up-to-date");
+
+  if (!upToDate)
+    {
+      VLOG (1) << "Not taking state snapshot as the game is not up-to-date";
+      stateSnapshot->Clear ();
+      return;
+    }
 
   std::unique_ptr<SQLiteDatabase> snapshot;
   uint64_t height = std::numeric_limits<uint64_t>::max ();
