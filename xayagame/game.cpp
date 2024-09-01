@@ -1119,6 +1119,19 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
           upd.toStyledString ());
   }
 
+  /* If an error is returned, such as when Xaya X is not yet synced to
+     our "fromblock", reset the ZMQ connection so it gets restored and
+     the sync retried later.  */
+  const auto errValue = upd["error"];
+  if (errValue.isBool () && errValue.asBool ())
+    {
+      LOG (ERROR)
+          << "Game blocks update request returned error,"
+          << " resetting ZMQ connection...";
+      zmq.RequestStop ();
+      return;
+    }
+
   LOG (INFO)
       << "Retrieving " << upd["steps"]["detach"].asInt () << " detach and "
       << upd["steps"]["attach"].asInt () << " attach steps with reqtoken = "
