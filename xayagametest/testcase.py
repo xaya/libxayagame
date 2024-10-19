@@ -322,7 +322,7 @@ class XayaGameTest (object):
   def runXayaXEthEnvironment (self):
     """
     Runs a base-chain environment that uses Xaya X to link to an
-    Ethereum-like test chain (based on Ganache).
+    Ethereum-like test chain.
     """
 
     if self.zmqPending != "one socket":
@@ -333,10 +333,10 @@ class XayaGameTest (object):
     env.enablePending ()
 
     with env.run ():
-      self.ethnode = env.ganache
+      self.ethnode = env.evm
       self.contracts = env.contracts
-      self.rpc.eth = env.createGanacheRpc ()
-      self.w3 = env.ganache.w3
+      self.rpc.eth = env.createEvmRpc ()
+      self.w3 = env.evm.w3
       yield env
 
   ##############################################################################
