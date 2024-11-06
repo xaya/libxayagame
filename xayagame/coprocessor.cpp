@@ -41,7 +41,9 @@ CoprocessorBatch::CommitTransaction ()
 void
 CoprocessorBatch::AbortTransaction ()
 {
-  CHECK (activeTransaction) << "There is no active transaction";
+  if (!activeTransaction)
+    return;
+
   activeTransaction = false;
 
   for (auto& p : processors)

@@ -130,6 +130,11 @@ public:
 
   void BeginTransaction ();
   void CommitTransaction ();
+
+  /**
+   * Aborts the currently active transaction if there is any.  May be
+   * safely called if there is none, to ensure we clean up if needed.
+   */
   void AbortTransaction ();
 
 };

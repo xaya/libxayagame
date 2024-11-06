@@ -114,55 +114,12 @@ public:
 
 };
 
-namespace
-{
-
-/**
- * RAII helper to start/stop a coprocessor transaction.
- *
- * TODO: Replace this with an integration in TransactionManager.
- */
-class CoprocTx
-{
-
-private:
-
-  /** The CoprocessorBatch on which this operates.  */
-  CoprocessorBatch& coproc;
-
-  /** Whether the tx has been committed already.  */
-  bool committed = false;
-
-public:
-
-  CoprocTx (CoprocessorBatch& c)
-    : coproc(c)
-  {
-    coproc.BeginTransaction ();
-  }
-
-  ~CoprocTx ()
-  {
-    if (!committed)
-      coproc.AbortTransaction ();
-  }
-
-  void
-  Commit ()
-  {
-    coproc.CommitTransaction ();
-    committed = true;
-  }
-
-};
-
-} // anonymous namespace
-
 /* ************************************************************************** */
 
 Game::Game (const std::string& id)
   : gameId(id), state(State::DISCONNECTED), genesisHeight(-1)
 {
+  transactionManager.SetCoprocessor (coproc);
   targetBlock.SetNull ();
   genesisHash.SetNull ();
   zmq.AddListener (gameId, this);
@@ -220,7 +177,6 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
   {
     internal::ActiveTransaction tx(transactionManager);
 
-    CoprocTx cotx(coproc);
     CoprocessorBatch::Block coprocBlk(coproc, blockHeader,
                                       Coprocessor::Op::FORWARD);
     coprocBlk.Start ();
@@ -237,7 +193,6 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
     storage->SetCurrentGameStateWithHeight (hash, height, newState);
 
     coprocBlk.Finish ();
-    cotx.Commit ();
     tx.Commit ();
     rules->GameStateUpdated (newState, blockHeader);
   }
@@ -291,7 +246,6 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
 
     /* Note that here (unlike GameStateUpdated below), we want to pass the block
        that is being undone, not the new best block (its parent).  */
-    CoprocTx cotx(coproc);
     CoprocessorBatch::Block coprocBlk(coproc, blockHeader,
                                       Coprocessor::Op::BACKWARD);
     coprocBlk.Start ();
@@ -313,7 +267,6 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
     stateBlockHeader["hash"] = parent.ToHex ();
 
     coprocBlk.Finish ();
-    cotx.Commit ();
     tx.Commit ();
     rules->GameStateUpdated (oldState, stateBlockHeader);
   }
