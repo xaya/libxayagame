@@ -1,4 +1,4 @@
-// Copyright (C) 2023 The Xaya developers
+// Copyright (C) 2023-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,6 +13,39 @@ CoprocessorBatch::Add (const std::string& name, Coprocessor& p)
   CHECK (processors.emplace (name, &p).second)
       << "We already had a processor of name '" << name << "'";
   LOG (INFO) << "Added coprocessor '" << name << "'";
+
+  if (activeTransaction)
+    p.BeginTransaction ();
+}
+
+void
+CoprocessorBatch::BeginTransaction ()
+{
+  CHECK (!activeTransaction) << "There is already an active transaction";
+  activeTransaction = true;
+
+  for (auto& p : processors)
+    p.second->BeginTransaction ();
+}
+
+void
+CoprocessorBatch::CommitTransaction ()
+{
+  CHECK (activeTransaction) << "There is no active transaction";
+  activeTransaction = false;
+
+  for (auto& p : processors)
+    p.second->CommitTransaction ();
+}
+
+void
+CoprocessorBatch::AbortTransaction ()
+{
+  CHECK (activeTransaction) << "There is no active transaction";
+  activeTransaction = false;
+
+  for (auto& p : processors)
+    p.second->AbortTransaction ();
 }
 
 Coprocessor::Block::Block (const Json::Value& d, const Op o)
@@ -37,35 +70,18 @@ CoprocessorBatch::Block::Block (CoprocessorBatch& batch,
       << "Duplicate coprocessor names while constructing batch";
 }
 
-CoprocessorBatch::Block::~Block ()
+void
+CoprocessorBatch::Block::Start ()
 {
-  if (!committed)
-    for (auto& entry : blocks)
-      if (started.count (entry.first) > 0)
-        entry.second->Abort ();
+  for (auto& entry : blocks)
+    entry.second->Start ();
 }
 
 void
-CoprocessorBatch::Block::Begin ()
+CoprocessorBatch::Block::Finish ()
 {
   for (auto& entry : blocks)
-    {
-      entry.second->Begin ();
-      started.insert (entry.first);
-    }
-}
-
-void
-CoprocessorBatch::Block::Commit ()
-{
-  CHECK (!committed) << "CoprocessorBatch::Block is already committed";
-  committed = true;
-  for (auto& entry : blocks)
-    {
-      CHECK_EQ (started.count (entry.first), 1)
-          << "Commit() called without Begin()";
-      entry.second->Commit ();
-    }
+    entry.second->Finish ();
 }
 
 } // namespace xaya

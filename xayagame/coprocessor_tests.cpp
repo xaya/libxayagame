@@ -1,4 +1,4 @@
-// Copyright (C) 2023 The Xaya developers
+// Copyright (C) 2023-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -28,11 +28,11 @@ private:
   /** Whether constructed block processors should expect success.  */
   bool shouldBeSuccess = true;
 
-  /** Whether constructed block processors should expect Begin() calls.  */
-  bool shouldBeginBeCalled = true;
+  /** Whether constructed block processors should expect Start() calls.  */
+  bool shouldStartBeCalled = true;
 
-  /** Whether constructed block processors should throw in Begin().  */
-  bool throwInBegin = false;
+  /** Whether constructed block processors should throw in Start().  */
+  bool throwInStart = false;
 
 public:
 
@@ -48,22 +48,22 @@ public:
   }
 
   /**
-   * Specifies that block processors should not expect Begin() calls.
+   * Specifies that block processors should not expect Start() calls.
    */
   void
-  BeginShouldNotBeCalled ()
+  StartShouldNotBeCalled ()
   {
-    shouldBeginBeCalled = false;
+    shouldStartBeCalled = false;
   }
 
   /**
-   * Specifies that block processors should throw in Begin().
+   * Specifies that block processors should throw in Start().
    */
   void
-  ThrowInBegin ()
+  ThrowInStart ()
   {
-    throwInBegin = true;
-    shouldBeginBeCalled = false;
+    throwInStart = true;
+    shouldStartBeCalled = false;
   }
 
   std::unique_ptr<Block> ForBlock (const Json::Value& blockData,
@@ -82,52 +82,43 @@ private:
    */
   const bool shouldBeSuccess;
 
-  /** Whether or not the block should be started with Begin() at all.  */
-  const bool shouldBeginBeCalled;
+  /** Whether or not the block should be started with Start() at all.  */
+  const bool shouldStartBeCalled;
 
-  /** If set to true, then fail (throw) from Begin().  */
-  const bool throwInBegin;
+  /** If set to true, then fail (throw) from Start().  */
+  const bool throwInStart;
 
-  /** Whether or not Begin() has been called.  */
-  bool beginCalled = false;
-  /** Whether or not Commit() has been called.  */
-  bool commitCalled = false;
+  /** Whether or not Start() has been called.  */
+  bool startCalled = false;
+  /** Whether or not Finish() has been called.  */
+  bool finishCalled = false;
   /** Whether or not Abort() has been called.  */
   bool abortCalled = false;
 
 protected:
 
   void
-  Begin () override
+  Start () override
   {
-    /* In case of throwInBegin, we actually have shouldBeginBeCalled set
+    /* In case of throwInStart, we actually have shouldStartBeCalled set
        to false (even though we expect this call), since then we do not
-       expect a Commit() or Abort() for this instance.  Thus throw
+       expect a Finish() for this instance.  Thus throw
        here before doing any of the other things.  */
-    if (throwInBegin)
-      throw std::runtime_error ("Begin() error");
+    if (throwInStart)
+      throw std::runtime_error ("Start() error");
 
-    EXPECT_TRUE (shouldBeginBeCalled) << "Unexpected Begin() call";
-    EXPECT_FALSE (beginCalled) << "Begin() called twice";
-    beginCalled = true;
+    EXPECT_TRUE (shouldStartBeCalled) << "Unexpected Start() call";
+    EXPECT_FALSE (startCalled) << "Start() called twice";
+    startCalled = true;
   }
 
   void
-  Commit () override
+  Finish () override
   {
-    EXPECT_TRUE (beginCalled) << "Resolution without Begin()";
-    EXPECT_FALSE (commitCalled || abortCalled) << "Duplicate resolution call";
+    EXPECT_TRUE (startCalled) << "Resolution without Start()";
+    EXPECT_FALSE (finishCalled) << "Duplicate resolution call";
     EXPECT_TRUE (shouldBeSuccess) << "Expected failure, but Commit() called";
-    commitCalled = true;
-  }
-
-  void
-  Abort () override
-  {
-    EXPECT_TRUE (beginCalled) << "Resolution without Begin()";
-    EXPECT_FALSE (commitCalled || abortCalled) << "Duplicate resolution call";
-    EXPECT_FALSE (shouldBeSuccess) << "Expected success, but Abort() called";
-    abortCalled = true;
+    finishCalled = true;
   }
 
 public:
@@ -143,21 +134,19 @@ public:
              const bool s, const bool b, const bool t,
              const MockCoprocessor& p)
     : Block(blockData, o),
-      shouldBeSuccess(s), shouldBeginBeCalled(b), throwInBegin(t),
+      shouldBeSuccess(s), shouldStartBeCalled(b), throwInStart(t),
       parent(p)
   {}
 
   ~MockBlock ()
   {
-    if (shouldBeginBeCalled)
+    if (shouldStartBeCalled)
       {
-        /* If both have been called, then we already failed the test
-           in the Commit() or Abort() method.  */
-        EXPECT_TRUE (beginCalled) << "Begin() has not been called";
-        EXPECT_TRUE (commitCalled || abortCalled) << "No resolution call";
+        EXPECT_TRUE (startCalled) << "Start() has not been called";
+        /* The call to Finish() is not guaranteed.  */
       }
-    /* Otherwise, we already fail the test in Begin() being called, or
-       when Commit() or Abort() are called without Begin().  */
+    /* Otherwise, we already fail the test in Start() being called, or
+       when Finish() is called without Start().  */
   }
 
 };
@@ -166,8 +155,8 @@ std::unique_ptr<Coprocessor::Block>
 MockCoprocessor::ForBlock (const Json::Value& blockData, const Op op)
 {
   return std::make_unique<MockBlock> (blockData, op,
-                                      shouldBeSuccess, shouldBeginBeCalled,
-                                      throwInBegin, *this);
+                                      shouldBeSuccess, shouldStartBeCalled,
+                                      throwInStart, *this);
 }
 
 /* ************************************************************************** */
@@ -231,8 +220,8 @@ TEST_F (CoprocessorTests, ParsesBlockData)
     EXPECT_EQ (blk.GetBlockHash (), BlockHash (123));
     EXPECT_EQ (blk.GetBlockHeight (), 123);
     EXPECT_EQ (blk.GetOperation (), Coprocessor::Op::FORWARD);
-    batchBlock.Begin ();
-    batchBlock.Commit ();
+    batchBlock.Start ();
+    batchBlock.Finish ();
   }
 
   {
@@ -240,44 +229,25 @@ TEST_F (CoprocessorTests, ParsesBlockData)
                                        Coprocessor::Op::BACKWARD);
     EXPECT_EQ (GetMockBlock (batchBlock).GetOperation (),
                Coprocessor::Op::BACKWARD);
-    batchBlock.Begin ();
-    batchBlock.Commit ();
+    batchBlock.Start ();
+    batchBlock.Finish ();
   }
 }
 
-TEST_F (CoprocessorTests, CommitAndAbort)
-{
-  {
-    CoprocessorBatch::Block batchBlock(batch, FakeBlockData (10),
-                                       Coprocessor::Op::FORWARD);
-    /* By default, the mock block expects success.  */
-    batchBlock.Begin ();
-    batchBlock.Commit ();
-  }
-
-  {
-    coproc.ExpectFailure ();
-    CoprocessorBatch::Block batchBlock(batch, FakeBlockData (11),
-                                       Coprocessor::Op::FORWARD);
-    batchBlock.Begin ();
-    /* We do not commit, which means that it should be aborted instead.  */
-  }
-}
-
-TEST_F (CoprocessorTests, ErrorInBegin)
+TEST_F (CoprocessorTests, ErrorInStart)
 {
   batch.Add ("mock2", proc2);
   batch.Add ("mock3", proc3);
 
   coproc.ExpectFailure ();
-  proc2.ThrowInBegin ();
-  proc3.BeginShouldNotBeCalled ();
+  proc2.ThrowInStart ();
+  proc3.StartShouldNotBeCalled ();
 
   EXPECT_THROW (
     {
       CoprocessorBatch::Block batchBlock(batch, FakeBlockData (10),
                                          Coprocessor::Op::FORWARD);
-      batchBlock.Begin ();
+      batchBlock.Start ();
     },
     std::runtime_error
   );
@@ -295,8 +265,8 @@ TEST_F (CoprocessorTests, ByName)
   EXPECT_EQ (&batchBlock.Get<MockCoprocessor::MockBlock> ("2")->parent,
              &proc2);
 
-  batchBlock.Begin ();
-  batchBlock.Commit ();
+  batchBlock.Start ();
+  batchBlock.Finish ();
 }
 
 /* ************************************************************************** */
