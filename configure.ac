@@ -17,6 +17,8 @@ AX_CXX_COMPILE_STDCXX([17], [noext])
 AX_CHECK_COMPILE_FLAG([-Wall], [CXXFLAGS="${CXXFLAGS} -Wall"])
 AX_CHECK_COMPILE_FLAG([-Werror], [CXXFLAGS="${CXXFLAGS} -Werror"])
 AX_CHECK_COMPILE_FLAG([-pedantic], [CXXFLAGS="${CXXFLAGS} -pedantic"])
+AX_CHECK_COMPILE_FLAG([-Wno-array-bounds],
+                      [CXXFLAGS="${CXXFLAGS} -Wno-array-bounds"])
 AX_CHECK_COMPILE_FLAG([-Wno-deprecated],
                       [CXXFLAGS="${CXXFLAGS} -Wno-deprecated"])
 
