@@ -40,6 +40,26 @@ public:
 
 };
 
+class MockCoProc : public Coprocessor
+{
+
+public:
+
+  MockCoProc ()
+  {
+    EXPECT_CALL (*this, BeginTransaction ()).Times (0);
+    EXPECT_CALL (*this, CommitTransaction ()).Times (0);
+    EXPECT_CALL (*this, AbortTransaction ()).Times (0);
+  }
+
+  MOCK_METHOD0 (BeginTransaction, void ());
+  MOCK_METHOD0 (CommitTransaction, void ());
+  MOCK_METHOD0 (AbortTransaction, void ());
+
+  MOCK_METHOD2 (ForBlock, std::unique_ptr<Block> (const Json::Value&, Op));
+
+};
+
 class TransactionManagerTests : public testing::Test
 {
 
@@ -48,6 +68,9 @@ protected:
   TransactionManager tm;
   MockedStorage storage;
 
+  MockCoProc coproc;
+  CoprocessorBatch cobatch;
+
   TransactionManagerTests ()
   {
     /* For ease-of-use in most tests, we already set up the transaction manager
@@ -55,6 +78,8 @@ protected:
        different setting, but they can just customly instantiate another
        TransactionManager.  */
     tm.SetStorage (storage);
+    cobatch.Add ("mock", coproc);
+    tm.SetCoprocessor (cobatch);
   }
 
 };
@@ -65,12 +90,18 @@ TEST_F (TransactionManagerTests, NoBatching)
     InSequence dummy;
 
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
+    EXPECT_CALL (coproc, CommitTransaction ());
     EXPECT_CALL (storage, CommitTransactionMock ());
 
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
     EXPECT_CALL (storage, RollbackTransactionMock ());
+    EXPECT_CALL (coproc, AbortTransaction ());
 
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
+    EXPECT_CALL (coproc, CommitTransaction ());
     EXPECT_CALL (storage, CommitTransactionMock ());
   }
 
@@ -91,6 +122,8 @@ TEST_F (TransactionManagerTests, BasicBatching)
   {
     InSequence dummy;
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
+    EXPECT_CALL (coproc, CommitTransaction ());
     EXPECT_CALL (storage, CommitTransactionMock ());
   }
 
@@ -108,7 +141,9 @@ TEST_F (TransactionManagerTests, Rollback)
   {
     InSequence dummy;
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
     EXPECT_CALL (storage, RollbackTransactionMock ());
+    EXPECT_CALL (coproc, AbortTransaction ());
   }
 
   tm.SetBatchSize (10);
@@ -147,10 +182,14 @@ TEST_F (TransactionManagerTests, SetStorageFlushes)
     InSequence dummy;
 
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
+    EXPECT_CALL (coproc, CommitTransaction ());
     EXPECT_CALL (storage, CommitTransactionMock ());
 
     EXPECT_CALL (secondStorage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
     EXPECT_CALL (secondStorage, RollbackTransactionMock ());
+    EXPECT_CALL (coproc, AbortTransaction ());
   }
 
   tm.SetBatchSize (10);
@@ -199,6 +238,11 @@ TEST_F (TransactionManagerTests, CommitFails)
   {
     InSequence dummy;
     EXPECT_CALL (fallibleStorage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
+    /* The coprocessors are committed before the storage, so they will commit
+       fine and only the storage commit later will fail (and trigger a rollback
+       of the storage transaction).  */
+    EXPECT_CALL (coproc, CommitTransaction ());
     EXPECT_CALL (fallibleStorage, CommitTransactionMock ());
     EXPECT_CALL (fallibleStorage, RollbackTransactionMock ());
   }
@@ -234,7 +278,9 @@ TEST_F (TryAbortTransactionTests, BatchedCommits)
     InSequence dummy;
 
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
     EXPECT_CALL (storage, RollbackTransactionMock ());
+    EXPECT_CALL (coproc, AbortTransaction ());
   }
 
   tm.SetBatchSize (10);
@@ -252,7 +298,9 @@ TEST_F (TryAbortTransactionTests, ActiveTransaction)
     InSequence dummy;
 
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
     EXPECT_CALL (storage, RollbackTransactionMock ());
+    EXPECT_CALL (coproc, AbortTransaction ());
   }
 
   tm.BeginTransaction ();
@@ -268,10 +316,14 @@ TEST_F (SetBatchSizeTests, TriggersFlush)
     InSequence dummy;
 
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
+    EXPECT_CALL (coproc, CommitTransaction ());
     EXPECT_CALL (storage, CommitTransactionMock ());
 
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
     EXPECT_CALL (storage, RollbackTransactionMock ());
+    EXPECT_CALL (coproc, AbortTransaction ());
   }
 
   tm.SetBatchSize (10);
@@ -294,7 +346,9 @@ TEST_F (SetBatchSizeTests, NoFlushWhenTransactionInProgress)
     InSequence dummy;
 
     EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
     EXPECT_CALL (storage, RollbackTransactionMock ());
+    EXPECT_CALL (coproc, AbortTransaction ());
   }
 
   tm.SetBatchSize (10);

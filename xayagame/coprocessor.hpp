@@ -1,4 +1,4 @@
-// Copyright (C) 2023 The Xaya developers
+// Copyright (C) 2023-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -63,6 +63,34 @@ public:
   virtual ~Coprocessor () = default;
 
   /**
+   * Request the coprocessor to start an "atomic transaction" for a batch
+   * of future updates, if it supports this.  All updates in a block are always
+   * wrapped into such a transaction, and possibly updates from many blocks
+   * are in a single transaction while syncing.
+   */
+  virtual void
+  BeginTransaction ()
+  {}
+
+  /**
+   * Requests the coprocessor to commit the currently active atomic
+   * transaction to storage.  This is called after BeginTransaction
+   * when all changes have been done successfully.
+   */
+  virtual void
+  CommitTransaction ()
+  {}
+
+  /**
+   * Requests the coprocessor to abort the currently active atomic
+   * transaction and discard any changes made since BeginTransaction
+   * has been called.
+   */
+  virtual void
+  AbortTransaction ()
+  {}
+
+  /**
    * Constructs a block-processor instance for this coprocessor and the
    * given block data.
    */
@@ -82,6 +110,9 @@ private:
   /** The included coprocessors, not owned by this instance.  */
   std::map<std::string, Coprocessor*> processors;
 
+  /** Whether or not an atomic transaction is currently active.  */
+  bool activeTransaction = false;
+
 public:
 
   class Block;
@@ -96,6 +127,15 @@ public:
    * CoprocessorBatch lives.
    */
   void Add (const std::string& name, Coprocessor& p);
+
+  void BeginTransaction ();
+  void CommitTransaction ();
+
+  /**
+   * Aborts the currently active transaction if there is any.  May be
+   * safely called if there is none, to ensure we clean up if needed.
+   */
+  void AbortTransaction ();
 
 };
 
@@ -131,36 +171,29 @@ private:
 protected:
 
   /**
-   * Signals to the implementation that it should start processing / open
-   * a database transaction if it wants.  This is called after the constructor.
+   * Signals to the implementation that it should start processing, with
+   * any specific things it would need for that (such as any initialisation).
+   * This is called after the constructor.
    *
    * This is separate from the constructor, as that has some technical
    * advantages (such as more well-defined behaviour in case of exceptions
    * or calls to virtual methods).
-   *
-   * In case a Block instance had no call to Begin() yet (for instance because
-   * another coprocessor's Begin() failed), then also no Abort() or Commit()
-   * will be called.
    */
   virtual void
-  Begin ()
+  Start ()
   {}
 
   /**
    * Signals to the implementation that processing the block is finished and
-   * was successful, so if a transaction of some sort is used in the background,
-   * it can be committed.
+   * was successful, so any final processing can take place.
+   *
+   * If some kind of error occurs, then it may happen that no Finish() is
+   * called after Start().  The implementation must be able to handle this.
+   * In this case, AbortTransaction() on the Coprocessor will be called
+   * at some point.
    */
   virtual void
-  Commit ()
-  {}
-
-  /**
-   * Signals to the implementation that processing the block failed, and
-   * a potential transaction should be aborted.
-   */
-  virtual void
-  Abort ()
+  Finish ()
   {}
 
 public:
@@ -208,9 +241,7 @@ public:
 
 /**
  * An instance representing the processing of a block by all coprocessors
- * in a CoprocessorBatch.  This class handles by RAII the transaction
- * of all the Coprocessor::Blocks contained, committing or aborting them
- * respectively.
+ * in a CoprocessorBatch.
  */
 class CoprocessorBatch::Block
 {
@@ -220,19 +251,6 @@ private:
   /** All the individual block processors.  */
   std::map<std::string, std::unique_ptr<Coprocessor::Block>> blocks;
 
-  /**
-   * All the processors (names of them) that have been successfully started
-   * with a call to Begin().
-   */
-  std::set<std::string> started;
-
-  /**
-   * Set to true if the block has been committed explicitly.  If it is not
-   * committed by the time the destructor runs, all blocks will be aborted
-   * instead.
-   */
-  bool committed = false;
-
 public:
 
   /**
@@ -241,17 +259,15 @@ public:
   Block (CoprocessorBatch& batch, const Json::Value& blockData,
          Coprocessor::Op op);
 
-  ~Block ();
-
   /**
-   * Calls Begin() on all of the coprocessors.
+   * Calls Start() on all of the coprocessors.
    */
-  void Begin ();
+  void Start ();
 
   /**
    * Mark the block processing as completed with success.
    */
-  void Commit ();
+  void Finish ();
 
   /**
    * Gets the coprocessor block with the given name or null if none exists.

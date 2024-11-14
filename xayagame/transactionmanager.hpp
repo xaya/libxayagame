@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2024 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,7 @@
 /* This file is an implementation detail of Game and should not be
    used directly by external code!  */
 
+#include "coprocessor.hpp"
 #include "storage.hpp"
 
 namespace xaya
@@ -30,6 +31,9 @@ private:
 
   /** The underlying storage instance.  */
   StorageInterface* storage = nullptr;
+
+  /** Optional CoprocessorBatch that gets also transaction-managed.  */
+  CoprocessorBatch* coproc = nullptr;
 
   /** The desired batch size.  <= 1 means batching is disabled.  */
   unsigned batchSize = 1;
@@ -74,6 +78,12 @@ public:
    * the instance reference.
    */
   void SetStorage (StorageInterface& s);
+
+  /**
+   * Sets the underlying CoprocessorBatch that should also be managed
+   * with transactions.
+   */
+  void SetCoprocessor (CoprocessorBatch& c);
 
   /**
    * Changes the desired batch size.  The value must be at least one.  Setting

@@ -34,16 +34,25 @@ TransactionManager::Flush ()
 
   if (batchedCommits > 0)
     {
-      if (storage != nullptr)
-        try
-          {
+      try
+        {
+          /* It is impossible to fully sync the commit between both
+             the coprocessors and the storage.  The rule we apply instead
+             is that if they go out of sync, then the coprocessors should be
+             "further along" in terms of blocks committed than the storage,
+             if we can manage this.  That is what still works for append-only
+             archival storage as coprocessors.  */
+
+          if (coproc != nullptr)
+            coproc->CommitTransaction ();
+          if (storage != nullptr)
             storage->CommitTransaction ();
-          }
-        catch (...)
-          {
-            commitFailed = true;
-            throw;
-          }
+        }
+      catch (...)
+        {
+          commitFailed = true;
+          throw;
+        }
       batchedCommits = 0;
     }
 }
@@ -53,6 +62,13 @@ TransactionManager::SetStorage (StorageInterface& s)
 {
   Flush ();
   storage = &s;
+}
+
+void
+TransactionManager::SetCoprocessor (CoprocessorBatch& c)
+{
+  Flush ();
+  coproc = &c;
 }
 
 void
@@ -89,6 +105,8 @@ TransactionManager::BeginTransaction ()
     {
       LOG (INFO) << "No pending commits, starting new underlying transaction";
       storage->BeginTransaction ();
+      if (coproc != nullptr)
+        coproc->BeginTransaction ();
     }
 }
 
@@ -124,6 +142,8 @@ TransactionManager::RollbackTransaction ()
       << " batched transactions";
 
   storage->RollbackTransaction ();
+  if (coproc != nullptr)
+    coproc->AbortTransaction ();
   batchedCommits = 0;
 }
 
@@ -136,6 +156,8 @@ TransactionManager::TryAbortTransaction ()
     {
       LOG (INFO) << "Aborting current transaction and batched commits";
       storage->RollbackTransaction ();
+      if (coproc != nullptr)
+        coproc->AbortTransaction ();
     }
 
   inTransaction = false;

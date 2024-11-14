@@ -119,6 +119,7 @@ public:
 Game::Game (const std::string& id)
   : gameId(id), state(State::DISCONNECTED), genesisHeight(-1)
 {
+  transactionManager.SetCoprocessor (coproc);
   targetBlock.SetNull ();
   genesisHash.SetNull ();
   zmq.AddListener (gameId, this);
@@ -178,7 +179,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
 
     CoprocessorBatch::Block coprocBlk(coproc, blockHeader,
                                       Coprocessor::Op::FORWARD);
-    coprocBlk.Begin ();
+    coprocBlk.Start ();
 
     UndoData undo;
     PerformanceTimer timer;
@@ -191,7 +192,7 @@ Game::UpdateStateForAttach (const uint256& parent, const uint256& hash,
     storage->AddUndoData (hash, height, undo);
     storage->SetCurrentGameStateWithHeight (hash, height, newState);
 
-    coprocBlk.Commit ();
+    coprocBlk.Finish ();
     tx.Commit ();
     rules->GameStateUpdated (newState, blockHeader);
   }
@@ -247,7 +248,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
        that is being undone, not the new best block (its parent).  */
     CoprocessorBatch::Block coprocBlk(coproc, blockHeader,
                                       Coprocessor::Op::BACKWARD);
-    coprocBlk.Begin ();
+    coprocBlk.Start ();
 
     PerformanceTimer timer;
     const GameStateData oldState
@@ -265,7 +266,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
     stateBlockHeader["height"] = static_cast<Json::Int64> (height - 1);
     stateBlockHeader["hash"] = parent.ToHex ();
 
-    coprocBlk.Commit ();
+    coprocBlk.Finish ();
     tx.Commit ();
     rules->GameStateUpdated (oldState, stateBlockHeader);
   }
@@ -1212,16 +1213,29 @@ Game::ReinitialiseState ()
   stateBlockHeader["height"] = static_cast<Json::Int64> (genesisHeight);
   stateBlockHeader["hash"] = blockHash.ToHex ();
 
-  /* The coprocessor batch is started before we call GetInitialState, which
-     will be able to access coprocessors from the Context.  */
-  CoprocessorBatch::Block coprocBlk(coproc, stateBlockHeader,
-                                    Coprocessor::Op::INITIALISATION);
-  coprocBlk.Begin ();
-
   std::string genesisHashHex;
   unsigned genesisHeightDummy;
-  const GameStateData genesisData
-      = rules->GetInitialState (genesisHeightDummy, genesisHashHex, &coprocBlk);
+  GameStateData genesisData;
+  try
+    {
+      /* The coprocessor batch is started before we call GetInitialState, which
+         will be able to access coprocessors from the Context.  We manage the
+         Coprocessor transaction manually here, since it is detached
+         from the storage update later (which uses the transactionManager).  */
+      CoprocessorBatch::Block coprocBlk(coproc, stateBlockHeader,
+                                        Coprocessor::Op::INITIALISATION);
+      coproc.BeginTransaction ();
+      coprocBlk.Start ();
+      genesisData = rules->GetInitialState (genesisHeightDummy, genesisHashHex,
+                                            &coprocBlk);
+      coprocBlk.Finish ();
+      coproc.CommitTransaction ();
+    }
+  catch (...)
+    {
+      coproc.AbortTransaction ();
+      throw;
+    }
   CHECK_EQ (genesisHeight, genesisHeightDummy);
 
   if (genesisHashHex.empty ())
@@ -1246,7 +1260,6 @@ Game::ReinitialiseState ()
         storage->SetCurrentGameStateWithHeight (genesisHash, genesisHeight,
                                                 genesisData);
 
-        coprocBlk.Commit ();
         tx.Commit ();
         rules->GameStateUpdated (genesisData, stateBlockHeader);
 

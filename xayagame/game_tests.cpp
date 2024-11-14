@@ -1721,14 +1721,25 @@ public:
 
 private:
 
-  /** The records saved.  */
+  /** The records saved and committed.  */
   std::vector<Record> records;
+
+  /** Set to true when a transaction is active.  */
+  bool transaction = false;
+
+  /** The records "pending" commit.  */
+  std::vector<Record> pending;
 
 public:
 
   class TestBlock;
 
   GameTestCoprocessor () = default;
+
+  ~GameTestCoprocessor ()
+  {
+    CHECK (!transaction) << "Unresolved transaction";
+  }
 
   /**
    * Expects that the records match.
@@ -1737,6 +1748,33 @@ public:
   ExpectRecords (const std::vector<Record>& expected) const
   {
     EXPECT_EQ (records, expected);
+  }
+
+  void
+  BeginTransaction () override
+  {
+    CHECK (!transaction) << "There is already an active transaction";
+    CHECK (pending.empty ()) << "No transaction but pending records";
+    transaction = true;
+  }
+
+  void
+  CommitTransaction () override
+  {
+    CHECK (transaction) << "No transaction to commit";
+    transaction = false;
+
+    for (const auto& r : pending)
+      records.push_back (r);
+    pending.clear ();
+  }
+
+  void
+  AbortTransaction () override
+  {
+    CHECK (transaction) << "No transaction to abort";
+    transaction = false;
+    pending.clear ();
   }
 
   std::unique_ptr<Block> ForBlock (const Json::Value& blockData,
@@ -1763,11 +1801,11 @@ private:
 protected:
 
   void
-  Commit () override
+  Finish () override
   {
     if (!write)
       {
-        LOG (ERROR) << "Commit() called but 'write' on TestBlock is false";
+        LOG (ERROR) << "Finish() called but 'write' on TestBlock is false";
         return;
       }
 
@@ -1776,7 +1814,7 @@ protected:
     else
       EXPECT_EQ (GetBlockHash (), BlockHash (GetBlockHeight ()));
 
-    parent.records.push_back ({GetOperation (), GetBlockHeight ()});
+    parent.pending.push_back ({GetOperation (), GetBlockHeight ()});
   }
 
 public:
@@ -1811,6 +1849,9 @@ class CoprocessorTestGame : public TestGame
 
 private:
 
+  /** If this is set, then fail any game logic calls.  */
+  bool shouldFail = false;
+
   /**
    * Gets the coprocessor from the context, and if it is set,
    * calls WriteRecord on it.
@@ -1827,12 +1868,23 @@ private:
       coproc->WriteRecord ();
   }
 
+  /**
+   * Throws if shouldFail is true.
+   */
+  void
+  MaybeFail ()
+  {
+    if (shouldFail)
+      throw std::runtime_error ("Expected test exception");
+  }
+
 protected:
 
   GameStateData
   GetInitialStateInternal (unsigned& height, std::string& hashHex) override
   {
     WriteRecord ();
+    MaybeFail ();
     return TestGame::GetInitialStateInternal (height, hashHex);
   }
 
@@ -1842,6 +1894,7 @@ protected:
                           UndoData& undoData) override
   {
     WriteRecord ();
+    MaybeFail ();
     return TestGame::ProcessForwardInternal (oldState, blockData, undoData);
   }
 
@@ -1851,7 +1904,21 @@ protected:
                             const UndoData& undoData) override
   {
     WriteRecord ();
+    MaybeFail ();
     return TestGame::ProcessBackwardsInternal (newState, blockData, undoData);
+  }
+
+public:
+
+  /**
+   * Set whether or not we want the game logic calls to throw, so we can
+   * simulate error behaviour.
+   */
+  void
+  SetShouldFail (const bool v)
+  {
+    LOG (INFO) << "Setting should fail for game logic: " << v;
+    shouldFail = v;
   }
 
 };
@@ -1888,6 +1955,19 @@ TEST_F (GameCoprocessorTests, CoprocessorCalled)
     {Coprocessor::Op::FORWARD, 11},
     {Coprocessor::Op::FORWARD, 12},
     {Coprocessor::Op::BACKWARD, 12},
+  });
+}
+
+TEST_F (GameCoprocessorTests, Failure)
+{
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  rules.SetShouldFail (true);
+  EXPECT_THROW (AttachBlock (g, BlockHash (12), Moves ("a2c3")),
+                std::runtime_error);
+
+  coproc.ExpectRecords ({
+    {Coprocessor::Op::INITIALISATION, GAME_GENESIS_HEIGHT},
+    {Coprocessor::Op::FORWARD, 11},
   });
 }
 
