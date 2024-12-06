@@ -91,7 +91,9 @@ ZmqSubscriber::ReceiveMultiparts (std::string& topic, std::string& payload,
   for (unsigned parts = 1; ; ++parts)
     {
       zmq::message_t msg;
+      LOG (INFO) << "Starting socket receive for part " << parts << "...";
       CHECK (socket->recv (msg));
+      LOG (INFO) << "Socket receive finished";
 
       switch (parts)
         {
