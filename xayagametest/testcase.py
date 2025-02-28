@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2022 The Xaya developers
+# Copyright (C) 2018-2025 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -26,8 +26,6 @@ from jsonrpclib import ProtocolError
 
 
 XAYAD_BINARY_DEFAULT = "/usr/local/bin/xayad"
-XCORE_BINARY_DEFAULT = "/usr/local/bin/xayax-core"
-XETH_BINARY_DEFAULT = "/usr/local/bin/xayax-eth"
 DEFAULT_DIR = "/tmp"
 DIR_PREFIX = "xayagametest_"
 
@@ -64,10 +62,6 @@ class XayaGameTest (object):
     parser = argparse.ArgumentParser (description=desc)
     parser.add_argument ("--xayad_binary", default=XAYAD_BINARY_DEFAULT,
                          help="xayad binary to use in the test")
-    parser.add_argument ("--xcore_binary", default=XCORE_BINARY_DEFAULT,
-                         help="xayax-core binary to use")
-    parser.add_argument ("--xeth_binary", default=XETH_BINARY_DEFAULT,
-                         help="xayax-eth binary to use")
     parser.add_argument ("--game_daemon", default=gameBinaryDefault,
                          help="game daemon binary to use in the test")
     parser.add_argument ("--run_game_with", default="",
@@ -297,46 +291,6 @@ class XayaGameTest (object):
     with env.run ():
       self.xayanode = env.node
       self.rpc.xaya = env.node.rpc
-      yield env
-
-  @contextmanager
-  def runXayaXCoreEnvironment (self):
-    """
-    Runs a base-chain environment that uses Xaya X to link back to
-    a real Xaya Core instance.
-    """
-
-    if self.zmqPending != "one socket":
-      raise AssertionError ("Xaya-X-Core only supports one-socket pending")
-
-    from xayax import core
-    env = core.Environment (self.basedir, self.ports,
-                            self.args.xayad_binary, self.args.xcore_binary)
-
-    with env.run ():
-      self.xayanode = env.xayanode
-      self.rpc.xaya = env.xayanode.rpc
-      yield env
-
-  @contextmanager
-  def runXayaXEthEnvironment (self):
-    """
-    Runs a base-chain environment that uses Xaya X to link to an
-    Ethereum-like test chain.
-    """
-
-    if self.zmqPending != "one socket":
-      raise AssertionError ("Xaya-X-Eth only supports one-socket pending")
-
-    from xayax import eth
-    env = eth.Environment (self.basedir, self.ports, self.args.xeth_binary)
-    env.enablePending ()
-
-    with env.run ():
-      self.ethnode = env.evm
-      self.contracts = env.contracts
-      self.rpc.eth = env.createEvmRpc ()
-      self.w3 = env.evm.w3
       yield env
 
   ##############################################################################
