@@ -19,6 +19,9 @@ Makefile.in
 .deps
 .libs
 
+dist
+*.egg-info
+
 *.lo
 *.la
 *.trs

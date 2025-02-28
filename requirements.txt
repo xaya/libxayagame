@@ -1,2 +1,4 @@
+build
 jsonrpclib-pelix
 protobuf
+twine

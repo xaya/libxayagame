@@ -1,0 +1,29 @@
+[project]
+name = "xayagametest"
+version = "1.0.0"
+authors = [
+  { name = "Daniel Kraft", email = "d@domob.eu" },
+]
+description = "Testing framework for Xaya GSPs"
+requires-python = ">=3.9"
+dependencies =  [
+  "jsonrpclib-pelix",
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "License :: OSI Approved :: MIT License",
+]
+readme = "README.md"
+license = {file = "COPYING"}
+
+[project.urls]
+Homepage = "https://xaya.io"
+Repository = "https://github.com/xaya/libxayagame"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["xayagametest"]
