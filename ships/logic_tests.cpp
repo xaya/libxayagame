@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2025 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -197,7 +197,7 @@ TEST_F (StateUpdateTests, MoveNotAnObject)
   const auto txid = xaya::SHA256::Hash ("foo");
 
   std::vector<Json::Value> moves;
-  for (const std::string& mv : {"10", "\"foo\"", "null", "true", "[42]"})
+  for (const std::string mv : {"10", "\"foo\"", "null", "true", "[42]"})
     moves.push_back (Move ("foo", txid, ParseJson (mv)));
 
   UpdateState (10, moves);
@@ -237,9 +237,9 @@ TEST_F (CreateChannelTests, InvalidCreates)
   const auto txid = xaya::SHA256::Hash ("foo");
 
   std::vector<Json::Value> moves;
-  for (const std::string& create : {"42", "null", "{}",
-                                    R"({"addr": 100})",
-                                    R"({"addr": "foo", "x": 5})"})
+  for (const std::string create : {"42", "null", "{}",
+                                   R"({"addr": 100})",
+                                   R"({"addr": "foo", "x": 5})"})
     {
       Json::Value data(Json::objectValue);
       data["c"] = ParseJson (create);
@@ -335,11 +335,11 @@ TEST_F (JoinChannelTests, Malformed)
   const auto txid = xaya::SHA256::Hash ("bar");
 
   std::vector<Json::Value> moves;
-  for (const std::string& create : {"42", "null", "{}",
-                                    R"({"addr": 100, "id": "00"})",
-                                    R"({"addr": "addr", "id": 100})",
-                                    R"({"addr": "addr", "id": "00"})",
-                                    R"({"addr": "foo", "id": "00", "x": 5})"})
+  for (const std::string create : {"42", "null", "{}",
+                                   R"({"addr": 100, "id": "00"})",
+                                   R"({"addr": "addr", "id": 100})",
+                                   R"({"addr": "addr", "id": "00"})",
+                                   R"({"addr": "foo", "id": "00", "x": 5})"})
     {
       Json::Value data(Json::objectValue);
       data["j"] = ParseJson (create);
@@ -459,10 +459,10 @@ TEST_F (AbortChannelTests, Malformed)
   const auto txid = xaya::SHA256::Hash ("bar");
 
   std::vector<Json::Value> moves;
-  for (const std::string& create : {"42", "null", "{}",
-                                    R"({"id": "00"})",
-                                    R"({"id": 100})",
-                                    R"({"id": "00", "x": 5})"})
+  for (const std::string create : {"42", "null", "{}",
+                                   R"({"id": "00"})",
+                                   R"({"id": 100})",
+                                   R"({"id": "00", "x": 5})"})
     {
       Json::Value data(Json::objectValue);
       data["a"] = ParseJson (create);
@@ -645,7 +645,7 @@ TEST_F (DeclareLossTests, UpdateStats)
 TEST_F (DeclareLossTests, Malformed)
 {
   std::vector<Json::Value> moves;
-  for (const std::string& create : {"42", "null", "{}"})
+  for (const std::string create : {"42", "null", "{}"})
     {
       Json::Value data(Json::objectValue);
       data["l"] = ParseJson (create);
@@ -814,11 +814,11 @@ TEST_F (DisputeResolutionTests, ExpiringDisputes)
 TEST_F (DisputeResolutionTests, Malformed)
 {
   std::vector<Json::Value> moves;
-  for (const std::string& str : {"42", "null", "{}",
-                                  R"({"id": "00"})",
-                                  R"({"id": 100, "state": ""})",
-                                  R"({"id": "00", "state": ""})",
-                                  R"({"id": "00", "state": "", "x": 5})"})
+  for (const std::string str : {"42", "null", "{}",
+                                R"({"id": "00"})",
+                                R"({"id": 100, "state": ""})",
+                                R"({"id": "00", "state": ""})",
+                                R"({"id": "00", "state": "", "x": 5})"})
     {
       Json::Value data(Json::objectValue);
       data["r"] = ParseJson (str);
