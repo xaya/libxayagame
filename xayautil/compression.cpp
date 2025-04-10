@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2025 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,7 +18,7 @@ namespace
 constexpr int WINDOW_BITS = 15;
 
 /** Compression level we use.  */
-constexpr int LEVEL = 9;
+constexpr int LEVEL = Z_BEST_COMPRESSION;
 
 /**
  * Utility class wrapping a z_stream instance used for inflating data.

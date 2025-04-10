@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2025 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,6 +14,7 @@
 
 #include <zlib.h>
 
+#include <algorithm>
 #include <memory>
 
 namespace xaya
@@ -82,15 +83,25 @@ protected:
   }
 
   /**
-   * Sets the size of the output buffer, and points the stream to it.
+   * Sets the size of the output buffer, and points the stream to it.  If output
+   * is already written, it will be preserved (so the buffer can be enlarged
+   * as needed).
    */
   void
   SetOutputSize (const size_t sz)
   {
+    const size_t alreadyWritten = stream.total_out;
+    CHECK_GE (sz, alreadyWritten)
+        << "Can't shrink output buffer below what is already written";
+
+    std::unique_ptr<char[]> newOutput(new char[sz]);
+    std::copy (output.get (), output.get () + alreadyWritten, newOutput.get ());
+
     outputSize = sz;
-    output.reset (new char[outputSize]);
-    stream.next_out = reinterpret_cast<Bytef*> (output.get ());
-    stream.avail_out = outputSize;
+    output = std::move (newOutput);
+
+    stream.next_out = reinterpret_cast<Bytef*> (output.get () + alreadyWritten);
+    stream.avail_out = outputSize - alreadyWritten;
   }
 
   /**
@@ -165,12 +176,32 @@ public:
     CHECK_EQ (res, Z_OK)
         << "Get dictionary length error " << res << ": " << GetError ();
 
+    const size_t outputBound = deflateBound (&stream, data.size ());
     SetInput (data);
-    SetOutputSize (deflateBound (&stream, data.size ()));
+    SetOutputSize (outputBound);
 
-    res = deflate (&stream, Z_FINISH);
-    CHECK_EQ (res, Z_STREAM_END)
-        << "Deflate error " << res << ": " << GetError ();
+    /* There is a bug in deflateBound in some versions of zlib, which causes it
+       to return a value too small: https://github.com/madler/zlib/issues/758
+
+       For this reason, we implement a work around.  Even though deflate()
+       in our situation "should" be a one-shot, we handle the case that the
+       output buffer runs out and stock it up until deflate() finishes.  */
+
+    while (true)
+      {
+        res = deflate (&stream, Z_FINISH);
+        if (res == Z_STREAM_END)
+          break;
+
+        CHECK (res == Z_OK || res == Z_BUF_ERROR)
+            << "Deflate error " << res << ": " << GetError ();
+
+        LOG (WARNING)
+            << "Increasing deflate output buffer by " << outputBound
+            << " due to bug in deflateBound";
+        SetOutputSize (stream.total_out + outputBound);
+      }
+
     CHECK_EQ (stream.total_in, dictLength + data.size ());
 
     const std::string output = ExtractOutput ();
