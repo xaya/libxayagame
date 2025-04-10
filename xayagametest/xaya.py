@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2021 The Xaya developers
+# Copyright (C) 2018-2025 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -61,6 +61,7 @@ class Node:
     args.append ("-datadir=%s" % self.datadir)
     args.append ("-noprinttoconsole")
     args.append ("-regtest")
+    args.append ("-deprecatedrpc=create_bdb")
     self.proc = subprocess.Popen (args)
 
     # Start with a temporary RPC connection without wallet, which we
