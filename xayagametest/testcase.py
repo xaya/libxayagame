@@ -10,6 +10,8 @@ from . import game
 from . import premine
 from . import xaya
 
+import tempfile
+import sysconfig
 import argparse
 from contextlib import contextmanager
 import json
@@ -105,6 +107,14 @@ class XayaGameTest (object):
 
     randomSuffix = "%08x" % random.getrandbits (32)
     self.basedir = os.path.join (self.args.dir, DIR_PREFIX + randomSuffix)
+    
+    if sysconfig.get_platform() == "mingw_x86_64":
+      self.args.dir = tempfile.gettempdir()
+      self.basedir = os.path.join (self.args.dir, DIR_PREFIX + randomSuffix)
+      spath = sys.path[0]
+      spath = spath.replace("\\","/")
+      self.args.game_daemon = spath + "/../src/" + self.gameId + "d.exe"     
+    
     shutil.rmtree (self.basedir, ignore_errors=True)
     os.mkdir (self.basedir)
 
@@ -125,6 +135,14 @@ class XayaGameTest (object):
     self.mainLogger = logging.getLogger ("main")
     self.mainLogger.addHandler (logHandler)
     self.mainLogger.addHandler (mainHandler)
+    
+    if sysconfig.get_platform() == "mingw_x86_64":
+      self.mainLogger.info ("msys2 mingw windows build detected, adjustings paths") 
+      self.mainLogger.info ("setting new tempdir as %s" % tempfile.gettempdir()) 
+      self.args.xayad_binary = sysconfig.get_config_var('LIBDIR') + "/daemon/xayad"
+      self.mainLogger.info ("setting new bynary path as %s" % self.args.xayad_binary) 
+      self.mainLogger.info ("setting new game_daemon path as %s" % self.args.game_daemon)    
+    
     self.mainLogger.info ("Base directory for integration test: %s"
                             % self.basedir)
 
