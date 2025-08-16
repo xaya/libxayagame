@@ -797,10 +797,12 @@ SQLiteGame::GetCustomStateData (
     }
 
   /* Otherwise use Game::GetCustomStateData to retrieve the state
-     directly from the Game instance and main database.  */
+     directly from the Game instance and main database.  In this case, we
+     need to keep the game lock during the call.  */
   return game.GetCustomStateData (jsonField,
       [this, &cb] (const GameStateData& state, const uint256& hash,
-                   const unsigned height)
+                   const unsigned height,
+                   std::unique_lock<std::mutex> lock)
         {
           CHECK (database != nullptr) << "SQLiteGame has not been initialised";
           LOG (WARNING) << "Using main database for GetCustomStateData";
