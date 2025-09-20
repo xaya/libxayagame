@@ -248,9 +248,10 @@ template <>
   unsigned
   SQLiteDatabase::Statement::Get<unsigned> (const int ind) const
 {
-  const int val = Get<int> (ind);
+  const auto val = Get<int64_t> (ind);
+  CHECK_LE (val, std::numeric_limits<unsigned>::max ());
   CHECK_GE (val, 0);
-  return val;
+  return static_cast<unsigned> (val);
 }
 
 template <>
