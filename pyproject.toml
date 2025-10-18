@@ -1,6 +1,6 @@
 [project]
 name = "xayagametest"
-version = "1.0.1"
+version = "1.0.3"
 authors = [
   { name = "Daniel Kraft", email = "d@domob.eu" },
 ]

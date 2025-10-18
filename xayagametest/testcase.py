@@ -166,11 +166,15 @@ class XayaGameTest (object):
         self.shutdown ()
         self.stopGameDaemon ()
 
+    # Explicitly remove the logging handlers before cleaning up the directory,
+    # as the log handlers will attempt to write there.
+    rootLogger.removeHandler (logHandler)
+    self.mainLogger.removeHandler (logHandler)
+    self.mainLogger.removeHandler (mainHandler)
+
     if cleanup:
       self.log.info ("Cleaning up base directory in %s" % self.basedir)
       shutil.rmtree (self.basedir, ignore_errors=True)
-
-    logging.shutdown ()
 
     if not success:
       sys.exit ("Test failed")

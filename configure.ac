@@ -1,4 +1,4 @@
-AC_INIT([libxayagame], [1.0.2])
+AC_INIT([libxayagame], [1.0.3])
 AM_INIT_AUTOMAKE([subdir-objects])
 
 AC_CONFIG_MACRO_DIR([m4])
