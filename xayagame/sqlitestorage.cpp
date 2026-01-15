@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -801,12 +801,31 @@ SQLiteStorage::WalCheckpoint ()
      that might contradict the WAL truncation.  */
   db->ClearStatementCache ();
 
-  CHECK_EQ (sqlite3_wal_checkpoint_v2 (db->db, nullptr,
-                                       SQLITE_CHECKPOINT_TRUNCATE,
-                                       nullptr, nullptr),
-            SQLITE_OK)
-      << "Error checkpointing the WAL file";
-  LOG (INFO) << "Checkpointed and truncated WAL file successfully";
+  /* In theory, the code above ensures that we are good to do a checkpoint,
+     with no existing open locks on the database.  However, in some usage
+     scenarios, external processes might read the database file directly,
+     and we have no control over that (but want to support these cases).
+
+     For them, the WAL checkpointing might fail with SQLITE_BUSY.  In this
+     case (and only this case), we fail gracefully, and just don't checkpoint;
+     this is not a critical issue, as we might be able to just checkpoint
+     later, and it won't cause any immediate difference to the database.  */
+  const int res = sqlite3_wal_checkpoint_v2 (db->db, nullptr,
+                                             SQLITE_CHECKPOINT_TRUNCATE,
+                                             nullptr, nullptr);
+  switch (res)
+    {
+    case SQLITE_BUSY:
+      LOG (WARNING)
+          << "Failed to checkpoint WAL file,"
+             " another process might be reading the database";
+      break;
+    case SQLITE_OK:
+      LOG (INFO) << "Checkpointed and truncated WAL file successfully";
+      break;
+    default:
+      LOG (FATAL) << "Error checkpointing the WAL file: " << res;
+    }
 }
 
 void
