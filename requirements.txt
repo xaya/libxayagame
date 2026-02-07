@@ -1,4 +1,6 @@
 build
+eth_account
 jsonrpclib-pelix
 protobuf
+solc
 twine
