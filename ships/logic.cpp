@@ -63,6 +63,11 @@ ShipsLogic::GetInitialStateBlock (unsigned& height, std::string& hashHex) const
       hashHex = "";
       break;
 
+    case xaya::Chain::POLYGON:
+      height = 82'640'000;
+      hashHex = "";
+      break;
+
     default:
       LOG (FATAL) << "Invalid chain value: " << static_cast<int> (chain);
     }
