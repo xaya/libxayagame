@@ -1,16 +1,23 @@
 # XayaWasm.cmake - Reusable CMake module for building Xaya game channel
 # games as WebAssembly using Emscripten.
 #
-# This module provides shared source file lists, include path setup,
-# and Emscripten configuration so that individual game projects do not
-# need to duplicate WASM build infrastructure.
+# This compiles the complete libchannelcore and xayautil libraries
+# (unchanged from native) alongside game-specific logic.  The only
+# dependency that is shimmed is glog, which has complex native-only
+# dependencies (gflags, libunwind).  All other libraries (protobuf,
+# OpenSSL, jsoncpp, eth-utils/secp256k1) are expected to be provided
+# as WASM-compiled static libraries.
 #
 # ============================================================================
 # PREREQUISITES
 # ============================================================================
 #
 #   - Emscripten SDK must be active (use emcmake cmake / emmake make)
-#   - Protobuf must be compiled for WASM (static library)
+#   - The following libraries compiled as static WASM libraries:
+#       * Protobuf (full, not lite - reflection API needed by protoversion.cpp)
+#       * OpenSSL (for SHA-256, base64, cryptographic randomness)
+#       * jsoncpp (for JSON serialization)
+#       * eth-utils + secp256k1 (for Ethereum ECDSA signatures)
 #
 # ============================================================================
 # USAGE
@@ -26,6 +33,9 @@
 #   # Required: set paths before including this module.
 #   set(LIBXAYAGAME_DIR "/path/to/libxayagame")
 #   set(PROTOBUF_WASM_DIR "/path/to/protobuf-wasm")
+#   set(OPENSSL_WASM_DIR "/path/to/openssl-wasm")
+#   set(JSONCPP_WASM_DIR "/path/to/jsoncpp-wasm")
+#   set(ETHUTILS_WASM_DIR "/path/to/eth-utils-wasm")
 #   include(${LIBXAYAGAME_DIR}/wasm/XayaWasm.cmake)
 #
 #   # Define your game-specific sources and generated proto stubs.
@@ -36,7 +46,6 @@
 #     ${MY_SOURCES}
 #     ${XAYA_WASM_GAMECHANNEL_SOURCES}
 #     ${XAYA_WASM_XAYAUTIL_SOURCES}
-#     ${XAYA_WASM_SHIM_SOURCES}
 #     ${MY_PROTO_SOURCES}
 #     my_bindings.cpp
 #   )
@@ -60,42 +69,48 @@ endif()
 if(NOT DEFINED PROTOBUF_WASM_DIR)
   message(FATAL_ERROR "PROTOBUF_WASM_DIR must be set before including XayaWasm.cmake")
 endif()
+if(NOT DEFINED OPENSSL_WASM_DIR)
+  message(FATAL_ERROR "OPENSSL_WASM_DIR must be set before including XayaWasm.cmake")
+endif()
+if(NOT DEFINED JSONCPP_WASM_DIR)
+  message(FATAL_ERROR "JSONCPP_WASM_DIR must be set before including XayaWasm.cmake")
+endif()
+if(NOT DEFINED ETHUTILS_WASM_DIR)
+  message(FATAL_ERROR "ETHUTILS_WASM_DIR must be set before including XayaWasm.cmake")
+endif()
 
-# Path to the WASM shims directory within libxayagame.
+# Path to the glog shim directory within libxayagame.
 set(XAYA_WASM_SHIM_DIR "${LIBXAYAGAME_DIR}/wasm/shims")
 
 # ============================================================================
 # Source file lists
 # ============================================================================
 
-# Game channel framework sources (from libxayagame, used unchanged).
-# These provide the core channel logic: board rules, state proofs,
-# signatures, and move sending.
+# Complete libchannelcore (all sources from gamechannel/Makefile.am).
+# This is the full library compiled unchanged from native.
 set(XAYA_WASM_GAMECHANNEL_SOURCES
   "${LIBXAYAGAME_DIR}/gamechannel/boardrules.cpp"
+  "${LIBXAYAGAME_DIR}/gamechannel/broadcast.cpp"
+  "${LIBXAYAGAME_DIR}/gamechannel/channelmanager.cpp"
+  "${LIBXAYAGAME_DIR}/gamechannel/channelstatejson.cpp"
+  "${LIBXAYAGAME_DIR}/gamechannel/ethsignatures.cpp"
+  "${LIBXAYAGAME_DIR}/gamechannel/movesender.cpp"
   "${LIBXAYAGAME_DIR}/gamechannel/openchannel.cpp"
+  "${LIBXAYAGAME_DIR}/gamechannel/protoversion.cpp"
+  "${LIBXAYAGAME_DIR}/gamechannel/rollingstate.cpp"
   "${LIBXAYAGAME_DIR}/gamechannel/signatures.cpp"
   "${LIBXAYAGAME_DIR}/gamechannel/stateproof.cpp"
-  "${LIBXAYAGAME_DIR}/gamechannel/movesender.cpp"
 )
 
-# Xaya utility sources (from libxayagame, used unchanged).
-# uint256 for hash representation, random for deterministic PRNG.
+# Xaya utility sources (all except compression.cpp which requires zlib
+# and is not used by gamechannel).
 set(XAYA_WASM_XAYAUTIL_SOURCES
-  "${LIBXAYAGAME_DIR}/xayautil/uint256.cpp"
+  "${LIBXAYAGAME_DIR}/xayautil/base64.cpp"
+  "${LIBXAYAGAME_DIR}/xayautil/cryptorand.cpp"
+  "${LIBXAYAGAME_DIR}/xayautil/hash.cpp"
+  "${LIBXAYAGAME_DIR}/xayautil/jsonutils.cpp"
   "${LIBXAYAGAME_DIR}/xayautil/random.cpp"
-)
-
-# WASM shim sources replacing native-only dependencies.
-# These provide standalone implementations of SHA-256, base64,
-# cryptographic randomness, and simplified proto version checks
-# without requiring OpenSSL, glog, or jsoncpp.
-set(XAYA_WASM_SHIM_SOURCES
-  "${XAYA_WASM_SHIM_DIR}/sha256.cpp"
-  "${XAYA_WASM_SHIM_DIR}/hash_shim.cpp"
-  "${XAYA_WASM_SHIM_DIR}/base64_shim.cpp"
-  "${XAYA_WASM_SHIM_DIR}/cryptorand_shim.cpp"
-  "${XAYA_WASM_SHIM_DIR}/protoversion_shim.cpp"
+  "${LIBXAYAGAME_DIR}/xayautil/uint256.cpp"
 )
 
 # ============================================================================
@@ -104,8 +119,8 @@ set(XAYA_WASM_SHIM_SOURCES
 # Configures a CMake target for Xaya WASM channel game compilation.
 #
 # This sets up:
-#   - Include directories with correct shadowing order (shims first)
-#   - Protobuf static library linkage
+#   - Include directories (glog shim first for shadowing, then library headers)
+#   - Static library linkage (protobuf, OpenSSL, jsoncpp, eth-utils)
 #   - Emscripten output settings (WASM, modularized JS, embind)
 #   - Compiler warning flags and optimization level
 #
@@ -116,11 +131,12 @@ set(XAYA_WASM_SHIM_SOURCES
 function(xaya_wasm_setup_target TARGET_NAME EXPORT_NAME)
 
   # Include paths: ORDER MATTERS.
-  # Shims must come first so they shadow the native glog, jsoncpp,
-  # and gamechannel/protoversion.hpp headers.
+  # The glog shim must come first so it shadows the native glog/logging.h
+  # header.  All other dependencies use their real headers from the
+  # WASM-compiled library installations.
   target_include_directories(${TARGET_NAME} BEFORE PRIVATE
-    # 1. Shims FIRST - shadows glog/logging.h, json/json.h, json/writer.h,
-    #    and gamechannel/protoversion.hpp with WASM-compatible versions.
+    # 1. Glog shim FIRST - shadows glog/logging.h with a minimal stub
+    #    (LOG/CHECK/VLOG macros that discard output, abort on fatal).
     "${XAYA_WASM_SHIM_DIR}"
 
     # 2. libxayagame root - for angle-bracket includes like
@@ -131,13 +147,20 @@ function(xaya_wasm_setup_target TARGET_NAME EXPORT_NAME)
     #    gamechannel source files (e.g., #include "boardrules.hpp").
     "${LIBXAYAGAME_DIR}/gamechannel"
 
-    # 4. Protobuf headers from the WASM protobuf installation.
+    # 4. WASM-compiled dependency headers.
     "${PROTOBUF_WASM_DIR}/include"
+    "${OPENSSL_WASM_DIR}/include"
+    "${JSONCPP_WASM_DIR}/include"
+    "${ETHUTILS_WASM_DIR}/include"
   )
 
-  # Link the WASM-compiled protobuf static library.
+  # Link WASM-compiled static libraries.
   target_link_libraries(${TARGET_NAME}
     "${PROTOBUF_WASM_DIR}/lib/libprotobuf.a"
+    "${OPENSSL_WASM_DIR}/lib/libssl.a"
+    "${OPENSSL_WASM_DIR}/lib/libcrypto.a"
+    "${JSONCPP_WASM_DIR}/lib/libjsoncpp.a"
+    "${ETHUTILS_WASM_DIR}/lib/libeth-utils.a"
   )
 
   # Emscripten output settings.
