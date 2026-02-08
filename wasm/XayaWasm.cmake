@@ -182,6 +182,7 @@ function(xaya_wasm_setup_target TARGET_NAME EXPORT_NAME)
       -s ENVIRONMENT=web,worker,node \
       -s NO_EXIT_RUNTIME=1 \
       -s DISABLE_EXCEPTION_CATCHING=0 \
+      -s WASM_BIGINT=0 \
     "
   )
 
