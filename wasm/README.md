@@ -119,6 +119,7 @@ set(PROTOBUF_WASM_DIR "/path/to/protobuf-wasm")
 set(OPENSSL_WASM_DIR "/path/to/openssl-wasm")
 set(JSONCPP_WASM_DIR "/path/to/jsoncpp-wasm")
 set(ETHUTILS_WASM_DIR "/path/to/eth-utils-wasm")
+set(SECP256K1_WASM_DIR "/path/to/secp256k1-wasm")
 include(${LIBXAYAGAME_DIR}/wasm/XayaWasm.cmake)
 
 # Game-specific sources (the complete game core library).

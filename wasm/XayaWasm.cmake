@@ -36,6 +36,7 @@
 #   set(OPENSSL_WASM_DIR "/path/to/openssl-wasm")
 #   set(JSONCPP_WASM_DIR "/path/to/jsoncpp-wasm")
 #   set(ETHUTILS_WASM_DIR "/path/to/eth-utils-wasm")
+#   set(SECP256K1_WASM_DIR "/path/to/secp256k1-wasm")
 #   include(${LIBXAYAGAME_DIR}/wasm/XayaWasm.cmake)
 #
 #   # Define your game-specific sources and generated proto stubs.
@@ -77,6 +78,9 @@ if(NOT DEFINED JSONCPP_WASM_DIR)
 endif()
 if(NOT DEFINED ETHUTILS_WASM_DIR)
   message(FATAL_ERROR "ETHUTILS_WASM_DIR must be set before including XayaWasm.cmake")
+endif()
+if(NOT DEFINED SECP256K1_WASM_DIR)
+  message(FATAL_ERROR "SECP256K1_WASM_DIR must be set before including XayaWasm.cmake")
 endif()
 
 # Path to the glog shim directory within libxayagame.
@@ -152,15 +156,18 @@ function(xaya_wasm_setup_target TARGET_NAME EXPORT_NAME)
     "${OPENSSL_WASM_DIR}/include"
     "${JSONCPP_WASM_DIR}/include"
     "${ETHUTILS_WASM_DIR}/include"
+    "${SECP256K1_WASM_DIR}/include"
   )
 
   # Link WASM-compiled static libraries.
+  # Order matters: eth-utils depends on secp256k1, so secp256k1 comes after.
   target_link_libraries(${TARGET_NAME}
     "${PROTOBUF_WASM_DIR}/lib/libprotobuf.a"
     "${OPENSSL_WASM_DIR}/lib/libssl.a"
     "${OPENSSL_WASM_DIR}/lib/libcrypto.a"
     "${JSONCPP_WASM_DIR}/lib/libjsoncpp.a"
     "${ETHUTILS_WASM_DIR}/lib/libeth-utils.a"
+    "${SECP256K1_WASM_DIR}/lib/libsecp256k1.a"
   )
 
   # Emscripten output settings.
