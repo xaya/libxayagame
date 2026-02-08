@@ -5,8 +5,6 @@
 #ifndef XAYASHIPS_COORD_HPP
 #define XAYASHIPS_COORD_HPP
 
-#include <cmath>
-
 namespace ships
 {
 
@@ -59,7 +57,7 @@ public:
   /** The size of the board (side length).  */
   static constexpr int SIDE = 8;
   /** The size of the board in total number of cells.  */
-  static constexpr int CELLS = std::pow (SIDE, 2);
+  static constexpr int CELLS = SIDE * SIDE;
 
   Coord () = default;
   Coord (const Coord&) = default;
