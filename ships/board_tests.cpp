@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -63,15 +63,16 @@ HashToString (const std::string& preimage)
   return std::string (data, xaya::uint256::NUM_BYTES);
 }
 
-/* Allow printing as text proto for logging.  */
-
-template <typename S>
-  S&
-  operator<< (S& out, const proto::BoardState& pb)
+/**
+ * Helper method to return the string representation of a BoardState, which
+ * we use for logging / testing.
+ */
+std::string
+ToString (const proto::BoardState& pb)
 {
   std::string str;
   CHECK (TextFormat::PrintToString (pb, &str));
-  return out << str;
+  return str;
 }
 
 } // anonymous namespace
@@ -639,7 +640,7 @@ private:
              proto::BoardState& newState)
   {
     auto oldState = ParseState (state);
-    CHECK (oldState != nullptr) << "Old state is invalid: " << state;
+    CHECK (oldState != nullptr) << "Old state is invalid: " << ToString (state);
 
     return ApplyMoveProto (*oldState, mv, newState);
   }
@@ -669,8 +670,8 @@ protected:
     ASSERT_TRUE (ApplyMove (oldState, mv, actual));
 
     EXPECT_TRUE (MessageDifferencer::Equals (actual, expected))
-        << "Actual new game state: " << actual
-        << "\n  does not equal expected new state: " << expected;
+        << "Actual new game state: " << ToString (actual)
+        << "\n  does not equal expected new state: " << ToString (expected);
 
     EXPECT_EQ (ParseState (oldState)->TurnCount () + 1,
                ParseState (expected)->TurnCount ());

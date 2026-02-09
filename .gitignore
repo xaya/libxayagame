@@ -1,38 +1,20 @@
-aclocal.m4
-autom4te.cache
-compile
-config.*
-configure
-depcomp
-stamp-h1
-INSTALL
-install-sh
-libtool
-ltmain.sh
-ar-lib
-m4
-missing
-py-compile
-test-driver
-Makefile
-Makefile.in
-.deps
-.libs
+# CMake build directory.
+build/
 
-dist
+# CMake in-source build artifacts (shouldn't happen, but just in case).
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Python.
+*.pyc
+__pycache__/
+dist/
 *.egg-info
 
-*.lo
-*.la
-*.trs
-*.pyc
-*.pc
-
+# Generated files.
 *.pb.h
 *.pb.cc
 *_pb2.py
-
+*.pc
 */rpc-stubs/*.h
-
-.dirstamp
-tests

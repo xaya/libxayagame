@@ -28,11 +28,11 @@ class ShipsTest (channeltest.TestCase):
   """
 
   def __init__ (self):
-    top_builddir = os.getenv ("top_builddir")
-    if top_builddir is None:
-      top_builddir = "../.."
-    shipsd = os.path.join (top_builddir, "ships", "shipsd")
-    channeld = os.path.join (top_builddir, "ships", "ships-channel")
+    builddir = os.getenv ("BUILD_DIR")
+    if builddir is None:
+      builddir = "../.."
+    shipsd = os.path.join (builddir, "ships", "shipsd")
+    channeld = os.path.join (builddir, "ships", "ships-channel")
     super (ShipsTest, self).__init__ (GAME_ID, shipsd, channeld)
 
   def getChannelIds (self):

@@ -37,10 +37,10 @@ class DetachedBroadcastServer (threading.Thread):
 if __name__ == "__main__":
   server = DetachedBroadcastServer ()
 
-  builddir = os.getenv ("builddir")
+  builddir = os.getenv ("BUILD_DIR")
   if builddir is None:
-    builddir = "."
-  testbin = os.path.join (builddir, "test_rpcbroadcast")
+    builddir = "../.."
+  testbin = os.path.join (builddir, "gamechannel", "test_rpcbroadcast")
 
   url = "--rpc_url=http://localhost:%d" % server.PORT
 
