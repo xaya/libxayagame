@@ -1,4 +1,6 @@
 Dockerfile
+build
+venv
 
 .git
 **/.*.swp
