@@ -14,10 +14,10 @@ class NonFungibleTest (XayaGameTest):
   """
 
   def __init__ (self):
-    top_builddir = os.getenv ("top_builddir")
-    if top_builddir is None:
-      top_builddir = "../.."
-    nfd = os.path.join (top_builddir, "nonfungible", "nonfungibled")
+    builddir = os.getenv ("BUILD_DIR")
+    if builddir is None:
+      builddir = "../.."
+    nfd = os.path.join (builddir, "nonfungible", "nonfungibled")
     super ().__init__ ("nf", nfd)
 
   def setup (self):

@@ -1,16 +1,15 @@
-prefix=@prefix@
-exec_prefix=@exec_prefix@
-libdir=@libdir@
-includedir=@includedir@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 
 Name: gamechannel
-Version: @PACKAGE_VERSION@
+Version: @PROJECT_VERSION@
 
 Description: A library for Xaya games with game channels.
 URL: https://github.com/xaya/libxayagame
 
-Requires: @AX_PACKAGE_REQUIRES@ channelcore libxayagame libxayautil
-Requires.private: @AX_PACKAGE_REQUIRES_PRIVATE@
+Requires: jsoncpp libjsonrpccpp-client libjsonrpccpp-server libglog sqlite3 protobuf channelcore libxayagame libxayautil
 
 Cflags: -I${includedir}
 Libs: -L${libdir} -lgamechannel

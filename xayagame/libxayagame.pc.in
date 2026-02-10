@@ -1,16 +1,17 @@
-prefix=@prefix@
-exec_prefix=@exec_prefix@
-libdir=@libdir@
-includedir=@includedir@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 
-Name: @PACKAGE_NAME@
-Version: @PACKAGE_VERSION@
+Name: libxayagame
+Version: @PROJECT_VERSION@
 
 Description: A library for development of game backends on the Xaya platform.
 URL: https://github.com/xaya/libxayagame
 
-Requires: @AX_PACKAGE_REQUIRES@ libxayautil
-Requires.private: @AX_PACKAGE_REQUIRES_PRIVATE@
+Requires: jsoncpp libjsonrpccpp-client libjsonrpccpp-server libglog sqlite3 lmdb libxayautil
+Requires.private: openssl zlib libcurl libmicrohttpd gflags libzmq
 
 Cflags: -I${includedir}
 Libs: -L${libdir} -lxayagame
+Libs.private: -lstdc++fs

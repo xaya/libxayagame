@@ -75,8 +75,8 @@ RUN ldconfig
 # potential garbage copied over in the build context.
 WORKDIR /usr/src/libxayagame
 COPY . .
-RUN make distclean || true
-RUN ./autogen.sh && ./configure && make -j${N} && make install-strip
+RUN rm -rf build && cmake -B build \
+    && cmake --build build -j${N} && cmake --install build --strip
 
 # For the final image, just copy over all built / installed stuff and
 # add in the non-dev libraries needed (where we installed the dev version
