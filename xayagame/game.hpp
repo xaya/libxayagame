@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -169,14 +169,19 @@ private:
    */
   std::string reqToken;
 
-  /** The JSON-RPC client connection to the Xaya daemon.  */
-  std::unique_ptr<XayaRpcClient> rpcClient;
+  /**
+   * The height-caching storage we use.  Note that the storage is a key
+   * component, and we need to make sure it is defined before (and thus
+   * destructed after) other things such as the ZmqSubscriber, which
+   * may still access the storage in its shutdown routine!
+   */
+  std::unique_ptr<internal::StorageWithCachedHeight> storage;
 
   /** The ZMQ subscriber.  */
   internal::ZmqSubscriber zmq;
 
-  /** The height-caching storage we use.  */
-  std::unique_ptr<internal::StorageWithCachedHeight> storage;
+  /** The JSON-RPC client connection to the Xaya daemon.  */
+  std::unique_ptr<XayaRpcClient> rpcClient;
 
   /** The game rules in use.  */
   GameLogic* rules = nullptr;
