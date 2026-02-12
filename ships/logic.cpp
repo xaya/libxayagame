@@ -73,6 +73,12 @@ ShipsLogic::InitialiseState (xaya::SQLiteDatabase& db)
 {
   /* The game simply starts with an empty database.  No stats for any names
      yet, and also no channels defined.  */
+
+  /* Pre-fill the payment queue with the game creator's address.  This ensures
+     the queue is never empty during early game history, and acts as a
+     small initial fee to the game creators (first N wagered matches pay them).
+     See Daniel Kraft's "PvP with Payment Queue" design doc.  */
+  /* TODO: Update this address to the actual game creator's wallet.  */
 }
 
 /* ************************************************************************** */
@@ -429,7 +435,7 @@ ShipsLogic::HandleDeclareLoss (xaya::SQLiteDatabase& db,
       << name << " declared loss on channel " << id.ToHex ()
       << ", " << meta.participants (winner).name () << " is the winner";
 
-  UpdateStats (db, meta, winner);
+  UpdateStats (db, meta, winner, id);
   h.reset ();
   DeleteChannelById (db, tbl, id);
 }
@@ -526,7 +532,7 @@ ShipsLogic::HandleDisputeResolution (xaya::SQLiteDatabase& db,
           << " has winner " << meta.participants (pb.winner ()).name ()
           << ", closing now";
 
-      UpdateStats (db, meta, pb.winner ());
+      UpdateStats (db, meta, pb.winner (), id);
       h.reset ();
       DeleteChannelById (db, tbl, id);
     }
@@ -567,7 +573,7 @@ ShipsLogic::ProcessExpiredDisputes (xaya::SQLiteDatabase& db,
           << meta.participants (winner).name () << " won, "
           << meta.participants (loser).name () << " lost";
 
-      UpdateStats (db, meta, winner);
+      UpdateStats (db, meta, winner, id);
       h.reset ();
       DeleteChannelById (db, tbl, id);
     }
@@ -576,7 +582,7 @@ ShipsLogic::ProcessExpiredDisputes (xaya::SQLiteDatabase& db,
 void
 ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
                          const xaya::proto::ChannelMetadata& meta,
-                         const int winner)
+                         const int winner, const xaya::uint256& channelId)
 {
   CHECK_GE (winner, 0);
   CHECK_LE (winner, 1);
@@ -609,6 +615,72 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
   )");
   stmt.Bind (2, loserName);
   stmt.Execute ();
+
+  /* If this was a wagered channel, add the winner to the payment queue
+     (unless they are already in invalid_payments, meaning they were
+     pre-paid by a prior mismatched payment).  */
+  auto stmtWager = db.PrepareRo (R"(
+    SELECT `match_id` FROM `wagered_channels` WHERE `channel_id` = ?1
+  )");
+  stmtWager.Bind (1, channelId);
+  if (stmtWager.Step ())
+    {
+      const std::string matchId = stmtWager.Get<std::string> (0);
+      const std::string& winnerAddr = meta.participants (winner).address ();
+
+      /* Check if winner is in invalid_payments (already pre-paid).  */
+      auto stmtChk = db.PrepareRo (R"(
+        SELECT 1 FROM `invalid_payments`
+          WHERE `address` = ?1 AND `match_id` = ?2
+      )");
+      stmtChk.Bind (1, winnerAddr);
+      stmtChk.Bind (2, matchId);
+
+      if (!stmtChk.Step ())
+        {
+          /* Not pre-paid: add winner to back of payment queue.  */
+          auto stmtMax = db.PrepareRo (R"(
+            SELECT COALESCE(MAX(`position`), -1) FROM `payment_queue`
+          )");
+          stmtMax.Step ();
+          const int nextPos = stmtMax.Get<int> (0) + 1;
+
+          auto stmtIns = db.Prepare (R"(
+            INSERT INTO `payment_queue` (`position`, `address`, `match_id`)
+              VALUES (?1, ?2, ?3)
+          )");
+          stmtIns.Bind (1, nextPos);
+          stmtIns.Bind (2, winnerAddr);
+          stmtIns.Bind (3, matchId);
+          stmtIns.Execute ();
+
+          LOG (INFO)
+              << "Added " << winnerName << " (addr " << winnerAddr
+              << ") to payment queue at position " << nextPos;
+        }
+      else
+        {
+          /* Winner was pre-paid: remove from invalid_payments.  */
+          auto stmtDel = db.Prepare (R"(
+            DELETE FROM `invalid_payments`
+              WHERE `address` = ?1 AND `match_id` = ?2
+          )");
+          stmtDel.Bind (1, winnerAddr);
+          stmtDel.Bind (2, matchId);
+          stmtDel.Execute ();
+
+          LOG (INFO)
+              << winnerName << " was already pre-paid, removed from "
+              << "invalid_payments";
+        }
+
+      /* Clean up wagered_channels entry.  */
+      auto stmtClean = db.Prepare (R"(
+        DELETE FROM `wagered_channels` WHERE `channel_id` = ?1
+      )");
+      stmtClean.Bind (1, channelId);
+      stmtClean.Execute ();
+    }
 }
 
 namespace
@@ -646,6 +718,188 @@ TimeOutChannels (xaya::SQLiteDatabase& db, const unsigned height)
 
   LOG_IF (INFO, num > 0)
       << "Timed out " << num << " channels at height " << height;
+}
+
+/**
+ * Tries to process a "start wagered match" move.  This is an admin-only
+ * move sent by the SkillWager smart contract.  It creates a channel with
+ * both participants immediately.
+ *
+ * Move format:
+ *   {"s": {"p0": "name0", "p1": "name1", "a0": "addr0", "a1": "addr1",
+ *          "pay": {"addr": "payAddr", "mid": "matchIdHex"}}}
+ */
+void
+HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
+                  const unsigned height, const std::string& name,
+                  const xaya::uint256& id)
+{
+  if (!obj.isObject ())
+    return;
+
+  /* Only the admin name can start wagered matches.  */
+  if (name != WAGER_ADMIN_NAME)
+    {
+      LOG (WARNING)
+          << "Non-admin " << name << " tried to start wagered match";
+      return;
+    }
+
+  /* Parse player names and signing addresses.  */
+  const auto& p0Val = obj["p0"];
+  const auto& p1Val = obj["p1"];
+  const auto& a0Val = obj["a0"];
+  const auto& a1Val = obj["a1"];
+  const auto& payVal = obj["pay"];
+
+  if (!p0Val.isString () || !p1Val.isString ()
+      || !a0Val.isString () || !a1Val.isString ()
+      || !payVal.isObject ())
+    {
+      LOG (WARNING) << "Invalid start match move: " << obj;
+      return;
+    }
+
+  const std::string p0 = p0Val.asString ();
+  const std::string p1 = p1Val.asString ();
+  const std::string a0 = a0Val.asString ();
+  const std::string a1 = a1Val.asString ();
+
+  const auto& payAddrVal = payVal["addr"];
+  const auto& payMidVal = payVal["mid"];
+  if (!payAddrVal.isString () || !payMidVal.isString ())
+    {
+      LOG (WARNING) << "Invalid payment info in start match: " << payVal;
+      return;
+    }
+
+  const std::string payAddr = payAddrVal.asString ();
+  const std::string payMid = payMidVal.asString ();
+
+  if (p0 == p1)
+    {
+      LOG (WARNING) << "Cannot start match with same player: " << p0;
+      return;
+    }
+
+  LOG (INFO)
+      << "Processing wagered match start: " << p0 << " vs " << p1
+      << ", payment to " << payAddr << " for match " << payMid;
+
+  /* Validate payment against the payment queue.  */
+  bool matchesFront = false;
+
+  /* Check queue front.  */
+  auto stmtFront = db.PrepareRo (R"(
+    SELECT `position`, `address`, `match_id`
+      FROM `payment_queue`
+      ORDER BY `position` ASC
+      LIMIT 1
+  )");
+  if (stmtFront.Step ())
+    {
+      const int frontPos = stmtFront.Get<int> (0);
+      const std::string frontAddr = stmtFront.Get<std::string> (1);
+      const std::string frontMatchId = stmtFront.Get<std::string> (2);
+
+      if (payAddr == frontAddr && payMid == frontMatchId)
+        {
+          /* Perfect match with queue front — pop and create channel.  */
+          auto stmtDel = db.Prepare (R"(
+            DELETE FROM `payment_queue` WHERE `position` = ?1
+          )");
+          stmtDel.Bind (1, frontPos);
+          stmtDel.Execute ();
+          matchesFront = true;
+
+          LOG (INFO)
+              << "Payment matches queue front (pos " << frontPos
+              << "), creating wagered channel";
+        }
+    }
+
+  if (!matchesFront)
+    {
+      /* Check if payment matches any other queue entry.  */
+      auto stmtAny = db.PrepareRo (R"(
+        SELECT `position` FROM `payment_queue`
+          WHERE `address` = ?1 AND `match_id` = ?2
+      )");
+      stmtAny.Bind (1, payAddr);
+      stmtAny.Bind (2, payMid);
+
+      if (stmtAny.Step ())
+        {
+          const int pos = stmtAny.Get<int> (0);
+          auto stmtDel = db.Prepare (R"(
+            DELETE FROM `payment_queue` WHERE `position` = ?1
+          )");
+          stmtDel.Bind (1, pos);
+          stmtDel.Execute ();
+
+          LOG (INFO)
+              << "Payment matches non-front queue entry (pos " << pos
+              << "), removed but no channel created";
+          return;
+        }
+
+      /* No match at all — add to invalid_payments.  */
+      auto stmtInv = db.Prepare (R"(
+        INSERT OR IGNORE INTO `invalid_payments` (`address`, `match_id`)
+          VALUES (?1, ?2)
+      )");
+      stmtInv.Bind (1, payAddr);
+      stmtInv.Bind (2, payMid);
+      stmtInv.Execute ();
+
+      LOG (WARNING)
+          << "Payment does not match any queue entry: "
+          << payAddr << " / " << payMid;
+      return;
+    }
+
+  /* Create the channel with both participants.  */
+  xaya::ChannelsTable tbl(db);
+
+  auto h = tbl.GetById (id);
+  CHECK (h == nullptr) << "Already have channel with ID " << id.ToHex ();
+
+  h = tbl.CreateNew (id);
+  xaya::proto::ChannelMetadata meta;
+  auto* part0 = meta.add_participants ();
+  part0->set_name (p0);
+  part0->set_address (a0);
+  auto* part1 = meta.add_participants ();
+  part1->set_name (p1);
+  part1->set_address (a1);
+
+  xaya::BoardState initState;
+  CHECK (InitialBoardState ().SerializeToString (&initState));
+  h->Reinitialise (meta, initState);
+
+  /* Record in channel_extradata with participants=2 (ready to play).  */
+  auto stmtExtra = db.Prepare (R"(
+    INSERT INTO `channel_extradata`
+      (`id`, `createdheight`, `participants`)
+      VALUES (?1, ?2, 2)
+  )");
+  stmtExtra.Bind (1, h->GetId ());
+  stmtExtra.Bind (2, height);
+  stmtExtra.Execute ();
+
+  /* Record in wagered_channels so UpdateStats knows to add
+     the winner to the payment queue.  */
+  auto stmtWager = db.Prepare (R"(
+    INSERT INTO `wagered_channels` (`channel_id`, `match_id`)
+      VALUES (?1, ?2)
+  )");
+  stmtWager.Bind (1, h->GetId ());
+  stmtWager.Bind (2, payMid);
+  stmtWager.Execute ();
+
+  LOG (INFO)
+      << "Created wagered channel " << id.ToHex ()
+      << " for " << p0 << " vs " << p1;
 }
 
 /**
@@ -721,6 +975,7 @@ ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
       HandleDeclareLoss (db, data["l"], name);
       HandleDisputeResolution (db, data["d"], height, true);
       HandleDisputeResolution (db, data["r"], height, false);
+      HandleStartMatch (db, data["s"], height, name, id);
     }
 
   ProcessExpiredDisputes (db, height);

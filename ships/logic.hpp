@@ -32,6 +32,13 @@ constexpr unsigned DISPUTE_BLOCKS = 10;
 constexpr unsigned CHANNEL_TIMEOUT_BLOCKS = 12;
 
 /**
+ * The Xaya p/ name that the SkillWager smart contract owns and uses to
+ * send admin "start wagered match" moves.  Only moves from this name
+ * are accepted for the "s" (start) move type.
+ */
+constexpr const char* WAGER_ADMIN_NAME = "xswager";
+
+/**
  * The main game logic for the on-chain part of Xayaships.  This takes care of
  * the public game state (win/loss statistics for names), management of open
  * channels and dispute processing.
@@ -64,13 +71,15 @@ private:
 
   /**
    * Updates the game stats in the global database state for a channel that
-   * is being closed with the given winner.  Note that this does not close
-   * (remove) the channel itself from the database; it just updates the
-   * game_stats table.
+   * is being closed with the given winner.  If the channel was a wagered
+   * match, the winner is also added to the payment queue (unless they
+   * appear in invalid_payments).  Note that this does not close (remove)
+   * the channel itself from the database; it just updates game_stats
+   * and the payment queue.
    */
   static void UpdateStats (xaya::SQLiteDatabase& db,
                            const xaya::proto::ChannelMetadata& meta,
-                           int winner);
+                           int winner, const xaya::uint256& channelId);
 
   friend class InMemoryLogicFixture;
   friend class StateUpdateTests;

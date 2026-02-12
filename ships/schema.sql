@@ -35,3 +35,31 @@ CREATE TABLE IF NOT EXISTS `channel_extradata` (
 -- have not yet gotten a second participant.
 CREATE INDEX IF NOT EXISTS `channel_extradata_by_height_and_participants`
   ON `channel_extradata` (`createdheight`, `participants`);
+
+-- ============================================================================
+-- Payment queue wagering (SkillWager)
+-- ============================================================================
+
+-- FIFO queue of winners awaiting 2B payout.  When new wagered matches start,
+-- the front of this queue is paid.  Winners are added to the back.
+CREATE TABLE IF NOT EXISTS `payment_queue` (
+  `position` INTEGER PRIMARY KEY,
+  `address` TEXT NOT NULL,
+  `match_id` TEXT NOT NULL
+);
+
+-- Payments that did not match the queue front.  Tracked so that if the
+-- recipient later wins a match, they are not added to the queue again
+-- (since they were already paid).
+CREATE TABLE IF NOT EXISTS `invalid_payments` (
+  `address` TEXT NOT NULL,
+  `match_id` TEXT NOT NULL,
+  PRIMARY KEY (`address`, `match_id`)
+);
+
+-- Tracks which channels were created as wagered matches (vs free play).
+-- Used by UpdateStats to decide whether to add winners to the payment queue.
+CREATE TABLE IF NOT EXISTS `wagered_channels` (
+  `channel_id` BLOB PRIMARY KEY,
+  `match_id` TEXT NOT NULL
+);
