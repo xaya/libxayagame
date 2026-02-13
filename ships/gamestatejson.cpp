@@ -37,11 +37,54 @@ GameStateJson::GetFullJson () const
   xaya::ChannelsTable tbl(const_cast<xaya::SQLiteDatabase&> (db));
   res["channels"] = xaya::AllChannelsGameStateJson (tbl, rules);
 
-  /* Export the payment queue (first 20 entries) for the frontend.
-     The SkillWager contract needs this to construct queue snapshots.  */
+  /* Export per-tier payment queues for the frontend.
+     The SkillWager v3 contract needs this to construct queue snapshots.  */
+  Json::Value queues(Json::objectValue);
+
+  /* Get distinct tiers present in the queue.  */
+  auto stmtTiers = db.PrepareRo (R"(
+    SELECT DISTINCT `tier` FROM `payment_queue` ORDER BY `tier` ASC
+  )");
+  while (stmtTiers.Step ())
+    {
+      const int64_t tier = stmtTiers.Get<int64_t> (0);
+      const std::string tierKey = std::to_string (tier);
+
+      Json::Value entries(Json::arrayValue);
+      auto stmtQ = db.PrepareRo (R"(
+        SELECT `position`, `address`, `match_id`
+          FROM `payment_queue`
+          WHERE `tier` = ?1
+          ORDER BY `position` ASC
+          LIMIT 20
+      )");
+      stmtQ.Bind (1, tier);
+      while (stmtQ.Step ())
+        {
+          Json::Value entry(Json::objectValue);
+          entry["position"] = static_cast<Json::Int> (stmtQ.Get<int> (0));
+          entry["address"] = stmtQ.Get<std::string> (1);
+          entry["matchId"] = stmtQ.Get<std::string> (2);
+          entries.append (entry);
+        }
+
+      auto stmtLen = db.PrepareRo (R"(
+        SELECT COUNT(*) FROM `payment_queue` WHERE `tier` = ?1
+      )");
+      stmtLen.Bind (1, tier);
+      stmtLen.Step ();
+
+      Json::Value tierObj(Json::objectValue);
+      tierObj["entries"] = entries;
+      tierObj["length"] = static_cast<Json::Int> (stmtLen.Get<int> (0));
+      queues[tierKey] = tierObj;
+    }
+  res["paymentqueues"] = queues;
+
+  /* Also keep flat paymentqueue for backward compatibility.  */
   Json::Value queue(Json::arrayValue);
   auto stmtQ = db.PrepareRo (R"(
-    SELECT `position`, `address`, `match_id`
+    SELECT `position`, `address`, `match_id`, `tier`
       FROM `payment_queue`
       ORDER BY `position` ASC
       LIMIT 20
@@ -52,6 +95,7 @@ GameStateJson::GetFullJson () const
       entry["position"] = static_cast<Json::Int> (stmtQ.Get<int> (0));
       entry["address"] = stmtQ.Get<std::string> (1);
       entry["matchId"] = stmtQ.Get<std::string> (2);
+      entry["tier"] = static_cast<Json::Int64> (stmtQ.Get<int64_t> (3));
       queue.append (entry);
     }
   res["paymentqueue"] = queue;

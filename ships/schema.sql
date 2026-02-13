@@ -45,7 +45,8 @@ CREATE INDEX IF NOT EXISTS `channel_extradata_by_height_and_participants`
 CREATE TABLE IF NOT EXISTS `payment_queue` (
   `position` INTEGER PRIMARY KEY,
   `address` TEXT NOT NULL,
-  `match_id` TEXT NOT NULL
+  `match_id` TEXT NOT NULL,
+  `tier` INTEGER NOT NULL DEFAULT 10
 );
 
 -- Payments that did not match the queue front.  Tracked so that if the
@@ -63,5 +64,6 @@ CREATE TABLE IF NOT EXISTS `wagered_channels` (
   `channel_id` BLOB PRIMARY KEY,
   `match_id` TEXT NOT NULL,
   `creator_wallet` TEXT NOT NULL,
-  `joiner_wallet` TEXT NOT NULL
+  `joiner_wallet` TEXT NOT NULL,
+  `tier` INTEGER NOT NULL DEFAULT 10
 );

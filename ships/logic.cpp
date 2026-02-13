@@ -104,16 +104,25 @@ ShipsLogic::InitialiseState (xaya::SQLiteDatabase& db)
      bootstrap fee to the game deployer.
      See Daniel Kraft's "PvP with Payment Queue" design doc.  */
   const std::string deployerAddr = "0x867fd8a1d2bb41e9841c27ef910c4dda0d508905";
-  {
-    auto stmt = db.Prepare (R"(
-      INSERT INTO `payment_queue` (`position`, `address`, `match_id`)
-        VALUES (0, ?1, ?2)
-    )");
-    stmt.Bind (1, deployerAddr);
-    stmt.Bind (2, std::string (64, '0'));  /* 64-char zero hex, matching bytes32 */
-    stmt.Execute ();
-  }
-  LOG (INFO) << "Pre-filled payment queue with 1 entry for " << deployerAddr;
+  /* Pre-fill the payment queue with one entry per funded tier.
+     Tier values are in WCHI raw units (8 decimals).  */
+  const int64_t fundedTiers[] = {1000000000, 10000000000};  /* 10 WCHI, 100 WCHI */
+  int pos = 0;
+  for (const auto t : fundedTiers)
+    {
+      auto stmt = db.Prepare (R"(
+        INSERT INTO `payment_queue`
+          (`position`, `address`, `match_id`, `tier`)
+          VALUES (?1, ?2, ?3, ?4)
+      )");
+      stmt.Bind (1, pos++);
+      stmt.Bind (2, deployerAddr);
+      stmt.Bind (3, std::string (64, '0'));  /* 64-char zero hex, matching bytes32 */
+      stmt.Bind (4, t);
+      stmt.Execute ();
+    }
+  LOG (INFO) << "Pre-filled payment queue with " << pos
+             << " entries for " << deployerAddr;
 }
 
 /* ************************************************************************** */
@@ -655,7 +664,7 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
      (unless they are already in invalid_payments, meaning they were
      pre-paid by a prior mismatched payment).  */
   auto stmtWager = db.PrepareRo (R"(
-    SELECT `match_id`, `creator_wallet`, `joiner_wallet`
+    SELECT `match_id`, `creator_wallet`, `joiner_wallet`, `tier`
       FROM `wagered_channels` WHERE `channel_id` = ?1
   )");
   stmtWager.Bind (1, channelId);
@@ -664,6 +673,7 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
       const std::string matchId = stmtWager.Get<std::string> (0);
       const std::string creatorWallet = stmtWager.Get<std::string> (1);
       const std::string joinerWallet = stmtWager.Get<std::string> (2);
+      const int64_t tier = stmtWager.Get<int64_t> (3);
       const std::string winnerAddr
           = (winner == 0) ? creatorWallet : joinerWallet;
 
@@ -692,8 +702,9 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
           const int nextPos = stmtMax.Get<int> (0) + 1;
 
           auto stmtIns = db.Prepare (R"(
-            INSERT INTO `payment_queue` (`position`, `address`, `match_id`)
-              VALUES (?1, ?2, ?3)
+            INSERT INTO `payment_queue`
+              (`position`, `address`, `match_id`, `tier`)
+              VALUES (?1, ?2, ?3, ?4)
           )");
           stmtIns.Bind (1, nextPos);
           stmtIns.Bind (2, winnerAddr);
@@ -702,11 +713,13 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
              paymentMade[matchId][addr] collisions in the contract after
              one payout cycle.  */
           stmtIns.Bind (3, channelId.ToHex ());
+          stmtIns.Bind (4, tier);
           stmtIns.Execute ();
 
           LOG (INFO)
               << "Added " << winnerName << " (addr " << winnerAddr
-              << ") to payment queue at position " << nextPos;
+              << ") to payment queue at position " << nextPos
+              << " (tier " << tier << ")";
         }
       else
         {
@@ -775,18 +788,22 @@ TimeOutChannels (xaya::SQLiteDatabase& db, const unsigned height)
  * move sent by the SkillWager smart contract.  It creates a channel with
  * both participants immediately.
  *
- * Move format:
+ * Move format (v3):
  *   {"s": {"p0": "name0", "p1": "name1",
  *          "a0": "signingAddr0", "a1": "signingAddr1",
  *          "w0": "walletAddr0", "w1": "walletAddr1",
- *          "pay": {"addr": "payAddr", "mid": "matchIdHex"}}}
+ *          "bet": "betAmount",
+ *          "pay": {"addr": "payAddr", "mid": "matchIdHex",
+ *                  "amt": "winnerPayout"}}}
  *
  * Fields:
  *   p0/p1  - Xaya p/ names of the two players
  *   a0/a1  - Session signing addresses (for game channel off-chain moves)
  *   w0/w1  - Polygon wallet addresses (for WCHI payouts via payment queue)
+ *   bet    - Bet amount per player (WCHI raw units, 8 decimals)
  *   pay    - Payment info: which queue entry is being paid out
- *            addr = recipient address, mid = queue entry's matchId
+ *            addr = recipient address, mid = queue entry's matchId,
+ *            amt = actual winner payout after fee/burn deductions
  */
 void
 HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
@@ -804,13 +821,14 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
       return;
     }
 
-  /* Parse player names and signing addresses.  */
+  /* Parse player names, signing addresses, and bet tier.  */
   const auto& p0Val = obj["p0"];
   const auto& p1Val = obj["p1"];
   const auto& a0Val = obj["a0"];
   const auto& a1Val = obj["a1"];
   const auto& w0Val = obj["w0"];
   const auto& w1Val = obj["w1"];
+  const auto& betVal = obj["bet"];
   const auto& payVal = obj["pay"];
 
   if (!p0Val.isString () || !p1Val.isString ()
@@ -828,6 +846,21 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
   const std::string a1 = a1Val.asString ();
   const std::string w0 = NormalizeAddress (w0Val.asString ());
   const std::string w1 = NormalizeAddress (w1Val.asString ());
+
+  /* Parse bet tier (v3).  Falls back to 10 for v2-style moves without bet.  */
+  int64_t tier = 10;
+  if (betVal.isString ())
+    {
+      try
+        {
+          tier = std::stoll (betVal.asString ());
+        }
+      catch (...)
+        {
+          LOG (WARNING) << "Invalid bet value: " << betVal;
+          return;
+        }
+    }
 
   const auto& payAddrVal = payVal["addr"];
   const auto& payMidVal = payVal["mid"];
@@ -848,19 +881,22 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
 
   LOG (INFO)
       << "Processing wagered match start: " << p0 << " vs " << p1
+      << ", tier=" << tier
       << ", payment to " << payAddr << " for match " << payMid
       << ", wallets: w0=" << w0 << " w1=" << w1;
 
-  /* Validate payment against the payment queue.  */
+  /* Validate payment against the payment queue for this tier.  */
   bool matchesFront = false;
 
-  /* Check queue front.  */
+  /* Check queue front for this tier.  */
   auto stmtFront = db.PrepareRo (R"(
     SELECT `position`, `address`, `match_id`
       FROM `payment_queue`
+      WHERE `tier` = ?1
       ORDER BY `position` ASC
       LIMIT 1
   )");
+  stmtFront.Bind (1, tier);
   if (stmtFront.Step ())
     {
       const int frontPos = stmtFront.Get<int> (0);
@@ -879,19 +915,20 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
 
           LOG (INFO)
               << "Payment matches queue front (pos " << frontPos
-              << "), creating wagered channel";
+              << ", tier " << tier << "), creating wagered channel";
         }
     }
 
   if (!matchesFront)
     {
-      /* Check if payment matches any other queue entry.  */
+      /* Check if payment matches any other queue entry for this tier.  */
       auto stmtAny = db.PrepareRo (R"(
         SELECT `position` FROM `payment_queue`
-          WHERE LOWER(`address`) = ?1 AND `match_id` = ?2
+          WHERE `tier` = ?1 AND LOWER(`address`) = ?2 AND `match_id` = ?3
       )");
-      stmtAny.Bind (1, payAddr);
-      stmtAny.Bind (2, payMid);
+      stmtAny.Bind (1, tier);
+      stmtAny.Bind (2, payAddr);
+      stmtAny.Bind (3, payMid);
 
       if (stmtAny.Step ())
         {
@@ -953,16 +990,17 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
   stmtExtra.Execute ();
 
   /* Record in wagered_channels so UpdateStats knows to add
-     the winner to the payment queue.  */
+     the winner to the payment queue with the correct tier.  */
   auto stmtWager = db.Prepare (R"(
     INSERT INTO `wagered_channels`
-      (`channel_id`, `match_id`, `creator_wallet`, `joiner_wallet`)
-      VALUES (?1, ?2, ?3, ?4)
+      (`channel_id`, `match_id`, `creator_wallet`, `joiner_wallet`, `tier`)
+      VALUES (?1, ?2, ?3, ?4, ?5)
   )");
   stmtWager.Bind (1, h->GetId ());
   stmtWager.Bind (2, payMid);
   stmtWager.Bind (3, w0);
   stmtWager.Bind (4, w1);
+  stmtWager.Bind (5, tier);
   stmtWager.Execute ();
 
   LOG (INFO)
