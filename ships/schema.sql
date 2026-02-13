@@ -61,5 +61,7 @@ CREATE TABLE IF NOT EXISTS `invalid_payments` (
 -- Used by UpdateStats to decide whether to add winners to the payment queue.
 CREATE TABLE IF NOT EXISTS `wagered_channels` (
   `channel_id` BLOB PRIMARY KEY,
-  `match_id` TEXT NOT NULL
+  `match_id` TEXT NOT NULL,
+  `creator_wallet` TEXT NOT NULL,
+  `joiner_wallet` TEXT NOT NULL
 );

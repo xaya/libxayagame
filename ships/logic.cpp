@@ -661,13 +661,17 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
      (unless they are already in invalid_payments, meaning they were
      pre-paid by a prior mismatched payment).  */
   auto stmtWager = db.PrepareRo (R"(
-    SELECT `match_id` FROM `wagered_channels` WHERE `channel_id` = ?1
+    SELECT `match_id`, `creator_wallet`, `joiner_wallet`
+      FROM `wagered_channels` WHERE `channel_id` = ?1
   )");
   stmtWager.Bind (1, channelId);
   if (stmtWager.Step ())
     {
       const std::string matchId = stmtWager.Get<std::string> (0);
-      const std::string winnerAddr = NormalizeAddress (meta.participants (winner).address ());
+      const std::string winnerAddr
+          = (winner == 0)
+              ? stmtWager.Get<std::string> (1)
+              : stmtWager.Get<std::string> (2);
 
       /* Check if winner is in invalid_payments (already pre-paid).  */
       auto stmtChk = db.PrepareRo (R"(
@@ -791,10 +795,13 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
   const auto& p1Val = obj["p1"];
   const auto& a0Val = obj["a0"];
   const auto& a1Val = obj["a1"];
+  const auto& w0Val = obj["w0"];
+  const auto& w1Val = obj["w1"];
   const auto& payVal = obj["pay"];
 
   if (!p0Val.isString () || !p1Val.isString ()
       || !a0Val.isString () || !a1Val.isString ()
+      || !w0Val.isString () || !w1Val.isString ()
       || !payVal.isObject ())
     {
       LOG (WARNING) << "Invalid start match move: " << obj;
@@ -805,6 +812,8 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
   const std::string p1 = p1Val.asString ();
   const std::string a0 = a0Val.asString ();
   const std::string a1 = a1Val.asString ();
+  const std::string w0 = NormalizeAddress (w0Val.asString ());
+  const std::string w1 = NormalizeAddress (w1Val.asString ());
 
   const auto& payAddrVal = payVal["addr"];
   const auto& payMidVal = payVal["mid"];
@@ -931,11 +940,14 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
   /* Record in wagered_channels so UpdateStats knows to add
      the winner to the payment queue.  */
   auto stmtWager = db.Prepare (R"(
-    INSERT INTO `wagered_channels` (`channel_id`, `match_id`)
-      VALUES (?1, ?2)
+    INSERT INTO `wagered_channels`
+      (`channel_id`, `match_id`, `creator_wallet`, `joiner_wallet`)
+      VALUES (?1, ?2, ?3, ?4)
   )");
   stmtWager.Bind (1, h->GetId ());
   stmtWager.Bind (2, payMid);
+  stmtWager.Bind (3, w0);
+  stmtWager.Bind (4, w1);
   stmtWager.Execute ();
 
   LOG (INFO)

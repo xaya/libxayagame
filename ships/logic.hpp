@@ -36,7 +36,7 @@ constexpr unsigned CHANNEL_TIMEOUT_BLOCKS = 12;
  * send admin "start wagered match" moves.  Only moves from this name
  * are accepted for the "s" (start) move type.
  */
-constexpr const char* WAGER_ADMIN_NAME = "xswager";
+constexpr const char* WAGER_ADMIN_NAME = "xswager2";
 
 /**
  * The main game logic for the on-chain part of Xayaships.  This takes care of
