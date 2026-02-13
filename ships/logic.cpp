@@ -697,7 +697,11 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
           )");
           stmtIns.Bind (1, nextPos);
           stmtIns.Bind (2, winnerAddr);
-          stmtIns.Bind (3, matchId);
+          /* Use channelId hex as the new queue entry's matchId.
+             This ensures uniqueness — reusing the old matchId would cause
+             paymentMade[matchId][addr] collisions in the contract after
+             one payout cycle.  */
+          stmtIns.Bind (3, channelId.ToHex ());
           stmtIns.Execute ();
 
           LOG (INFO)
@@ -772,8 +776,17 @@ TimeOutChannels (xaya::SQLiteDatabase& db, const unsigned height)
  * both participants immediately.
  *
  * Move format:
- *   {"s": {"p0": "name0", "p1": "name1", "a0": "addr0", "a1": "addr1",
+ *   {"s": {"p0": "name0", "p1": "name1",
+ *          "a0": "signingAddr0", "a1": "signingAddr1",
+ *          "w0": "walletAddr0", "w1": "walletAddr1",
  *          "pay": {"addr": "payAddr", "mid": "matchIdHex"}}}
+ *
+ * Fields:
+ *   p0/p1  - Xaya p/ names of the two players
+ *   a0/a1  - Session signing addresses (for game channel off-chain moves)
+ *   w0/w1  - Polygon wallet addresses (for WCHI payouts via payment queue)
+ *   pay    - Payment info: which queue entry is being paid out
+ *            addr = recipient address, mid = queue entry's matchId
  */
 void
 HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
