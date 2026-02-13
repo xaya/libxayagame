@@ -99,27 +99,21 @@ ShipsLogic::InitialiseState (xaya::SQLiteDatabase& db)
   /* The game simply starts with an empty database.  No stats for any names
      yet, and also no channels defined.  */
 
-  /* Pre-fill the payment queue with the game creator's address.  This ensures
-     the queue is never empty during early game history, and acts as a
-     small initial fee to the game creators (first N wagered matches pay them).
+  /* Pre-fill the payment queue with the deployer's address.  This ensures
+     the queue is never empty for the first wagered match, and acts as a
+     bootstrap fee to the game deployer.
      See Daniel Kraft's "PvP with Payment Queue" design doc.  */
-  const std::string creatorAddr = "0x867fd8a1d2bb41e9841c27ef910c4dda0d508905";
-  for (int i = 0; i < 5; ++i)
-    {
-      auto stmt = db.Prepare (R"(
-        INSERT INTO `payment_queue` (`position`, `address`, `match_id`)
-          VALUES (?1, ?2, ?3)
-      )");
-      stmt.Bind (1, i);
-      stmt.Bind (2, creatorAddr);
-      /* Match IDs are 64-char hex strings, matching the contract's bytes32 format.  */
-      char matchId[65];
-      std::snprintf (matchId, sizeof (matchId),
-                     "%064d", i);
-      stmt.Bind (3, std::string (matchId));
-      stmt.Execute ();
-    }
-  LOG (INFO) << "Pre-filled payment queue with 5 entries for " << creatorAddr;
+  const std::string deployerAddr = "0x867fd8a1d2bb41e9841c27ef910c4dda0d508905";
+  {
+    auto stmt = db.Prepare (R"(
+      INSERT INTO `payment_queue` (`position`, `address`, `match_id`)
+        VALUES (0, ?1, ?2)
+    )");
+    stmt.Bind (1, deployerAddr);
+    stmt.Bind (2, std::string (64, '0'));  /* 64-char zero hex, matching bytes32 */
+    stmt.Execute ();
+  }
+  LOG (INFO) << "Pre-filled payment queue with 1 entry for " << deployerAddr;
 }
 
 /* ************************************************************************** */
@@ -668,10 +662,17 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
   if (stmtWager.Step ())
     {
       const std::string matchId = stmtWager.Get<std::string> (0);
+      const std::string creatorWallet = stmtWager.Get<std::string> (1);
+      const std::string joinerWallet = stmtWager.Get<std::string> (2);
       const std::string winnerAddr
-          = (winner == 0)
-              ? stmtWager.Get<std::string> (1)
-              : stmtWager.Get<std::string> (2);
+          = (winner == 0) ? creatorWallet : joinerWallet;
+
+      LOG (INFO)
+          << "Wagered channel " << channelId.ToHex ()
+          << " closing: winner=" << winnerName << " (idx " << winner
+          << "), wallet=" << winnerAddr
+          << ", creator_wallet=" << creatorWallet
+          << ", joiner_wallet=" << joinerWallet;
 
       /* Check if winner is in invalid_payments (already pre-paid).  */
       auto stmtChk = db.PrepareRo (R"(
@@ -834,7 +835,8 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
 
   LOG (INFO)
       << "Processing wagered match start: " << p0 << " vs " << p1
-      << ", payment to " << payAddr << " for match " << payMid;
+      << ", payment to " << payAddr << " for match " << payMid
+      << ", wallets: w0=" << w0 << " w1=" << w1;
 
   /* Validate payment against the payment queue.  */
   bool matchesFront = false;
@@ -952,7 +954,8 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
 
   LOG (INFO)
       << "Created wagered channel " << id.ToHex ()
-      << " for " << p0 << " vs " << p1;
+      << " for " << p0 << " (wallet " << w0 << ")"
+      << " vs " << p1 << " (wallet " << w1 << ")";
 }
 
 /**
