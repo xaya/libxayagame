@@ -14,8 +14,27 @@
 
 #include <glog/logging.h>
 
+#include <algorithm>
+
 namespace ships
 {
+
+namespace
+{
+
+/**
+ * Normalize an Ethereum address string to lowercase for consistent comparison.
+ * The EIP-55 checksum uses mixed case, but addresses are case-insensitive.
+ */
+std::string
+NormalizeAddress (const std::string& addr)
+{
+  std::string result = addr;
+  std::transform (result.begin (), result.end (), result.begin (), ::tolower);
+  return result;
+}
+
+} // anonymous namespace
 
 /* ************************************************************************** */
 
@@ -56,6 +75,12 @@ ShipsLogic::GetInitialStateBlock (unsigned& height, std::string& hashHex) const
           = "6f750b36d22f1dc3d0a6e483af45301022646dfc3b3ba2187865f5a7d6d83ab1";
       break;
 
+    case xaya::Chain::POLYGON:
+      height = 82'867'000;
+      /* Polygon via XayaX — accept any block hash at this height.  */
+      hashHex = "";
+      break;
+
     case xaya::Chain::GANACHE:
       height = 0;
       /* Ganache does not have a fixed genesis block.  So leave the block
@@ -78,7 +103,23 @@ ShipsLogic::InitialiseState (xaya::SQLiteDatabase& db)
      the queue is never empty during early game history, and acts as a
      small initial fee to the game creators (first N wagered matches pay them).
      See Daniel Kraft's "PvP with Payment Queue" design doc.  */
-  /* TODO: Update this address to the actual game creator's wallet.  */
+  const std::string creatorAddr = "0x867fd8a1d2bb41e9841c27ef910c4dda0d508905";
+  for (int i = 0; i < 5; ++i)
+    {
+      auto stmt = db.Prepare (R"(
+        INSERT INTO `payment_queue` (`position`, `address`, `match_id`)
+          VALUES (?1, ?2, ?3)
+      )");
+      stmt.Bind (1, i);
+      stmt.Bind (2, creatorAddr);
+      /* Match IDs are 64-char hex strings, matching the contract's bytes32 format.  */
+      char matchId[65];
+      std::snprintf (matchId, sizeof (matchId),
+                     "%064d", i);
+      stmt.Bind (3, std::string (matchId));
+      stmt.Execute ();
+    }
+  LOG (INFO) << "Pre-filled payment queue with 5 entries for " << creatorAddr;
 }
 
 /* ************************************************************************** */
@@ -626,12 +667,12 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
   if (stmtWager.Step ())
     {
       const std::string matchId = stmtWager.Get<std::string> (0);
-      const std::string& winnerAddr = meta.participants (winner).address ();
+      const std::string winnerAddr = NormalizeAddress (meta.participants (winner).address ());
 
       /* Check if winner is in invalid_payments (already pre-paid).  */
       auto stmtChk = db.PrepareRo (R"(
         SELECT 1 FROM `invalid_payments`
-          WHERE `address` = ?1 AND `match_id` = ?2
+          WHERE LOWER(`address`) = ?1 AND `match_id` = ?2
       )");
       stmtChk.Bind (1, winnerAddr);
       stmtChk.Bind (2, matchId);
@@ -663,7 +704,7 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
           /* Winner was pre-paid: remove from invalid_payments.  */
           auto stmtDel = db.Prepare (R"(
             DELETE FROM `invalid_payments`
-              WHERE `address` = ?1 AND `match_id` = ?2
+              WHERE LOWER(`address`) = ?1 AND `match_id` = ?2
           )");
           stmtDel.Bind (1, winnerAddr);
           stmtDel.Bind (2, matchId);
@@ -773,7 +814,7 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
       return;
     }
 
-  const std::string payAddr = payAddrVal.asString ();
+  const std::string payAddr = NormalizeAddress (payAddrVal.asString ());
   const std::string payMid = payMidVal.asString ();
 
   if (p0 == p1)
@@ -799,7 +840,7 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
   if (stmtFront.Step ())
     {
       const int frontPos = stmtFront.Get<int> (0);
-      const std::string frontAddr = stmtFront.Get<std::string> (1);
+      const std::string frontAddr = NormalizeAddress (stmtFront.Get<std::string> (1));
       const std::string frontMatchId = stmtFront.Get<std::string> (2);
 
       if (payAddr == frontAddr && payMid == frontMatchId)
@@ -823,7 +864,7 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
       /* Check if payment matches any other queue entry.  */
       auto stmtAny = db.PrepareRo (R"(
         SELECT `position` FROM `payment_queue`
-          WHERE `address` = ?1 AND `match_id` = ?2
+          WHERE LOWER(`address`) = ?1 AND `match_id` = ?2
       )");
       stmtAny.Bind (1, payAddr);
       stmtAny.Bind (2, payMid);
