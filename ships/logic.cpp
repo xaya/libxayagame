@@ -660,9 +660,8 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
   stmt.Bind (2, loserName);
   stmt.Execute ();
 
-  /* If this was a wagered channel, add the winner to the payment queue
-     (unless they are already in invalid_payments, meaning they were
-     pre-paid by a prior mismatched payment).  */
+  /* If this was a contract-managed channel (wagered or free), update the
+     payment queue (paid tiers only) and clean up wagered_channels.  */
   auto stmtWager = db.PrepareRo (R"(
     SELECT `match_id`, `creator_wallet`, `joiner_wallet`, `tier`
       FROM `wagered_channels` WHERE `channel_id` = ?1
@@ -678,63 +677,69 @@ ShipsLogic::UpdateStats (xaya::SQLiteDatabase& db,
           = (winner == 0) ? creatorWallet : joinerWallet;
 
       LOG (INFO)
-          << "Wagered channel " << channelId.ToHex ()
+          << "Contract channel " << channelId.ToHex ()
           << " closing: winner=" << winnerName << " (idx " << winner
           << "), wallet=" << winnerAddr
           << ", creator_wallet=" << creatorWallet
-          << ", joiner_wallet=" << joinerWallet;
+          << ", joiner_wallet=" << joinerWallet
+          << ", tier=" << tier;
 
-      /* Check if winner is in invalid_payments (already pre-paid).  */
-      auto stmtChk = db.PrepareRo (R"(
-        SELECT 1 FROM `invalid_payments`
-          WHERE LOWER(`address`) = ?1 AND `match_id` = ?2
-      )");
-      stmtChk.Bind (1, winnerAddr);
-      stmtChk.Bind (2, matchId);
-
-      if (!stmtChk.Step ())
+      /* Only process payment queue for paid tiers (tier > 0).
+         Free tier (tier=0) has no queue, just stats.  */
+      if (tier > 0)
         {
-          /* Not pre-paid: add winner to back of payment queue.  */
-          auto stmtMax = db.PrepareRo (R"(
-            SELECT COALESCE(MAX(`position`), -1) FROM `payment_queue`
-          )");
-          stmtMax.Step ();
-          const int nextPos = stmtMax.Get<int> (0) + 1;
-
-          auto stmtIns = db.Prepare (R"(
-            INSERT INTO `payment_queue`
-              (`position`, `address`, `match_id`, `tier`)
-              VALUES (?1, ?2, ?3, ?4)
-          )");
-          stmtIns.Bind (1, nextPos);
-          stmtIns.Bind (2, winnerAddr);
-          /* Use channelId hex as the new queue entry's matchId.
-             This ensures uniqueness — reusing the old matchId would cause
-             paymentMade[matchId][addr] collisions in the contract after
-             one payout cycle.  */
-          stmtIns.Bind (3, channelId.ToHex ());
-          stmtIns.Bind (4, tier);
-          stmtIns.Execute ();
-
-          LOG (INFO)
-              << "Added " << winnerName << " (addr " << winnerAddr
-              << ") to payment queue at position " << nextPos
-              << " (tier " << tier << ")";
-        }
-      else
-        {
-          /* Winner was pre-paid: remove from invalid_payments.  */
-          auto stmtDel = db.Prepare (R"(
-            DELETE FROM `invalid_payments`
+          /* Check if winner is in invalid_payments (already pre-paid).  */
+          auto stmtChk = db.PrepareRo (R"(
+            SELECT 1 FROM `invalid_payments`
               WHERE LOWER(`address`) = ?1 AND `match_id` = ?2
           )");
-          stmtDel.Bind (1, winnerAddr);
-          stmtDel.Bind (2, matchId);
-          stmtDel.Execute ();
+          stmtChk.Bind (1, winnerAddr);
+          stmtChk.Bind (2, matchId);
 
-          LOG (INFO)
-              << winnerName << " was already pre-paid, removed from "
-              << "invalid_payments";
+          if (!stmtChk.Step ())
+            {
+              /* Not pre-paid: add winner to back of payment queue.  */
+              auto stmtMax = db.PrepareRo (R"(
+                SELECT COALESCE(MAX(`position`), -1) FROM `payment_queue`
+              )");
+              stmtMax.Step ();
+              const int nextPos = stmtMax.Get<int> (0) + 1;
+
+              auto stmtIns = db.Prepare (R"(
+                INSERT INTO `payment_queue`
+                  (`position`, `address`, `match_id`, `tier`)
+                  VALUES (?1, ?2, ?3, ?4)
+              )");
+              stmtIns.Bind (1, nextPos);
+              stmtIns.Bind (2, winnerAddr);
+              /* Use channelId hex as the new queue entry's matchId.
+                 This ensures uniqueness — reusing the old matchId would cause
+                 paymentMade[matchId][addr] collisions in the contract after
+                 one payout cycle.  */
+              stmtIns.Bind (3, channelId.ToHex ());
+              stmtIns.Bind (4, tier);
+              stmtIns.Execute ();
+
+              LOG (INFO)
+                  << "Added " << winnerName << " (addr " << winnerAddr
+                  << ") to payment queue at position " << nextPos
+                  << " (tier " << tier << ")";
+            }
+          else
+            {
+              /* Winner was pre-paid: remove from invalid_payments.  */
+              auto stmtDel = db.Prepare (R"(
+                DELETE FROM `invalid_payments`
+                  WHERE LOWER(`address`) = ?1 AND `match_id` = ?2
+              )");
+              stmtDel.Bind (1, winnerAddr);
+              stmtDel.Bind (2, matchId);
+              stmtDel.Execute ();
+
+              LOG (INFO)
+                  << winnerName << " was already pre-paid, removed from "
+                  << "invalid_payments";
+            }
         }
 
       /* Clean up wagered_channels entry.  */
@@ -833,8 +838,7 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
 
   if (!p0Val.isString () || !p1Val.isString ()
       || !a0Val.isString () || !a1Val.isString ()
-      || !w0Val.isString () || !w1Val.isString ()
-      || !payVal.isObject ())
+      || !w0Val.isString () || !w1Val.isString ())
     {
       LOG (WARNING) << "Invalid start match move: " << obj;
       return;
@@ -847,7 +851,7 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
   const std::string w0 = NormalizeAddress (w0Val.asString ());
   const std::string w1 = NormalizeAddress (w1Val.asString ());
 
-  /* Parse bet tier (v3).  Falls back to 10 for v2-style moves without bet.  */
+  /* Parse bet tier.  Falls back to 10 for v2-style moves without bet.  */
   int64_t tier = 10;
   if (betVal.isString ())
     {
@@ -862,16 +866,30 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
         }
     }
 
-  const auto& payAddrVal = payVal["addr"];
-  const auto& payMidVal = payVal["mid"];
-  if (!payAddrVal.isString () || !payMidVal.isString ())
-    {
-      LOG (WARNING) << "Invalid payment info in start match: " << payVal;
-      return;
-    }
+  /* For paid tiers, require and validate the pay field.
+     For free tier (tier=0), pay field is optional/absent.  */
+  std::string payAddr;
+  std::string payMid;
 
-  const std::string payAddr = NormalizeAddress (payAddrVal.asString ());
-  const std::string payMid = payMidVal.asString ();
+  if (tier > 0)
+    {
+      if (!payVal.isObject ())
+        {
+          LOG (WARNING) << "Paid tier requires pay field: " << obj;
+          return;
+        }
+
+      const auto& payAddrVal = payVal["addr"];
+      const auto& payMidVal = payVal["mid"];
+      if (!payAddrVal.isString () || !payMidVal.isString ())
+        {
+          LOG (WARNING) << "Invalid payment info in start match: " << payVal;
+          return;
+        }
+
+      payAddr = NormalizeAddress (payAddrVal.asString ());
+      payMid = payMidVal.asString ();
+    }
 
   if (p0 == p1)
     {
@@ -880,85 +898,90 @@ HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
     }
 
   LOG (INFO)
-      << "Processing wagered match start: " << p0 << " vs " << p1
+      << "Processing match start: " << p0 << " vs " << p1
       << ", tier=" << tier
-      << ", payment to " << payAddr << " for match " << payMid
+      << (tier > 0 ? (", payment to " + payAddr + " for match " + payMid) : "")
       << ", wallets: w0=" << w0 << " w1=" << w1;
 
-  /* Validate payment against the payment queue for this tier.  */
-  bool matchesFront = false;
-
-  /* Check queue front for this tier.  */
-  auto stmtFront = db.PrepareRo (R"(
-    SELECT `position`, `address`, `match_id`
-      FROM `payment_queue`
-      WHERE `tier` = ?1
-      ORDER BY `position` ASC
-      LIMIT 1
-  )");
-  stmtFront.Bind (1, tier);
-  if (stmtFront.Step ())
+  /* For paid tiers, validate payment against the payment queue.
+     For free tier (tier=0), skip queue validation entirely.  */
+  if (tier > 0)
     {
-      const int frontPos = stmtFront.Get<int> (0);
-      const std::string frontAddr = NormalizeAddress (stmtFront.Get<std::string> (1));
-      const std::string frontMatchId = stmtFront.Get<std::string> (2);
+      bool matchesFront = false;
 
-      if (payAddr == frontAddr && payMid == frontMatchId)
-        {
-          /* Perfect match with queue front — pop and create channel.  */
-          auto stmtDel = db.Prepare (R"(
-            DELETE FROM `payment_queue` WHERE `position` = ?1
-          )");
-          stmtDel.Bind (1, frontPos);
-          stmtDel.Execute ();
-          matchesFront = true;
-
-          LOG (INFO)
-              << "Payment matches queue front (pos " << frontPos
-              << ", tier " << tier << "), creating wagered channel";
-        }
-    }
-
-  if (!matchesFront)
-    {
-      /* Check if payment matches any other queue entry for this tier.  */
-      auto stmtAny = db.PrepareRo (R"(
-        SELECT `position` FROM `payment_queue`
-          WHERE `tier` = ?1 AND LOWER(`address`) = ?2 AND `match_id` = ?3
+      /* Check queue front for this tier.  */
+      auto stmtFront = db.PrepareRo (R"(
+        SELECT `position`, `address`, `match_id`
+          FROM `payment_queue`
+          WHERE `tier` = ?1
+          ORDER BY `position` ASC
+          LIMIT 1
       )");
-      stmtAny.Bind (1, tier);
-      stmtAny.Bind (2, payAddr);
-      stmtAny.Bind (3, payMid);
-
-      if (stmtAny.Step ())
+      stmtFront.Bind (1, tier);
+      if (stmtFront.Step ())
         {
-          const int pos = stmtAny.Get<int> (0);
-          auto stmtDel = db.Prepare (R"(
-            DELETE FROM `payment_queue` WHERE `position` = ?1
-          )");
-          stmtDel.Bind (1, pos);
-          stmtDel.Execute ();
+          const int frontPos = stmtFront.Get<int> (0);
+          const std::string frontAddr = NormalizeAddress (stmtFront.Get<std::string> (1));
+          const std::string frontMatchId = stmtFront.Get<std::string> (2);
 
-          LOG (INFO)
-              << "Payment matches non-front queue entry (pos " << pos
-              << "), removed but no channel created";
+          if (payAddr == frontAddr && payMid == frontMatchId)
+            {
+              /* Perfect match with queue front — pop and create channel.  */
+              auto stmtDel = db.Prepare (R"(
+                DELETE FROM `payment_queue` WHERE `position` = ?1
+              )");
+              stmtDel.Bind (1, frontPos);
+              stmtDel.Execute ();
+              matchesFront = true;
+
+              LOG (INFO)
+                  << "Payment matches queue front (pos " << frontPos
+                  << ", tier " << tier << "), creating wagered channel";
+            }
+        }
+
+      if (!matchesFront)
+        {
+          /* Check if payment matches any other queue entry for this tier.  */
+          auto stmtAny = db.PrepareRo (R"(
+            SELECT `position` FROM `payment_queue`
+              WHERE `tier` = ?1 AND LOWER(`address`) = ?2 AND `match_id` = ?3
+          )");
+          stmtAny.Bind (1, tier);
+          stmtAny.Bind (2, payAddr);
+          stmtAny.Bind (3, payMid);
+
+          if (stmtAny.Step ())
+            {
+              const int pos = stmtAny.Get<int> (0);
+              auto stmtDel = db.Prepare (R"(
+                DELETE FROM `payment_queue` WHERE `position` = ?1
+              )");
+              stmtDel.Bind (1, pos);
+              stmtDel.Execute ();
+
+              LOG (INFO)
+                  << "Payment matches non-front queue entry (pos " << pos
+                  << "), removed but no channel created";
+              return;
+            }
+
+          /* No match at all — add to invalid_payments.  */
+          auto stmtInv = db.Prepare (R"(
+            INSERT OR IGNORE INTO `invalid_payments` (`address`, `match_id`)
+              VALUES (?1, ?2)
+          )");
+          stmtInv.Bind (1, payAddr);
+          stmtInv.Bind (2, payMid);
+          stmtInv.Execute ();
+
+          LOG (WARNING)
+              << "Payment does not match any queue entry: "
+              << payAddr << " / " << payMid;
           return;
         }
-
-      /* No match at all — add to invalid_payments.  */
-      auto stmtInv = db.Prepare (R"(
-        INSERT OR IGNORE INTO `invalid_payments` (`address`, `match_id`)
-          VALUES (?1, ?2)
-      )");
-      stmtInv.Bind (1, payAddr);
-      stmtInv.Bind (2, payMid);
-      stmtInv.Execute ();
-
-      LOG (WARNING)
-          << "Payment does not match any queue entry: "
-          << payAddr << " / " << payMid;
-      return;
     }
+  /* Free tier (tier=0): fall through directly to channel creation.  */
 
   /* Create the channel with both participants.  */
   xaya::ChannelsTable tbl(db);
