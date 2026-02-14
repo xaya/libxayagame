@@ -789,42 +789,24 @@ TimeOutChannels (xaya::SQLiteDatabase& db, const unsigned height)
 }
 
 /**
- * Tries to process a "start wagered match" move.  This is an admin-only
- * move sent by the SkillWager smart contract.  It creates a channel with
- * both participants immediately.
+ * Tries to process a "start wagered match" admin command.  This is sent by
+ * the SkillWager contract via the g/GAMEID name using admin command format:
+ *   {"cmd": {"s": {"p0": "name0", "p1": "name1",
+ *                   "a0": "signingAddr0", "a1": "signingAddr1",
+ *                   "w0": "walletAddr0", "w1": "walletAddr1",
+ *                   "bet": "betAmount",
+ *                   "pay": {"addr": "payAddr", "mid": "matchIdHex",
+ *                           "amt": "winnerPayout"}}}}
  *
- * Move format (v3):
- *   {"s": {"p0": "name0", "p1": "name1",
- *          "a0": "signingAddr0", "a1": "signingAddr1",
- *          "w0": "walletAddr0", "w1": "walletAddr1",
- *          "bet": "betAmount",
- *          "pay": {"addr": "payAddr", "mid": "matchIdHex",
- *                  "amt": "winnerPayout"}}}
- *
- * Fields:
- *   p0/p1  - Xaya p/ names of the two players
- *   a0/a1  - Session signing addresses (for game channel off-chain moves)
- *   w0/w1  - Polygon wallet addresses (for WCHI payouts via payment queue)
- *   bet    - Bet amount per player (WCHI raw units, 8 decimals)
- *   pay    - Payment info: which queue entry is being paid out
- *            addr = recipient address, mid = queue entry's matchId,
- *            amt = actual winner payout after fee/burn deductions
+ * Admin commands are delivered in blockData["admin"] and are inherently
+ * trusted (only g/GAMEID can send them), so no name check is needed.
  */
 void
 HandleStartMatch (xaya::SQLiteDatabase& db, const Json::Value& obj,
-                  const unsigned height, const std::string& name,
-                  const xaya::uint256& id)
+                  const unsigned height, const xaya::uint256& id)
 {
   if (!obj.isObject ())
     return;
-
-  /* Only the admin name can start wagered matches.  */
-  if (name != WAGER_ADMIN_NAME)
-    {
-      LOG (WARNING)
-          << "Non-admin " << name << " tried to start wagered match";
-      return;
-    }
 
   /* Parse player names, signing addresses, and bet tier.  */
   const auto& p0Val = obj["p0"];
@@ -1105,7 +1087,51 @@ ShipsLogic::UpdateState (xaya::SQLiteDatabase& db, const Json::Value& blockData)
       HandleDeclareLoss (db, data["l"], name);
       HandleDisputeResolution (db, data["d"], height, true);
       HandleDisputeResolution (db, data["r"], height, false);
-      HandleStartMatch (db, data["s"], height, name, id);
+    }
+
+  /* Process admin commands from g/GAMEID name.  These arrive in
+     blockData["admin"] with format [{"cmd": {...}, "txid": "...", ...}].
+     The "s" (start match) command is handled here.  */
+  const auto& adminCmds = blockData["admin"];
+  if (adminCmds.isArray () && !adminCmds.empty ())
+    {
+      LOG (INFO) << "Processing " << adminCmds.size () << " admin commands...";
+      for (const auto& entry : adminCmds)
+        {
+          if (!entry.isObject ())
+            continue;
+
+          const auto& cmd = entry["cmd"];
+          if (!cmd.isObject ())
+            {
+              LOG (WARNING) << "Admin entry has no cmd object: " << entry;
+              continue;
+            }
+
+          /* Extract channel ID from mvid/txid.  */
+          xaya::uint256 adminId;
+          const Json::Value* idField = nullptr;
+          if (entry.isMember ("mvid"))
+            idField = &entry["mvid"];
+          else if (entry.isMember ("txid"))
+            idField = &entry["txid"];
+
+          if (idField != nullptr && idField->isString ())
+            {
+              if (!adminId.FromHex (idField->asString ()))
+                {
+                  LOG (WARNING) << "Invalid admin mvid/txid hex";
+                  continue;
+                }
+            }
+          else
+            {
+              LOG (WARNING) << "Admin command has no mvid/txid, skipping";
+              continue;
+            }
+
+          HandleStartMatch (db, cmd["s"], height, adminId);
+        }
     }
 
   ProcessExpiredDisputes (db, height);

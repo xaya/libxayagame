@@ -88,7 +88,7 @@ main (int argc, char** argv)
   if (FLAGS_pending_moves)
     config.PendingMoves = &pending;
 
-  const int res = xaya::SQLiteMain (config, "xs", rules);
+  const int res = xaya::SQLiteMain (config, "xstest", rules);
   google::protobuf::ShutdownProtobufLibrary ();
   return res;
 }

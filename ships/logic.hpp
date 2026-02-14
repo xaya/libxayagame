@@ -32,13 +32,6 @@ constexpr unsigned DISPUTE_BLOCKS = 10;
 constexpr unsigned CHANNEL_TIMEOUT_BLOCKS = 12;
 
 /**
- * The Xaya p/ name that the SkillWager smart contract owns and uses to
- * send admin "start wagered match" moves.  Only moves from this name
- * are accepted for the "s" (start) move type.
- */
-constexpr const char* WAGER_ADMIN_NAME = "xsv4";
-
-/**
  * The main game logic for the on-chain part of Xayaships.  This takes care of
  * the public game state (win/loss statistics for names), management of open
  * channels and dispute processing.
