@@ -1295,7 +1295,7 @@ Game::ProbeAndFixConnection ()
         }
       catch (const std::exception& exc)
         {
-          LOG_FIRST_N (ERROR, 10) << "Exception caught: " << exc.what ();
+          LOG (ERROR) << "Failed to reconnect ZMQ: " << exc.what ();
           zmq.RequestStop ();
           return;
         }
@@ -1303,12 +1303,6 @@ Game::ProbeAndFixConnection ()
 
   const auto maxStaleness
       = std::chrono::milliseconds (FLAGS_xaya_zmq_staleness_ms);
-  /* If we haven't received an update in this timeframe, we try to
-     trigger one (even if no actual blocks have been mined since) by
-     requesting a game_sendupdates just for that purpose.  With this being
-     half the maximum allowed staleness, we (except for edge cases) ensure
-     that we will ping & process the ping before attempting a reconnect
-     in case the connection is still working fine.  */
   const auto pingStaleness = maxStaleness / 2;
   const auto staleness = zmq.GetBlockStaleness<std::chrono::milliseconds> ();
 
@@ -1322,14 +1316,22 @@ Game::ProbeAndFixConnection ()
       return;
     }
 
+  /* Try to trigger an update by requesting game_sendupdates.  Use try_lock
+     to avoid blocking the checker thread indefinitely if mut is held by
+     another thread (e.g. a long-running block processing callback).  If we
+     can't acquire the lock, skip the ping this cycle -- the next check will
+     retry, and if staleness exceeds maxStaleness, the disconnect above will
+     fire without needing mut.  */
+  std::unique_lock<std::mutex> lock(mut, std::try_to_lock);
+  if (!lock.owns_lock ())
+    {
+      VLOG (1) << "Skipping stale ping, mutex is busy";
+      return;
+    }
+
   try
     {
-      LOG (WARNING) << "ZMQ connection seems stale, requesting a block";
-      /* Request some updates to be sent, so we get out of staleness
-         in case the ZMQ connection still works.  We want to request an
-         update that is as cheap as possible.  So try to request just the
-         last block (or thereabouts).  */
-      std::lock_guard<std::mutex> lock(mut);
+      VLOG (1) << "ZMQ connection seems stale, requesting a block";
       const auto data = rpcClient->getblockchaininfo ();
       const std::string fromHash
           = rpcClient->getblockhash (data["blocks"].asInt () - 1);
@@ -1337,7 +1339,8 @@ Game::ProbeAndFixConnection ()
     }
   catch (const std::exception& exc)
     {
-      LOG_FIRST_N (ERROR, 10) << "Exception caught: " << exc.what ();
+      LOG (ERROR) << "Stale ping RPC failed: " << exc.what ();
+      lock.unlock ();
       zmq.RequestStop ();
     }
 }

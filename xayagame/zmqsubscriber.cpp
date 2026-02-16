@@ -329,7 +329,11 @@ ZmqSubscriber::Start ()
 void
 ZmqSubscriber::RequestStop ()
 {
-  CHECK (worker != nullptr);
+  if (worker == nullptr)
+    {
+      LOG (WARNING) << "RequestStop called but ZMQ worker is not running";
+      return;
+    }
   shouldStop = true;
 }
 
