@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -149,6 +149,7 @@ class PendingMovesTests : public testing::Test
 
 private:
 
+  XayaRpcProvider provider;
   HttpRpcServer<MockXayaRpcServer> mockXayaServer;
 
 protected:
@@ -157,8 +158,8 @@ protected:
 
   PendingMovesTests ()
   {
-    proc.InitialiseGameContext (Chain::MAIN, "game id",
-                                &mockXayaServer.GetClient ());
+    provider.Set (mockXayaServer.GetUrl (), jsonrpc::JSONRPC_CLIENT_V2);
+    proc.InitialiseGameContext (Chain::MAIN, "game id", &provider);
     SetMempool ({});
   }
 

@@ -15,12 +15,9 @@
 #include "transactionmanager.hpp"
 #include "zmqsubscriber.hpp"
 
-#include "rpc-stubs/xayarpcclient.h"
-
 #include <xayautil/uint256.hpp>
 
 #include <json/json.h>
-#include <jsonrpccpp/client.h>
 
 #include <atomic>
 #include <condition_variable>
@@ -180,8 +177,12 @@ private:
   /** The ZMQ subscriber.  */
   internal::ZmqSubscriber zmq;
 
-  /** The JSON-RPC client connection to the Xaya daemon.  */
-  std::unique_ptr<XayaRpcClient> rpcClient;
+  /**
+   * The Xaya RPC settings to use.  They are initialised in ConnectRpcClient,
+   * and are valid when chain is different from UNKNOWN (since the chain is
+   * initialised in the same call).
+   */
+  const XayaRpcProvider* rpcProvider = nullptr;
 
   /** The game rules in use.  */
   GameLogic* rules = nullptr;
@@ -382,14 +383,12 @@ public:
   void operator= (const Game&) = delete;
 
   /**
-   * Sets up the RPC client based on the given connector.  This must only
+   * Sets up the RPC client based on the given settings.  This must only
    * be called once.  The JSON-RPC protocol version to use can be specified.
    * V1 is what needs to be used with a real Xaya Core instance, while
    * unit tests and other situations (e.g. Xaya X) need V2.
    */
-  void ConnectRpcClient (
-      jsonrpc::IClientConnector& conn,
-      jsonrpc::clientVersion_t version = jsonrpc::JSONRPC_CLIENT_V1);
+  void ConnectRpcClient (const XayaRpcProvider& rpc);
 
   /**
    * Returns the version of the connected Xaya Core daemon in the form

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -379,6 +379,10 @@ public:
 class GameTests : public GameTestWithBlockchain
 {
 
+private:
+
+  XayaRpcProvider provider;
+
 protected:
 
   HttpRpcServer<MockXayaRpcServerWithState> mockXayaServer;
@@ -391,6 +395,8 @@ protected:
   GameTests ()
     : GameTestWithBlockchain(GAME_ID)
   {
+    provider.Set (mockXayaServer.GetUrl (), jsonrpc::JSONRPC_CLIENT_V2);
+
     /* The mocked RPC server listens on separate threads and is already set up
        (cannot be started only from within the death test), so we need to run
        those threadsafe.  */
@@ -416,8 +422,7 @@ protected:
   void
   ConnectToMockRpc (Game& g)
   {
-    g.ConnectRpcClient (mockXayaServer.GetClientConnector (),
-                        jsonrpc::JSONRPC_CLIENT_V2);
+    g.ConnectRpcClient (provider);
   }
 
 };

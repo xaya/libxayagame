@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -558,16 +558,14 @@ Game::HasStopped ()
 }
 
 void
-Game::ConnectRpcClient (jsonrpc::IClientConnector& conn,
-                        const jsonrpc::clientVersion_t version)
+Game::ConnectRpcClient (const XayaRpcProvider& rpc)
 {
   std::lock_guard<std::mutex> lock(mut);
-  CHECK (rpcClient == nullptr) << "RPC client is already connected";
-  CHECK (chain == Chain::UNKNOWN);
+  CHECK (chain == Chain::UNKNOWN) << "RPC client is already connected";
 
-  rpcClient = std::make_unique<XayaRpcClient> (conn, version);
+  rpcProvider = &rpc;
 
-  const Json::Value info = rpcClient->getblockchaininfo ();
+  const Json::Value info = (**rpcProvider).getblockchaininfo ();
   const std::string chainStr = info["chain"].asString ();
   chain = ChainFromString (chainStr);
   CHECK (chain != Chain::UNKNOWN)
@@ -575,18 +573,18 @@ Game::ConnectRpcClient (jsonrpc::IClientConnector& conn,
 
   LOG (INFO) << "Connected to RPC daemon with chain " << ChainToString (chain);
   if (rules != nullptr)
-    rules->InitialiseGameContext (chain, gameId, rpcClient.get ());
+    rules->InitialiseGameContext (chain, gameId, rpcProvider);
   if (pending != nullptr)
-    pending->InitialiseGameContext (chain, gameId, rpcClient.get ());
+    pending->InitialiseGameContext (chain, gameId, rpcProvider);
 }
 
 unsigned
 Game::GetXayaVersion () const
 {
   std::lock_guard<std::mutex> lock(mut);
-  CHECK (rpcClient != nullptr);
+  CHECK (rpcProvider != nullptr && *rpcProvider);
 
-  const auto info = rpcClient->getnetworkinfo ();
+  const auto info = (**rpcProvider).getnetworkinfo ();
   CHECK (info.isObject ());
   const auto& version = info["version"];
   CHECK (version.isUInt ());
@@ -629,8 +627,8 @@ Game::SetStorage (StorageInterface& s)
 
   storage = std::make_unique<internal::StorageWithCachedHeight> (s,
       [this] (const uint256& hash) {
-        CHECK (rpcClient != nullptr);
-        return GetHeightForBlockHash (*rpcClient, hash);
+        CHECK (rpcProvider != nullptr && *rpcProvider);
+        return GetHeightForBlockHash (**rpcProvider, hash);
       });
 
   LOG (INFO) << "Storage has been added to Game, initialising it now";
@@ -652,7 +650,7 @@ Game::SetGameLogic (GameLogic& gl)
   CHECK (!mainLoop.IsRunning ());
   rules = &gl;
   if (chain != Chain::UNKNOWN)
-    rules->InitialiseGameContext (chain, gameId, rpcClient.get ());
+    rules->InitialiseGameContext (chain, gameId, rpcProvider);
 }
 
 void
@@ -662,7 +660,7 @@ Game::SetPendingMoveProcessor (PendingMoveProcessor& p)
   CHECK (!mainLoop.IsRunning ());
   pending = &p;
   if (chain != Chain::UNKNOWN)
-    pending->InitialiseGameContext (chain, gameId, rpcClient.get ());
+    pending->InitialiseGameContext (chain, gameId, rpcProvider);
 }
 
 void
@@ -709,8 +707,9 @@ Game::DetectZmqEndpoint ()
 
   {
     std::lock_guard<std::mutex> lock(mut);
-    CHECK (rpcClient != nullptr) << "RPC client is not yet set up";
-    notifications = rpcClient->getzmqnotifications ();
+    CHECK (rpcProvider != nullptr && *rpcProvider)
+        << "RPC client is not yet set up";
+    notifications = (**rpcProvider).getzmqnotifications ();
   }
   VLOG (1) << "Configured ZMQ notifications:\n" << notifications;
 
@@ -995,8 +994,9 @@ void
 Game::TrackGame ()
 {
   std::lock_guard<std::mutex> lock(mut);
-  CHECK (rpcClient != nullptr) << "RPC client is not yet set up";
-  rpcClient->trackedgames ("add", gameId);
+  CHECK (rpcProvider != nullptr && *rpcProvider)
+      << "RPC client is not yet set up";
+  (**rpcProvider).trackedgames ("add", gameId);
   LOG (INFO) << "Added " << gameId << " to tracked games";
 }
 
@@ -1004,8 +1004,9 @@ void
 Game::UntrackGame ()
 {
   std::lock_guard<std::mutex> lock(mut);
-  CHECK (rpcClient != nullptr) << "RPC client is not yet set up";
-  rpcClient->trackedgames ("remove", gameId);
+  CHECK (rpcProvider != nullptr && *rpcProvider)
+      << "RPC client is not yet set up";
+  (**rpcProvider).trackedgames ("remove", gameId);
   LOG (INFO) << "Removed " << gameId << " from tracked games";
 }
 
@@ -1113,7 +1114,7 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
     params["gameid"] = gameId;
     if (!targetBlock.IsNull ())
       params["toblock"] = targetBlock.ToHex ();
-    upd = rpcClient->CallMethod ("game_sendupdates", params);
+    upd = (**rpcProvider).CallMethod ("game_sendupdates", params);
     if (!upd.isObject ())
       throw jsonrpc::JsonRpcException (
           jsonrpc::Errors::ERROR_CLIENT_INVALID_RESPONSE,
@@ -1152,7 +1153,7 @@ Game::ReinitialiseState ()
   state = State::UNKNOWN;
   LOG (INFO) << "Reinitialising game state";
 
-  const Json::Value data = rpcClient->getblockchaininfo ();
+  const Json::Value data = (**rpcProvider).getblockchaininfo ();
 
   uint256 currentHash;
   if (storage->GetCurrentBlockHash (currentHash))
@@ -1205,7 +1206,7 @@ Game::ReinitialiseState ()
   transactionManager.TryAbortTransaction ();
   storage->Clear ();
 
-  const std::string blockHashHex = rpcClient->getblockhash (genesisHeight);
+  const std::string blockHashHex = (**rpcProvider).getblockhash (genesisHeight);
   uint256 blockHash;
   CHECK (blockHash.FromHex (blockHashHex));
 
@@ -1330,10 +1331,11 @@ Game::ProbeAndFixConnection ()
          update that is as cheap as possible.  So try to request just the
          last block (or thereabouts).  */
       std::lock_guard<std::mutex> lock(mut);
-      const auto data = rpcClient->getblockchaininfo ();
+      XayaRpcClient& rpcClient = **rpcProvider;
+      const auto data = rpcClient.getblockchaininfo ();
       const std::string fromHash
-          = rpcClient->getblockhash (data["blocks"].asInt () - 1);
-      rpcClient->game_sendupdates (fromHash, gameId);
+          = rpcClient.getblockhash (data["blocks"].asInt () - 1);
+      rpcClient.game_sendupdates (fromHash, gameId);
     }
   catch (const std::exception& exc)
     {
