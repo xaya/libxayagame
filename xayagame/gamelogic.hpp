@@ -73,18 +73,34 @@ private:
   /** The protocol version to use.  */
   jsonrpc::clientVersion_t version;
 
-  /** If already configured, the HTTP client connector.  */
-  std::unique_ptr<jsonrpc::HttpClient> httpClient;
+  /**
+   * The data about each thread's client that is held in thread-local storage.
+   */
+  struct PerThreadData
+  {
 
-  /** If already configured, the RPC client itself.  */
-  std::unique_ptr<XayaRpcClient> rpcClient;
+    /** The underlying HTTP client.  */
+    std::unique_ptr<jsonrpc::HttpClient> httpClient;
+
+    /** The actual RPC client.  */
+    std::unique_ptr<XayaRpcClient> rpcClient;
+
+  };
+
+  /**
+   * Helper function that returns the current thread's data.
+   */
+  PerThreadData& GetThreadLocalData () const;
 
 public:
 
   XayaRpcProvider () = default;
+  ~XayaRpcProvider ();
 
   /**
-   * Sets / updates the connection settings.
+   * Sets the connection settings.  Can only be done once and the settings
+   * cannot be changed afterwards (so that existing thread-local clients
+   * remain valid).
    */
   void Set (const std::string& u, jsonrpc::clientVersion_t v);
 
@@ -98,6 +114,8 @@ public:
 
   /**
    * Returns the RPC client.  Must only be called if the settings are provided.
+   * This returns a thread-local instance, so that it is safe to use this
+   * from multiple threads and use the returned RPC clients in parallel.
    */
   XayaRpcClient& operator* () const;
 
