@@ -1330,7 +1330,6 @@ Game::ProbeAndFixConnection ()
          in case the ZMQ connection still works.  We want to request an
          update that is as cheap as possible.  So try to request just the
          last block (or thereabouts).  */
-      std::lock_guard<std::mutex> lock(mut);
       XayaRpcClient& rpcClient = **rpcProvider;
       const auto data = rpcClient.getblockchaininfo ();
       const std::string fromHash
