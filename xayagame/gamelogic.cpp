@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -67,6 +67,51 @@ ChainFromString (const std::string& name)
 
 /* ************************************************************************** */
 
+XayaRpcProvider::~XayaRpcProvider ()
+{
+  /* We explicitly destruct the main thread's thread-local RPC client
+     here, to avoid it staying around until program shutdown, where other
+     things are already destructed that it might depend on for its own
+     shutdown.  */
+  auto& data = GetThreadLocalData ();
+  data.rpcClient.reset ();
+  data.httpClient.reset ();
+}
+
+XayaRpcProvider::PerThreadData&
+XayaRpcProvider::GetThreadLocalData () const
+{
+  thread_local PerThreadData data;
+  return data;
+}
+
+void
+XayaRpcProvider::Set (const std::string& u, const jsonrpc::clientVersion_t v)
+{
+  CHECK (url.empty ()) << "XayaRpcProvider is already configured";
+
+  url = u;
+  version = v;
+}
+
+XayaRpcClient&
+XayaRpcProvider::operator* () const
+{
+  CHECK (!url.empty ()) << "Xaya RPC settings not configured";
+
+  auto& data = GetThreadLocalData ();
+  if (data.rpcClient == nullptr)
+    {
+      data.httpClient = std::make_unique<jsonrpc::HttpClient> (url);
+      data.rpcClient
+          = std::make_unique<XayaRpcClient> (*data.httpClient, version);
+    }
+
+  return *data.rpcClient;
+}
+
+/* ************************************************************************** */
+
 Context::Context (const GameLogic& l, const uint256& rndSeed,
                   CoprocessorBatch::Block* cb)
   : logic(l), coprocBlk(cb)
@@ -105,14 +150,13 @@ GameProcessorWithContext::GetGameId () const
 XayaRpcClient&
 GameProcessorWithContext::GetXayaRpc ()
 {
-  CHECK (rpcClient != nullptr);
-  return *rpcClient;
+  CHECK (rpcProvider != nullptr && *rpcProvider);
+  return **rpcProvider;
 }
 
 void
-GameProcessorWithContext::InitialiseGameContext (const Chain c,
-                                                 const std::string& id,
-                                                 XayaRpcClient* rpc)
+GameProcessorWithContext::InitialiseGameContext (
+    const Chain c, const std::string& id, const XayaRpcProvider* rpc)
 {
   CHECK (c != Chain::UNKNOWN);
   CHECK (!id.empty ());
@@ -120,12 +164,11 @@ GameProcessorWithContext::InitialiseGameContext (const Chain c,
   CHECK (chain == Chain::UNKNOWN) << "Game context is already initialised";
   chain = c;
   gameId = id;
-  rpcClient = rpc;
 
-  if (rpcClient == nullptr)
-    LOG (WARNING)
-        << "Game context has been initialised without an RPC connection;"
-           " some features will be missing";
+  rpcProvider = rpc;
+  LOG_IF (WARNING, rpcProvider == nullptr)
+      << "Game context has been initialised without an RPC connection;"
+         " some features will be missing";
 }
 
 /* ************************************************************************** */

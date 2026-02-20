@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -1505,35 +1505,22 @@ class SQLitePendingMoveTests : public SQLiteGameTests<ChatGame>
 
 private:
 
-  jsonrpc::HttpServer httpServer;
-  jsonrpc::HttpClient httpClient;
-
-  MockXayaRpcServer mockXayaServer;
-  XayaRpcClient rpcClient;
+  XayaRpcProvider provider;
+  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
 
 protected:
 
   ChatPendingMoves proc;
 
   SQLitePendingMoveTests ()
-    : httpServer(MockXayaRpcServer::HTTP_PORT),
-      httpClient(MockXayaRpcServer::HTTP_URL),
-      mockXayaServer(httpServer),
-      rpcClient(httpClient),
-      proc(rules)
+    : proc(rules)
   {
-    proc.InitialiseGameContext (Chain::MAIN, GAME_ID, &rpcClient);
+    provider.Set (mockXayaServer.GetUrl (), jsonrpc::JSONRPC_CLIENT_V2);
+    proc.InitialiseGameContext (Chain::MAIN, GAME_ID, &provider);
     game.SetPendingMoveProcessor (proc);
 
-    EXPECT_CALL (mockXayaServer, getrawmempool ())
+    EXPECT_CALL (*mockXayaServer, getrawmempool ())
         .WillRepeatedly (Return (Json::Value (Json::arrayValue)));
-
-    mockXayaServer.StartListening ();
-  }
-
-  ~SQLitePendingMoveTests ()
-  {
-    mockXayaServer.StopListening ();
   }
 
 };

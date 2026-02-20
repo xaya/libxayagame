@@ -1,16 +1,14 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "defaultmain.hpp"
 
+#include "gamelogic.hpp"
 #include "gamerpcserver.hpp"
 #include "lmdbstorage.hpp"
 #include "sqlitestorage.hpp"
 
-#include "rpc-stubs/xayarpcclient.h"
-
-#include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/common/exception.h>
 
 #include <glog/logging.h>
@@ -151,11 +149,12 @@ VerifyXayaVersion (const GameDaemonConfiguration& config, const unsigned v)
  * client connector.
  */
 void
-WaitForXaya (jsonrpc::IClientConnector& conn, const jsonrpc::clientVersion_t v)
+WaitForXaya (const XayaRpcProvider& provider)
 {
   LOG (INFO) << "Waiting for Xaya to be up...";
 
-  XayaRpcClient client(conn, v);
+  XayaRpcClient& client = *provider;
+
   while (true)
     try
       {
@@ -207,14 +206,16 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
 
       CHECK (!config.XayaRpcUrl.empty ()) << "XayaRpcUrl must be configured";
       const std::string jsonRpcUrl(config.XayaRpcUrl);
-      jsonrpc::HttpClient httpConnector(jsonRpcUrl);
-
       const auto protocol = GetClientVersion (config);
+
+      XayaRpcProvider rpcProvider;
+      rpcProvider.Set (jsonRpcUrl, protocol);
+
       if (config.XayaRpcWait)
-        WaitForXaya (httpConnector, protocol);
+        WaitForXaya (rpcProvider);
 
       auto game = std::make_unique<Game> (gameId);
-      game->ConnectRpcClient (httpConnector, protocol);
+      game->ConnectRpcClient (rpcProvider);
       VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());
 
@@ -281,14 +282,16 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
 
       CHECK (!config.XayaRpcUrl.empty ()) << "XayaRpcUrl must be configured";
       const std::string jsonRpcUrl(config.XayaRpcUrl);
-      jsonrpc::HttpClient httpConnector(jsonRpcUrl);
-
       const auto protocol = GetClientVersion (config);
+
+      XayaRpcProvider rpcProvider;
+      rpcProvider.Set (jsonRpcUrl, protocol);
+
       if (config.XayaRpcWait)
-        WaitForXaya (httpConnector, protocol);
+        WaitForXaya (rpcProvider);
 
       auto game = std::make_unique<Game> (gameId);
-      game->ConnectRpcClient (httpConnector, protocol);
+      game->ConnectRpcClient (rpcProvider);
       VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());
 

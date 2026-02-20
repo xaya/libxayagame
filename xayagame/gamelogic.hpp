@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,8 +13,11 @@
 #include <xayautil/random.hpp>
 #include <xayautil/uint256.hpp>
 
+#include <jsonrpccpp/client/connectors/httpclient.h>
+
 #include <json/json.h>
 
+#include <memory>
 #include <string>
 
 namespace xaya
@@ -56,6 +59,69 @@ std::string ChainToString (Chain c);
 Chain ChainFromString (const std::string& name);
 
 /**
+ * Settings for the JSON-RPC connection to Xaya and a utility class to provide
+ * an RPC client based on them.
+ */
+class XayaRpcProvider
+{
+
+private:
+
+  /** The connection URL (we always use HTTP).  */
+  std::string url;
+
+  /** The protocol version to use.  */
+  jsonrpc::clientVersion_t version;
+
+  /**
+   * The data about each thread's client that is held in thread-local storage.
+   */
+  struct PerThreadData
+  {
+
+    /** The underlying HTTP client.  */
+    std::unique_ptr<jsonrpc::HttpClient> httpClient;
+
+    /** The actual RPC client.  */
+    std::unique_ptr<XayaRpcClient> rpcClient;
+
+  };
+
+  /**
+   * Helper function that returns the current thread's data.
+   */
+  PerThreadData& GetThreadLocalData () const;
+
+public:
+
+  XayaRpcProvider () = default;
+  ~XayaRpcProvider ();
+
+  /**
+   * Sets the connection settings.  Can only be done once and the settings
+   * cannot be changed afterwards (so that existing thread-local clients
+   * remain valid).
+   */
+  void Set (const std::string& u, jsonrpc::clientVersion_t v);
+
+  /**
+   * Checks if the settings are provided.
+   */
+  operator bool () const
+  {
+    return !url.empty ();
+  }
+
+  /**
+   * Returns the RPC client.  Must only be called if the settings are provided.
+   * This returns a thread-local instance, so that it is safe to use this
+   * from multiple threads and use the returned RPC clients in parallel.
+   */
+  XayaRpcClient& operator* () const;
+
+};
+
+/**
  * Generic class for a processor game state, which mainly holds some contextual
  * information (like the chain and game ID).  This is used as a common
  * superclass for the block update logic (GameLogic) and the logic
@@ -78,11 +144,8 @@ private:
    */
   std::string gameId;
 
-  /**
-   * Xaya Core RPC connection, if it has been initialised already from the
-   * Game instance.
-   */
-  XayaRpcClient* rpcClient = nullptr;
+  /** The RPC settings to use.  */
+  const XayaRpcProvider* rpcProvider = nullptr;
 
 protected:
 
@@ -112,14 +175,14 @@ public:
    * Initialises the instance with some data that is obtained by a Game
    * instance after the RPC connection to Xaya Core is up.
    *
-   * The RPC client instance may be null, but then certain features
+   * The RPC settings may be null, but then certain features
    * (depending on GetXayaRpc) will be disabled.
    *
    * This must only be called once.  It is typically done by the Game
    * instance, but may also be used for testing.
    */
   void InitialiseGameContext (Chain c, const std::string& id,
-                              XayaRpcClient* rpc);
+                              const XayaRpcProvider* rpc);
 
 };
 
