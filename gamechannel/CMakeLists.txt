@@ -1,61 +1,24 @@
-# Copyright (C) 2019-2025 The Xaya developers
+# Copyright (C) 2019-2026 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+include (sources.cmake)
+
 # Protobuf generation.
-file (MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/proto)
-
-set (GAMECHANNEL_PROTOS
-  broadcast
-  metadata
-  signatures
-  stateproof
-  testprotos
+include (proto.cmake)
+gamechannel_generate_protos (GAMECHANNEL_PROTO_SOURCES GAMECHANNEL_PROTO_HEADERS
+  "${CMAKE_CURRENT_SOURCE_DIR}/proto"
+  "${PROJECT_SOURCE_DIR}"
+  "${PROJECT_BINARY_DIR}"
 )
 
-set (GAMECHANNEL_PROTO_SOURCES)
-set (GAMECHANNEL_PROTO_HEADERS)
-set (GAMECHANNEL_PROTO_PY)
-foreach (proto ${GAMECHANNEL_PROTOS})
-  set (src ${CMAKE_CURRENT_SOURCE_DIR}/proto/${proto}.proto)
-  set (cc ${CMAKE_CURRENT_BINARY_DIR}/proto/${proto}.pb.cc)
-  set (h ${CMAKE_CURRENT_BINARY_DIR}/proto/${proto}.pb.h)
-  set (py ${CMAKE_CURRENT_BINARY_DIR}/proto/${proto}_pb2.py)
-  add_custom_command (
-    OUTPUT ${cc} ${h}
-    COMMAND protobuf::protoc
-      -I${PROJECT_SOURCE_DIR}
-      --cpp_out=${PROJECT_BINARY_DIR}
-      ${src}
-    DEPENDS ${src}
-  )
-  add_custom_command (
-    OUTPUT ${py}
-    COMMAND protobuf::protoc
-      -I${PROJECT_SOURCE_DIR}
-      --python_out=${PROJECT_BINARY_DIR}
-      ${src}
-    DEPENDS ${src}
-  )
-  list (APPEND GAMECHANNEL_PROTO_SOURCES ${cc})
-  list (APPEND GAMECHANNEL_PROTO_HEADERS ${h})
-  list (APPEND GAMECHANNEL_PROTO_PY ${py})
-endforeach ()
-
-add_custom_target (gamechannel_proto_py ALL DEPENDS ${GAMECHANNEL_PROTO_PY})
-
-# Copy Python source files into the build tree so that the gamechannel
-# Python package is complete (source .py + generated _pb2.py together).
-set (GAMECHANNEL_PY_SOURCES
-  __init__.py
-  channeltest.py
-  rpcbroadcast.py
-  signatures.py
+# Python stubs (native build only).
+gamechannel_generate_proto_py (
+  "${CMAKE_CURRENT_SOURCE_DIR}/proto"
+  "${PROJECT_SOURCE_DIR}"
+  "${PROJECT_BINARY_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}"
 )
-foreach (pyfile ${GAMECHANNEL_PY_SOURCES})
-  configure_file (${pyfile} ${PROJECT_BINARY_DIR}/gamechannel/${pyfile} COPYONLY)
-endforeach ()
-configure_file (proto/__init__.py ${PROJECT_BINARY_DIR}/gamechannel/proto/__init__.py COPYONLY)
 
 # RPC stub generation.
 set (GAMECHANNEL_RPC_STUBS
@@ -106,17 +69,7 @@ add_custom_command (
 
 # channelcore library.
 add_library (channelcore STATIC
-  boardrules.cpp
-  broadcast.cpp
-  channelmanager.cpp
-  channelstatejson.cpp
-  ethsignatures.cpp
-  movesender.cpp
-  openchannel.cpp
-  protoversion.cpp
-  rollingstate.cpp
-  signatures.cpp
-  stateproof.cpp
+  ${CHANNELCORE_SOURCES}
   ${GAMECHANNEL_PROTO_SOURCES}
 )
 
@@ -140,17 +93,8 @@ target_link_libraries (channelcore
 
 # gamechannel library.
 add_library (gamechannel SHARED
-  channelgame.cpp
-  chaintochannel.cpp
-  daemon.cpp
-  database.cpp
-  gamestatejson.cpp
-  gsprpc.cpp
-  recvbroadcast.cpp
-  rpcbroadcast.cpp
-  rpcwallet.cpp
+  ${GAMECHANNEL_SOURCES}
   ${CMAKE_CURRENT_BINARY_DIR}/schema.cpp
-  syncmanager.cpp
 )
 
 add_dependencies (gamechannel gamechannel_rpc_stubs)
@@ -187,28 +131,7 @@ target_link_libraries (gamechannel_testutils PUBLIC
 )
 
 # Unit tests.
-add_executable (gamechannel_tests
-  broadcast_tests.cpp
-  channelgame_tests.cpp
-  channelmanager_tests.cpp
-  channelstatejson_tests.cpp
-  chaintochannel_tests.cpp
-  database_tests.cpp
-  ethsignatures_tests.cpp
-  gamestatejson_tests.cpp
-  movesender_tests.cpp
-  protoboard_tests.cpp
-  protoutils_tests.cpp
-  protoversion_tests.cpp
-  recvbroadcast_tests.cpp
-  rollingstate_tests.cpp
-  schema_tests.cpp
-  signatures_tests.cpp
-  stateproof_tests.cpp
-  syncmanager_tests.cpp
-  testgame_tests.cpp
-  testgame.cpp
-)
+add_executable (gamechannel_tests ${GAMECHANNEL_TEST_SOURCES})
 target_link_libraries (gamechannel_tests PRIVATE
   gamechannel_testutils
   gamechannel
@@ -269,31 +192,10 @@ install (PROGRAMS rpc-channel-server.py DESTINATION ${CMAKE_INSTALL_BINDIR})
 install (FILES rpc-stubs/channel-gsp-rpc.json
   DESTINATION ${CMAKE_INSTALL_DATADIR}/gamechannel
 )
-install (FILES
-    boardrules.hpp
-    broadcast.hpp
-    channelmanager.hpp channelmanager.tpp
-    channelstatejson.hpp
-    ethsignatures.hpp
-    movesender.hpp
-    openchannel.hpp
-    protoboard.hpp protoboard.tpp
-    protoutils.hpp protoutils.tpp
-    protoversion.hpp
-    rollingstate.hpp
-    signatures.hpp
-    stateproof.hpp
-    channelgame.hpp
-    chaintochannel.hpp
-    daemon.hpp
-    database.hpp
-    gamestatejson.hpp
-    gsprpc.hpp
-    recvbroadcast.hpp
-    rpcbroadcast.hpp
-    rpcwallet.hpp
-    schema.hpp
-    syncmanager.hpp
+install (FILES ${CHANNELCORE_HEADERS}
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/gamechannel
+)
+install (FILES ${GAMECHANNEL_HEADERS}
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/gamechannel
 )
 install (FILES ${GAMECHANNEL_RPC_STUBS}

@@ -1,16 +1,10 @@
-# Copyright (C) 2018-2025 The Xaya developers
+# Copyright (C) 2018-2026 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-add_library (xayautil STATIC
-  base64.cpp
-  compression.cpp
-  cryptorand.cpp
-  hash.cpp
-  jsonutils.cpp
-  random.cpp
-  uint256.cpp
-)
+include (sources.cmake)
+
+add_library (xayautil STATIC ${XAYAUTIL_SOURCES})
 
 set_target_properties (xayautil PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -29,15 +23,7 @@ target_link_libraries (xayautil
 )
 
 # Unit tests.
-add_executable (xayautil_tests
-  base64_tests.cpp
-  compression_tests.cpp
-  cryptorand_tests.cpp
-  hash_tests.cpp
-  jsonutils_tests.cpp
-  random_tests.cpp
-  uint256_tests.cpp
-)
+add_executable (xayautil_tests ${XAYAUTIL_TEST_SOURCES})
 target_link_libraries (xayautil_tests PRIVATE
   xayautil
   PkgConfig::JSONCPP
@@ -49,16 +35,7 @@ add_test (NAME xayautil_tests COMMAND xayautil_tests)
 
 # Installation.
 install (TARGETS xayautil ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install (FILES
-    base64.hpp
-    compression.hpp
-    cryptorand.hpp
-    hash.hpp
-    jsonutils.hpp
-    random.hpp random.tpp
-    uint256.hpp
-  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/xayautil
-)
+install (FILES ${XAYAUTIL_HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/xayautil)
 
 configure_file (libxayautil.pc.in libxayautil.pc @ONLY)
 install (FILES ${CMAKE_CURRENT_BINARY_DIR}/libxayautil.pc
