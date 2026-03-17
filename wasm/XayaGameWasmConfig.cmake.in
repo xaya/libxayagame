@@ -29,7 +29,7 @@ foreach (_lib IN ITEMS
     openssl:ssl:libssl.a
     openssl:crypto:libcrypto.a
     jsoncpp:jsoncpp:libjsoncpp.a
-    ethutils:eth-utils:libeth-utils.a)
+    ethutils:eth-utils:libethutils.a)
   # Each entry is  namespace:target-suffix:filename
   string (REPLACE ":" ";" _parts "${_lib}")
   list (GET _parts 0 _ns)
