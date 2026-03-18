@@ -1,0 +1,8 @@
+prefix=/emsdk/upstream/emscripten/cache/sysroot
+includedir=${prefix}/include
+
+Name: libglog
+Description: glog shim for WASM builds
+Version: 0.0
+Cflags: -I${includedir}
+Libs:
