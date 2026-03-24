@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -708,7 +708,7 @@ SQLiteGame::GameStateUpdated (const GameStateData& state,
   std::shared_ptr<SQLiteDatabase> snapshot;
   if (upToDate)
     {
-      auto uniqueSnapshot = database->GetSnapshot ();
+      auto uniqueSnapshot = database->GetDatabase ().GetSnapshot ();
       if (uniqueSnapshot != nullptr
             && database->CheckCurrentState (*uniqueSnapshot, state))
         snapshot.reset (uniqueSnapshot.release ());
@@ -750,7 +750,7 @@ SQLiteGame::InstanceStateChanged (const Json::Value& state)
 
       const auto state = database->GetCurrentGameState ();
       EnsureCurrentState (state);
-      snapshot = database->GetSnapshot ();
+      snapshot = database->GetDatabase ().GetSnapshot ();
       if (snapshot == nullptr
             || !database->CheckCurrentState (*snapshot, state))
         {

@@ -1,4 +1,4 @@
-// Copyright (C) 2022-2023 The Xaya developers
+// Copyright (C) 2022-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -136,7 +136,6 @@ public:
   }
 
   using SQLiteStorage::GetDatabase;
-  using SQLiteStorage::GetSnapshot;
 
 };
 
@@ -201,7 +200,7 @@ protected:
     std::shared_ptr<SQLiteDatabase> snapshot;
     if (useSnapshot)
       {
-        auto uniqueSnapshot = storage.GetSnapshot ();
+        auto uniqueSnapshot = storage.GetDatabase ().GetSnapshot ();
         CHECK (uniqueSnapshot != nullptr);
         snapshot.reset (uniqueSnapshot.release ());
       }

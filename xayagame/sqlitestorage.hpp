@@ -21,8 +21,6 @@
 namespace xaya
 {
 
-class SQLiteStorage;
-
 /**
  * Wrapper around an SQLite database connection.  This object mostly holds
  * an sqlite3* handle (that is owned and managed by it), but it also
@@ -43,11 +41,17 @@ private:
   static bool sqliteInitialised;
 
   /**
+   * Filename of the underlying SQLite file.  This is used to re-open it for
+   * snapshots.
+   */
+  const std::string filename;
+
+  /**
    * The SQLite database handle, which is owned and managed by the
    * current instance.  It will be opened in the constructor, and
    * finalised in the destructor.
    */
-  sqlite3* db;
+  sqlite3* db = nullptr;
 
   /**
    * Whether or not we have WAL mode on the database.  This is required
@@ -56,8 +60,8 @@ private:
    */
   bool walMode;
 
-  /** The "parent" storage if this is a read-only snapshot.  */
-  const SQLiteStorage* parent = nullptr;
+  /** The "parent" database if this is a read-only snapshot.  */
+  const SQLiteDatabase* parent = nullptr;
 
   /**
    * Mutex protecting the statement cache (but not the statements
@@ -74,17 +78,39 @@ private:
       preparedStatements;
 
   /**
-   * Marks this is a read-only snapshot (with the given parent storage).  When
+   * Number of outstanding snapshots.  This has to drop to zero before
+   * we can close the database.
+   */
+  mutable unsigned snapshots = 0;
+
+  /**
+   * Set to true while waiting for snapshots to drop to zero (WaitForSnapshots),
+   * prevents new snapshots from being created.
+   */
+  bool waitingForSnapshots = false;
+
+  /** Mutex for the snapshot number.  */
+  mutable std::mutex mutSnapshots;
+  /** Condition variable for waiting for snapshot unrefs.  */
+  mutable std::condition_variable cvSnapshots;
+
+  /**
+   * Marks this is a read-only snapshot (with the given parent database).  When
    * called, this starts a read transaction to ensure that the current view is
    * preserved for all future queries.  It also registers this as outstanding
    * snapshot with the parent.
    */
-  void SetReadonlySnapshot (const SQLiteStorage& p);
+  void SetReadonlySnapshot (const SQLiteDatabase& p);
 
   /**
    * Clears the cache of prepared statements.
    */
   void ClearStatementCache ();
+
+  /**
+   * Decrements the count of outstanding snapshots.
+   */
+  void UnrefSnapshot () const;
 
   /**
    * Returns whether or not the database is using WAL mode.
@@ -94,8 +120,6 @@ private:
   {
     return walMode;
   }
-
-  friend class SQLiteStorage;
 
 public:
 
@@ -158,6 +182,24 @@ public:
    * is meant for statements that are read-only, i.e. SELECT.
    */
   Statement PrepareRo (const std::string& sql) const;
+
+  /**
+   * Performs an explicit WAL checkpoint.
+   */
+  void WalCheckpoint ();
+
+  /**
+   * Blocks until no child snapshots are open.
+   */
+  void WaitForSnapshots ();
+
+  /**
+   * Creates a read-only snapshot of the underlying database and returns
+   * the corresponding SQLiteDatabase instance.  May return NULL if the
+   * underlying database is not using WAL mode (e.g. in-memory) or some
+   * other condition prevents snapshot creation.
+   */
+  std::unique_ptr<SQLiteDatabase> GetSnapshot () const;
 
 };
 
@@ -350,17 +392,6 @@ private:
    */
   bool startedTransaction = false;
 
-  /**
-   * Number of outstanding snapshots.  This has to drop to zero before
-   * we can close the database.
-   */
-  mutable unsigned snapshots = 0;
-
-  /** Mutex for the snapshot number.  */
-  mutable std::mutex mutSnapshots;
-  /** Condition variable for waiting for snapshot unrefs.  */
-  mutable std::condition_variable cvSnapshots;
-
   /** Clock used for timing the WAL checkpointing.  */
   using Clock = std::chrono::steady_clock;
   /** Last time when we did a WAL checkpoint.  */
@@ -371,18 +402,6 @@ private:
    * database is already opened.
    */
   void OpenDatabase ();
-
-  /**
-   * Decrements the count of outstanding snapshots.
-   */
-  void UnrefSnapshot () const;
-
-  /**
-   * Performs an explicit WAL checkpoint.
-   */
-  void WalCheckpoint ();
-
-  friend class SQLiteDatabase;
 
 protected:
 
@@ -414,13 +433,6 @@ protected:
    * Returns the underlying SQLiteDatabase instance.
    */
   const SQLiteDatabase& GetDatabase () const;
-
-  /**
-   * Creates a read-only snapshot of the underlying database and returns
-   * the corresponding SQLiteDatabase instance.  May return NULL if the
-   * underlying database is not using WAL mode (e.g. in-memory).
-   */
-  std::unique_ptr<SQLiteDatabase> GetSnapshot () const;
 
   /**
    * Returns the current block hash (if any) for the given database connection.
