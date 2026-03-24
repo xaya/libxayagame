@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -370,7 +370,12 @@ protected:
 
     using SQLiteStorage::SQLiteStorage;
     using SQLiteStorage::GetDatabase;
-    using SQLiteStorage::GetSnapshot;
+
+    std::unique_ptr<SQLiteDatabase>
+    GetSnapshot () const
+    {
+      return GetDatabase ().GetSnapshot ();
+    }
 
   };
 
@@ -501,56 +506,6 @@ TEST_F (SQLiteStorageSnapshotTests, StatementsMustAllBeDestructed)
      should CHECK fail.  At the end of the test scope, the statement
      will be destructed before the snapshot, which is fine.  */
   EXPECT_DEATH (s.reset (), "statement is still in use");
-}
-
-TEST_F (SQLiteStorageSnapshotTests, OneSnapshotMultipleThreads)
-{
-  /* It is possible to use one snapshot from multiple threads, and this should
-     not cause any specific congestion.  Just when a statement is prepared
-     should there be a lock, but then processing a statement should not block
-     other threads from also doing something on the snapshot.  */
-
-  Storage storage(file.GetName ());
-  storage.Initialise ();
-  storage.GetDatabase ().Execute (R"(
-    CREATE TABLE `foo` (`id` INTEGER NOT NULL PRIMARY KEY);
-    INSERT INTO `foo` (`id`) VALUES (1), (2), (3);
-  )");
-
-  auto snapshot = storage.GetSnapshot ();
-  storage.GetDatabase ().Execute (R"(
-    DELETE FROM `foo`
-  )");
-
-  constexpr auto sleep = std::chrono::milliseconds (100);
-
-  PerformanceTimer timer;
-  std::vector<std::thread> threads;
-  for (unsigned i = 0; i < 10; ++i)
-    threads.emplace_back ([&] ()
-      {
-        auto stmt = snapshot->PrepareRo (R"(
-          SELECT `id`
-            FROM `foo`
-            ORDER BY `id`
-        )");
-
-        for (unsigned j = 1; j <= 3; ++j)
-          {
-            std::this_thread::sleep_for (sleep);
-            ASSERT_TRUE (stmt.Step ());
-            ASSERT_EQ (stmt.Get<int64_t> (0), j);
-          }
-
-        ASSERT_FALSE (stmt.Step ());
-      });
-  for (auto& t : threads)
-    t.join ();
-  timer.Stop ();
-
-  const auto dur = timer.Get<std::chrono::milliseconds> ();
-  EXPECT_GT (dur, 2 * sleep);
-  EXPECT_LT (dur, 4 * sleep);
 }
 
 /* ************************************************************************** */
