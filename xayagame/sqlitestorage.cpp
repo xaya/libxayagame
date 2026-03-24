@@ -94,7 +94,6 @@ bool
 SQLiteDatabase::Statement::Step ()
 {
   CHECK (db != nullptr) << "Statement has no associated database";
-  std::lock_guard<std::mutex> lock(db->mutDb);
 
   PerformanceTimer timer;
   const int rc = sqlite3_step (**this);
@@ -338,13 +337,17 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
       else
         LOG (INFO) << "Configured SQLite error handler";
 
-      CHECK_EQ (sqlite3_config (SQLITE_CONFIG_MULTITHREAD, nullptr), SQLITE_OK)
-          << "Failed to enable multi-threaded mode for SQLite";
-
       sqliteInitialised = true;
     }
 
-  const int rc = sqlite3_open_v2 (file.c_str (), &db, flags, nullptr);
+  /* We open the database connection with full internal locking by SQLite
+     to make sure everything is thread safe and we do not need to worry about
+     this ourselves in edge cases.  However, between threads in libxayagame,
+     we typically use entirely separate connections anyway, such as one
+     for writing during block processing, and one for each read as part
+     of an RPC request.  */
+  const int rc = sqlite3_open_v2 (file.c_str (), &db,
+                                  flags | SQLITE_OPEN_FULLMUTEX, nullptr);
   if (rc != SQLITE_OK)
     LOG (FATAL) << "Failed to open SQLite database: " << file;
 
@@ -377,7 +380,6 @@ SQLiteDatabase::~SQLiteDatabase ()
 
   ClearStatementCache ();
 
-  std::lock_guard<std::mutex> lock(mutDb);
   CHECK (db != nullptr);
   const int rc = sqlite3_close (db);
   if (rc != SQLITE_OK)
@@ -481,13 +483,10 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
      before inserting into the map of course).  */
 
   sqlite3_stmt* stmt = nullptr;
-  ReadDatabase ([&stmt, &sql] (sqlite3* h)
-    {
-      CHECK_EQ (sqlite3_prepare_v2 (h, sql.c_str (), sql.size () + 1,
-                                    &stmt, nullptr),
-                SQLITE_OK)
-          << "Failed to prepare SQL statement";
-    });
+  CHECK_EQ (sqlite3_prepare_v2 (db, sql.c_str (), sql.size () + 1,
+                                &stmt, nullptr),
+            SQLITE_OK)
+      << "Failed to prepare SQL statement";
 
   auto entry = std::make_unique<CachedStatement> (stmt);
   entry->used.test_and_set ();

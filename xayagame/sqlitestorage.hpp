@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -43,14 +43,6 @@ private:
   static bool sqliteInitialised;
 
   /**
-   * Mutex for access to db itself.  We configure the database to be in
-   * multi-thread mode (rather than serialised) since statements are
-   * created for single-thread use anyway, and thus have to explicitly
-   * synchronise any direct access to db.
-   */
-  mutable std::mutex mutDb;
-
-  /**
    * The SQLite database handle, which is owned and managed by the
    * current instance.  It will be opened in the constructor, and
    * finalised in the destructor.
@@ -69,13 +61,13 @@ private:
 
   /**
    * Mutex protecting the statement cache (but not the statements
-   * themselves inside, which have their own locks).
+   * themselves inside, which are given out thread local).
    */
   mutable std::mutex mutPreparedStatements;
 
   /**
    * A cache of prepared statements (mapping from the SQL command to the
-   * statement plus lock).  One SQL string may point to multiple cached
+   * statement).  One SQL string may point to multiple cached
    * entries, in case some of them are currently in use.
    */
   mutable std::multimap<std::string, std::unique_ptr<CachedStatement>>
@@ -119,15 +111,14 @@ public:
   ~SQLiteDatabase ();
 
   /**
-   * Executes a given callback with access to the raw database handle, ensuring
-   * necessary locking.  This should typically only be used for select use
-   * cases; most operations should go through Prepare instead.
+   * Executes a given callback with access to the raw database handle.
+   * This should typically only be used for select use cases; most operations
+   * should go through Prepare instead.
    */
   template <typename Fcn>
     auto
     AccessDatabase (const Fcn& cb)
   {
-    std::lock_guard<std::mutex> lock(mutDb);
     return cb (db);
   }
 
@@ -140,7 +131,6 @@ public:
     auto
     ReadDatabase (const Fcn& cb) const
   {
-    std::lock_guard<std::mutex> lock(mutDb);
     return cb (db);
   }
 
