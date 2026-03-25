@@ -334,6 +334,8 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
               && sqlite3_compileoption_used ("ENABLE_PREUPDATE_HOOK"))
           << "SQLite must be compiled with SQLITE_ENABLE_SESSION"
               " and SQLITE_ENABLE_PREUPDATE_HOOK";
+      CHECK (sqlite3_compileoption_used ("ENABLE_SNAPSHOT"))
+          << "SQLite must be compiled with SQLITE_ENABLE_SNAPSHOT";
 
       const int rc
           = sqlite3_config (SQLITE_CONFIG_LOG, &SQLiteErrorLogger, nullptr);
@@ -385,6 +387,12 @@ SQLiteDatabase::~SQLiteDatabase ()
       PrepareRo ("ROLLBACK").Execute ();
     }
 
+  if (sqliteSnapshot != nullptr && ownsSqliteSnapshot)
+    {
+      sqlite3_snapshot_free (sqliteSnapshot);
+      sqliteSnapshot = nullptr;
+    }
+
   ClearStatementCache ();
 
   CHECK (db != nullptr);
@@ -407,18 +415,59 @@ SQLiteDatabase::CachedStatement::~CachedStatement ()
 }
 
 void
-SQLiteDatabase::SetReadonlySnapshot (const SQLiteDatabase& p)
+SQLiteDatabase::SetReadonlySnapshot (const SQLiteDatabase& p,
+                                     sqlite3_snapshot* atSnap)
 {
-  CHECK (parent == nullptr);
+  CHECK (parent == nullptr && sqliteSnapshot == nullptr);
   parent = &p;
   LOG (INFO) << "Starting read transaction for snapshot";
 
-  /* There is no way to do an "immediate" read transaction.  Thus we have
-     to start a default deferred one, and then issue some SELECT query
-     that we don't really care about and that is guaranteed to work.  */
-
+  /* We need to exit auto-commit mode and start a deferred read transaction
+     for the entire lifespan of this snapshot (it is ROLLBACK'ed in the
+     destructor).  */
   PrepareRo ("BEGIN").Execute ();
 
+  /* If we want to anchor the transaction to a particular snapshot
+     from the parent database, open it now.  */
+  if (atSnap != nullptr)
+    CHECK_EQ (sqlite3_snapshot_open (db, "main", atSnap), SQLITE_OK)
+        << "Failed to open parent snapshot position";
+
+  /* Get a WAL snapshot for this exact state of the database.  This is used
+     for getting future child snapshots of this database, which should be
+     exact "copies".  This locks in the actual WAL position and starts the
+     read transaction deferred above.  */
+  CHECK (IsWalMode ()) << "Read-only snapshots only work in WAL mode";
+  if (atSnap == nullptr)
+    {
+      /* Fresh snapshot from the live database: ask SQLite for the current
+         WAL position.  This may fail, for instance if there is no physical
+         WAL file on disk yet.  In that case, we cannot record a WAL token;
+         the snapshot itself is valid and can be used, but it cannot be
+         "copied" to child snapshots.  */
+      const int sqliteRes = sqlite3_snapshot_get (db, "main", &sqliteSnapshot);
+      if (sqliteRes != SQLITE_OK)
+        {
+          LOG (WARNING) << "Failed to record SQLite snapshot: " << sqliteRes;
+          sqliteSnapshot = nullptr;
+        }
+      ownsSqliteSnapshot = true;
+    }
+  else
+    {
+      /* This connection was opened at an existing snapshot via
+         sqlite3_snapshot_open.  sqlite3_snapshot_get does not work after
+         snapshot_open on the same connection.  Instead, we store a non-owning
+         pointer to the parent's snapshot token directly: the parent is
+         guaranteed to outlive this connection by the snapshots reference
+         count, so the pointer remains valid for as long as we need it.  */
+      sqliteSnapshot = atSnap;
+      ownsSqliteSnapshot = false;
+    }
+
+  /* Make sure to start a read transaction, in case we didn't do so yet
+     with the sqlite3_snapshot_get call, which may not have happened
+     or succeeded in all code paths.  */
   auto stmt = PrepareRo ("SELECT COUNT(*) FROM `sqlite_master`");
   CHECK (stmt.Step ());
   CHECK (!stmt.Step ());
@@ -530,6 +579,14 @@ SQLiteDatabase::GetSnapshot () const
       return nullptr;
     }
 
+  /* If this is a snapshot itself but has no SQLite WAL snapshot token, we
+     cannot produce a copy of it.  */
+  if (parent != nullptr && sqliteSnapshot == nullptr)
+    {
+      LOG (WARNING) << "Snapshot without WAL snapshot token cannot be copied";
+      return nullptr;
+    }
+
   std::lock_guard<std::mutex> lock(mutSnapshots);
   if (waitingForSnapshots)
     {
@@ -539,7 +596,7 @@ SQLiteDatabase::GetSnapshot () const
   ++snapshots;
 
   auto res = std::make_unique<SQLiteDatabase> (filename, SQLITE_OPEN_READONLY);
-  res->SetReadonlySnapshot (*this);
+  res->SetReadonlySnapshot (*this, sqliteSnapshot);
 
   return res;
 }

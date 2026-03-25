@@ -8,7 +8,6 @@ RUN apt -y update && apt -y install \
   libzmq3-dev \
   zlib1g-dev \
   libjsoncpp-dev \
-  libsqlite3-dev \
   liblmdb-dev \
   libcurl4-openssl-dev \
   libssl-dev \
@@ -36,6 +35,15 @@ RUN apt -y install \
 
 # Number of parallel cores to use for make builds.
 ARG N=1
+
+# Build and install sqlite3 with custom flags.
+ARG SQLITE_VERSION="version-3.52.0"
+WORKDIR /usr/src/sqlite3
+RUN git clone https://github.com/sqlite/sqlite . \
+  && git checkout "${SQLITE_VERSION}" \
+  && ./configure --enable-session CFLAGS="-DSQLITE_ENABLE_SNAPSHOT" \
+  && make -j${N} \
+  && make install
 
 # We need to install libjson-rpc-cpp from source.
 ARG JSONRPCCPP_VERSION="v1.4.1"

@@ -64,6 +64,24 @@ private:
   const SQLiteDatabase* parent = nullptr;
 
   /**
+   * If this is a read-only snapshot of a parent database, then this
+   * records the SQLite-level WAL snapshot data it corresponds to.
+   *
+   * In some situations (such as no WAL file present on disk when snapshotting),
+   * taking a snapshot fails, so this may be null even if this instance is
+   * itself a snapshot.  Then the snapshot by itself works, but cannot be
+   * "copied" any further.
+   */
+  sqlite3_snapshot* sqliteSnapshot = nullptr;
+
+  /**
+   * Whether or not the sqliteSnapshot is owned by this instance (should be
+   * free'd in the destructor) or is just a reference to the parent's
+   * snapshot instead.
+   */
+  bool ownsSqliteSnapshot;
+
+  /**
    * Mutex protecting the statement cache (but not the statements
    * themselves inside, which are given out thread local).
    */
@@ -99,8 +117,11 @@ private:
    * called, this starts a read transaction to ensure that the current view is
    * preserved for all future queries.  It also registers this as outstanding
    * snapshot with the parent.
+   *
+   * Optionally, an existing snapshot (from the parent) can be used to
+   * anchor the read transaction for this snapshot to.
    */
-  void SetReadonlySnapshot (const SQLiteDatabase& p);
+  void SetReadonlySnapshot (const SQLiteDatabase& p, sqlite3_snapshot* atSnap);
 
   /**
    * Clears the cache of prepared statements.

@@ -449,10 +449,16 @@ TEST_F (SQLiteStorageSnapshotTests, MultipleSnapshots)
   storage.CommitTransaction ();
   auto s4 = storage.GetSnapshot ();
 
+  /* Get a second-level snapshot ("copy" of existing snapshot s2),
+     which should reflect the original state of that snapshot in a new
+     database instance.  */
+  auto s5 = s2->GetSnapshot ();
+
   ExpectDatabaseState (*s1, "");
   ExpectDatabaseState (*s2, "first");
   ExpectDatabaseState (*s3, "first");
   ExpectDatabaseState (*s4, "second");
+  ExpectDatabaseState (*s5, "first");
   ExpectDatabaseState (storage.GetDatabase (), "second");
 }
 
