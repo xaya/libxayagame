@@ -94,7 +94,6 @@ bool
 SQLiteDatabase::Statement::Step ()
 {
   CHECK (db != nullptr) << "Statement has no associated database";
-  std::lock_guard<std::mutex> lock(db->mutDb);
 
   PerformanceTimer timer;
   const int rc = sqlite3_step (**this);
@@ -321,7 +320,7 @@ SQLiteErrorLogger (void* arg, const int errCode, const char* msg)
 bool SQLiteDatabase::sqliteInitialised = false;
 
 SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
-  : db(nullptr)
+  : filename(file)
 {
   if (!sqliteInitialised)
     {
@@ -331,6 +330,13 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
       CHECK_EQ (SQLITE_VERSION_NUMBER, sqlite3_libversion_number ())
           << "Mismatch between header and library SQLite versions";
 
+      CHECK (sqlite3_compileoption_used ("ENABLE_SESSION")
+              && sqlite3_compileoption_used ("ENABLE_PREUPDATE_HOOK"))
+          << "SQLite must be compiled with SQLITE_ENABLE_SESSION"
+              " and SQLITE_ENABLE_PREUPDATE_HOOK";
+      CHECK (sqlite3_compileoption_used ("ENABLE_SNAPSHOT"))
+          << "SQLite must be compiled with SQLITE_ENABLE_SNAPSHOT";
+
       const int rc
           = sqlite3_config (SQLITE_CONFIG_LOG, &SQLiteErrorLogger, nullptr);
       if (rc != SQLITE_OK)
@@ -338,13 +344,17 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
       else
         LOG (INFO) << "Configured SQLite error handler";
 
-      CHECK_EQ (sqlite3_config (SQLITE_CONFIG_MULTITHREAD, nullptr), SQLITE_OK)
-          << "Failed to enable multi-threaded mode for SQLite";
-
       sqliteInitialised = true;
     }
 
-  const int rc = sqlite3_open_v2 (file.c_str (), &db, flags, nullptr);
+  /* We open the database connection with full internal locking by SQLite
+     to make sure everything is thread safe and we do not need to worry about
+     this ourselves in edge cases.  However, between threads in libxayagame,
+     we typically use entirely separate connections anyway, such as one
+     for writing during block processing, and one for each read as part
+     of an RPC request.  */
+  const int rc = sqlite3_open_v2 (filename.c_str (), &db,
+                                  flags | SQLITE_OPEN_FULLMUTEX, nullptr);
   if (rc != SQLITE_OK)
     LOG (FATAL) << "Failed to open SQLite database: " << file;
 
@@ -369,15 +379,22 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
 
 SQLiteDatabase::~SQLiteDatabase ()
 {
+  WaitForSnapshots ();
+
   if (parent != nullptr)
     {
       LOG (INFO) << "Ending snapshot read transaction";
       PrepareRo ("ROLLBACK").Execute ();
     }
 
+  if (sqliteSnapshot != nullptr && ownsSqliteSnapshot)
+    {
+      sqlite3_snapshot_free (sqliteSnapshot);
+      sqliteSnapshot = nullptr;
+    }
+
   ClearStatementCache ();
 
-  std::lock_guard<std::mutex> lock(mutDb);
   CHECK (db != nullptr);
   const int rc = sqlite3_close (db);
   if (rc != SQLITE_OK)
@@ -398,18 +415,59 @@ SQLiteDatabase::CachedStatement::~CachedStatement ()
 }
 
 void
-SQLiteDatabase::SetReadonlySnapshot (const SQLiteStorage& p)
+SQLiteDatabase::SetReadonlySnapshot (const SQLiteDatabase& p,
+                                     sqlite3_snapshot* atSnap)
 {
-  CHECK (parent == nullptr);
+  CHECK (parent == nullptr && sqliteSnapshot == nullptr);
   parent = &p;
   LOG (INFO) << "Starting read transaction for snapshot";
 
-  /* There is no way to do an "immediate" read transaction.  Thus we have
-     to start a default deferred one, and then issue some SELECT query
-     that we don't really care about and that is guaranteed to work.  */
-
+  /* We need to exit auto-commit mode and start a deferred read transaction
+     for the entire lifespan of this snapshot (it is ROLLBACK'ed in the
+     destructor).  */
   PrepareRo ("BEGIN").Execute ();
 
+  /* If we want to anchor the transaction to a particular snapshot
+     from the parent database, open it now.  */
+  if (atSnap != nullptr)
+    CHECK_EQ (sqlite3_snapshot_open (db, "main", atSnap), SQLITE_OK)
+        << "Failed to open parent snapshot position";
+
+  /* Get a WAL snapshot for this exact state of the database.  This is used
+     for getting future child snapshots of this database, which should be
+     exact "copies".  This locks in the actual WAL position and starts the
+     read transaction deferred above.  */
+  CHECK (IsWalMode ()) << "Read-only snapshots only work in WAL mode";
+  if (atSnap == nullptr)
+    {
+      /* Fresh snapshot from the live database: ask SQLite for the current
+         WAL position.  This may fail, for instance if there is no physical
+         WAL file on disk yet.  In that case, we cannot record a WAL token;
+         the snapshot itself is valid and can be used, but it cannot be
+         "copied" to child snapshots.  */
+      const int sqliteRes = sqlite3_snapshot_get (db, "main", &sqliteSnapshot);
+      if (sqliteRes != SQLITE_OK)
+        {
+          LOG (WARNING) << "Failed to record SQLite snapshot: " << sqliteRes;
+          sqliteSnapshot = nullptr;
+        }
+      ownsSqliteSnapshot = true;
+    }
+  else
+    {
+      /* This connection was opened at an existing snapshot via
+         sqlite3_snapshot_open.  sqlite3_snapshot_get does not work after
+         snapshot_open on the same connection.  Instead, we store a non-owning
+         pointer to the parent's snapshot token directly: the parent is
+         guaranteed to outlive this connection by the snapshots reference
+         count, so the pointer remains valid for as long as we need it.  */
+      sqliteSnapshot = atSnap;
+      ownsSqliteSnapshot = false;
+    }
+
+  /* Make sure to start a read transaction, in case we didn't do so yet
+     with the sqlite3_snapshot_get call, which may not have happened
+     or succeeded in all code paths.  */
   auto stmt = PrepareRo ("SELECT COUNT(*) FROM `sqlite_master`");
   CHECK (stmt.Step ());
   CHECK (!stmt.Step ());
@@ -481,13 +539,10 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
      before inserting into the map of course).  */
 
   sqlite3_stmt* stmt = nullptr;
-  ReadDatabase ([&stmt, &sql] (sqlite3* h)
-    {
-      CHECK_EQ (sqlite3_prepare_v2 (h, sql.c_str (), sql.size () + 1,
-                                    &stmt, nullptr),
-                SQLITE_OK)
-          << "Failed to prepare SQL statement";
-    });
+  CHECK_EQ (sqlite3_prepare_v2 (db, sql.c_str (), sql.size () + 1,
+                                &stmt, nullptr),
+            SQLITE_OK)
+      << "Failed to prepare SQL statement";
 
   auto entry = std::make_unique<CachedStatement> (stmt);
   entry->used.test_and_set ();
@@ -501,6 +556,101 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
   preparedStatements.emplace (sql, std::move (entry));
 
   return res;
+}
+
+void
+SQLiteDatabase::WaitForSnapshots ()
+{
+  std::unique_lock<std::mutex> lock(mutSnapshots);
+  LOG_IF (INFO, snapshots > 0)
+      << "Waiting for outstanding snapshots to be finished...";
+  waitingForSnapshots = true;
+  while (snapshots > 0)
+    cvSnapshots.wait (lock);
+  waitingForSnapshots = false;
+}
+
+std::unique_ptr<SQLiteDatabase>
+SQLiteDatabase::GetSnapshot () const
+{
+  if (!IsWalMode ())
+    {
+      LOG (WARNING) << "Snapshot is not possible for non-WAL database";
+      return nullptr;
+    }
+
+  /* If this is a snapshot itself but has no SQLite WAL snapshot token, we
+     cannot produce a copy of it.  */
+  if (parent != nullptr && sqliteSnapshot == nullptr)
+    {
+      LOG (WARNING) << "Snapshot without WAL snapshot token cannot be copied";
+      return nullptr;
+    }
+
+  std::lock_guard<std::mutex> lock(mutSnapshots);
+  if (waitingForSnapshots)
+    {
+      LOG (WARNING) << "Waiting for snapshots to close, can't open new one";
+      return nullptr;
+    }
+  ++snapshots;
+
+  auto res = std::make_unique<SQLiteDatabase> (filename, SQLITE_OPEN_READONLY);
+  res->SetReadonlySnapshot (*this, sqliteSnapshot);
+
+  return res;
+}
+
+void
+SQLiteDatabase::UnrefSnapshot () const
+{
+  std::lock_guard<std::mutex> lock(mutSnapshots);
+  CHECK_GT (snapshots, 0);
+  --snapshots;
+  if (snapshots == 0)
+    cvSnapshots.notify_all ();
+}
+
+void
+SQLiteDatabase::WalCheckpoint ()
+{
+  if (!IsWalMode ())
+    {
+      LOG_FIRST_N (WARNING, 1) << "Database is not in WAL mode";
+      return;
+    }
+
+  WaitForSnapshots ();
+  /* Make sure to clear also all prepared statements, so that the
+     database does not consider some operations still in progress
+     that might contradict the WAL truncation.  */
+  ClearStatementCache ();
+
+  /* In theory, the code above ensures that we are good to do a checkpoint,
+     with no existing open locks on the database.  However, in some usage
+     scenarios, external processes might read the database file directly,
+     and we have no control over that (but want to support these cases).
+
+     For them, the WAL checkpointing might fail with SQLITE_BUSY.  In this
+     case (and only this case), we fail gracefully, and just don't checkpoint;
+     this is not a critical issue, as we might be able to just checkpoint
+     later, and it won't cause any immediate difference to the database.  */
+  const int res = sqlite3_wal_checkpoint_v2 (db, nullptr,
+                                             SQLITE_CHECKPOINT_TRUNCATE,
+                                             nullptr, nullptr);
+  switch (res)
+    {
+    case SQLITE_BUSY:
+      LOG (WARNING)
+          << "Failed to checkpoint WAL file,"
+             " another process might be reading the database";
+      break;
+    case SQLITE_OK:
+      LOG (INFO) << "Checkpointed and truncated WAL file successfully";
+      break;
+    default:
+      LOG (FATAL) << "Error checkpointing the WAL file: " << res;
+    }
 }
 
 /* ************************************************************************** */
@@ -524,11 +674,7 @@ SQLiteStorage::OpenDatabase ()
 void
 SQLiteStorage::WaitForSnapshots ()
 {
-  std::unique_lock<std::mutex> lock(mutSnapshots);
-  LOG_IF (INFO, snapshots > 0)
-      << "Waiting for outstanding snapshots to be finished...";
-  while (snapshots > 0)
-    cvSnapshots.wait (lock);
+  db->WaitForSnapshots ();
 }
 
 void
@@ -551,34 +697,6 @@ SQLiteStorage::GetDatabase () const
 {
   CHECK (db != nullptr);
   return *db;
-}
-
-std::unique_ptr<SQLiteDatabase>
-SQLiteStorage::GetSnapshot () const
-{
-  CHECK (db != nullptr);
-  if (!db->IsWalMode ())
-    {
-      LOG (WARNING) << "Snapshot is not possible for non-WAL database";
-      return nullptr;
-    }
-
-  std::lock_guard<std::mutex> lock(mutSnapshots);
-  ++snapshots;
-
-  auto res = std::make_unique<SQLiteDatabase> (filename, SQLITE_OPEN_READONLY);
-  res->SetReadonlySnapshot (*this);
-
-  return res;
-}
-
-void
-SQLiteStorage::UnrefSnapshot () const
-{
-  std::lock_guard<std::mutex> lock(mutSnapshots);
-  CHECK_GT (snapshots, 0);
-  --snapshots;
-  cvSnapshots.notify_all ();
 }
 
 void
@@ -776,55 +894,11 @@ SQLiteStorage::CommitTransaction ()
       const auto intv
           = std::chrono::milliseconds (FLAGS_xaya_sqlite_wal_truncate_ms);
       if (lastWalCheckpoint + intv <= Clock::now ())
-        WalCheckpoint ();
-    }
-}
-
-void
-SQLiteStorage::WalCheckpoint ()
-{
-  CHECK (db != nullptr);
-  CHECK (!startedTransaction);
-
-  LOG (INFO) << "Attempting periodic WAL checkpointing...";
-  lastWalCheckpoint = Clock::now ();
-
-  if (!db->IsWalMode ())
-    {
-      LOG_FIRST_N (WARNING, 1) << "Database is not in WAL mode";
-      return;
-    }
-
-  WaitForSnapshots ();
-  /* Make sure to clear also all prepared statements, so that the
-     database does not consider some operations still in progress
-     that might contradict the WAL truncation.  */
-  db->ClearStatementCache ();
-
-  /* In theory, the code above ensures that we are good to do a checkpoint,
-     with no existing open locks on the database.  However, in some usage
-     scenarios, external processes might read the database file directly,
-     and we have no control over that (but want to support these cases).
-
-     For them, the WAL checkpointing might fail with SQLITE_BUSY.  In this
-     case (and only this case), we fail gracefully, and just don't checkpoint;
-     this is not a critical issue, as we might be able to just checkpoint
-     later, and it won't cause any immediate difference to the database.  */
-  const int res = sqlite3_wal_checkpoint_v2 (db->db, nullptr,
-                                             SQLITE_CHECKPOINT_TRUNCATE,
-                                             nullptr, nullptr);
-  switch (res)
-    {
-    case SQLITE_BUSY:
-      LOG (WARNING)
-          << "Failed to checkpoint WAL file,"
-             " another process might be reading the database";
-      break;
-    case SQLITE_OK:
-      LOG (INFO) << "Checkpointed and truncated WAL file successfully";
-      break;
-    default:
-      LOG (FATAL) << "Error checkpointing the WAL file: " << res;
+        {
+          LOG (INFO) << "Attempting periodic WAL checkpointing...";
+          lastWalCheckpoint = Clock::now ();
+          db->WalCheckpoint ();
+        }
     }
 }
 

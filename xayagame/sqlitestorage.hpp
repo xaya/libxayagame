@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,8 +21,6 @@
 namespace xaya
 {
 
-class SQLiteStorage;
-
 /**
  * Wrapper around an SQLite database connection.  This object mostly holds
  * an sqlite3* handle (that is owned and managed by it), but it also
@@ -43,19 +41,17 @@ private:
   static bool sqliteInitialised;
 
   /**
-   * Mutex for access to db itself.  We configure the database to be in
-   * multi-thread mode (rather than serialised) since statements are
-   * created for single-thread use anyway, and thus have to explicitly
-   * synchronise any direct access to db.
+   * Filename of the underlying SQLite file.  This is used to re-open it for
+   * snapshots.
    */
-  mutable std::mutex mutDb;
+  const std::string filename;
 
   /**
    * The SQLite database handle, which is owned and managed by the
    * current instance.  It will be opened in the constructor, and
    * finalised in the destructor.
    */
-  sqlite3* db;
+  sqlite3* db = nullptr;
 
   /**
    * Whether or not we have WAL mode on the database.  This is required
@@ -64,35 +60,78 @@ private:
    */
   bool walMode;
 
-  /** The "parent" storage if this is a read-only snapshot.  */
-  const SQLiteStorage* parent = nullptr;
+  /** The "parent" database if this is a read-only snapshot.  */
+  const SQLiteDatabase* parent = nullptr;
+
+  /**
+   * If this is a read-only snapshot of a parent database, then this
+   * records the SQLite-level WAL snapshot data it corresponds to.
+   *
+   * In some situations (such as no WAL file present on disk when snapshotting),
+   * taking a snapshot fails, so this may be null even if this instance is
+   * itself a snapshot.  Then the snapshot by itself works, but cannot be
+   * "copied" any further.
+   */
+  sqlite3_snapshot* sqliteSnapshot = nullptr;
+
+  /**
+   * Whether or not the sqliteSnapshot is owned by this instance (should be
+   * free'd in the destructor) or is just a reference to the parent's
+   * snapshot instead.
+   */
+  bool ownsSqliteSnapshot;
 
   /**
    * Mutex protecting the statement cache (but not the statements
-   * themselves inside, which have their own locks).
+   * themselves inside, which are given out thread local).
    */
   mutable std::mutex mutPreparedStatements;
 
   /**
    * A cache of prepared statements (mapping from the SQL command to the
-   * statement plus lock).  One SQL string may point to multiple cached
+   * statement).  One SQL string may point to multiple cached
    * entries, in case some of them are currently in use.
    */
   mutable std::multimap<std::string, std::unique_ptr<CachedStatement>>
       preparedStatements;
 
   /**
-   * Marks this is a read-only snapshot (with the given parent storage).  When
+   * Number of outstanding snapshots.  This has to drop to zero before
+   * we can close the database.
+   */
+  mutable unsigned snapshots = 0;
+
+  /**
+   * Set to true while waiting for snapshots to drop to zero (WaitForSnapshots),
+   * prevents new snapshots from being created.
+   */
+  bool waitingForSnapshots = false;
+
+  /** Mutex for the snapshot number.  */
+  mutable std::mutex mutSnapshots;
+  /** Condition variable for waiting for snapshot unrefs.  */
+  mutable std::condition_variable cvSnapshots;
+
+  /**
+   * Marks this is a read-only snapshot (with the given parent database).  When
    * called, this starts a read transaction to ensure that the current view is
    * preserved for all future queries.  It also registers this as outstanding
    * snapshot with the parent.
+   *
+   * Optionally, an existing snapshot (from the parent) can be used to
+   * anchor the read transaction for this snapshot to.
    */
-  void SetReadonlySnapshot (const SQLiteStorage& p);
+  void SetReadonlySnapshot (const SQLiteDatabase& p, sqlite3_snapshot* atSnap);
 
   /**
    * Clears the cache of prepared statements.
    */
   void ClearStatementCache ();
+
+  /**
+   * Decrements the count of outstanding snapshots.
+   */
+  void UnrefSnapshot () const;
 
   /**
    * Returns whether or not the database is using WAL mode.
@@ -102,8 +141,6 @@ private:
   {
     return walMode;
   }
-
-  friend class SQLiteStorage;
 
 public:
 
@@ -119,15 +156,14 @@ public:
   ~SQLiteDatabase ();
 
   /**
-   * Executes a given callback with access to the raw database handle, ensuring
-   * necessary locking.  This should typically only be used for select use
-   * cases; most operations should go through Prepare instead.
+   * Executes a given callback with access to the raw database handle.
+   * This should typically only be used for select use cases; most operations
+   * should go through Prepare instead.
    */
   template <typename Fcn>
     auto
     AccessDatabase (const Fcn& cb)
   {
-    std::lock_guard<std::mutex> lock(mutDb);
     return cb (db);
   }
 
@@ -140,7 +176,6 @@ public:
     auto
     ReadDatabase (const Fcn& cb) const
   {
-    std::lock_guard<std::mutex> lock(mutDb);
     return cb (db);
   }
 
@@ -168,6 +203,24 @@ public:
    * is meant for statements that are read-only, i.e. SELECT.
    */
   Statement PrepareRo (const std::string& sql) const;
+
+  /**
+   * Performs an explicit WAL checkpoint.
+   */
+  void WalCheckpoint ();
+
+  /**
+   * Blocks until no child snapshots are open.
+   */
+  void WaitForSnapshots ();
+
+  /**
+   * Creates a read-only snapshot of the underlying database and returns
+   * the corresponding SQLiteDatabase instance.  May return NULL if the
+   * underlying database is not using WAL mode (e.g. in-memory) or some
+   * other condition prevents snapshot creation.
+   */
+  std::unique_ptr<SQLiteDatabase> GetSnapshot () const;
 
 };
 
@@ -360,17 +413,6 @@ private:
    */
   bool startedTransaction = false;
 
-  /**
-   * Number of outstanding snapshots.  This has to drop to zero before
-   * we can close the database.
-   */
-  mutable unsigned snapshots = 0;
-
-  /** Mutex for the snapshot number.  */
-  mutable std::mutex mutSnapshots;
-  /** Condition variable for waiting for snapshot unrefs.  */
-  mutable std::condition_variable cvSnapshots;
-
   /** Clock used for timing the WAL checkpointing.  */
   using Clock = std::chrono::steady_clock;
   /** Last time when we did a WAL checkpoint.  */
@@ -381,18 +423,6 @@ private:
    * database is already opened.
    */
   void OpenDatabase ();
-
-  /**
-   * Decrements the count of outstanding snapshots.
-   */
-  void UnrefSnapshot () const;
-
-  /**
-   * Performs an explicit WAL checkpoint.
-   */
-  void WalCheckpoint ();
-
-  friend class SQLiteDatabase;
 
 protected:
 
@@ -424,13 +454,6 @@ protected:
    * Returns the underlying SQLiteDatabase instance.
    */
   const SQLiteDatabase& GetDatabase () const;
-
-  /**
-   * Creates a read-only snapshot of the underlying database and returns
-   * the corresponding SQLiteDatabase instance.  May return NULL if the
-   * underlying database is not using WAL mode (e.g. in-memory).
-   */
-  std::unique_ptr<SQLiteDatabase> GetSnapshot () const;
 
   /**
    * Returns the current block hash (if any) for the given database connection.

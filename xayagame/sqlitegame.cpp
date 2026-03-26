@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2024 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -103,6 +103,11 @@ private:
    * The database snapshot for reading the game state.  May be null even if
    * there is a current snapshot, in which case it means that there is no game
    * state, just an instance state.
+   *
+   * This is a shared_ptr so that in-flight RPC calls (which hold a copy of
+   * this pointer) can keep the level-1 anchor connection alive independently
+   * of when a new block is processed and the snapshot replaced here.  This
+   * means Set() never needs to wait for ongoing RPC calls to finish.
    */
   std::shared_ptr<const SQLiteDatabase> database;
 
@@ -119,6 +124,9 @@ public:
   /**
    * Returns a "copy" (that can then be used without locks) of the current
    * snapshot data.  If no snapshot is stored, returns false.
+   *
+   * The database is returned as a shared_ptr; callers must keep it alive and
+   * then call GetSnapshot() on it to obtain a private per-call connection.
    */
   bool
   Get (Json::Value& inst, std::shared_ptr<const SQLiteDatabase>& db,
@@ -708,7 +716,7 @@ SQLiteGame::GameStateUpdated (const GameStateData& state,
   std::shared_ptr<SQLiteDatabase> snapshot;
   if (upToDate)
     {
-      auto uniqueSnapshot = database->GetSnapshot ();
+      auto uniqueSnapshot = database->GetDatabase ().GetSnapshot ();
       if (uniqueSnapshot != nullptr
             && database->CheckCurrentState (*uniqueSnapshot, state))
         snapshot.reset (uniqueSnapshot.release ());
@@ -750,7 +758,7 @@ SQLiteGame::InstanceStateChanged (const Json::Value& state)
 
       const auto state = database->GetCurrentGameState ();
       EnsureCurrentState (state);
-      snapshot = database->GetSnapshot ();
+      snapshot = database->GetDatabase ().GetSnapshot ();
       if (snapshot == nullptr
             || !database->CheckCurrentState (*snapshot, state))
         {
@@ -780,20 +788,32 @@ SQLiteGame::GetCustomStateData (
   /* If we have a state snapshot, use it to retrieve the data without
      locking the Game's lock at all.  */
   Json::Value res;
-  std::shared_ptr<const SQLiteDatabase> snapshotDb;
+  std::shared_ptr<const SQLiteDatabase> anchorDb;
   uint64_t snapshotHeight = std::numeric_limits<uint64_t>::max ();
   uint256 snapshotHash;
-  if (stateSnapshot->Get (res, snapshotDb, snapshotHeight, snapshotHash))
+  if (stateSnapshot->Get (res, anchorDb, snapshotHeight, snapshotHash))
     {
       VLOG (1) << "Using state snapshot for GetCustomStateData";
 
+      if (anchorDb == nullptr)
+        {
+          /* No actual state is present at the moment.  */
+          return res;
+        }
+
+      /* Take a fresh per-call child snapshot so that this RPC call has
+         its own private connection and does not compete for locks with
+         other RPC calls.  */
+      auto snapshotDb = anchorDb->GetSnapshot ();
       if (snapshotDb != nullptr)
         {
           CHECK_LT (snapshotHeight, std::numeric_limits<uint64_t>::max ());
           res[jsonField] = cb (*snapshotDb, snapshotHash, snapshotHeight);
+          return res;
         }
 
-      return res;
+      /* If we failed to make a copy of the snapshot to use in lock-free
+         RPC processing, fall through to the main-lock code path below.  */
     }
 
   /* Otherwise use Game::GetCustomStateData to retrieve the state
