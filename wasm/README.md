@@ -64,10 +64,75 @@ internal logging which uses token pasting (`LOGLEVEL_##LEVEL`).
 The shim headers are installed into the prefix alongside the libraries so
 that game projects do not need a copy of the libxayagame source tree.
 
-## Prerequisites
+## Docker Image (Recommended)
+
+The `wasm/docker/` directory contains a `Dockerfile` that builds a
+self-contained image with Emscripten and all required dependencies
+already cross-compiled and installed into the Emscripten sysroot.  This
+is the easiest way to get a reproducible build environment without
+installing or cross-compiling anything on the host.
+
+### What is in the image
+
+The image is based on `emscripten/emsdk` (Debian-based) and adds:
+
+| Component | Version ARG | How built |
+|-----------|-------------|-----------|
+| Emscripten SDK | (from base image) | Pre-installed |
+| OpenSSL | `OPENSSL_VERSION` | Cross-compiled for WASM |
+| Protobuf (`protoc` + `libprotobuf`) | `PROTOBUF_VERSION` | `protoc` built natively; `libprotobuf` cross-compiled for WASM |
+| jsoncpp | `JSONCPP_VERSION` | Cross-compiled for WASM |
+| secp256k1 | `SECP256K1_VERSION` | Cross-compiled for WASM |
+| eth-utils | `ETHUTILS_VERSION` | Cross-compiled for WASM |
+
+`protoc` and `libprotobuf` are built from **the same source checkout**,
+guaranteeing that the code-generator binary and the runtime library are
+always the exact same version.
+
+All WASM artefacts are installed into the Emscripten sysroot
+(`/emsdk/upstream/emscripten/cache/sysroot`), which Emscripten searches
+automatically, so no extra `-I` or `-L` flags are needed.
+
+### Building the image
+
+```bash
+# From the root of the libxayagame repository:
+docker build -f wasm/docker/Dockerfile -t libxayagame-wasm .
+```
+
+Parallel builds can be enabled with the `N` build argument to speed up
+the cross-compilation steps:
+
+```bash
+docker build -f wasm/docker/Dockerfile -t libxayagame-wasm \
+  --build-arg N=$(nproc) .
+```
+
+### Using the image
+
+Mount your game project into the container and run the build inside it:
+
+```bash
+docker run --rm -v $(pwd):/game libxayagame-wasm \
+  bash -c "
+    emcmake cmake -B /game/build /game \
+      -DCMAKE_PREFIX_PATH=\${WASM_PREFIX} && \
+    cmake --build /game/build
+  "
+```
+
+The `WASM_PREFIX` environment variable is set inside the image to the
+Emscripten sysroot path, so game projects can reference it without
+hardcoding the path.
+
+## Prerequisites (manual setup)
+
+If you prefer not to use Docker, you will need to set up the following
+manually:
 
 1. **Emscripten SDK** — Install and activate (`source emsdk_env.sh`)
-2. **Protobuf for WASM** — Full protobuf compiled as a static WASM library
+2. **Protobuf for WASM** — Full protobuf compiled as a static WASM library,
+   plus a matching native `protoc` binary on `$PATH`
 3. **OpenSSL for WASM** — OpenSSL compiled as a static WASM library
 4. **jsoncpp for WASM** — jsoncpp compiled as a static WASM library
 5. **eth-utils for WASM** — eth-utils (with secp256k1) compiled as a static WASM library
