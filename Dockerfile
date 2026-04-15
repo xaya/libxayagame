@@ -2,7 +2,7 @@
 # both for the build but also in the final image.  These are the dependencies
 # that are required as dev packages also for using libxayagame.
 FROM debian:13-slim AS base
-RUN apt -y update && apt -y install \
+RUN apt -y update && apt -y install --no-install-recommends \
   cppzmq-dev \
   libargtable2-dev \
   libzmq3-dev \
@@ -24,11 +24,12 @@ RUN apt -y update && apt -y install \
 # Create the image that we use to build everything, and install additional
 # packages that are needed only for the build itself.
 FROM base AS build
-RUN apt -y install \
+RUN apt -y update && apt -y install --no-install-recommends \
   autoconf \
   autoconf-archive \
   automake \
   build-essential \
+  ca-certificates \
   cmake \
   git \
   libtool \
@@ -85,6 +86,6 @@ FROM base
 COPY --from=build /usr/local /usr/local/
 ENV PKG_CONFIG_PATH="/usr/local/lib64/pkgconfig"
 ENV LD_LIBRARY_PATH="/usr/local/lib:/usr/local/lib64"
-RUN apt -y install \
+RUN apt -y update && apt -y install --no-install-recommends \
   bash
 LABEL description="Development image with libxayagame and dependencies"
