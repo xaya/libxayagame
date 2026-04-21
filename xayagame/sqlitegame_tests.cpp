@@ -1226,6 +1226,21 @@ TEST_F (UnblockedStateExtractionTests, LongBlockUpdate)
   EXPECT_EQ (GetLastMessage ("domob", 1), "new");
 }
 
+TEST_F (UnblockedStateExtractionTests, WalCheckpointing)
+{
+  /* This test verifies that WAL checkpointing (which waits for all
+     open snapshots) correctly works also with the state snapshot stored by
+     SQLiteGame itself, and this does not lead to a deadlock.  */
+
+  FLAGS_xaya_sqlite_wal_truncate_ms = 1;
+  const auto delay
+      = std::chrono::milliseconds (2 * FLAGS_xaya_sqlite_wal_truncate_ms);
+
+  AttachBlock (game, BlockHash (12), ChatGame::Moves ({{"domob", "new"}}));
+  std::this_thread::sleep_for (delay);
+  AttachBlock (game, BlockHash (13), ChatGame::Moves ({{"andy", "new"}}));
+}
+
 /* ************************************************************************** */
 
 /**
