@@ -36,6 +36,7 @@ public:
 private:
 
   struct CachedStatement;
+  class SnapshotGate;
 
   /** Whether or not we have already initialised SQLite.  */
   static bool sqliteInitialised;
@@ -210,9 +211,13 @@ public:
   void WalCheckpoint ();
 
   /**
-   * Blocks until no child snapshots are open.
+   * Blocks until no child snapshots are open, then returns a SnapshotGate
+   * that keeps the gate closed (preventing new snapshots from being created)
+   * for as long as the caller holds the returned object.  Discarding the
+   * return value immediately closes the gate again, which is the right
+   * behaviour for callers that only need to drain existing snapshots.
    */
-  void WaitForSnapshots ();
+  std::unique_ptr<SnapshotGate> WaitForSnapshots ();
 
   /**
    * Creates a read-only snapshot of the underlying database and returns
@@ -253,6 +258,29 @@ struct SQLiteDatabase::CachedStatement
    * Cleans up the SQLite statement and ensures the statement is not in use.
    */
   ~CachedStatement ();
+
+};
+
+/**
+ * RAII gate that keeps waitingForSnapshots=true and mutSnapshots locked
+ * for its entire lifetime.  Constructed only by WaitForSnapshots().
+ */
+class SQLiteDatabase::SnapshotGate
+{
+
+private:
+
+  SQLiteDatabase& db;
+  std::unique_lock<std::mutex> lock;
+
+public:
+
+  explicit SnapshotGate (SQLiteDatabase& db);
+  ~SnapshotGate ();
+
+  SnapshotGate () = delete;
+  SnapshotGate (const SnapshotGate&) = delete;
+  void operator= (const SnapshotGate&) = delete;
 
 };
 

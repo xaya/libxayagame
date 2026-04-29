@@ -566,16 +566,25 @@ SQLiteDatabase::PrepareRo (const std::string& sql) const
   return res;
 }
 
-void
+SQLiteDatabase::SnapshotGate::SnapshotGate (SQLiteDatabase& d)
+  : db(d), lock(d.mutSnapshots)
+{
+  LOG_IF (INFO, db.snapshots > 0)
+      << "Waiting for outstanding snapshots to be finished...";
+  db.waitingForSnapshots = true;
+  while (db.snapshots > 0)
+    db.cvSnapshots.wait (lock);
+}
+
+SQLiteDatabase::SnapshotGate::~SnapshotGate ()
+{
+  db.waitingForSnapshots = false;
+}
+
+std::unique_ptr<SQLiteDatabase::SnapshotGate>
 SQLiteDatabase::WaitForSnapshots ()
 {
-  std::unique_lock<std::mutex> lock(mutSnapshots);
-  LOG_IF (INFO, snapshots > 0)
-      << "Waiting for outstanding snapshots to be finished...";
-  waitingForSnapshots = true;
-  while (snapshots > 0)
-    cvSnapshots.wait (lock);
-  waitingForSnapshots = false;
+  return std::make_unique<SnapshotGate> (*this);
 }
 
 std::unique_ptr<SQLiteDatabase>
@@ -628,7 +637,11 @@ SQLiteDatabase::WalCheckpoint ()
       return;
     }
 
-  WaitForSnapshots ();
+  /* Hold the gate for the entire duration of the checkpoint to ensure
+     that no new snapshots are created until after the checkpointing
+     operation is finished.  */
+  const auto gate = WaitForSnapshots ();
+
   /* Make sure to clear also all prepared statements, so that the
      database does not consider some operations still in progress
      that might contradict the WAL truncation.  */
