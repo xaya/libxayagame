@@ -52,9 +52,12 @@ for the configuration and/or build to be successful:
 - [`zlib`](https://zlib.net):
   Available in Debian as `zlib1g-dev`.
 - [SQLite3](https://www.sqlite.org/) with the
-  [session extension](https://www.sqlite.org/sessionintro.html).
-  In Debian, the `libsqlite3-dev` package can be installed.
-  Alternatively, build from source and configure with `--enable-session`.
+  [session extension](https://www.sqlite.org/sessionintro.html)
+  and [snapshot extension](https://sqlite.org/c3ref/snapshot.html).
+  In Debian, the `libsqlite3-dev` package can not be used, as it misses
+  the snapshot extension.
+  Build from source and configure with `--enable-session`
+  and `CFLAGS="-DSQLITE_ENABLE_SNAPSHOT"`.
 - [LMDB](https://symas.com/lmdb):  Available for Debian in the
   `liblmdb-dev` package.
 - [`glog`](https://github.com/google/glog):
