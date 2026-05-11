@@ -789,7 +789,18 @@ Game::NotifyInstanceStateChanged () const
   uint256 hash;
   unsigned height;
   const auto state = UnlockedGetInstanceStateJson (hash, height);
+  /* InstanceStateChanged must be called first, before updating the cache.
+     This is because InstanceStateChanged (e.g. in SQLiteGame) is where the
+     read-only database snapshot gets updated to reflect the new block.  If we
+     updated cachedNullState first, a concurrent GetNullJsonState caller could
+     observe the new block hash in the cache and immediately call a state RPC,
+     which would still read the old snapshot and return inconsistent data.  */
   rules->InstanceStateChanged (state);
+  {
+    std::lock_guard<std::mutex> lock(mutNullState);
+    VLOG (1) << "Updating cached instance 'null' state:\n" << state;
+    cachedNullState = state;
+  }
 }
 
 Json::Value
@@ -860,6 +871,14 @@ Game::GetCurrentJsonState () const
 Json::Value
 Game::GetNullJsonState () const
 {
+  {
+    std::lock_guard<std::mutex> lock(mutNullState);
+    if (!cachedNullState.isNull ())
+      return cachedNullState;
+  }
+
+  /* Fall back to the full locked path if the cache is not yet populated
+     (i.e. before the first call to NotifyInstanceStateChanged).  */
   Json::Value res = GetCustomStateData ("data",
       [] (const GameStateData& state)
         {

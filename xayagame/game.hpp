@@ -218,6 +218,26 @@ private:
   /** The coprocessor batch we use to handle coprocessors during blocks.  */
   CoprocessorBatch coproc;
 
+  /**
+   * Mutex protecting cachedNullState.  This is a separate, subordinate lock
+   * that is only ever acquired while mut is already held (when writing) or
+   * instead of mut (when reading in GetNullJsonState).  This ensures that
+   * GetNullJsonState never needs to acquire the main mut lock.
+   */
+  mutable std::mutex mutNullState;
+
+  /**
+   * Cached result of the last GetNullJsonState-equivalent computation, i.e.
+   * the instance state JSON (gameid, chain, state, blockhash, height).
+   * Updated in NotifyInstanceStateChanged while mut is held.  Empty until
+   * the first call to NotifyInstanceStateChanged.
+   *
+   * We use a cache here to provide fast, unblocked (on main game lock)
+   * access to getnullstate, e.g. for state polling, which works well
+   * even when catching up.
+   */
+  mutable Json::Value cachedNullState;
+
   void BlockAttach (const std::string& id, const Json::Value& data,
                     bool seqMismatch) override;
   void BlockDetach (const std::string& id, const Json::Value& data,

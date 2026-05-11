@@ -809,6 +809,55 @@ TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
   EXPECT_EQ (state["gamestate"]["state"], "");
 }
 
+TEST_F (GetCurrentJsonStateTests, NullStateUnblocked)
+{
+  mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
+                                TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+  SetStartingBlock (GAME_GENESIS_HEIGHT, TestGame::GenesisBlockHash ());
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+
+  std::atomic<bool> longCallStarted;
+  std::atomic<bool> longCallDone;
+  longCallStarted = false;
+  longCallDone = false;
+
+  /* Hold the game lock for a long time with a slow GetCustomStateData
+     call, simulating a long block update or slow RPC handler.  */
+  std::thread longCall([&] ()
+    {
+      g.GetCustomStateData ("data",
+          [&] (const GameStateData& state,
+               const uint256& hash, const unsigned height,
+               std::unique_lock<std::mutex> lock)
+          {
+            LOG (INFO) << "Long call: holding lock";
+            longCallStarted = true;
+            std::this_thread::sleep_for (std::chrono::milliseconds (100));
+            LOG (INFO) << "Long call: releasing lock";
+            return Json::Value ();
+          });
+      longCallDone = true;
+    });
+
+  while (!longCallStarted)
+    std::this_thread::sleep_for (std::chrono::milliseconds (1));
+
+  /* GetNullJsonState must return immediately from the cache without waiting
+     for the long call to release the game lock.  */
+  const Json::Value nullState = g.GetNullJsonState ();
+  EXPECT_FALSE (longCallDone);
+
+  EXPECT_EQ (nullState["gameid"], GAME_ID);
+  EXPECT_EQ (nullState["chain"], "main");
+  EXPECT_EQ (nullState["state"], "up-to-date");
+  EXPECT_EQ (nullState["blockhash"], BlockHash (11).ToHex ());
+  EXPECT_EQ (nullState["height"].asInt (), 11);
+  EXPECT_FALSE (nullState.isMember ("data"));
+
+  longCall.join ();
+}
+
 TEST_F (GetCurrentJsonStateTests, CallbackUnblocked)
 {
   mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
