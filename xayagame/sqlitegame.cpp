@@ -457,7 +457,7 @@ SQLiteGame::SQLiteGame ()
 SQLiteGame::~SQLiteGame () = default;
 
 void
-SQLiteGame::EnsureCurrentState (const GameStateData& state)
+SQLiteGame::EnsureCurrentState (const GameStateData& state) const
 {
   CHECK (database != nullptr) << "SQLiteGame has not been initialised";
   CHECK (database->CheckCurrentState (database->GetDatabase (), state))
@@ -778,6 +778,22 @@ SQLiteGame::GameStateToJson (const GameStateData& state)
 {
   EnsureCurrentState (state);
   return GetStateAsJson (database->GetDatabase ());
+}
+
+Json::Value
+SQLiteGame::GetCustomInstanceStateJson (const uint256& hash, unsigned height,
+                                        const GameStateData& state)
+{
+  CHECK (database != nullptr) << "SQLiteGame has not been initialised";
+  EnsureCurrentState (state);
+  return GetCustomInstanceState (database->GetDatabase (), hash, height);
+}
+
+Json::Value
+SQLiteGame::GetCustomInstanceState (const SQLiteDatabase& db,
+                                    const uint256& hash, unsigned height)
+{
+  return Json::Value ();
 }
 
 Json::Value

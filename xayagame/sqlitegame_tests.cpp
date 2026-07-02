@@ -616,6 +616,13 @@ TEST_F (MovingTests, ErrorHandling)
   });
 }
 
+TEST_F (MovingTests, InstanceStateHasNoCustomField)
+{
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({}));
+  const Json::Value state = game.GetCurrentJsonState ();
+  EXPECT_FALSE (state.isMember ("custom"));
+}
+
 /* ************************************************************************** */
 
 /**
@@ -768,6 +775,49 @@ using SchemaVersionTests = SQLiteGameTests<ChatWithSchemaVersion>;
 TEST_F (SchemaVersionTests, VersionSet)
 {
   EXPECT_EQ (rules.GetSchemaVersion (), "schema");
+}
+
+/* ************************************************************************** */
+
+class CustomStateChatGame : public ChatGame
+{
+
+public:
+
+  Json::Value
+  GetCustomInstanceState (const SQLiteDatabase& db,
+                                const uint256& hash,
+                                unsigned height) override
+  {
+    const auto state = GetState (db);
+    const auto mit = state.find ("customuser");
+    if (mit == state.end ())
+      return Json::Value ();
+
+    Json::Value res(Json::objectValue);
+    res["msg"] = mit->second;
+    return res;
+  }
+
+};
+
+using CustomStateTests = SQLiteGameTests<CustomStateChatGame>;
+
+TEST_F (CustomStateTests, NoCustomFieldWhenUserMissing)
+{
+  AttachBlock (game, BlockHash (11),
+               ChatGame::Moves ({{"otheruser", "irrelevant"}}));
+  const Json::Value state = game.GetCurrentJsonState ();
+  EXPECT_FALSE (state.isMember ("custom"));
+}
+
+TEST_F (CustomStateTests, CustomFieldWhenUserExists)
+{
+  AttachBlock (game, BlockHash (11),
+               ChatGame::Moves ({ {"customuser", "hello"} }));
+  const Json::Value state = game.GetCurrentJsonState ();
+  ASSERT_TRUE (state.isMember ("custom"));
+  EXPECT_EQ (state["custom"]["msg"], "hello");
 }
 
 /* ************************************************************************** */
