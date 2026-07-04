@@ -117,7 +117,7 @@ private:
    * Ensures that the current state of the database matches the passed in
    * "fake game state".
    */
-  void EnsureCurrentState (const GameStateData& state);
+  void EnsureCurrentState (const GameStateData& state) const;
 
 protected:
 
@@ -182,6 +182,18 @@ protected:
   virtual Json::Value GetStateAsJson (const SQLiteDatabase& db) = 0;
 
   /**
+   * Constructs a custom portion of the instance state JSON from the
+   * database.  This can be overridden by subclasses to add custom data
+   * to the instance state.
+   *
+   * The default implementation returns null, meaning no custom data
+   * is included.
+   */
+  virtual Json::Value GetCustomInstanceState (
+      const SQLiteDatabase& db,
+      const uint256& hash, unsigned height);
+
+  /**
    * Returns a handle to an AutoId instance for a given named key.  That can
    * be used to generate a consistent sequence of integer IDs.
    */
@@ -241,6 +253,9 @@ protected:
   GameStateData ProcessBackwardsInternal (const GameStateData& newState,
                                           const Json::Value& blockData,
                                           const UndoData& undo) override;
+
+  Json::Value GetCustomInstanceStateJson (const uint256& hash, unsigned height,
+                                          const GameStateData& state) override;
 
 public:
 

@@ -780,6 +780,15 @@ Game::UnlockedGetInstanceStateJson (uint256& hash, unsigned& height) const
   res["blockhash"] = hash.ToHex ();
   res["height"] = height;
 
+  if (rules != nullptr)
+    {
+      const auto gameState = storage->GetCurrentGameState ();
+      const Json::Value custom
+          = rules->GetCustomInstanceStateJson (hash, height, gameState);
+      if (!custom.isNull ())
+        res["custom"] = custom;
+    }
+
   return res;
 }
 

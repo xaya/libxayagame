@@ -777,6 +777,7 @@ TEST_F (GetCurrentJsonStateTests, WhenUpToDate)
   EXPECT_EQ (state["blockhash"], BlockHash (11).ToHex ());
   EXPECT_EQ (state["height"].asInt (), 11);
   EXPECT_EQ (state["gamestate"]["state"], "a0b1");
+  EXPECT_FALSE (state.isMember ("custom"));
 }
 
 TEST_F (GetCurrentJsonStateTests, HeightResolvedViaRpc)
@@ -854,6 +855,7 @@ TEST_F (GetCurrentJsonStateTests, NullStateUnblocked)
   EXPECT_EQ (nullState["blockhash"], BlockHash (11).ToHex ());
   EXPECT_EQ (nullState["height"].asInt (), 11);
   EXPECT_FALSE (nullState.isMember ("data"));
+  EXPECT_FALSE (nullState.isMember ("custom"));
 
   longCall.join ();
 }
@@ -895,6 +897,50 @@ TEST_F (GetCurrentJsonStateTests, CallbackUnblocked)
 
   EXPECT_FALSE (firstDone);
   first.join ();
+}
+
+TEST_F (GetCurrentJsonStateTests, CustomInstanceState)
+{
+  class : public TestGame
+  {
+  public:
+
+    using TestGame::TestGame;
+
+    Json::Value
+    GetCustomInstanceStateJson (const uint256& hash, unsigned height,
+                                const GameStateData& state) override
+    {
+      Json::Value res(Json::objectValue);
+      res["data"] = "custom-value";
+      res["hash"] = hash.ToHex ();
+      return res;
+    }
+
+  } customRules;
+
+  mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
+                                TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+
+  Game freshGame(GAME_ID);
+  ConnectToMockRpc (freshGame);
+  freshGame.SetStorage (storage);
+  freshGame.SetGameLogic (customRules);
+
+  ReinitialiseState (freshGame);
+  SetStartingBlock (GAME_GENESIS_HEIGHT, TestGame::GenesisBlockHash ());
+  AttachBlock (freshGame, BlockHash (10), Moves ("a0"));
+  ForceState (freshGame, State::UP_TO_DATE);
+
+  const Json::Value currentState = freshGame.GetCurrentJsonState ();
+  ASSERT_TRUE (currentState.isMember ("custom"));
+  EXPECT_EQ (currentState["custom"]["data"], "custom-value");
+  EXPECT_EQ (currentState["custom"]["hash"], BlockHash (10).ToHex ());
+
+  const Json::Value nullState = freshGame.GetNullJsonState ();
+  ASSERT_TRUE (nullState.isMember ("custom"));
+  EXPECT_EQ (nullState["custom"], currentState["custom"]);
 }
 
 /* ************************************************************************** */

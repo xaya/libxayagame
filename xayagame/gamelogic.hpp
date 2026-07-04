@@ -414,6 +414,19 @@ public:
    */
   virtual Json::Value GameStateToJson (const GameStateData& state);
 
+  /**
+   * Constructs a custom portion of the instance state JSON.  The result,
+   * if non-null, is included as a "custom" field in the instance state JSON.
+   *
+   * The default returns null, which means no "custom" field is included.
+   */
+  virtual Json::Value
+  GetCustomInstanceStateJson (const uint256& hash, unsigned height,
+                              const GameStateData& state)
+  {
+    return Json::Value ();
+  }
+
 };
 
 /**
