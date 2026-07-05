@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -212,6 +212,9 @@ struct GameDaemonConfiguration
    * false explicitly).
    */
   bool GameRpcListenLocally = true;
+
+  /** The number of worker threads to use for the RPC server.  */
+  unsigned GameRpcWorkerThreads = 50;
 
   /**
    * If non-negative (including zero), pruning of old undo data is enabled.
