@@ -1072,7 +1072,17 @@ Game::Stop ()
   connectionChecker.reset ();
 
   zmq.Stop ();
-  UntrackGame ();
+  try
+    {
+      UntrackGame ();
+    }
+  catch (const std::exception& exc)
+    {
+      /* If the block source is unavailable (e.g. because it is itself
+         already shut down), untracking the game fails.  This should not
+         prevent a clean shutdown of the GSP.  */
+      LOG (ERROR) << "Failed to untrack game on shutdown: " << exc.what ();
+    }
   CHECK (state == State::DISCONNECTED);
 
   /* Make sure to wake up all listeners waiting for a state update (as there
