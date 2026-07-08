@@ -932,7 +932,12 @@ SQLiteStorage::CommitTransaction ()
 void
 SQLiteStorage::RollbackTransaction ()
 {
+  /* ROLLBACK TO just undoes the changes, but it keeps the savepoint
+     itself on the stack and the associated transaction open.  Thus we
+     have to RELEASE it as well, so that the transaction gets closed
+     and later commits on the same connection are actually persisted.  */
   db->Prepare ("ROLLBACK TO `xayagame-sqlitegame`").Execute ();
+  db->Prepare ("RELEASE `xayagame-sqlitegame`").Execute ();
   CHECK (startedTransaction);
   startedTransaction = false;
 }

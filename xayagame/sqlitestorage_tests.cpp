@@ -336,6 +336,40 @@ TEST_F (PersistentSQLiteStorageTests, PersistsData)
   }
 }
 
+TEST_F (PersistentSQLiteStorageTests, CommitAfterRollback)
+{
+  {
+    SQLiteStorage storage(file.GetName ());
+    storage.Initialise ();
+
+    /* A rolled back transaction should leave the connection in a clean
+       state, so that a following transaction can be committed and is
+       actually persisted (see issue #149).  */
+    storage.BeginTransaction ();
+    storage.SetCurrentGameState (hash, "wrong state");
+    storage.RollbackTransaction ();
+
+    storage.BeginTransaction ();
+    storage.SetCurrentGameState (hash, state);
+    storage.AddUndoData (hash, 42, undo);
+    storage.CommitTransaction ();
+  }
+
+  {
+    SQLiteStorage storage(file.GetName ());
+    storage.Initialise ();
+
+    uint256 h;
+    ASSERT_TRUE (storage.GetCurrentBlockHash (h));
+    EXPECT_TRUE (h == hash);
+    EXPECT_EQ (storage.GetCurrentGameState (), state);
+
+    UndoData val;
+    ASSERT_TRUE (storage.GetUndoData (hash, val));
+    EXPECT_EQ (val, undo);
+  }
+}
+
 TEST_F (PersistentSQLiteStorageTests, ClearWithOnDiskFile)
 {
   SQLiteStorage storage(file.GetName ());
