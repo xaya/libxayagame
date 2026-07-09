@@ -2672,6 +2672,18 @@ TEST_F (GameProbeAndFixConnectionTests, DisconnectAndReconnect)
   EXPECT_TRUE (GameTestFixture::GetZmq (g).IsRunning ());
 }
 
+TEST_F (GameProbeAndFixConnectionTests, StopSurvivesUntrackGameError)
+{
+  ExpectPings (0);
+
+  /* If the block source is down when the game is stopped, the untracking
+     RPC fails.  The test should survive this.  */
+  mockXayaServer->StopListening ();
+
+  g.Stop ();
+  EXPECT_EQ (GetState (g), State::DISCONNECTED);
+}
+
 /* ************************************************************************** */
 
 } // anonymous namespace
