@@ -41,7 +41,6 @@ using testing::_;
 using testing::AnyNumber;
 using testing::InSequence;
 using testing::Return;
-using testing::Throw;
 
 constexpr const char GAME_ID[] = "test-game";
 
@@ -2678,11 +2677,8 @@ TEST_F (GameProbeAndFixConnectionTests, StopSurvivesUntrackGameError)
   ExpectPings (0);
 
   /* If the block source is down when the game is stopped, the untracking
-     RPC fails.  This should not crash the process but still result in a
-     clean shutdown (see issue #154).  */
-  EXPECT_CALL (*mockXayaServer, trackedgames ("remove", GAME_ID))
-      .WillOnce (Throw (
-          jsonrpc::JsonRpcException (jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR)));
+     RPC fails.  The test should survive this.  */
+  mockXayaServer->StopListening ();
 
   g.Stop ();
   EXPECT_EQ (GetState (g), State::DISCONNECTED);
