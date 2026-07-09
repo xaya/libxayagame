@@ -32,10 +32,16 @@ void
 CoprocessorBatch::CommitTransaction ()
 {
   CHECK (activeTransaction) << "There is no active transaction";
-  activeTransaction = false;
 
+  /* Only clear the flag after all processors have committed successfully.
+     If one of them throws, the flag remains set, so that a subsequent
+     AbortTransaction call actually rolls back the processors that still
+     have an open transaction (rather than being a no-op) and the
+     operation can be retried.  */
   for (auto& p : processors)
     p.second->CommitTransaction ();
+
+  activeTransaction = false;
 }
 
 void

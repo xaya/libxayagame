@@ -97,7 +97,6 @@ TransactionManager::BeginTransaction ()
   CHECK (!commitFailed);
 
   CHECK (!inTransaction);
-  inTransaction = true;
 
   VLOG (1) << "Starting new transaction on the TransactionManager";
 
@@ -105,9 +104,30 @@ TransactionManager::BeginTransaction ()
     {
       LOG (INFO) << "No pending commits, starting new underlying transaction";
       storage->BeginTransaction ();
-      if (coproc != nullptr)
-        coproc->BeginTransaction ();
+      try
+        {
+          if (coproc != nullptr)
+            coproc->BeginTransaction ();
+        }
+      catch (...)
+        {
+          /* If the coprocessors fail to begin their transaction, make sure
+             not to leave the storage transaction (nor any coprocessors that
+             have already begun) open, so that the whole operation can be
+             retried cleanly afterwards.  */
+          storage->RollbackTransaction ();
+          if (coproc != nullptr)
+            coproc->AbortTransaction ();
+          throw;
+        }
     }
+
+  /* Only mark the transaction as active after the underlying transactions
+     have been started successfully.  If one of them throws, the exception
+     escapes the ActiveTransaction constructor, so its destructor (which
+     would do the rollback) never runs; thus we must not leave the manager
+     in an inconsistent state in that case.  */
+  inTransaction = true;
 }
 
 void

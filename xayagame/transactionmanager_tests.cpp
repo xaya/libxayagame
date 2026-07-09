@@ -23,6 +23,7 @@ namespace
 {
 
 using testing::InSequence;
+using testing::Throw;
 
 class MockedStorage : public TxMockedMemoryStorage
 {
@@ -131,6 +132,66 @@ TEST_F (TransactionManagerTests, BasicBatching)
 
   tm.BeginTransaction ();
   tm.CommitTransaction ();
+
+  tm.BeginTransaction ();
+  tm.CommitTransaction ();
+}
+
+TEST_F (TransactionManagerTests, ErrorInCoprocessorBegin)
+{
+  {
+    InSequence dummy;
+
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ())
+        .WillOnce (Throw (std::runtime_error ("begin error")));
+    EXPECT_CALL (storage, RollbackTransactionMock ());
+    EXPECT_CALL (coproc, AbortTransaction ());
+
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
+    EXPECT_CALL (coproc, CommitTransaction ());
+    EXPECT_CALL (storage, CommitTransactionMock ());
+  }
+
+  tm.SetBatchSize (1);
+
+  /* A failure to begin the coprocessor transaction should propagate, but
+     leave the manager (and storage) in a clean state, so that the operation
+     can be retried later (see issue #151).  */
+  EXPECT_THROW (tm.BeginTransaction (), std::runtime_error);
+
+  tm.BeginTransaction ();
+  tm.CommitTransaction ();
+}
+
+TEST_F (TransactionManagerTests, ErrorInCoprocessorCommit)
+{
+  {
+    InSequence dummy;
+
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
+    EXPECT_CALL (coproc, CommitTransaction ())
+        .WillOnce (Throw (std::runtime_error ("commit error")));
+    EXPECT_CALL (storage, RollbackTransactionMock ());
+    EXPECT_CALL (coproc, AbortTransaction ());
+
+    EXPECT_CALL (storage, BeginTransactionMock ());
+    EXPECT_CALL (coproc, BeginTransaction ());
+    EXPECT_CALL (coproc, CommitTransaction ());
+    EXPECT_CALL (storage, CommitTransactionMock ());
+  }
+
+  tm.SetBatchSize (1);
+
+  tm.BeginTransaction ();
+  /* If a coprocessor fails to commit, the error should propagate, but a
+     subsequent rollback must actually abort the coprocessor transactions
+     that are still open, so that the block can be retried
+     (see issue #151).  */
+  EXPECT_THROW (tm.CommitTransaction (), std::runtime_error);
+  tm.RollbackTransaction ();
 
   tm.BeginTransaction ();
   tm.CommitTransaction ();
