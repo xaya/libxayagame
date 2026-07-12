@@ -514,6 +514,18 @@ namespace
 {
 
 /**
+ * Callback function for streaming SQLite session methods that accepts
+ * output data, and appends them to UndoData (std::string).
+ */
+int
+AppendStreamingOutputData (void* pOut, const void* pData, const int nData)
+{
+  std::string& str = *static_cast<std::string*> (pOut);
+  str.append (static_cast<const char*> (pData), nData);
+  return SQLITE_OK;
+}
+
+/**
  * Helper class wrapping aroung sqlite3_session and using RAII to ensure
  * proper management of its lifecycle.
  */
@@ -557,14 +569,12 @@ public:
     VLOG (1) << "Extracting recorded undo data from SQLite session";
     CHECK (session != nullptr);
 
-    int changeSize;
-    void* changeBytes;
-    CHECK_EQ (sqlite3session_changeset (session, &changeSize, &changeBytes),
-              SQLITE_OK)
+    UndoData result;
+    CHECK_EQ (
+        sqlite3session_changeset_strm (session,
+                                       &AppendStreamingOutputData, &result),
+        SQLITE_OK)
         << "Failed to extract current session changeset";
-
-    UndoData result(static_cast<const char*> (changeBytes), changeSize);
-    sqlite3_free (changeBytes);
 
     return result;
   }
@@ -612,52 +622,41 @@ AbortOnConflict (void* ctx, const int conflict, sqlite3_changeset_iter* it)
 }
 
 /**
- * Utility class to manage an inverted changeset (based on undo data
- * representing an original one).  The main use of the class is to manage
- * the associated memory using RAII.
+ * Data about a streaming input operation, with the underlying string data
+ * and the offset of what was already given as input.
  */
-class InvertedChangeset
+struct StreamingInputContext
 {
+  const UndoData& data;
+  size_t offset = 0;
 
-private:
-
-  /** Size of the inverted changeset.  */
-  int size;
-  /** Buffer holding the data for the inverted changeset.  */
-  void* data = nullptr;
-
-public:
-
-  /**
-   * Constructs the changeset by inverting the UndoData that represents
-   * the original "forward" changeset.
-   */
-  explicit InvertedChangeset (const UndoData& undo)
-  {
-    CHECK_EQ (sqlite3changeset_invert (undo.size (), &undo[0], &size, &data),
-              SQLITE_OK)
-        << "Failed to invert SQLite changeset";
-  }
-
-  ~InvertedChangeset ()
-  {
-    sqlite3_free (data);
-  }
-
-  /**
-   * Applies the inverted changeset to the database handle.  If conflicts
-   * appear, the transaction is aborted and the function CHECK-fails.
-   */
-  void
-  Apply (sqlite3* db)
-  {
-    CHECK_EQ (sqlite3changeset_apply (db, size, data, nullptr,
-                                      &AbortOnConflict, nullptr),
-              SQLITE_OK)
-        << "Failed to apply undo changeset";
-  }
-
+  explicit StreamingInputContext (const UndoData& d)
+    : data(d)
+  {}
 };
+
+/**
+ * Callback function to supply data from a StreamingInputContext bit by bit
+ * the SQLite streaming input.
+ */
+int
+SupplyStreamingInputData (void* pIn, void* pData, int* pnData)
+{
+  StreamingInputContext& ctx = *static_cast<StreamingInputContext*> (pIn);
+
+  CHECK_LE (ctx.offset, ctx.data.size ());
+  CHECK_GE (*pnData, 0);
+
+  const size_t remaining = ctx.data.size () - ctx.offset;
+  const size_t toPass = std::min (remaining, static_cast<size_t> (*pnData));
+
+  *pnData = toPass;
+  std::copy (&ctx.data[ctx.offset], &ctx.data[ctx.offset + toPass],
+             static_cast<char*> (pData));
+  ctx.offset += toPass;
+
+  return SQLITE_OK;
+}
 
 } // anonymous namespace
 
@@ -675,10 +674,20 @@ SQLiteGame::ProcessBackwardsInternal (const GameStateData& newState,
      used to roll any changes back, it is more efficient to do the inversion
      only when actually needed.  */
 
-  InvertedChangeset changeset(undo);
-  database->GetDatabase ().AccessDatabase ([&changeset] (sqlite3* h)
+  StreamingInputContext input(undo);
+  UndoData inverted;
+  CHECK_EQ (
+      sqlite3changeset_invert_strm (&SupplyStreamingInputData, &input,
+                                    &AppendStreamingOutputData, &inverted),
+      SQLITE_OK)
+      << "Failed to invert SQLite changeset";
+
+  database->GetDatabase ().AccessDatabase ([&inverted] (sqlite3* db)
     {
-      changeset.Apply (h);
+      CHECK_EQ (sqlite3changeset_apply (db, inverted.size (), inverted.data (),
+                                        nullptr, &AbortOnConflict, nullptr),
+                SQLITE_OK)
+          << "Failed to apply undo changeset";
     });
 
   return BLOCKHASH_STATE + blockData["block"]["parent"].asString ();
