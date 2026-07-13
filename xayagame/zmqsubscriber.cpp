@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -219,7 +219,10 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
         {
         case TopicType::ATTACH:
         case TopicType::DETACH:
-          self->lastBlockUpdate = Clock::now ();
+          {
+            std::lock_guard<std::shared_mutex> lock(self->mutProcessing);
+            self->lastBlockUpdate = Clock::now ();
+          }
           break;
         default:
           break;
@@ -228,6 +231,11 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
       const auto range = self->listeners.equal_range (gameId);
       if (range.first == self->listeners.end ())
         continue;
+
+      {
+        std::lock_guard<std::shared_mutex> lock(self->mutProcessing);
+        self->processingMessage = true;
+      }
 
       Json::Value data;
       std::string parseErrs;
@@ -261,9 +269,24 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
               << "Exception while processing ZMQ update: " << exc.what ();
           break;
         }
+
+      /* Make sure that after potentially a long processing step, we don't
+         introduce a window of time where the connection will look stale just
+         because the processing took long.  We want to reset the "busy" flag
+         only after/atomically with updating the last updated timestamp
+         to the current time.  */
+      {
+        std::lock_guard<std::shared_mutex> lock(self->mutProcessing);
+        self->lastBlockUpdate = Clock::now ();
+        self->processingMessage = false;
+      }
     }
 
   self->running = false;
+  {
+    std::lock_guard<std::shared_mutex> lock(self->mutProcessing);
+    self->processingMessage = false;
+  }
   for (auto& l : self->listeners)
     l.second->HasStopped ();
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -25,6 +25,7 @@ namespace
 using testing::_;
 using testing::AnyNumber;
 using testing::InSequence;
+using testing::Invoke;
 using testing::Throw;
 
 constexpr const char IPC_ENDPOINT[] = "ipc:///tmp/xayagame_zmqsubscriber_tests";
@@ -561,6 +562,32 @@ TEST_F (ZmqSubscriberTests, StalenessTimer)
   SleepSome ();
   EXPECT_LT (zmq.GetBlockStaleness<std::chrono::milliseconds> (),
              std::chrono::milliseconds (100));
+}
+
+TEST_F (ZmqSubscriberTests, NotStaleWhileBusy)
+{
+  Json::Value payload;
+  payload["test"] = 42;
+
+  EXPECT_CALL (mockListener, BlockAttach (GAME_ID, payload, _))
+      .Times (AnyNumber ())
+      .WillRepeatedly (Invoke ([] () {
+        std::this_thread::sleep_for (std::chrono::milliseconds (500));
+      }));
+
+  SendAttach (GAME_ID, payload, 1);
+  std::this_thread::sleep_for (std::chrono::milliseconds (200));
+
+  /* We are processing the long block, staleness should be zero.  */
+  EXPECT_EQ (zmq.GetBlockStaleness<std::chrono::milliseconds> (),
+             std::chrono::milliseconds (0));
+
+  /* At the end of the processing, the staleness has been reset once, but
+     will continue to increase from then on.  */
+  std::this_thread::sleep_for (std::chrono::milliseconds (500));
+  const auto staleness = zmq.GetBlockStaleness<std::chrono::milliseconds> ();
+  EXPECT_LT (staleness, std::chrono::milliseconds (500));
+  EXPECT_GT (staleness, std::chrono::milliseconds (100));
 }
 
 /* ************************************************************************** */

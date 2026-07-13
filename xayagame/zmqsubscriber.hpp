@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,6 +15,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -107,8 +108,19 @@ private:
   /** Last sequence numbers for each topic.  */
   std::unordered_map<std::string, uint32_t> lastSeq;
 
+  /**
+   * Mutex to protect lastBlockUpdate and processingMessage, and make sure
+   * writes to them occur in the right order and synchronised.  A write lock
+   * on the mutex is held only very briefly to actually assign the values
+   * in the right order, never for a long period of time.
+   */
+  mutable std::shared_mutex mutProcessing;
+
   /** The time-point when the last block notification was received.  */
   Clock::time_point lastBlockUpdate;
+
+  /** Set to true while running a block/pending callback.  */
+  bool processingMessage = false;
 
   /** The running ZMQ listener thread, if any.  */
   std::unique_ptr<std::thread> worker;
@@ -192,12 +204,16 @@ public:
 
   /**
    * Returns the time since last block update, cast to the given
-   * duration type.
+   * duration type.  While a processing callback is running, we always
+   * return zero, i.e. never consider the connection stale in that case.
    */
   template <typename D>
     D
     GetBlockStaleness () const
   {
+    std::shared_lock<std::shared_mutex> lock(mutProcessing);
+    if (processingMessage)
+      return D (0);
     return std::chrono::duration_cast<D> (Clock::now () - lastBlockUpdate);
   }
 
