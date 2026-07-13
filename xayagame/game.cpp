@@ -230,6 +230,7 @@ Game::UpdateStateForDetach (const uint256& parent, const uint256& hash,
           << "Block " << hash.ToHex ()
           << " is being detached without undo data";
       storage->Clear ();
+      coproc.Clear ();
       return false;
     }
 
@@ -1243,6 +1244,7 @@ Game::ReinitialiseState ()
 
   transactionManager.TryAbortTransaction ();
   storage->Clear ();
+  coproc.Clear ();
 
   const std::string blockHashHex = (**rpcProvider).getblockhash (genesisHeight);
   uint256 blockHash;

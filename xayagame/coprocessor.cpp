@@ -1,4 +1,4 @@
-// Copyright (C) 2023-2024 The Xaya developers
+// Copyright (C) 2023-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -54,6 +54,14 @@ CoprocessorBatch::AbortTransaction ()
 
   for (auto& p : processors)
     p.second->AbortTransaction ();
+}
+
+void
+CoprocessorBatch::Clear ()
+{
+  CHECK (!activeTransaction) << "There is an active transaction";
+  for (auto& p : processors)
+    p.second->Clear ();
 }
 
 Coprocessor::Block::Block (const Json::Value& d, const Op o)
