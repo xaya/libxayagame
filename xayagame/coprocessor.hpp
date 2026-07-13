@@ -1,4 +1,4 @@
-// Copyright (C) 2023-2024 The Xaya developers
+// Copyright (C) 2023-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -91,6 +91,18 @@ public:
   {}
 
   /**
+   * Requests that the coprocessor clears/resets all internal state data
+   * it has stored.  This is done if we need to reinitialise, before
+   * running a ForBlock "initialisation" operation.  This hook runs outside
+   * of the transaction logic, and can thus use explicit "wipe everything"
+   * semantics on a database without being constrained to live inside
+   * a transactional workflow.
+   */
+  virtual void
+  Clear ()
+  {}
+
+  /**
    * Constructs a block-processor instance for this coprocessor and the
    * given block data.
    */
@@ -136,6 +148,8 @@ public:
    * safely called if there is none, to ensure we clean up if needed.
    */
   void AbortTransaction ();
+
+  void Clear ();
 
 };
 

@@ -1805,16 +1805,34 @@ public:
     Coprocessor::Op op;
     uint64_t height;
 
+    /**
+     * True if this is a Clear() operation, which runs independent of a block
+     * or height.  If this is true, then only this matters, and the other fields
+     * are ignored.
+     */
+    bool isClear = false;
+
     friend bool
     operator== (const Record& a, const Record& b)
     {
-      return a.op == b.op && a.height == b.height;
+      if (a.isClear && b.isClear)
+        return true;
+
+      return a.isClear == b.isClear && a.op == b.op && a.height == b.height;
     }
 
     friend bool
     operator!= (const Record& a, const Record& b)
     {
       return !(a == b);
+    }
+
+    static Record
+    Clear ()
+    {
+      Record res;
+      res.isClear = true;
+      return res;
     }
 
   };
@@ -1875,6 +1893,13 @@ public:
     CHECK (transaction) << "No transaction to abort";
     transaction = false;
     pending.clear ();
+  }
+
+  void
+  Clear () override
+  {
+    CHECK (!transaction) << "A transaction is in progress";
+    records.push_back (Record::Clear ());
   }
 
   std::unique_ptr<Block> ForBlock (const Json::Value& blockData,
@@ -2051,6 +2076,7 @@ TEST_F (GameCoprocessorTests, CoprocessorCalled)
   DetachBlock (g);
 
   coproc.ExpectRecords ({
+    GameTestCoprocessor::Record::Clear (),
     {Coprocessor::Op::INITIALISATION, GAME_GENESIS_HEIGHT},
     {Coprocessor::Op::FORWARD, 11},
     {Coprocessor::Op::FORWARD, 12},
@@ -2066,9 +2092,35 @@ TEST_F (GameCoprocessorTests, Failure)
                 std::runtime_error);
 
   coproc.ExpectRecords ({
+    GameTestCoprocessor::Record::Clear (),
     {Coprocessor::Op::INITIALISATION, GAME_GENESIS_HEIGHT},
     {Coprocessor::Op::FORWARD, 11},
   });
+}
+
+TEST_F (GameCoprocessorTests, MissingUndoDetach)
+{
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+
+  storage.BeginTransaction ();
+  storage.ReleaseUndoData (BlockHash (11));
+  storage.CommitTransaction ();
+
+  DetachBlock (g);
+
+  coproc.ExpectRecords ({
+    GameTestCoprocessor::Record::Clear (),
+    {Coprocessor::Op::INITIALISATION, GAME_GENESIS_HEIGHT},
+    {Coprocessor::Op::FORWARD, 11},
+    /* This is the explicit clear from the missing undo data.  */
+    GameTestCoprocessor::Record::Clear (),
+    /* This is from state initialisation that happens after wiping the
+       data, and restarting the sync from scratch.  */
+    GameTestCoprocessor::Record::Clear (),
+    {Coprocessor::Op::INITIALISATION, GAME_GENESIS_HEIGHT},
+  });
+
+  ExpectGameState (TestGame::GenesisBlockHash (), "");
 }
 
 /* ************************************************************************** */
