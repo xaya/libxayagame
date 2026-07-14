@@ -25,7 +25,6 @@ namespace
 using testing::_;
 using testing::AnyNumber;
 using testing::InSequence;
-using testing::Invoke;
 using testing::Throw;
 
 constexpr const char IPC_ENDPOINT[] = "ipc:///tmp/xayagame_zmqsubscriber_tests";
@@ -571,9 +570,9 @@ TEST_F (ZmqSubscriberTests, NotStaleWhileBusy)
 
   EXPECT_CALL (mockListener, BlockAttach (GAME_ID, payload, _))
       .Times (AnyNumber ())
-      .WillRepeatedly (Invoke ([] () {
+      .WillRepeatedly ([] () {
         std::this_thread::sleep_for (std::chrono::milliseconds (500));
-      }));
+      });
 
   SendAttach (GAME_ID, payload, 1);
   std::this_thread::sleep_for (std::chrono::milliseconds (200));
