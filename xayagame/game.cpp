@@ -1025,7 +1025,15 @@ Game::TrackGame ()
   std::lock_guard<std::mutex> lock(mut);
   CHECK (rpcProvider != nullptr && *rpcProvider)
       << "RPC client is not yet set up";
+
+  if (gameTracked)
+    {
+      VLOG (1) << "Game " << gameId << " is already tracked";
+      return;
+    }
+
   (**rpcProvider).trackedgames ("add", gameId);
+  gameTracked = true;
   LOG (INFO) << "Added " << gameId << " to tracked games";
 }
 
@@ -1035,6 +1043,16 @@ Game::UntrackGame ()
   std::lock_guard<std::mutex> lock(mut);
   CHECK (rpcProvider != nullptr && *rpcProvider)
       << "RPC client is not yet set up";
+
+  if (!gameTracked)
+    {
+      VLOG (1) << "Game " << gameId << " is not tracked";
+      return;
+    }
+
+  /* Clear the flag before the RPC call so that it is cleared even if
+     the RPC throws.  */
+  gameTracked = false;
   (**rpcProvider).trackedgames ("remove", gameId);
   LOG (INFO) << "Removed " << gameId << " from tracked games";
 }
@@ -1061,7 +1079,20 @@ Game::ConnectToZmq ()
 void
 Game::Start ()
 {
-  ConnectToZmq ();
+  try
+    {
+      ConnectToZmq ();
+    }
+  catch (const std::exception& exc)
+    {
+      LOG (ERROR) << "Exception during initial ConnectToZmq: " << exc.what ();
+      if (zmq.IsRunning ())
+        zmq.RequestStop ();
+
+      std::lock_guard<std::mutex> lock(mut);
+      state = State::DISCONNECTED;
+      NotifyInstanceStateChanged ();
+    }
 
   if (FLAGS_xaya_connection_check_ms > 0)
     connectionChecker = std::make_unique<ConnectionCheckerThread> (*this);
