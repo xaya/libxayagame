@@ -137,6 +137,14 @@ private:
   std::atomic<State> state;
 
   /**
+   * Whether or not this game has been registered with the Xaya daemon
+   * as a tracked game (via "trackedgames add").  This is used to avoid
+   * duplicate RPC calls, which would lead to many more tracks than the one
+   * "untrack" we do in Stop().
+   */
+  bool gameTracked = false;
+
+  /**
    * The game's genesis height, if known already.  We cache that from the
    * first call to GetInitialState, so that we can avoid calling it all
    * over again on each block before we reach the genesis height.
