@@ -1162,13 +1162,19 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
 
   /* If an error is returned, such as when Xaya X is not yet synced to
      our "fromblock", reset the ZMQ connection so it gets restored and
-     the sync retried later.  */
+     the sync retried later.
+
+     In an edge case (load-balanced RPC node or a reorg race condition
+     with the "best chain tip" we checked against above), it may also happen
+     that there is no real error returned, but the server is not able to
+     provide any step towards our target.  In this case, we also fall back
+     to the retry logic.  */
   const auto errValue = upd["error"];
-  if (errValue.isBool () && errValue.asBool ())
+  if ((errValue.isBool () && errValue.asBool ())
+        || (currentHash.ToHex () == upd["toblock"].asString ()))
     {
       LOG (ERROR)
-          << "Game blocks update request returned error,"
-          << " resetting ZMQ connection...";
+          << "Game blocks update request failed, resetting ZMQ connection...";
       zmq.RequestStop ();
       return;
     }
