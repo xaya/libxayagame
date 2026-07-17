@@ -97,6 +97,12 @@ private:
   const std::string gameId;
 
   /**
+   * The game implementation's version string, which can optionally be set
+   * and is returned with all RPC requests (if non-empty).
+   */
+  std::string versionString;
+
+  /**
    * Mutex guarding internal state.  This is necessary at least in theory since
    * changes might be made from the ZMQ listener on the ZMQ subscriber's
    * worker thread in addition to the main thread.
@@ -409,6 +415,13 @@ public:
   Game () = delete;
   Game (const Game&) = delete;
   void operator= (const Game&) = delete;
+
+  /**
+   * Sets the game implementation's version string.  This is a custom string
+   * that gets returned with RPC requests (if set).  It can be e.g. the
+   * GSP's commit hash, or a version indicator.
+   */
+  void SetVersionString (const std::string& version);
 
   /**
    * Sets up the RPC client based on the given settings.  This must only

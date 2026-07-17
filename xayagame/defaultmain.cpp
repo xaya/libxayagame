@@ -216,6 +216,7 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
         WaitForXaya (rpcProvider);
 
       auto game = std::make_unique<Game> (gameId);
+      game->SetVersionString (config.VersionString);
       game->ConnectRpcClient (rpcProvider);
       VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());
@@ -292,6 +293,7 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
         WaitForXaya (rpcProvider);
 
       auto game = std::make_unique<Game> (gameId);
+      game->SetVersionString (config.VersionString);
       game->ConnectRpcClient (rpcProvider);
       VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());

@@ -157,6 +157,9 @@ public:
 struct GameDaemonConfiguration
 {
 
+  /** The version (as a custom string) of the game's implementation.  */
+  std::string VersionString;
+
   /**
    * The URL at which Xaya Core's JSON-RPC interface is available.  This
    * should already include the credentials, as in:

@@ -127,6 +127,13 @@ Game::Game (const std::string& id)
 
 Game::~Game () = default;
 
+void
+Game::SetVersionString (const std::string& version)
+{
+  versionString = version;
+  LOG_IF (INFO, !version.empty ()) << "Version: " << versionString;
+}
+
 std::string
 Game::StateToString (const State s)
 {
@@ -756,6 +763,9 @@ Game::UnlockedGetInstanceStateJson (uint256& hash, unsigned& height) const
   res["gameid"] = gameId;
   res["chain"] = ChainToString (chain);
   res["state"] = StateToString (state);
+
+  if (!versionString.empty ())
+    res["version"] = versionString;
 
   /* Getting the height for the hash value might throw, if we revert
      back to Xaya RPC and that is down.  We want to handle this case
