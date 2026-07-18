@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -379,6 +379,237 @@ TEST_F (StateProofTests, MultiSignedLaterState)
       }
   )"));
   EXPECT_EQ (endState, "43 6");
+}
+
+TEST_F (StateProofTests, DefaultRequiredSignaturesIsAllParticipants)
+{
+  /* Without an overridden RequiredSignatures, an unanchored proof needs
+     signatures of all participants (the historic rule).  */
+  EXPECT_FALSE (VerifyProof ("0 1", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn0"
+      }
+  )"));
+
+  ASSERT_TRUE (VerifyProof ("0 1", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )"));
+  EXPECT_EQ (endState, "42 5");
+}
+
+/* ************************************************************************** */
+
+/**
+ * A ParsedBoardState that wraps a state of the addition game, but reports
+ * a custom set of required signatures.
+ */
+class SignerSetState : public ParsedBoardState
+{
+
+private:
+
+  /** The underlying parsed addition-game state.  */
+  std::unique_ptr<ParsedBoardState> inner;
+
+  /** The set of required signatures to report.  */
+  const std::set<int> required;
+
+public:
+
+  explicit SignerSetState (const BoardRules& r, const uint256& id,
+                           const proto::ChannelMetadata& m,
+                           std::unique_ptr<ParsedBoardState> i,
+                           const std::set<int>& req)
+    : ParsedBoardState(r, id, m), inner(std::move (i)), required(req)
+  {}
+
+  bool
+  Equals (const BoardState& other) const override
+  {
+    return inner->Equals (other);
+  }
+
+  int
+  WhoseTurn () const override
+  {
+    return inner->WhoseTurn ();
+  }
+
+  unsigned
+  TurnCount () const override
+  {
+    return inner->TurnCount ();
+  }
+
+  bool
+  ApplyMove (const BoardMove& mv, BoardState& newState) const override
+  {
+    return inner->ApplyMove (mv, newState);
+  }
+
+  std::set<int>
+  RequiredSignatures () const override
+  {
+    return required;
+  }
+
+};
+
+/**
+ * Board rules that behave like the addition game, except that all parsed
+ * states report a configurable set of required signatures.
+ */
+class SignerSetRules : public BoardRules
+{
+
+private:
+
+  /** The underlying addition-game rules.  */
+  AdditionRules base;
+
+public:
+
+  /** The set of required signatures reported by all parsed states.  */
+  std::set<int> required;
+
+  std::unique_ptr<ParsedBoardState>
+  ParseState (const uint256& channelId, const proto::ChannelMetadata& meta,
+              const BoardState& s) const override
+  {
+    auto inner = base.ParseState (channelId, meta, s);
+    if (inner == nullptr)
+      return nullptr;
+    return std::make_unique<SignerSetState> (*this, channelId, meta,
+                                             std::move (inner), required);
+  }
+
+  ChannelProtoVersion
+  GetProtoVersion (const proto::ChannelMetadata& meta) const override
+  {
+    return base.GetProtoVersion (meta);
+  }
+
+};
+
+class SignerSetStateProofTests : public GeneralStateProofTests
+{
+
+protected:
+
+  SignerSetRules rules;
+
+  BoardState endState;
+
+  SignerSetStateProofTests ()
+  {
+    meta.add_participants ()->set_address ("addr2");
+    verifier.SetValid ("sgn2", "addr2");
+  }
+
+  /**
+   * Calls VerifyStateProof with the custom rules based on the given
+   * on-chain state and the proof proto loaded from text format.
+   */
+  bool
+  VerifyProof (const BoardState& chainState, const std::string& proof)
+  {
+    return VerifyStateProof (verifier, rules, gameId, channelId, meta,
+                             chainState, TextProof (proof), endState);
+  }
+
+};
+
+TEST_F (SignerSetStateProofTests, ExcludedSeatNotNeeded)
+{
+  rules.required = {0, 2};
+  ASSERT_TRUE (VerifyProof ("0 1", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn0"
+        signatures: "sgn2"
+      }
+  )"));
+  EXPECT_EQ (endState, "42 5");
+}
+
+TEST_F (SignerSetStateProofTests, SignaturesAccumulateAcrossTransitions)
+{
+  rules.required = {0, 2};
+  ASSERT_TRUE (VerifyProof ("0 1", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn2"
+      }
+    transitions:
+      {
+        move: "1"
+        new_state:
+          {
+            data: "43 6"
+            signatures: "sgn0"
+          }
+      }
+  )"));
+  EXPECT_EQ (endState, "43 6");
+}
+
+TEST_F (SignerSetStateProofTests, MissingRequiredSeat)
+{
+  rules.required = {0, 2};
+  EXPECT_FALSE (VerifyProof ("0 1", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+      }
+  )"));
+}
+
+TEST_F (SignerSetStateProofTests, OnChainAcceptedRegardless)
+{
+  rules.required = {0, 1, 2};
+  ASSERT_TRUE (VerifyProof ("42 5", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn42"
+      }
+  )"));
+  EXPECT_EQ (endState, "42 5");
+}
+
+TEST_F (SignerSetStateProofTests, UnparseableReinitRequiresAll)
+{
+  rules.required = {0};
+
+  EXPECT_FALSE (VerifyProof ("invalid", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn0"
+      }
+  )"));
+
+  ASSERT_TRUE (VerifyProof ("invalid", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+        signatures: "sgn2"
+      }
+  )"));
+  EXPECT_EQ (endState, "42 5");
 }
 
 /* ************************************************************************** */
