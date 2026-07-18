@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -137,14 +137,32 @@ VerifyStateProof (const SignatureVerifier& verifier, const BoardRules& rules,
       return true;
     }
 
-  for (int i = 0; i < meta.participants_size (); ++i)
+  /* The set of signatures required for a proof not anchored at the on-chain
+     state is determined by the game from the parsed reinit state.  Since that
+     state comes from on-chain data (not the proof itself), a malicious proof
+     cannot influence the set.  If the reinit state fails to parse (which
+     should not happen for on-chain data), we fall back to requiring all
+     participants.  */
+  std::set<int> required;
+  const auto parsedReinit = rules.ParseState (channelId, meta, reinitState);
+  if (parsedReinit == nullptr)
+    {
+      LOG (WARNING)
+          << "Failed to parse reinit state, requiring all signatures";
+      for (int i = 0; i < meta.participants_size (); ++i)
+        required.insert (i);
+    }
+  else
+    required = parsedReinit->RequiredSignatures ();
+
+  for (const int i : required)
     if (signatures.count (i) == 0)
       {
         LOG (WARNING) << "StateProof has no signature of player " << i;
         return false;
       }
 
-  VLOG (1) << "StateProof has signatures by all players and is valid";
+  VLOG (1) << "StateProof has all required signatures and is valid";
   return true;
 }
 
