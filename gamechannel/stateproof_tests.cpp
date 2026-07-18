@@ -614,6 +614,117 @@ TEST_F (SignerSetStateProofTests, UnparseableReinitRequiresAll)
 
 /* ************************************************************************** */
 
+/**
+ * Board rules like SignerSetRules, except that the required signatures
+ * depend on the content of the parsed state itself:  the state matching
+ * a configured content requires all participants, while every other
+ * state requires only seat 0.  This makes the reinit state and the states
+ * inside a proof report different sets, so that tests can pin down which
+ * of them the verification derives the required set from.
+ */
+class ContentSignerRules : public BoardRules
+{
+
+private:
+
+  /** The underlying addition-game rules.  */
+  AdditionRules base;
+
+public:
+
+  /** The state content whose parsed state requires all participants.  */
+  BoardState allSignersContent;
+
+  std::unique_ptr<ParsedBoardState>
+  ParseState (const uint256& channelId, const proto::ChannelMetadata& meta,
+              const BoardState& s) const override
+  {
+    auto inner = base.ParseState (channelId, meta, s);
+    if (inner == nullptr)
+      return nullptr;
+
+    std::set<int> required;
+    if (inner->Equals (allSignersContent))
+      for (int i = 0; i < meta.participants_size (); ++i)
+        required.insert (i);
+    else
+      required.insert (0);
+
+    return std::make_unique<SignerSetState> (*this, channelId, meta,
+                                             std::move (inner), required);
+  }
+
+  ChannelProtoVersion
+  GetProtoVersion (const proto::ChannelMetadata& meta) const override
+  {
+    return base.GetProtoVersion (meta);
+  }
+
+};
+
+class ContentSignerStateProofTests : public GeneralStateProofTests
+{
+
+protected:
+
+  ContentSignerRules rules;
+
+  BoardState endState;
+
+  ContentSignerStateProofTests ()
+  {
+    meta.add_participants ()->set_address ("addr2");
+    verifier.SetValid ("sgn2", "addr2");
+  }
+
+  /**
+   * Calls VerifyStateProof with the custom rules based on the given
+   * on-chain state and the proof proto loaded from text format.
+   */
+  bool
+  VerifyProof (const BoardState& chainState, const std::string& proof)
+  {
+    return VerifyStateProof (verifier, rules, gameId, channelId, meta,
+                             chainState, TextProof (proof), endState);
+  }
+
+};
+
+TEST_F (ContentSignerStateProofTests, RequiredSetDerivedFromReinitState)
+{
+  rules.allSignersContent = "0 1";
+
+  /* The reinit state ("0 1") requires all three participants, while the
+     proof's own states require just seat 0.  The required set must be
+     derived from the reinit state and never from the proof's content, so
+     a proof signed only by seat 0 is missing seats 1 and 2 and gets
+     rejected — even though the set derived from the proof's end state
+     would be satisfied.  */
+  EXPECT_FALSE (VerifyProof ("0 1", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn0"
+      }
+  )"));
+
+  /* With all three signatures present, the same proof is fine.  This
+     ensures the rejection above is really due to the reinit-derived set
+     and not some other defect.  */
+  ASSERT_TRUE (VerifyProof ("0 1", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn0"
+        signatures: "sgn1"
+        signatures: "sgn2"
+      }
+  )"));
+  EXPECT_EQ (endState, "42 5");
+}
+
+/* ************************************************************************** */
+
 using UnverifiedProofEndStateTests = testing::Test;
 
 TEST_F (UnverifiedProofEndStateTests, InitialState)
