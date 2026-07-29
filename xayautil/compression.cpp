@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -60,7 +60,14 @@ public:
     switch (res)
       {
       case Z_STREAM_END:
-        CHECK_EQ (stream.total_in, input.size ());
+        CHECK_LE (stream.total_in, input.size ());
+        if (stream.total_in < input.size ())
+          {
+            VLOG (1)
+                << "Trailing bytes in compressed data: "
+                << stream.total_in << " consumed of " << input.size ();
+            return false;
+          }
         output = ExtractOutput ();
         return true;
 

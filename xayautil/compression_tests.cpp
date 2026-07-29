@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -82,6 +82,11 @@ TEST_F (CompressionTests, MaxOutputSize)
 TEST_F (CompressionTests, InvalidData)
 {
   ExpectInvalidUncompress ("not valid compressed data", 100);
+}
+
+TEST_F (CompressionTests, TrailingData)
+{
+  ExpectInvalidUncompress (CompressData ("foo") + " ", 100);
 }
 
 TEST_F (CompressionTests, CompressionLevelZero)
