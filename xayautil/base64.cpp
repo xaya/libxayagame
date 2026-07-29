@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -51,8 +51,9 @@ DecodeBase64 (const std::string& encoded, std::string& data)
     }
 
   /* EVP_DecodeBlock is quite lenient with respect to padding
-     characters.  We want strict rules here, namely only accept 0-3
-     padding characters at the very end of the input string.  */
+     characters.  We want strict rules here, namely only accept 0-2
+     padding characters at the very end of the input string (as per
+     RFC 4648).  */
   size_t padding = 0;
   for (const char c : encoded)
     {
@@ -68,7 +69,7 @@ DecodeBase64 (const std::string& encoded, std::string& data)
 
       ++padding;
     }
-  if (padding >= 4)
+  if (padding >= 3)
     {
       LOG (ERROR) << "Too many padding characters in base64 data";
       return false;

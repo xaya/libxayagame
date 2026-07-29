@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -74,7 +74,7 @@ TEST_F (Base64Tests, OutputAlphabet)
 
 TEST_F (Base64Tests, InvalidDecode)
 {
-  for (const std::string s : {"xyz", "ab.=", "====", "AAAA====", "AA=A",
+  for (const std::string s : {"xyz", "ab.=", "====", "AAAA====", "AA=A", "A===",
                               "AAA\n", "AAA=\n"})
     {
       std::string decoded;
