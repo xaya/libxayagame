@@ -18,7 +18,8 @@ RUN apt -y update && apt -y install --no-install-recommends \
   libsecp256k1-dev \
   protobuf-compiler \
   python3 \
-  python3-protobuf
+  python3-protobuf \
+  python3-venv
 
 # Create the image that we use to build everything, and install additional
 # packages that are needed only for the build itself.

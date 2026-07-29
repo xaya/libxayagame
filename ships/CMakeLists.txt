@@ -188,7 +188,7 @@ set (SHIPS_GAMETESTS
 foreach (test ${SHIPS_GAMETESTS})
   add_test (
     NAME ships_gametest_${test}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gametest/${test}
+    COMMAND ${VENV_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gametest/${test}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/gametest
   )
   set_tests_properties (ships_gametest_${test} PROPERTIES
@@ -210,7 +210,7 @@ set (SHIPS_CHANNELTESTS
 foreach (test ${SHIPS_CHANNELTESTS})
   add_test (
     NAME ships_channeltest_${test}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/channeltest/${test}
+    COMMAND ${VENV_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/channeltest/${test}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/channeltest
   )
   set_tests_properties (ships_channeltest_${test} PROPERTIES

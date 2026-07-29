@@ -102,7 +102,7 @@ set (NONFUNGIBLE_GAMETESTS
 foreach (test ${NONFUNGIBLE_GAMETESTS})
   add_test (
     NAME nonfungible_gametest_${test}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gametest/${test}
+    COMMAND ${VENV_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gametest/${test}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/gametest
   )
   set_tests_properties (nonfungible_gametest_${test} PROPERTIES

@@ -27,6 +27,9 @@ find_package (Protobuf REQUIRED)
 find_program (JSONRPCSTUB jsonrpcstub REQUIRED)
 find_package (Python3 REQUIRED COMPONENTS Interpreter)
 
+include (cmake/SetupVenv.cmake)
+setup_venv ("${CMAKE_BINARY_DIR}/venv" "${CMAKE_SOURCE_DIR}/requirements.txt")
+
 # Dependencies.
 pkg_check_modules (JSONCPP REQUIRED IMPORTED_TARGET jsoncpp>=1.7.5)
 pkg_check_modules (GLOG REQUIRED IMPORTED_TARGET libglog)

@@ -84,7 +84,7 @@ set (MOVER_GAMETESTS
 foreach (test ${MOVER_GAMETESTS})
   add_test (
     NAME mover_gametest_${test}
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gametest/${test}
+    COMMAND ${VENV_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/gametest/${test}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/gametest
   )
   set_tests_properties (mover_gametest_${test} PROPERTIES

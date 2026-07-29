@@ -166,7 +166,7 @@ target_link_libraries (test_rpcbroadcast PRIVATE
 # Python tests.
 add_test (
   NAME gamechannel_signatures_tests.py
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/signatures_tests.py
+  COMMAND ${VENV_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/signatures_tests.py
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 set_tests_properties (gamechannel_signatures_tests.py PROPERTIES
@@ -175,7 +175,7 @@ set_tests_properties (gamechannel_signatures_tests.py PROPERTIES
 
 add_test (
   NAME gamechannel_test_rpcbroadcast.py
-  COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_rpcbroadcast.py
+  COMMAND ${VENV_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_rpcbroadcast.py
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 set_tests_properties (gamechannel_test_rpcbroadcast.py PROPERTIES
