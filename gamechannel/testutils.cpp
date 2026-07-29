@@ -1,4 +1,4 @@
-// Copyright (C) 2022 The Xaya developers
+// Copyright (C) 2022-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,7 +16,6 @@ namespace xaya
 {
 
 using testing::_;
-using testing::InvokeWithoutArgs;
 using testing::Return;
 using testing::Throw;
 
@@ -53,14 +52,14 @@ MockTransactionSender::ExpectSuccess (
 
   EXPECT_CALL (*this, SendRawMove (name, m))
       .Times (n)
-      .WillRepeatedly (InvokeWithoutArgs ([&] ()
+      .WillRepeatedly ([&] ()
         {
           const uint256 txid = txidQueue.front ();
           txidQueue.pop ();
 
           mempool.insert (txid);
           return txid;
-        }));
+        });
 
   return txids;
 }
