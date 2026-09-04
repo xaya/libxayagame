@@ -15,6 +15,30 @@
 namespace xaya
 {
 
+namespace internal
+{
+
+/**
+ * Checks if a given character is a base64 alphabet character.
+ *
+ * This method is not in an anonymous namespace and used by the unit test.
+ * It is not officially part of the public interface, though.
+ */
+bool
+IsBase64Char (const char c)
+{
+  if (c >= '0' && c <= '9')
+    return true;
+  if (c >= 'A' && c <= 'Z')
+    return true;
+  if (c >= 'a' && c <= 'z')
+    return true;
+
+  return (c == '+' || c == '/' || c == '=');
+}
+
+}
+
 std::string
 EncodeBase64 (const std::string& data)
 {
@@ -49,6 +73,16 @@ DecodeBase64 (const std::string& encoded, std::string& data)
       LOG (ERROR) << "Base64 data has invalid length " << encoded.size ();
       return false;
     }
+
+  /* OpenSSL's decode silently skips whitespace and trailing non-alphabet
+     characters, so we do a strict check that only valid characters are
+     present in the input.  */
+  for (const auto c : encoded)
+    if (!internal::IsBase64Char (c))
+      {
+        LOG (ERROR) << "Non-alphabet character '" << c << "' in base64 input";
+        return false;
+      }
 
   /* EVP_DecodeBlock is quite lenient with respect to padding
      characters.  We want strict rules here, namely only accept 0-2

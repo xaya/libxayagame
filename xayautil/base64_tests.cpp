@@ -10,6 +10,14 @@
 
 namespace xaya
 {
+
+namespace internal
+{
+
+bool IsBase64Char (char c);
+
+}
+
 namespace
 {
 
@@ -61,11 +69,7 @@ TEST_F (Base64Tests, OutputAlphabet)
 
   const std::string encoded = EncodeBase64 (data.str ());
   for (const auto c : encoded)
-    EXPECT_TRUE (
-          (c >= '0' && c <= '9')
-       || (c >= 'A' && c <= 'Z')
-       || (c >= 'a' && c <= 'z')
-       || c == '+' || c == '/' || c == '=');
+    EXPECT_TRUE (internal::IsBase64Char (c));
 
   std::string decoded;
   ASSERT_TRUE (DecodeBase64 (encoded, decoded));
@@ -75,7 +79,8 @@ TEST_F (Base64Tests, OutputAlphabet)
 TEST_F (Base64Tests, InvalidDecode)
 {
   for (const std::string s : {"xyz", "ab.=", "====", "AAAA====", "AA=A", "A===",
-                              "AAA\n", "AAA=\n"})
+                              "AAA\n", "AAA=\n", "    AAAA", "AAAA\n\n\n\n",
+                              "AAAA----"})
     {
       std::string decoded;
       EXPECT_FALSE (DecodeBase64 (s, decoded))
