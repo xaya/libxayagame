@@ -94,7 +94,7 @@ public:
    * Sets the data to be returned for the current best block.
    */
   void
-  SetBestBlock (const unsigned h, const uint256& hash)
+  SetBestBlock (const int h, const uint256& hash)
   {
     std::lock_guard<std::mutex> lock(mut);
     height = h;
@@ -2723,6 +2723,26 @@ TEST_F (GameProbeAndFixConnectionTests, DisconnectAndReconnect)
   EXPECT_EQ (rules.GetLastInstanceState ()["state"].asString (), "up-to-date");
   EXPECT_TRUE (GameTestFixture::GetZmq (g).IsRunning ());
 }
+
+class GameProbeWithoutPreviousBlockTests
+  : public GameProbeAndFixConnectionTests,
+    public testing::WithParamInterface<int>
+{};
+
+TEST_P (GameProbeWithoutPreviousBlockTests, DoesNotRequestNegativeHeight)
+{
+  mockXayaServer->SetBestBlock (GetParam (), BlockHash (0));
+  EXPECT_CALL (*mockXayaServer, getblockhash (testing::_)).Times (0);
+  ExpectPings (0);
+
+  std::this_thread::sleep_for (3 * MAX_STALENESS / 4);
+  ProbeAndFix ();
+  EXPECT_TRUE (GameTestFixture::GetZmq (g).IsRunning ());
+}
+
+INSTANTIATE_TEST_SUITE_P (UnavailableOrGenesis,
+                         GameProbeWithoutPreviousBlockTests,
+                         testing::Values (-1, 0));
 
 TEST_F (GameProbeAndFixConnectionTests, StopSurvivesUntrackGameError)
 {
