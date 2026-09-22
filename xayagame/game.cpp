@@ -1419,8 +1419,13 @@ Game::ProbeAndFixConnection ()
          last block (or thereabouts).  */
       XayaRpcClient& rpcClient = **rpcProvider;
       const auto data = rpcClient.getblockchaininfo ();
+      /* A connector without an indexed tip, or at genesis, cannot supply
+         a preceding block.  Let the normal stale timeout reconnect it.  */
+      const auto height = data["blocks"].asInt ();
+      if (height <= 0)
+        return;
       const std::string fromHash
-          = rpcClient.getblockhash (data["blocks"].asInt () - 1);
+          = rpcClient.getblockhash (height - 1);
       rpcClient.game_sendupdates (fromHash, gameId);
     }
   catch (const std::exception& exc)
