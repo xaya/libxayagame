@@ -377,6 +377,9 @@ SQLiteDatabase::SQLiteDatabase (const std::string& file, const int flags)
          coordination with our snapshot machinery, which causes SQLITE_BUSY
          errors in sqlite3_snapshot_open().  */
       CHECK_EQ (sqlite3_wal_autocheckpoint (db, 0), SQLITE_OK);
+
+      if (FLAGS_xaya_sqlite_wal_truncate_ms <= 0)
+        LOG (WARNING) << "Automatic WAL checkpointing is turned off";
     }
   else
     {
