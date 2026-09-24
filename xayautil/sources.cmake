@@ -12,6 +12,7 @@ set (XAYAUTIL_SOURCES
   jsonutils.cpp
   random.cpp
   uint256.cpp
+  utf8.cpp
 )
 
 set (XAYAUTIL_HEADERS
@@ -22,6 +23,7 @@ set (XAYAUTIL_HEADERS
   jsonutils.hpp
   random.hpp random.tpp
   uint256.hpp
+  utf8.hpp
 )
 
 set (XAYAUTIL_TEST_SOURCES
@@ -32,4 +34,5 @@ set (XAYAUTIL_TEST_SOURCES
   jsonutils_tests.cpp
   random_tests.cpp
   uint256_tests.cpp
+  utf8_tests.cpp
 )
