@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -184,6 +184,13 @@ ExtendStateProof (const SignatureVerifier& verifier, SignatureSigner& signer,
       LOG (ERROR) << "Invalid move for extending a state proof: " << mv;
       return false;
     }
+
+  /* newState is the output of a successful ApplyMove, so it should be a
+     valid state.  Verify this, so that bugs in a game's ApplyMove
+     implementation fail loudly instead of being propagated into a signed
+     state proof.  */
+  CHECK (rules.ParseState (channelId, meta, newState) != nullptr)
+      << "Move application produced an invalid state: " << newState;
 
   proto::StateTransition trans;
   trans.set_move (mv);
