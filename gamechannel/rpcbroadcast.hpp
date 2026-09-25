@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -29,6 +29,9 @@ namespace xaya
  * Implementation of OffChainBroadcast that talks to a JSON-RPC server
  * for sending and receiving messages.  The server manages the individual
  * channels and takes care of distributing the messages to clients.
+ *
+ * Note that this broadcast method is intended mainly for testing and
+ * as an example.  It should not be used unmodified in production.
  */
 class RpcBroadcast : public ReceivingOffChainBroadcast
 {
@@ -51,8 +54,16 @@ private:
   /** The RPC client used for receiving messages.  */
   RpcBroadcastClient receiveRpc;
 
-  /** The last known sequence number of the channel.  */
-  unsigned seq;
+  /**
+   * The last known sequence number of the channel.
+   *
+   * The number is initialised from the server when we connect, but we set it
+   * to zero here as a fallback, e.g. if the server returns a broken or
+   * malicious getseq response.  Then in the worst case we refetch and replay
+   * the channel history, but that is "only" a cost and does not result
+   * in a broken state or undefined behaviour.
+   */
+  unsigned seq = 0;
 
   /**
    * Initialises the sequence number from the RPC server.
