@@ -48,10 +48,12 @@ RUN git clone https://github.com/sqlite/sqlite . \
   && make install
 
 # We need to install libjson-rpc-cpp from source.
-ARG JSONRPCCPP_VERSION="v1.4.1"
+# The official repository in v1.4.1 has a bug, we need to use
+# the fixed version (until it gets merged eventually).
+ARG JSONRPCCPP_VERSION="24c069f74656ef9994623c5aecfabd5edcd85681"
 WORKDIR /usr/src/libjson-rpc-cpp
 RUN git clone -b ${JSONRPCCPP_VERSION} \
-  https://github.com/cinemast/libjson-rpc-cpp .
+  https://github.com/domob1812/libjson-rpc-cpp .
 RUN cmake . \
   -DREDIS_SERVER=NO -DREDIS_CLIENT=NO \
   -DCOMPILE_TESTS=NO -DCOMPILE_EXAMPLES=NO \
