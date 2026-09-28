@@ -185,19 +185,20 @@ private:
   /** The underlying GameLogic instance.  */
   GameLogic& logic;
 
-  /** The Context instance we point to.  */
-  Context& ctx;
+  /** The Context instance owned while it is active.  */
+  std::unique_ptr<Context> ctx;
 
 public:
 
   /**
    * Constructs the instance and sets the context pointer.
    */
-  explicit ContextSetter (GameLogic& l, Context& c)
-    : logic(l), ctx(c)
+  explicit ContextSetter (GameLogic& l, const uint256& rndSeed,
+                          CoprocessorBatch::Block* cb)
+    : logic(l), ctx(new Context (l, rndSeed, cb))
   {
     CHECK (logic.ctx == nullptr);
-    logic.ctx = &ctx;
+    logic.ctx = ctx.get ();
   }
 
   /**
@@ -205,7 +206,7 @@ public:
    */
   ~ContextSetter ()
   {
-    CHECK (logic.ctx == &ctx);
+    CHECK (logic.ctx == ctx.get ());
     logic.ctx = nullptr;
   }
 
@@ -235,8 +236,7 @@ GameLogic::GetInitialState (unsigned& height, std::string& hashHex,
   SHA256 rndSeed;
   rndSeed << "initial state" << GetGameId ();
 
-  Context context(*this, rndSeed.Finalise (), cb);
-  ContextSetter setter(*this, context);
+  ContextSetter setter(*this, rndSeed.Finalise (), cb);
 
   return GetInitialStateInternal (height, hashHex);
 }
@@ -274,8 +274,7 @@ GameLogic::ProcessForward (const GameStateData& oldState,
                            UndoData& undoData,
                            CoprocessorBatch::Block* cb)
 {
-  Context context(*this, BlockRngSeed (GetGameId (), blockData), cb);
-  ContextSetter setter(*this, context);
+  ContextSetter setter(*this, BlockRngSeed (GetGameId (), blockData), cb);
 
   return ProcessForwardInternal (oldState, blockData, undoData);
 }
@@ -286,8 +285,7 @@ GameLogic::ProcessBackwards (const GameStateData& newState,
                              const UndoData& undoData,
                              CoprocessorBatch::Block* cb)
 {
-  Context context(*this, BlockRngSeed (GetGameId (), blockData), cb);
-  ContextSetter setter(*this, context);
+  ContextSetter setter(*this, BlockRngSeed (GetGameId (), blockData), cb);
 
   return ProcessBackwardsInternal (newState, blockData, undoData);
 }

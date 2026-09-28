@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -59,10 +59,22 @@ ShipsBoardState::IsValid () const
   if (phase == Phase::INVALID)
     return false;
 
-  /* Unless the game is finished, we should have a turn set.  */
   const auto& pb = GetState ();
-  if (!pb.has_turn () || phase == Phase::FINISHED)
-    return !pb.has_turn () && phase == Phase::FINISHED;
+
+  /* If the game is finished, then there must be a winner (with a valid
+     participant index) and no turn set.  */
+  if (phase == Phase::FINISHED)
+    {
+      if (pb.has_turn () || !pb.has_winner ())
+        return false;
+
+      const int winner = pb.winner ();
+      return winner >= 0 && winner <= 1;
+    }
+
+  /* Unless the game is finished, we should have a turn set.  */
+  if (!pb.has_turn ())
+    return false;
 
   /* Since we have two players, turn should be zero or one.  */
   const int turn = pb.turn ();
@@ -71,6 +83,14 @@ ShipsBoardState::IsValid () const
 
   /* Verify some phase-dependent rules.  Especially check that turn is set
      to the correct values for phases where the turn is redundant.  */
+  if (phase == Phase::FIRST_COMMITMENT || phase == Phase::SECOND_COMMITMENT
+        || phase == Phase::FIRST_REVEAL_SEED)
+    {
+      if (pb.known_ships_size () != 0 || pb.positions_size () != 0)
+        return false;
+      if (pb.has_current_shot ())
+        return false;
+    }
   switch (phase)
     {
     case Phase::FIRST_COMMITMENT:

@@ -89,6 +89,23 @@ public:
 
 };
 
+/**
+ * Serialises JSON in the way we use for CompressJson.
+ */
+std::string
+SerialiseJsonForCompression (const Json::Value& val)
+{
+  Json::StreamWriterBuilder wbuilder;
+  wbuilder["commentStyle"] = "None";
+  wbuilder["indentation"] = "";
+  wbuilder["enableYAMLCompatibility"] = false;
+  wbuilder["dropNullPlaceholders"] = false;
+  wbuilder["useSpecialFloats"] = false;
+  wbuilder["emitUTF8"] = false;
+
+  return Json::writeString (wbuilder, val);
+}
+
 } // anonymous namespace
 
 std::string
@@ -112,20 +129,13 @@ bool
 CompressJson (const Json::Value& val,
               std::string& encoded, std::string& uncompressed)
 {
-  Json::StreamWriterBuilder wbuilder;
-  wbuilder["commentStyle"] = "None";
-  wbuilder["indentation"] = "";
-  wbuilder["enableYAMLCompatibility"] = false;
-  wbuilder["dropNullPlaceholders"] = false;
-  wbuilder["useSpecialFloats"] = false;
-
   if (!val.isObject () && !val.isArray ())
     {
       LOG (WARNING) << "CompressJson expects object or array: " << val;
       return false;
     }
 
-  uncompressed = Json::writeString (wbuilder, val);
+  uncompressed = SerialiseJsonForCompression (val);
   encoded = EncodeBase64 (CompressData (uncompressed));
 
   return true;
@@ -145,9 +155,11 @@ UncompressJson (const std::string& input,
   rbuilder["allowDroppedNullPlaceholders"] = false;
   rbuilder["allowNumericKeys"] = false;
   rbuilder["allowSingleQuotes"] = false;
+  rbuilder["allowTrailingCommas"] = false;
   rbuilder["stackLimit"] = stackLimit;
   rbuilder["failIfExtra"] = true;
   rbuilder["rejectDupKeys"] = true;
+  rbuilder["skipBom"] = false;
   rbuilder["allowSpecialFloats"] = false;
 
   std::string compressed;
@@ -168,6 +180,11 @@ UncompressJson (const std::string& input,
     {
       return false;
     }
+
+  /* As an extra safety net, we actually require that the string serialises
+     back byte-equal to the original input.  */
+  if (SerialiseJsonForCompression (output) != uncompressed)
+    return false;
 
   return output.isObject () || output.isArray ();
 }
