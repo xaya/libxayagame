@@ -7,7 +7,6 @@ RUN apt -y update && apt -y install --no-install-recommends \
   libargtable2-dev \
   libzmq3-dev \
   zlib1g-dev \
-  libjsoncpp-dev \
   liblmdb-dev \
   libcurl4-openssl-dev \
   libssl-dev \
@@ -47,23 +46,38 @@ RUN git clone https://github.com/sqlite/sqlite . \
   && make -j${N} \
   && make install
 
+# Install a pinned and well-defined version of jsoncpp.  We use that library
+# to parse data also in consensus-relevant ways (such as UncompressJson),
+# and while we try to ensure parsing is strict, pinning the version is
+# some additional safe-guard against potential bugs or consensus changes.
+ARG JSONCPP_VERSION="1.9.8"
+WORKDIR /usr/src/jsoncpp
+RUN git clone https://github.com/open-source-parsers/jsoncpp . \
+  && git checkout ${JSONCPP_VERSION} \
+  && cmake -B build -DCMAKE_BUILD_TYPE=Release \
+  && cmake --build build -j${N} \
+  && cmake --install build --strip
+
 # We need to install libjson-rpc-cpp from source.
 # The official repository in v1.4.1 has a bug, we need to use
 # the fixed version (until it gets merged eventually).
 ARG JSONRPCCPP_VERSION="24c069f74656ef9994623c5aecfabd5edcd85681"
 WORKDIR /usr/src/libjson-rpc-cpp
-RUN git clone -b ${JSONRPCCPP_VERSION} \
-  https://github.com/domob1812/libjson-rpc-cpp .
-RUN cmake . \
-  -DREDIS_SERVER=NO -DREDIS_CLIENT=NO \
-  -DCOMPILE_TESTS=NO -DCOMPILE_EXAMPLES=NO \
-  -DWITH_COVERAGE=NO
-RUN make -j${N} && make install/strip
+RUN git clone https://github.com/domob1812/libjson-rpc-cpp . \
+  && git checkout ${JSONRPCCPP_VERSION} \
+  && cmake -B build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DREDIS_SERVER=NO -DREDIS_CLIENT=NO \
+      -DCOMPILE_TESTS=NO -DCOMPILE_EXAMPLES=NO \
+      -DWITH_COVERAGE=NO \
+  && cmake --build build -j${N} && cmake --install build --strip
 
 # We also need to install googletest from source.
 WORKDIR /usr/src/googletest
 RUN git clone https://github.com/google/googletest .
-RUN cmake . && make -j${N} && make install/strip
+RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
+  && cmake --build build -j${N} \
+  && cmake --install build --strip
 
 # Build and install eth-utils.
 ARG ETHUTILS_COMMIT="ece89a90a62f406deeb8dc25534b94fc091438f4"
@@ -87,8 +101,10 @@ RUN ldconfig
 # potential garbage copied over in the build context.
 WORKDIR /usr/src/libxayagame
 COPY . .
-RUN rm -rf build && cmake -B build \
-    && cmake --build build -j${N} && cmake --install build --strip
+RUN rm -rf build \
+  && cmake -B build -DCMAKE_BUILD_TYPE=Release \
+  && cmake --build build -j${N} \
+  && cmake --install build --strip
 
 # For the final image, just copy over all built / installed stuff and
 # add in the non-dev libraries needed (where we installed the dev version
