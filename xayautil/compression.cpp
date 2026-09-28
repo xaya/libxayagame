@@ -6,6 +6,8 @@
 
 #include "base64.hpp"
 
+#include <map>
+
 namespace xaya
 {
 
@@ -89,6 +91,190 @@ public:
 
 };
 
+/**
+ * Serialises JSON in the way we use for CompressJson.
+ */
+std::string
+SerialiseJsonForCompression (const Json::Value& val)
+{
+  Json::StreamWriterBuilder wbuilder;
+  wbuilder["commentStyle"] = "None";
+  wbuilder["indentation"] = "";
+  wbuilder["enableYAMLCompatibility"] = false;
+  wbuilder["dropNullPlaceholders"] = false;
+  wbuilder["useSpecialFloats"] = false;
+  wbuilder["emitUTF8"] = false;
+
+  return Json::writeString (wbuilder, val);
+}
+
+/**
+ * Returns true if all bytes in the given string are ASCII, i.e. none of
+ * them has the highest bit set.  Note that our canonical serialisation
+ * (with emitUTF8 disabled) is always pure ASCII, so this is a necessary
+ * property for any accepted input.
+ */
+bool
+IsPrintableASCII (const std::string& s)
+{
+  for (const char c : s)
+    {
+      const unsigned char u = static_cast<unsigned char> (c);
+      if (u < 0x20 || u >= 0x80)
+        return false;
+    }
+
+  return true;
+}
+
+/**
+ * Skips over a JSON string token starting at the given position, advancing
+ * the position past the closing quote.  This assumes that the token is a
+ * valid JSON string (which is guaranteed if the input was accepted by our
+ * parser before).  Returns false if no well-formed token is found.
+ */
+bool
+SkipJsonString (const std::string& s, size_t& pos)
+{
+  if (pos >= s.size () || s[pos] != '"')
+    return false;
+  ++pos;
+
+  while (pos < s.size ())
+    {
+      const char c = s[pos];
+      if (c == '\\')
+        {
+          if (pos + 1 >= s.size ())
+            return false;
+          pos += 2;
+        }
+      else if (c == '"')
+        {
+          ++pos;
+          return true;
+        }
+      else
+        ++pos;
+    }
+
+  return false;
+}
+
+/**
+ * Checks that the JSON text starting at the given position is exactly the
+ * canonical serialisation of the given value (as done by CompressJson),
+ * with the sole exception that object members may appear in any order.
+ * On success, the position is advanced past the parsed value and true is
+ * returned.
+ *
+ * This can be used as a strict "re-encoding" check: it rejects any input
+ * that is not byte-for-byte the canonical form, except for member ordering,
+ * which is not significant in JSON.
+ */
+bool
+CheckCanonicalJson (const std::string& s, size_t& pos, const Json::Value& val)
+{
+  if (val.isObject ())
+    {
+      if (pos >= s.size () || s[pos] != '{')
+        return false;
+      ++pos;
+
+      /* Map the canonical serialisation of each member name to the name
+         itself, so that we can look up raw key tokens as we encounter
+         them (and enforce that the key escaping is canonical).  */
+      std::map<std::string, std::string> members;
+      for (const auto& name : val.getMemberNames ())
+        members.emplace (SerialiseJsonForCompression (name), name);
+
+      if (val.empty ())
+        {
+          if (pos >= s.size () || s[pos] != '}')
+            return false;
+          ++pos;
+          return true;
+        }
+
+      while (true)
+        {
+          const size_t start = pos;
+          if (!SkipJsonString (s, pos))
+            return false;
+          const std::string rawKey = s.substr (start, pos - start);
+
+          const auto mit = members.find (rawKey);
+          if (mit == members.end ())
+            return false;
+          const std::string name = mit->second;
+          members.erase (mit);
+
+          if (pos >= s.size () || s[pos] != ':')
+            return false;
+          ++pos;
+
+          if (!CheckCanonicalJson (s, pos, val[name]))
+            return false;
+
+          if (pos < s.size () && s[pos] == ',')
+            {
+              ++pos;
+              continue;
+            }
+          if (pos < s.size () && s[pos] == '}')
+            {
+              ++pos;
+              break;
+            }
+
+          return false;
+        }
+
+      return members.empty ();
+    }
+
+  if (val.isArray ())
+    {
+      if (pos >= s.size () || s[pos] != '[')
+        return false;
+      ++pos;
+
+      if (val.empty ())
+        {
+          if (pos >= s.size () || s[pos] != ']')
+            return false;
+          ++pos;
+          return true;
+        }
+
+      for (Json::ArrayIndex i = 0; i < val.size (); ++i)
+        {
+          if (!CheckCanonicalJson (s, pos, val[i]))
+            return false;
+
+          if (i + 1 < val.size ())
+            {
+              if (pos >= s.size () || s[pos] != ',')
+                return false;
+              ++pos;
+            }
+        }
+
+      if (pos >= s.size () || s[pos] != ']')
+        return false;
+      ++pos;
+      return true;
+    }
+
+  /* Scalars must match the canonical serialisation exactly.  */
+  const std::string canon = SerialiseJsonForCompression (val);
+  if (pos > s.size () || s.compare (pos, canon.size (), canon) != 0)
+    return false;
+  pos += canon.size ();
+
+  return true;
+}
+
 } // anonymous namespace
 
 std::string
@@ -112,20 +298,13 @@ bool
 CompressJson (const Json::Value& val,
               std::string& encoded, std::string& uncompressed)
 {
-  Json::StreamWriterBuilder wbuilder;
-  wbuilder["commentStyle"] = "None";
-  wbuilder["indentation"] = "";
-  wbuilder["enableYAMLCompatibility"] = false;
-  wbuilder["dropNullPlaceholders"] = false;
-  wbuilder["useSpecialFloats"] = false;
-
   if (!val.isObject () && !val.isArray ())
     {
       LOG (WARNING) << "CompressJson expects object or array: " << val;
       return false;
     }
 
-  uncompressed = Json::writeString (wbuilder, val);
+  uncompressed = SerialiseJsonForCompression (val);
   encoded = EncodeBase64 (CompressData (uncompressed));
 
   return true;
@@ -145,9 +324,11 @@ UncompressJson (const std::string& input,
   rbuilder["allowDroppedNullPlaceholders"] = false;
   rbuilder["allowNumericKeys"] = false;
   rbuilder["allowSingleQuotes"] = false;
+  rbuilder["allowTrailingCommas"] = false;
   rbuilder["stackLimit"] = stackLimit;
   rbuilder["failIfExtra"] = true;
   rbuilder["rejectDupKeys"] = true;
+  rbuilder["skipBom"] = false;
   rbuilder["allowSpecialFloats"] = false;
 
   std::string compressed;
@@ -155,6 +336,12 @@ UncompressJson (const std::string& input,
     return false;
 
   if (!UncompressData (compressed, maxOutputSize, uncompressed))
+    return false;
+
+  /* Our canonical serialisation is always pure ASCII, so reject any input
+     containing raw non-ASCII bytes.  Non-ASCII characters have to be
+     escaped as \uXXXX instead.  */
+  if (!IsPrintableASCII (uncompressed))
     return false;
 
   std::string parseErrs;
@@ -168,6 +355,14 @@ UncompressJson (const std::string& input,
     {
       return false;
     }
+
+  /* As an extra safety net, we require that the string serialises back
+     byte-equal to the original input, except that object members may be
+     ordered arbitrarily (which is not significant in JSON).  */
+  size_t pos = 0;
+  if (!CheckCanonicalJson (uncompressed, pos, output)
+        || pos != uncompressed.size ())
+    return false;
 
   return output.isObject () || output.isArray ();
 }
