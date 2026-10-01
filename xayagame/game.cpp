@@ -1125,12 +1125,17 @@ Game::Stop ()
          prevent a clean shutdown of the GSP.  */
       LOG (ERROR) << "Failed to untrack game on shutdown: " << exc.what ();
     }
-  CHECK (state == State::DISCONNECTED);
-
   /* Make sure to wake up all listeners waiting for a state update (as there
-     won't be one anymore).  */
-  NotifyStateChange ();
-  NotifyPendingStateChange ();
+     won't be one anymore).  This must hold the mut lock, as the notification
+     also updates shared state (the cached pending JSON).  Note that this must
+     not be held across UntrackGame() above or zmq.Stop(), both of which
+     acquire the lock / join a thread that does.  */
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    CHECK (state == State::DISCONNECTED);
+    NotifyStateChange ();
+    NotifyPendingStateChange ();
+  }
 
   /* Give the RPC server some more time to return still active calls.  */
   std::this_thread::sleep_for (std::chrono::milliseconds (100));
