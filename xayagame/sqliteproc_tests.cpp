@@ -65,12 +65,29 @@ private:
   /** Sleep this long in Compute() before running the actual logic.  */
   std::chrono::milliseconds delay{0};
 
+  /**
+   * If true, Compute() attempts a write to the database.  This is used to
+   * verify that Compute is guarded by PRAGMA query_only.
+   */
+  bool writeOnRead = false;
+
 protected:
 
   void
   Compute (const Json::Value& blockData, const SQLiteDatabase& db) override
   {
     std::this_thread::sleep_for (delay);
+
+    if (writeOnRead)
+      {
+        auto stmt = db.PrepareRo (R"(
+          INSERT INTO `onerow`
+            (`text`)
+            VALUES ('writer')
+        )");
+        stmt.Step ();
+      }
+
     CHECK (block.FromHex (blockData["hash"].asString ()));
     auto stmt = db.PrepareRo (R"(
       SELECT `text` FROM `onerow`
@@ -117,6 +134,15 @@ public:
   SetDelay (const std::chrono::milliseconds d)
   {
     delay = d;
+  }
+
+  /**
+   * Configures whether Compute() should attempt a write to the database.
+   */
+  void
+  SetWriteOnRead (const bool v)
+  {
+    writeOnRead = v;
   }
 
 };
@@ -235,6 +261,29 @@ TEST_F (SQLiteProcTests, RunsAtDefinedInterval)
 
   proc.Finish (db);
   ExpectValues ({{"one", "initial"}, {"four", "changed"}});
+}
+
+TEST_F (SQLiteProcTests, ComputeIsReadOnly)
+{
+  proc.SetInterval (1);
+  proc.SetWriteOnRead (true);
+
+  /* Without a snapshot, Compute runs on the main connection, which must be
+     guarded by PRAGMA query_only.  */
+  EXPECT_DEATH (Process (BlockData (0, "zero"), false),
+                "Unexpected SQLite step result");
+}
+
+TEST_F (SQLiteProcTests, ComputeGuardRestored)
+{
+  proc.SetInterval (1);
+  Process (BlockData (0, "zero"), false);
+
+  /* The main connection must be writable again after Compute, so that both
+     Store (already exercised above) and direct writes work.  */
+  SetValue ("after");
+  proc.Finish (db);
+  ExpectValues ({{"zero", "initial"}});
 }
 
 TEST_F (SQLiteProcTests, WorksAsyncOnSnapshot)

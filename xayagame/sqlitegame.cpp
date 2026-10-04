@@ -786,6 +786,7 @@ Json::Value
 SQLiteGame::GameStateToJson (const GameStateData& state)
 {
   EnsureCurrentState (state);
+  SQLiteDatabase::QueryOnlyGuard guard (database->GetDatabase ());
   return GetStateAsJson (database->GetDatabase ());
 }
 
@@ -795,6 +796,7 @@ SQLiteGame::GetCustomInstanceStateJson (const uint256& hash, unsigned height,
 {
   CHECK (database != nullptr) << "SQLiteGame has not been initialised";
   EnsureCurrentState (state);
+  SQLiteDatabase::QueryOnlyGuard guard (database->GetDatabase ());
   return GetCustomInstanceState (database->GetDatabase (), hash, height);
 }
 
@@ -852,6 +854,7 @@ SQLiteGame::GetCustomStateData (
           CHECK (database != nullptr) << "SQLiteGame has not been initialised";
           LOG (WARNING) << "Using main database for GetCustomStateData";
           EnsureCurrentState (state);
+          SQLiteDatabase::QueryOnlyGuard guard (database->GetDatabase ());
           return cb (database->GetDatabase (), hash, height);
         });
 }
@@ -933,6 +936,23 @@ SQLiteGame::PendingMoves::AccessConfirmedState () const
 {
   game.EnsureCurrentState (GetConfirmedState ());
   return game.database->GetDatabase ();
+}
+
+/* ************************************************************************** */
+
+void
+SQLiteGame::PendingMoves::BeginReadContext ()
+{
+  CHECK (readContextGuard == nullptr);
+  readContextGuard = std::make_unique<SQLiteDatabase::QueryOnlyGuard> (
+      game.database->GetDatabase ());
+}
+
+void
+SQLiteGame::PendingMoves::EndReadContext ()
+{
+  CHECK (readContextGuard != nullptr);
+  readContextGuard.reset ();
 }
 
 /* ************************************************************************** */

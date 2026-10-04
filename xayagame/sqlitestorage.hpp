@@ -222,10 +222,41 @@ public:
   /**
    * Creates a read-only snapshot of the underlying database and returns
    * the corresponding SQLiteDatabase instance.  May return NULL if the
-   * underlying database is not using WAL mode (e.g. in-memory) or some
+   * underlying database is not using WAL mode (e.g., in-memory) or some
    * other condition prevents snapshot creation.
    */
   std::unique_ptr<SQLiteDatabase> GetSnapshot () const;
+
+  /**
+   * RAII helper that enforces "PRAGMA query_only = 1" on a database connection
+   * for its entire lifetime, restoring the previous value when it goes out of
+   * scope.  This is used to make read paths that fall back to a main (writable)
+   * connection truly read-only.
+   *
+   * Note that query_only is enforced by SQLite when a statement is executed,
+   * so it also covers statements retrieved from the database's statement cache.
+   */
+  class QueryOnlyGuard
+  {
+
+  private:
+
+    /** The database connection whose mode is managed.  */
+    SQLiteDatabase& db;
+
+    /** The value of PRAGMA query_only before the guard was constructed.  */
+    bool oldValue;
+
+  public:
+
+    explicit QueryOnlyGuard (SQLiteDatabase& d);
+    ~QueryOnlyGuard ();
+
+    QueryOnlyGuard () = delete;
+    QueryOnlyGuard (const QueryOnlyGuard&) = delete;
+    void operator= (const QueryOnlyGuard&) = delete;
+
+  };
 
 };
 
