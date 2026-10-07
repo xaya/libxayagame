@@ -171,6 +171,7 @@ TEST_F (JsonCompressionTests, Roundtrip)
     {
       "{}",
       "[]",
+      u8R"(["äöü"])",
       "[1, 2, 3]",
       R"({
         "foo":
@@ -203,13 +204,13 @@ TEST_F (JsonCompressionTests, Roundtrip)
 
 TEST_F (JsonCompressionTests, SerialisedJsonFormat)
 {
-  const auto input = ParseJson (R"(
+  const auto input = ParseJson (u8R"(
     {
-      "foo": "bar",
+      "foo": "bär",
       "baz": null
     }
   )");
-  const std::string expectedString = R"({"baz":null,"foo":"bar"})";
+  const std::string expectedString = R"({"baz":null,"foo":"b\u00e4r"})";
 
   std::string encoded;
   std::string uncompressed;
@@ -275,21 +276,53 @@ TEST_F (JsonCompressionTests, InvalidCompressedData)
   EXPECT_FALSE (UncompressJson (encoded, 100, 10, output, uncompressed2));
 }
 
-TEST_F (JsonCompressionTests, WhitespaceOk)
+TEST_F (JsonCompressionTests, StrictCanonicalCheck)
 {
-  const std::string serialised = R"(
+  const std::string tests[] =
     {
-      "value": "with trailing whitespace"
+      R"({  "value": "with whitespace"  })",
+      R"(["trailing whitespace"] )",
+      u8R"(["äöü"])",
+      R"({"value":013})",
+      R"([1.])",
+      R"([1e2])",
+      R"(["\uDC00"])",
+      R"(["\uD800\u0041"])",
+      R"(["\udc00"])",
+      R"(["\ud800\u0041"])",
+    };
+
+  for (const auto& t : tests)
+    {
+      const std::string encoded = EncodeBase64 (CompressData (t));
+
+      Json::Value output;
+      std::string uncompressed2;
+      EXPECT_FALSE (UncompressJson (encoded, 100, 10, output, uncompressed2))
+          << "Accepted invalid re-encoding check:\n" << t;
     }
-  )";
+}
 
-  const std::string encoded = EncodeBase64 (CompressData (serialised));
+TEST_F (JsonCompressionTests, UnsortedObjectFields)
+{
+  const std::string tests[] =
+    {
+      R"({"foo":1,"bar":2})",
+      R"({"b":{"y":1,"x":2},"a":[{"q":1,"p":2}]})",
+      R"({"\u00e4":1})",
+    };
 
-  Json::Value output;
-  std::string uncompressed2;
-  ASSERT_TRUE (UncompressJson (encoded, 100, 10, output, uncompressed2));
-  EXPECT_EQ (output, ParseJson (serialised));
-  EXPECT_EQ (uncompressed2, serialised);
+  for (const auto& t : tests)
+    {
+      const std::string encoded = EncodeBase64 (CompressData (t));
+
+      Json::Value output;
+      std::string uncompressed2;
+      ASSERT_TRUE (UncompressJson (encoded, 100, 10, output, uncompressed2))
+          << "Rejected valid JSON with unsorted members:\n" << t;
+      EXPECT_EQ (output, ParseJson (t));
+      EXPECT_EQ (uncompressed2, t);
+    }
 }
 
 TEST_F (JsonCompressionTests, InvalidSerialisedJson)

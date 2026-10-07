@@ -302,6 +302,14 @@ TEST_F (IsValidTests, TurnWhenFinished)
   )");
 }
 
+TEST_F (IsValidTests, WinnerOutOfBounds)
+{
+  ExpectValid ("winner: 0");
+  ExpectValid ("winner: 1");
+  ExpectInvalid ("winner: 2");
+  ExpectInvalid ("winner: 100");
+}
+
 TEST_F (IsValidTests, MissingTurnWhenNotFinished)
 {
   ExpectInvalid (R"(
@@ -345,6 +353,51 @@ TEST_F (IsValidTests, TurnForSecondCommit)
   ExpectInvalid (R"(
     turn: 0
     position_hashes: "foo"
+  )");
+}
+
+TEST_F (IsValidTests, RepeatedFieldsForEarlyPhases)
+{
+  ExpectInvalid (R"(
+    turn: 0
+    known_ships: {}
+  )");
+
+  ExpectInvalid (R"(
+    turn: 0
+    current_shot: 42
+  )");
+
+  ExpectInvalid (R"(
+    turn: 1
+    position_hashes: "foo"
+    known_ships: {}
+  )");
+
+  ExpectInvalid (R"(
+    turn: 1
+    position_hashes: "foo"
+    positions: 0
+  )");
+
+  ExpectInvalid (R"(
+    turn: 1
+    position_hashes: "foo"
+    current_shot: 42
+  )");
+
+  ExpectInvalid (R"(
+    turn: 0
+    position_hashes: "a"
+    position_hashes: "b"
+    positions: 0
+  )");
+
+  ExpectInvalid (R"(
+    turn: 0
+    position_hashes: "a"
+    position_hashes: "b"
+    current_shot: 42
   )");
 }
 

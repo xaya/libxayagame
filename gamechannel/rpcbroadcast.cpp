@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -36,9 +36,13 @@ RpcBroadcast::UpdateSequence (const Json::Value& resp)
 {
   CHECK (resp.isObject ());
   const auto& seqVal = resp["seq"];
-  CHECK (seqVal.isUInt ());
-  seq = seqVal.asUInt ();
-  VLOG (1) << "New sequence number: " << seq;
+  if (seqVal.isUInt ())
+    {
+      seq = seqVal.asUInt ();
+      VLOG (1) << "New sequence number: " << seq;
+    }
+  else
+    LOG (WARNING) << "Server returned invalid sequence number: " << resp;
 }
 
 void
@@ -63,24 +67,26 @@ RpcBroadcast::GetMessages ()
   CHECK (res.isObject ());
   UpdateSequence (res);
 
-  const auto& msgVal = res["messages"];
-  CHECK (msgVal.isArray ());
   std::vector<std::string> messages;
-  messages.reserve (msgVal.size ());
-  for (const auto& m : msgVal)
+
+  const auto& msgVal = res["messages"];
+  if (msgVal.isArray ())
     {
-      CHECK (m.isString ());
-
-      std::string decoded;
-      if (!DecodeBase64 (m.asString (), decoded))
+      messages.reserve (msgVal.size ());
+      for (const auto& m : msgVal)
         {
-          LOG (WARNING)
-              << "Invalid base64 detected in broadcast message: " << m;
-          continue;
-        }
+          std::string decoded;
+          if (!m.isString () || !DecodeBase64 (m.asString (), decoded))
+            {
+              LOG (WARNING) << "Invalid broadcast message: " << m;
+              continue;
+            }
 
-      messages.push_back (decoded);
+          messages.push_back (decoded);
+        }
     }
+  else
+    LOG (WARNING) << "Invalid messages returned: " << res;
 
   return messages;
 }

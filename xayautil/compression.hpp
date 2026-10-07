@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -77,6 +77,14 @@ bool CompressJson (const Json::Value& val,
  * parsing of e.g. objects inside objects), which should be chosen
  * small enough to ensure safe and quick parsing, but large enough so that
  * it is sufficient for whatever JSON values are expected.
+ *
+ * This method accepts only a subset of "strictly encoded" valid JSON
+ * data, such as produced by CompressJson.  For instance, superfluous
+ * whitespace is not accepted, non-ASCII characters should be escaped
+ * rather than encoded as UTF-8, and number and string formatting must
+ * match the canonical form used by CompressJson.  The order of members
+ * inside objects, on the other hand, is not significant and may differ
+ * from the canonical (sorted) order.
  */
 bool UncompressJson (const std::string& input,
                      size_t maxOutputSize, unsigned stackLimit,

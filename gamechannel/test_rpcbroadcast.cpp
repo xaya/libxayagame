@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2021 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,6 +11,9 @@
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+
+#include <jsonrpccpp/client.h>
+#include <jsonrpccpp/client/connectors/httpclient.h>
 
 #include <google/protobuf/stubs/common.h>
 
@@ -140,6 +143,19 @@ main (int argc, char** argv)
   using xaya::TestRpcBroadcast;
 
   TestRpcBroadcast bc1(FLAGS_rpc_url, id1);
+
+  /* Send a non-string message directly to the broadcast server.  The client
+     should skip it gracefully rather than crash on it.  */
+  {
+    jsonrpc::HttpClient rawConnector(FLAGS_rpc_url);
+    jsonrpc::Client rawRpc(rawConnector);
+
+    Json::Value params;
+    params["channel"] = id1.ToHex ();
+    params["message"] = 42;
+    rawRpc.CallNotification ("send", params);
+  }
+
   bc1.SendMessage ("foo");
   bc1.ExpectResult ({"foo"});
 
