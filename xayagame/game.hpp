@@ -24,6 +24,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 
 namespace xaya
@@ -212,6 +213,20 @@ private:
   int pendingStateVersion = 1;
 
   /**
+   * Cached result of pending->ToJson() for the current pending state.  This
+   * avoids rebuilding the (potentially expensive) pending sub-object for every
+   * caller and every waiter at the same pending version.
+   *
+   * It is reset in NotifyPendingStateChange (which the
+   * PendingStateChangeNotifier also invokes if a processor callback throws),
+   * so a present value is always up to date and no separate version tracking
+   * is needed.
+   *
+   * Guarded by mut.
+   */
+  mutable std::optional<Json::Value> cachedPendingJson;
+
+  /**
    * Desired size for batches of atomic transactions while the game is
    * catching up.  <= 1 means no batching even in these situations.
    */
@@ -338,8 +353,39 @@ private:
 
   /**
    * Notifies potentially-waiting threads that the pending state has changed.
+   * This also invalidates the cached pending JSON.  Callers must hold the
+   * mut lock.
    */
   void NotifyPendingStateChange ();
+
+  /**
+   * RAII helper that calls NotifyPendingStateChange() on scope exit.  It is
+   * used around PendingMoveProcessor callbacks, so that the cached pending
+   * JSON is invalidated and waiters are woken even if the callback mutated
+   * the pending state and then threw.
+   *
+   * The caller must hold the mut lock for the entire lifetime of an instance.
+   */
+  class PendingStateChangeNotifier
+  {
+
+  private:
+
+    /** The Game instance to notify.  */
+    Game& game;
+
+  public:
+
+    explicit PendingStateChangeNotifier (Game& g)
+      : game(g)
+    {}
+
+    ~PendingStateChangeNotifier ()
+    {
+      game.NotifyPendingStateChange ();
+    }
+
+  };
 
   /**
    * Constructs a JSON object representing the basic instance state (with
@@ -365,7 +411,8 @@ private:
 
   /**
    * Returns the current pending state as JSON, but assuming that the caller
-   * already holds the mut lock.
+   * already holds the mut lock.  Reuses cachedPendingJson if it is still
+   * populated for the current pending state.
    */
   Json::Value UnlockedPendingJsonState () const;
 

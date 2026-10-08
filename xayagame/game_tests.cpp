@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <map>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 
@@ -341,6 +342,9 @@ private:
   /** The currently built up JSON object.  */
   Json::Value data;
 
+  /** Number of times ToJson has been called, used to test caching.  */
+  mutable unsigned toJsonCalls = 0;
+
 protected:
 
   void
@@ -365,6 +369,83 @@ public:
   TestPendingMoves ()
     : data(Json::objectValue)
   {}
+
+  Json::Value
+  ToJson () const override
+  {
+    ++toJsonCalls;
+    return data;
+  }
+
+  /**
+   * Returns the number of times ToJson has been called so far.
+   */
+  unsigned
+  GetToJsonCalls () const
+  {
+    return toJsonCalls;
+  }
+
+};
+
+/**
+ * PendingMoveProcessor used to test the invalidation of the cached pending
+ * JSON when a processor callback mutates the state and then throws.  It can
+ * be configured to throw in Clear() or AddPendingMove(), after it has already
+ * modified the stored data.
+ */
+class ThrowingPendingMoves : public PendingMoveProcessor
+{
+
+private:
+
+  /** The currently built up JSON object.  */
+  Json::Value data;
+
+  /** Whether Clear() throws after mutating the data.  */
+  bool throwInClear = false;
+
+  /** Whether AddPendingMove() throws after mutating the data.  */
+  bool throwInAdd = false;
+
+protected:
+
+  void
+  Clear () override
+  {
+    data = Json::Value (Json::objectValue);
+    data["value"] = "cleared";
+
+    if (throwInClear)
+      throw std::runtime_error ("Clear failed");
+  }
+
+  void
+  AddPendingMove (const Json::Value& mv) override
+  {
+    data["value"] = mv["move"].asString ();
+
+    if (throwInAdd)
+      throw std::runtime_error ("AddPendingMove failed");
+  }
+
+public:
+
+  ThrowingPendingMoves ()
+    : data(Json::objectValue)
+  {}
+
+  void
+  SetThrowInClear (const bool v)
+  {
+    throwInClear = v;
+  }
+
+  void
+  SetThrowInAdd (const bool v)
+  {
+    throwInAdd = v;
+  }
 
   Json::Value
   ToJson () const override
@@ -1030,6 +1111,134 @@ TEST_F (GetPendingJsonStateTests, PendingState)
       "a": "x"
     }
   )"));
+}
+
+TEST_F (GetPendingJsonStateTests, CachedPendingJson)
+{
+  TestPendingMoves proc;
+  g.SetPendingMoveProcessor (proc);
+
+  SetupZmqEndpoints (true);
+  g.Start ();
+
+  mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
+                                TestGame::GenesisBlockHash ());
+  ReinitialiseState (g);
+
+  AttachBlock (g, BlockHash (11), Moves (""));
+  CallPendingMove (g, Moves ("ax")[0]);
+
+  const auto state = g.GetPendingJsonState ();
+  EXPECT_EQ (proc.GetToJsonCalls (), 1);
+
+  /* Repeated calls at the same version must reuse the cached sub-object.  */
+  EXPECT_EQ (g.GetPendingJsonState (), state);
+  EXPECT_EQ (g.GetPendingJsonState (), state);
+  EXPECT_EQ (proc.GetToJsonCalls (), 1);
+
+  /* A change to the pending state invalidates the cache; the expensive JSON
+     is only rebuilt once it is actually requested again.  */
+  CallPendingMove (g, Moves ("by")[0]);
+  EXPECT_EQ (proc.GetToJsonCalls (), 1);
+
+  const auto updated = g.GetPendingJsonState ();
+  EXPECT_NE (updated["version"], state["version"]);
+  EXPECT_NE (updated["pending"], state["pending"]);
+  EXPECT_EQ (proc.GetToJsonCalls (), 2);
+
+  /* The new version's value is cached again.  */
+  EXPECT_EQ (g.GetPendingJsonState (), updated);
+  EXPECT_EQ (proc.GetToJsonCalls (), 2);
+}
+
+/**
+ * Tests that the cached pending JSON is invalidated and waiters are notified
+ * if a pending-move processor callback mutates the state and then throws.
+ */
+class PendingJsonCacheTests : public GetPendingJsonStateTests
+{
+
+protected:
+
+  ThrowingPendingMoves proc;
+
+  /**
+   * Starts the game up-to-date with the throwing pending-move processor.
+   */
+  void
+  StartUpToDate ()
+  {
+    g.SetPendingMoveProcessor (proc);
+
+    SetupZmqEndpoints (true);
+    g.Start ();
+
+    mockXayaServer->SetBestBlock (GAME_GENESIS_HEIGHT,
+                                  TestGame::GenesisBlockHash ());
+    ReinitialiseState (g);
+  }
+
+};
+
+TEST_F (PendingJsonCacheTests, ThrowingPendingMove)
+{
+  StartUpToDate ();
+
+  AttachBlock (g, BlockHash (11), Moves (""));
+  CallPendingMove (g, Moves ("ax")[0]);
+
+  const auto before = g.GetPendingJsonState ();
+  EXPECT_EQ (before["pending"]["value"], "x");
+  const int oldVersion = before["version"].asInt ();
+
+  proc.SetThrowInAdd (true);
+  EXPECT_THROW (CallPendingMove (g, Moves ("by")[0]), std::runtime_error);
+
+  /* The cache must have been invalidated and waiters notified before the
+     exception was rethrown, so the new state is served.  */
+  const auto after = g.GetPendingJsonState ();
+  EXPECT_GT (after["version"].asInt (), oldVersion);
+  EXPECT_EQ (after["pending"]["value"], "y");
+}
+
+TEST_F (PendingJsonCacheTests, ThrowingClearOnAttach)
+{
+  StartUpToDate ();
+
+  AttachBlock (g, BlockHash (11), Moves (""));
+  CallPendingMove (g, Moves ("ax")[0]);
+
+  const auto before = g.GetPendingJsonState ();
+  EXPECT_EQ (before["pending"]["value"], "x");
+  const int oldVersion = before["version"].asInt ();
+
+  proc.SetThrowInClear (true);
+  EXPECT_THROW (AttachBlock (g, BlockHash (12), Moves ("")),
+                std::runtime_error);
+
+  const auto after = g.GetPendingJsonState ();
+  EXPECT_GT (after["version"].asInt (), oldVersion);
+  EXPECT_EQ (after["pending"]["value"], "cleared");
+}
+
+TEST_F (PendingJsonCacheTests, ThrowingClearOnDetach)
+{
+  StartUpToDate ();
+
+  AttachBlock (g, BlockHash (11), Moves (""));
+  AttachBlock (g, BlockHash (12), Moves (""));
+  CallPendingMove (g, Moves ("ax")[0]);
+
+  const auto before = g.GetPendingJsonState ();
+  EXPECT_EQ (before["pending"]["value"], "x");
+  const int oldVersion = before["version"].asInt ();
+
+  proc.SetThrowInClear (true);
+  EXPECT_THROW (DetachBlock (g), std::runtime_error);
+
+  const auto after = g.GetPendingJsonState ();
+  EXPECT_GT (after["version"].asInt (), oldVersion);
+  EXPECT_EQ (after["pending"]["value"], "cleared");
 }
 
 /* ************************************************************************** */

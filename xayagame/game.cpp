@@ -409,8 +409,10 @@ Game::BlockAttach (const std::string& id, const Json::Value& data,
 
   if (state == State::UP_TO_DATE && pending != nullptr)
     {
+      /* The notifier fires on scope exit, so the cache is invalidated and
+         waiters are woken even if the processor callback throws.  */
+      PendingStateChangeNotifier notifier(*this);
       pending->ProcessAttachedBlock (storage->GetCurrentGameState (), data);
-      NotifyPendingStateChange ();
     }
 
   NotifyInstanceStateChanged ();
@@ -527,8 +529,10 @@ Game::BlockDetach (const std::string& id, const Json::Value& data,
       const unsigned height = data["block"]["height"].asUInt ();
       CHECK_GT (height, 0);
 
+      /* The notifier fires on scope exit, so the cache is invalidated and
+         waiters are woken even if the processor callback throws.  */
+      PendingStateChangeNotifier notifier(*this);
       pending->ProcessDetachedBlock (storage->GetCurrentGameState (), data);
-      NotifyPendingStateChange ();
     }
 
   NotifyInstanceStateChanged ();
@@ -546,8 +550,11 @@ Game::PendingMove (const std::string& id, const Json::Value& data)
       CHECK (storage->GetCurrentBlockHash (hash));
 
       CHECK (pending != nullptr);
+
+      /* The notifier fires on scope exit, so the cache is invalidated and
+         waiters are woken even if the processor callback throws.  */
+      PendingStateChangeNotifier notifier(*this);
       pending->ProcessTx (storage->GetCurrentGameState (), data);
-      NotifyPendingStateChange ();
     }
   else
     {
@@ -667,6 +674,8 @@ Game::SetPendingMoveProcessor (PendingMoveProcessor& p)
   std::lock_guard<std::mutex> lock(mut);
   CHECK (!mainLoop.IsRunning ());
   pending = &p;
+  cachedPendingJson.reset ();
+
   if (chain != Chain::UNKNOWN)
     pending->InitialiseGameContext (chain, gameId, rpcProvider);
 }
@@ -937,7 +946,9 @@ Game::UnlockedPendingJsonState () const
       res["height"] = height;
     }
 
-  res["pending"] = pending->ToJson ();
+  if (!cachedPendingJson)
+    cachedPendingJson = pending->ToJson ();
+  res["pending"] = *cachedPendingJson;
 
   return res;
 }
@@ -963,6 +974,7 @@ Game::NotifyPendingStateChange ()
   /* Callers are expected to already hold the mut lock here (as that is the
      typical case when they make changes to the state anyway).  */
   CHECK_GT (pendingStateVersion, WAITFORCHANGE_ALWAYS_BLOCK);
+  cachedPendingJson.reset ();
   ++pendingStateVersion;
   VLOG (1)
       << "Notifying waiting threads about change of pending state,"
@@ -1125,12 +1137,17 @@ Game::Stop ()
          prevent a clean shutdown of the GSP.  */
       LOG (ERROR) << "Failed to untrack game on shutdown: " << exc.what ();
     }
-  CHECK (state == State::DISCONNECTED);
-
   /* Make sure to wake up all listeners waiting for a state update (as there
-     won't be one anymore).  */
-  NotifyStateChange ();
-  NotifyPendingStateChange ();
+     won't be one anymore).  This must hold the mut lock, as the notification
+     also updates shared state (the cached pending JSON).  Note that this must
+     not be held across UntrackGame() above or zmq.Stop(), both of which
+     acquire the lock / join a thread that does.  */
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    CHECK (state == State::DISCONNECTED);
+    NotifyStateChange ();
+    NotifyPendingStateChange ();
+  }
 
   /* Give the RPC server some more time to return still active calls.  */
   std::this_thread::sleep_for (std::chrono::milliseconds (100));
