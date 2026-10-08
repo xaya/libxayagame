@@ -1,4 +1,4 @@
-// Copyright (C) 2022-2023 The Xaya developers
+// Copyright (C) 2022-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -122,7 +122,13 @@ SQLiteProcessor::Process (const Json::Value& blockData,
           << "Running '" << name << "' on block "
           << blockData["hash"].asString ()
           << " synchronously";
-      TimedCompute (blockData, db);
+      {
+        /* Even though Compute is meant to be read-only, it would otherwise
+           run on the main writable connection.  Enforce read-only access for
+           its duration.  */
+        SQLiteDatabase::QueryOnlyGuard guard (db);
+        TimedCompute (blockData, db);
+      }
       StoreResult (db);
       return;
     }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -91,6 +91,24 @@ private:
   class ContextSetter;
 
 protected:
+
+  /**
+   * Called when a read context is entered, once the ContextSetter has set up
+   * the context under which the callbacks (AddPendingMove) may access the
+   * confirmed game state.
+   *
+   * This can be overridden by subclasses that need to enforce read-only
+   * access to some underlying storage for the duration of the context.
+   * The default implementation does nothing.
+   */
+  virtual void BeginReadContext () {}
+
+  /**
+   * Called when a read context is left, after the last callback that could
+   * access the confirmed game state has finished.  This undoes whatever
+   * BeginReadContext did.  The default implementation does nothing.
+   */
+  virtual void EndReadContext () {}
 
   /**
    * Returns the currently confirmed on-chain game state.  This must only

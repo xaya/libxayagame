@@ -303,6 +303,27 @@ SQLiteDatabase::Statement::GetBlob (const int ind) const
 
 /* ************************************************************************** */
 
+SQLiteDatabase::QueryOnlyGuard::QueryOnlyGuard (SQLiteDatabase& d)
+  : db(d)
+{
+  auto stmt = db.PrepareRo ("PRAGMA query_only");
+  CHECK (stmt.Step ());
+  oldValue = stmt.Get<bool> (0);
+  CHECK (!stmt.Step ());
+
+  db.Prepare ("PRAGMA query_only = 1").Execute ();
+}
+
+SQLiteDatabase::QueryOnlyGuard::~QueryOnlyGuard ()
+{
+  /* PRAGMA statements do not support bound parameters, so we build the SQL
+     from the boolean previous value.  */
+  db.Prepare (std::string ("PRAGMA query_only = ") + (oldValue ? "1" : "0"))
+      .Execute ();
+}
+
+/* ************************************************************************** */
+
 namespace
 {
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -41,6 +41,7 @@ public:
     CHECK (proc.ctx == nullptr);
     CHECK (blk.isObject ());
     proc.ctx = std::make_unique<CurrentState> (s, blk);
+    proc.BeginReadContext ();
   }
 
   /**
@@ -49,6 +50,7 @@ public:
   ~ContextSetter ()
   {
     CHECK (proc.ctx != nullptr);
+    proc.EndReadContext ();
     proc.ctx.reset ();
   }
 

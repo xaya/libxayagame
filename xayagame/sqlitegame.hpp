@@ -399,11 +399,21 @@ private:
   /** The underlying SQLiteGame instance, which manages the database.  */
   SQLiteGame& game;
 
+  /**
+   * Guard that enforces read-only access on the main database connection
+   * while a pending-move context is active.  It is installed by
+   * BeginReadContext and removed by EndReadContext.
+   */
+  std::unique_ptr<SQLiteDatabase::QueryOnlyGuard> readContextGuard;
+
 protected:
 
   explicit PendingMoves (SQLiteGame& g)
     : game(g)
   {}
+
+  void BeginReadContext () override;
+  void EndReadContext () override;
 
   /**
    * Returns our reference of SQLiteGame.  That may be useful in a game-specific

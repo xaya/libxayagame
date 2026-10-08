@@ -1294,6 +1294,131 @@ TEST_F (UnblockedStateExtractionTests, WalCheckpointing)
 /* ************************************************************************** */
 
 /**
+ * Test game that attempts to write to the database from within the read-only
+ * state-extraction callback GetStateAsJson.  This is used to verify that the
+ * fallback to the main database connection is guarded with PRAGMA query_only.
+ *
+ * The write can be disabled, which allows us to test that the guard is
+ * properly restored after a read path.
+ */
+class WriteOnReadGame : public ChatGame
+{
+
+private:
+
+  /** Whether GetStateAsJson should attempt a write.  */
+  bool writeOnRead = true;
+
+protected:
+
+  /**
+   * Attempts a write to the database.  Note that we explicitly use PrepareRo,
+   * to make clear that the SQLiteDatabase API itself does not prevent the
+   * write; only the query_only guard does.
+   */
+  void
+  Write (const SQLiteDatabase& db) const
+  {
+    auto stmt = db.PrepareRo (R"(
+      INSERT INTO `chat`
+        (`user`, `msg`)
+        VALUES ('writer', 'value')
+    )");
+    stmt.Step ();
+  }
+
+  Json::Value
+  GetStateAsJson (const SQLiteDatabase& db) override
+  {
+    if (writeOnRead)
+      Write (db);
+
+    return ChatGame::GetStateAsJson (db);
+  }
+
+public:
+
+  void
+  SetWriteOnRead (const bool v)
+  {
+    writeOnRead = v;
+  }
+
+};
+
+using ReadOnlyStateTests = SQLiteGameTests<WriteOnReadGame>;
+
+TEST_F (ReadOnlyStateTests, GameStateToJson)
+{
+  /* Even though GetStateAsJson is meant to be read-only, a write must be
+     rejected by the query_only guard on the main database connection.  */
+  EXPECT_DEATH (ExpectState ({{"domob", "hello world"}, {"foo", "bar"}}),
+                "Unexpected SQLite step result");
+}
+
+TEST_F (ReadOnlyStateTests, GuardRestored)
+{
+  rules.SetWriteOnRead (false);
+  ExpectState ({{"domob", "hello world"}, {"foo", "bar"}});
+
+  /* After a normal guarded read, the main connection must be writable
+     again (the guard is restored correctly).  */
+  rules.GetDatabaseForTesting ().Execute (R"(
+    INSERT INTO `chat`
+      (`user`, `msg`)
+      VALUES ('after', 'write')
+  )");
+  ExpectState ({
+    {"after", "write"},
+    {"domob", "hello world"},
+    {"foo", "bar"},
+  });
+}
+
+using ReadOnlyCustomStateTests = SQLiteGameTests<ChatGame>;
+
+TEST_F (ReadOnlyCustomStateTests, FallbackIsReadOnly)
+{
+  /* Attach a block first:  On an in-memory database no snapshots can be
+     taken, so the state snapshot is dropped and GetCustomStateData falls
+     back to the main database connection.  */
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({{"domob", "old"}}));
+
+  EXPECT_DEATH (rules.GetCustomStateData (game, "data",
+      [] (const SQLiteDatabase& db) -> Json::Value
+      {
+        auto stmt = db.PrepareRo (R"(
+          INSERT INTO `chat`
+            (`user`, `msg`)
+            VALUES ('writer', 'value')
+        )");
+        stmt.Step ();
+        return Json::Value ();
+      }), "Unexpected SQLite step result");
+}
+
+TEST_F (ReadOnlyCustomStateTests, FallbackGuardRestored)
+{
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({{"domob", "old"}}));
+
+  const auto res = rules.GetCustomStateData (game, "data",
+      [] (const SQLiteDatabase& db)
+      {
+        return ChatGame::GetState (db).at ("domob");
+      });
+  ASSERT_EQ (res["data"].asString (), "old");
+
+  /* The main connection must be writable again after the fallback read.  */
+  rules.GetDatabaseForTesting ().Execute (R"(
+    INSERT INTO `chat`
+      (`user`, `msg`)
+      VALUES ('after', 'write')
+  )");
+}
+
+/* ************************************************************************** */
+
+/**
  * Example game where each name that sends a move is simply inserted into
  * two database tables with a generated integer ID.  This is used to verify
  * that database rollbacks and transaction atomicity with exceptions work fine
@@ -1612,6 +1737,75 @@ TEST_F (SQLitePendingMoveTests, Works)
       "new player": ["hi", "there"]
     }
   )"));
+}
+
+/* ************************************************************************** */
+
+/**
+ * Pending-move processor that attempts a write to the confirmed state from
+ * within AddPendingMove.  This verifies that the read context established
+ * around the callbacks enforces query_only on the main database connection.
+ */
+class WriteOnReadPendingMoves : public ChatPendingMoves
+{
+
+protected:
+
+  void
+  AddPendingMove (const Json::Value& mv) override
+  {
+    const auto& db = AccessConfirmedState ();
+    auto stmt = db.PrepareRo (R"(
+      INSERT INTO `chat`
+        (`user`, `msg`)
+        VALUES ('writer', 'value')
+    )");
+    stmt.Step ();
+
+    ChatPendingMoves::AddPendingMove (mv);
+  }
+
+public:
+
+  explicit WriteOnReadPendingMoves (SQLiteGame& g)
+    : ChatPendingMoves(g)
+  {}
+
+};
+
+class ReadOnlyPendingMoveTests : public SQLiteGameTests<ChatGame>
+{
+
+private:
+
+  XayaRpcProvider provider;
+  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
+
+protected:
+
+  WriteOnReadPendingMoves proc;
+
+  ReadOnlyPendingMoveTests ()
+    : proc(rules)
+  {
+    provider.Set (mockXayaServer.GetUrl (), jsonrpc::JSONRPC_CLIENT_V2);
+    proc.InitialiseGameContext (Chain::MAIN, GAME_ID, &provider);
+    game.SetPendingMoveProcessor (proc);
+
+    EXPECT_CALL (*mockXayaServer, getrawmempool ())
+        .WillRepeatedly (Return (Json::Value (Json::arrayValue)));
+  }
+
+};
+
+TEST_F (ReadOnlyPendingMoveTests, ContextIsReadOnly)
+{
+  AttachBlock (game, BlockHash (11), ChatGame::Moves ({{"domob", "new"}}));
+
+  const auto moves = ChatGame::Moves ({{"foo", "baz"}});
+  ASSERT_EQ (moves.size (), 1u);
+  EXPECT_DEATH (CallPendingMove (game, moves[0]),
+                "Unexpected SQLite step result");
 }
 
 /* ************************************************************************** */
