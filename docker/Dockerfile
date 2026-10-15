@@ -86,12 +86,12 @@ RUN git clone https://github.com/xaya/eth-utils . \
   && git checkout ${ETHUTILS_COMMIT}
 RUN ./autogen.sh && ./configure && make -j${N} && make install-strip
 
-# Also add a utility script for copying dynamic libraries needed for
-# a given binary.  This can be used by GSP images based on this one
-# to make them as minimal as possible.
-WORKDIR /usr/src/scripts
-RUN git clone https://github.com/hemanth/futhark .
-RUN cp sh/cpld.bash /usr/local/bin/cpld
+# Add our own cpld, a utility script for collecting the dynamic libraries
+# needed for a given binary.  GSP images based on this one use it to make
+# themselves as minimal as possible.  It copies only locally-built libraries;
+# libraries owned by a Debian package are reported instead, so the runtime
+# image can install them via apt.
+COPY docker/cpld /usr/local/bin/cpld
 RUN chmod a+x /usr/local/bin/cpld
 
 # Make sure all installed dependencies are visible.

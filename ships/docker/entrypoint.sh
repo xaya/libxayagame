@@ -1,7 +1,5 @@
 #!/bin/sh -e
 
-exclude="waitforchange,waitforpendingchange"
-
 case $1 in
   shipsd)
     shift
@@ -15,32 +13,11 @@ case $1 in
   ships-channel)
     shift
     exec /usr/local/bin/ships-channel \
-      --game_rpc_port=8600 \
-      "$@"
-    ;;
-
-  charon-client)
-    shift
-    exec /usr/local/bin/charon-client \
-      --waitforchange --waitforpendingchange \
-      --port=8600 \
-      --methods_json_spec="/usr/local/share/channel-gsp-rpc.json" \
-      --methods_exclude="${exclude}" \
-      --cafile="/usr/local/share/letsencrypt.pem" \
-      "$@"
-    ;;
-
-  charon-server)
-    shift
-    exec /usr/local/bin/charon-server \
-      --waitforchange --waitforpendingchange \
-      --methods_json_spec="/usr/local/share/channel-gsp-rpc.json" \
-      --methods_exclude="${exclude}" \
-      --cafile="/usr/local/share/letsencrypt.pem" \
+      --rpc_port=8600 \
       "$@"
     ;;
 
   *)
-    echo "Provide \"shipsd\", \"ships-channel\", \"charon-client\" or \"charon-server\" as command"
+    echo "Provide \"shipsd\" or \"ships-channel\" as command"
     exit 1
 esac

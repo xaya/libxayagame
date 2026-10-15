@@ -1,31 +1,36 @@
-# Builds a Docker image that contains the Xaya ships binaries as well as
-# Charon binaries for running the Xayaships GSP client/server for
-# light mode.
+# Builds a minimal Docker image with the Xayaships binaries (shipsd and
+# ships-channel) and their runtime libraries.
+#
+# It is based on the libxayagame image directly, and uses its cpld helper
+# to collect the runtime libraries:  locally built libraries are copied,
+# while libraries owned by a Debian package are installed via apt in the
+# final runtime image.
 
-# Note:  This image is based on xaya/charon, which itself is based on
-# xaya/libxayagame, not on the libxayagame image directly!
+FROM xaya/libxayagame AS build
 
-FROM xaya/charon AS build
-
-# Collect the binaries and required libraries.  Also add in the Charon
-# binaries.
+# Collect the binaries and required runtime libraries.  cpld copies the
+# locally built libraries and records the Debian packages needed for the
+# rest in "packages.txt".
 WORKDIR /jail
-RUN mkdir bin && cp /usr/local/bin/ships* /usr/local/bin/charon-* bin/
-RUN for b in bin/*; do cpld $b lib64; done
+RUN mkdir bin \
+  && cp /usr/local/bin/shipsd /usr/local/bin/ships-channel bin/ \
+  && touch packages.txt \
+  && for b in bin/*; do cpld "$b" lib64 packages.txt; done \
+  && sort -u -o packages.txt packages.txt
 
-# Add extra files needed (like the channel GSP method spec loaded with the
-# Charon binaries).
-RUN mkdir share \
-  && cp /usr/local/share/channel-gsp-rpc.json share/ \
-  && cp /usr/local/share/charon/letsencrypt.pem share/
 COPY ships/docker/entrypoint.sh bin/
 
-# Build the final image.
-FROM alpine
+# Build the final, minimal runtime image based on Debian, installing the
+# packages reported by cpld for the libraries we did not copy ourselves.
+FROM debian:13-slim
 COPY --from=build /jail /usr/local/
+RUN apt -y update \
+  && apt -y install --no-install-recommends $(cat /usr/local/packages.txt) \
+  && rm -f /usr/local/packages.txt \
+  && rm -rf /var/lib/apt/lists/*
 ENV LD_LIBRARY_PATH "/usr/local/lib64"
 ENV XAYAGAME_DIR "/xayagame"
-LABEL description="Xayaships GSP with Charon"
+LABEL description="Xayaships GSP"
 VOLUME ["/log"]
 ENV GLOG_log_dir "/log"
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

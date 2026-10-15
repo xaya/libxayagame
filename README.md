@@ -83,7 +83,7 @@ virtual environment.
 ### Docker Image
 
 We also provide a
-[Dockerfile](https://github.com/xaya/libxayagame/blob/master/Dockerfile),
+[Dockerfile](https://github.com/xaya/libxayagame/blob/master/docker/Dockerfile),
 which can be used to build an image based on Debian that has all dependencies
 and libxayagame itself prebuilt and installed.  (Hint:  The file can also
 just serve as documentation for how to get all dependencies and build

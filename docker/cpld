@@ -1,0 +1,45 @@
+#!/bin/bash
+# Collect the shared-library closure of a binary for a minimal runtime image.
+#
+# Libraries owned by a Debian package are NOT copied.  Their owning package is
+# appended to the package-list file (arg 3), so the runtime image can install
+# it and stay patched/consistent.  Only locally built libraries (not owned by
+# any package) are copied.
+#
+# Usage: cpld <binary> <destdir> <packages-file>
+set -euo pipefail
+
+if [ "$#" -ne 3 ]; then
+    echo "Usage: cpld <binary> <destdir> <packages-file>" >&2
+    exit 1
+fi
+
+bin=$1
+dest=$2
+packages=$3
+
+[ -e "$bin" ] || { echo "cpld: no such file: $bin" >&2; exit 1; }
+mkdir -p "$dest"
+mkdir -p "$(dirname "$packages")"
+
+lddout=$(ldd "$bin" || true)
+if grep -q 'not found' <<< "$lddout"; then
+    echo "cpld: unresolved dependencies for $bin:" >&2
+    grep 'not found' <<< "$lddout" >&2
+    exit 1
+fi
+
+deps=$(awk '$1 ~ /^\// {print $1} $3 ~ /^\// {print $3}' <<< "$lddout")
+for dep in $deps; do
+    # Canonicalise: ldd reports /lib/... but dpkg records /usr/lib/... (usrmerge),
+    # and the loader is a diversion unless resolved via its real path.
+    real=$(readlink -f "$dep")
+    # dpkg-query exits non-zero when no package owns the path; don't let that
+    # abort under set -e / pipefail.
+    owner=$(dpkg-query -S "$real" 2>/dev/null | head -n1 | cut -d: -f1) || owner=
+    if [ -n "$owner" ]; then
+        echo "$owner" >> "$packages"
+    else
+        cp -L "$dep" "$dest/"
+    fi
+done
