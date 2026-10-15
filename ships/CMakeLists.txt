@@ -219,4 +219,8 @@ foreach (test ${SHIPS_CHANNELTESTS})
 endforeach ()
 
 # Installation.
+install (TARGETS ships
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
 install (TARGETS shipsd ships-channel RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
