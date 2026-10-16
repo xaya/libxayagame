@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,6 +13,7 @@
 #include <json/json.h>
 
 #include <memory>
+#include <set>
 #include <string>
 
 namespace xaya
@@ -141,6 +142,16 @@ public:
    * context of the given old state).
    */
   virtual bool ApplyMove (const BoardMove& mv, BoardState& newState) const = 0;
+
+  /**
+   * Returns the set of participant indices whose signatures are required
+   * for a state proof that does not start from the on-chain state.  By
+   * default all participants are required.  Games whose participants can be
+   * removed from play by on-chain events (so that they provably can no
+   * longer sign) may exclude those seats when this state is the on-chain
+   * reinit state; the framework only ever calls this on the reinit state.
+   */
+  virtual std::set<int> RequiredSignatures () const;
 
   /**
    * Returns a JSON representation of the current board state.  This is used
