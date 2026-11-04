@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,8 +6,21 @@
 
 #include <glog/logging.h>
 
+#include <chrono>
+#include <deque>
+#include <exception>
+#include <utility>
+
 namespace xaya
 {
+
+namespace
+{
+
+/** Time to wait before retrying after an error in the event loop.  */
+constexpr auto RETRY_DELAY = std::chrono::seconds (1);
+
+} // anonymous namespace
 
 ReceivingOffChainBroadcast::ReceivingOffChainBroadcast (
     SynchronisedChannelManager& cm)
@@ -65,13 +78,37 @@ void
 ReceivingOffChainBroadcast::RunLoop ()
 {
   LOG (INFO) << "Running default event loop...";
+
+  /* Messages that have been fetched but not processed yet.  This is local
+     to the loop, and lets us retry a message whose processing failed without
+     losing it or the rest of the batch.  */
+  std::deque<std::string> pending;
+
   while (!stopLoop)
     {
-      const auto messages = GetMessages ();
-      VLOG_IF (1, !messages.empty ())
-          << "Received " << messages.size () << " messages";
-      for (const auto& msg : messages)
-        FeedMessage (msg);
+      try
+        {
+          if (pending.empty ())
+            {
+              auto messages = GetMessages ();
+              VLOG_IF (1, !messages.empty ())
+                  << "Received " << messages.size () << " messages";
+              for (auto& msg : messages)
+                pending.push_back (std::move (msg));
+            }
+
+          while (!pending.empty ())
+            {
+              FeedMessage (pending.front ());
+              pending.pop_front ();
+            }
+        }
+      catch (const std::exception& exc)
+        {
+          LOG (WARNING)
+              << "Error in broadcast event loop, retrying: " << exc.what ();
+          std::this_thread::sleep_for (RETRY_DELAY);
+        }
     }
 }
 

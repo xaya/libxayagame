@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,6 +12,8 @@
 #include "rpc-stubs/channelgsprpcserverstub.h"
 
 #include <xayautil/hash.hpp>
+
+#include <jsonrpccpp/common/errors.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -57,6 +59,15 @@ private:
 
   std::string gspState;
   uint256 bestBlockHash;
+
+  /** If set, the next getchannel call will throw an exception.  */
+  bool failNextGetChannel = false;
+
+  /** If set, all waitforchange calls will throw an exception immediately.  */
+  bool failWaitForChange = false;
+
+  /** Number of waitforchange calls made so far.  */
+  unsigned waitForChangeCalls = 0;
 
   /* Mutex and condition variable for the faked waitforchange.  */
   std::mutex mut;
@@ -140,11 +151,59 @@ public:
     cv.notify_all ();
   }
 
+  /**
+   * Makes the next getchannel call throw an exception.
+   */
+  void
+  FailNextGetchannel ()
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    failNextGetChannel = true;
+  }
+
+  /**
+   * Makes all waitforchange calls throw an exception immediately.
+   */
+  void
+  FailWaitForChange ()
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    failWaitForChange = true;
+  }
+
+  /**
+   * Lets waitforchange calls succeed again.
+   */
+  void
+  AllowWaitForChange ()
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    failWaitForChange = false;
+  }
+
+  /**
+   * Returns the number of waitforchange calls made so far.
+   */
+  unsigned
+  GetWaitForChangeCalls ()
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    return waitForChangeCalls;
+  }
+
   Json::Value
   getchannel (const std::string& channelIdHex) override
   {
     LOG (INFO) << "RPC call: getchannel " << channelIdHex;
     std::lock_guard<std::mutex> lock(mut);
+
+    if (failNextGetChannel)
+      {
+        failNextGetChannel = false;
+        throw jsonrpc::JsonRpcException (
+            jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR,
+            "injected getchannel error");
+      }
 
     Json::Value res(Json::objectValue);
     res["state"] = gspState;
@@ -170,6 +229,12 @@ public:
   {
     LOG (INFO) << "RPC call: waitforchange " << knownBlock;
     std::unique_lock<std::mutex> lock(mut);
+
+    ++waitForChangeCalls;
+    if (failWaitForChange)
+      throw jsonrpc::JsonRpcException (
+          jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR,
+          "injected waitforchange error");
 
     cv.wait (lock);
 
@@ -404,9 +469,60 @@ TEST_F (WaitForChangeLoopTests, TimeoutsGetRepeated)
   std::this_thread::sleep_for (std::chrono::milliseconds (2 * RPC_TIMEOUT_MS));
   EXPECT_EQ (GetLatestState (), "0 0");
 
+  while (GetLatestState () != "10 5")
+    {
+      gspServer->NotifyChange ();
+      SleepSome ();
+    }
+}
+
+TEST_F (ChainToChannelFeederTests, WaitForChangeErrorsAreThrottled)
+{
+  gspServer->SetState ("start", "up-to-date", "0 0", ValidProof ("0 0"), 0);
+  gspServer->FailWaitForChange ();
+  feeder.Start ();
+
+  /* Wait until the loop has hit at least one immediate error.  */
+  while (gspServer->GetWaitForChangeCalls () == 0)
+    SleepSome ();
+
+  const unsigned before = gspServer->GetWaitForChangeCalls ();
+  std::this_thread::sleep_for (std::chrono::milliseconds (200));
+  const unsigned after = gspServer->GetWaitForChangeCalls ();
+
+  /* With the retry delay, there must be at most one additional attempt
+     within this short time frame.  Without it, this would be a busy loop.  */
+  EXPECT_LE (after - before, 1u);
+
+  /* The loop must recover and process updates once the errors stop.  */
+  gspServer->AllowWaitForChange ();
+  gspServer->SetState ("blk 2", "up-to-date", "0 0", ValidProof ("20 6"), 0);
+
+  while (GetLatestState () != "20 6")
+    {
+      gspServer->NotifyChange ();
+      SleepSome ();
+    }
+}
+
+TEST_F (WaitForChangeLoopTests, GetChannelErrorsAreRetried)
+{
+  gspServer->SetState ("blk 2", "up-to-date", "0 0", ValidProof ("20 6"), 0);
+  gspServer->FailNextGetchannel ();
   gspServer->NotifyChange ();
-  SleepSome ();
-  EXPECT_EQ (GetLatestState (), "10 5");
+
+  /* The first update attempt fails on getchannel; the loop should retry
+     after its delay and then apply the new state.  */
+  while (true)
+    {
+      SleepSome ();
+      const auto state = GetLatestState ();
+      if (state == "0 0")
+        continue;
+
+      EXPECT_EQ (GetLatestState (), "20 6");
+      break;
+    }
 }
 
 /* ************************************************************************** */
