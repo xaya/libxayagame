@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,6 +14,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
+#include <stdexcept>
 
 namespace xaya
 {
@@ -38,6 +39,9 @@ private:
   /** Current list of unforwarded messages.  */
   std::vector<std::string> messages;
 
+  /** If set, the next GetMessages call will throw an exception.  */
+  bool failNextGetMessages = false;
+
 protected:
 
   void
@@ -51,6 +55,13 @@ protected:
   GetMessages () override
   {
     std::unique_lock<std::mutex> lock(mut);
+
+    if (failNextGetMessages)
+      {
+        failNextGetMessages = false;
+        throw std::runtime_error ("injected GetMessages error");
+      }
+
     if (messages.empty ())
       cv.wait_for (lock, WAITER_TIMEOUT);
 
@@ -62,6 +73,16 @@ public:
   explicit FeedBackBroadcast (SynchronisedChannelManager& cm)
     : ReceivingOffChainBroadcast(cm)
   {}
+
+  /**
+   * Makes the next GetMessages call throw an exception.
+   */
+  void
+  FailNextGetMessages ()
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    failNextGetMessages = true;
+  }
 
   /**
    * Forwards the queued messages (by notifying the waiting thread).
@@ -136,6 +157,31 @@ TEST_F (ReceivingBroadcastTests, BeyondTimeout)
      waiter thread times out and recalls GetMessages.  */
   std::this_thread::sleep_for (2 * WAITER_TIMEOUT);
   EXPECT_EQ (GetLatestState (), "10 5");
+}
+
+TEST_F (ReceivingBroadcastTests, ExceptionsAreRetried)
+{
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
+
+  offChain.FailNextGetMessages ();
+  offChain.Notify ();
+  SleepSome ();
+
+  offChain.SendNewState ("", ValidProof ("10 5"));
+  offChain.Notify ();
+
+  /* The loop should survive the exception, wait for its retry delay and
+     then process the queued update.  */
+  while (true)
+    {
+      SleepSome ();
+      const BoardState state = GetLatestState ();
+      if (state == "0 0")
+        continue;
+
+      EXPECT_EQ (GetLatestState (), "10 5");
+      break;
+    }
 }
 
 } // anonymous namespace

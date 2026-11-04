@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,8 +6,19 @@
 
 #include <glog/logging.h>
 
+#include <chrono>
+#include <exception>
+
 namespace xaya
 {
+
+namespace
+{
+
+/** Time to wait before retrying after an error in the event loop.  */
+constexpr auto RETRY_DELAY = std::chrono::seconds (1);
+
+} // anonymous namespace
 
 ReceivingOffChainBroadcast::ReceivingOffChainBroadcast (
     SynchronisedChannelManager& cm)
@@ -67,11 +78,20 @@ ReceivingOffChainBroadcast::RunLoop ()
   LOG (INFO) << "Running default event loop...";
   while (!stopLoop)
     {
-      const auto messages = GetMessages ();
-      VLOG_IF (1, !messages.empty ())
-          << "Received " << messages.size () << " messages";
-      for (const auto& msg : messages)
-        FeedMessage (msg);
+      try
+        {
+          const auto messages = GetMessages ();
+          VLOG_IF (1, !messages.empty ())
+              << "Received " << messages.size () << " messages";
+          for (const auto& msg : messages)
+            FeedMessage (msg);
+        }
+      catch (const std::exception& exc)
+        {
+          LOG (WARNING)
+              << "Error in broadcast event loop, retrying: " << exc.what ();
+          std::this_thread::sleep_for (RETRY_DELAY);
+        }
     }
 }
 

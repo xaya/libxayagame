@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,6 +12,8 @@
 #include "rpc-stubs/channelgsprpcserverstub.h"
 
 #include <xayautil/hash.hpp>
+
+#include <jsonrpccpp/common/errors.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -57,6 +59,9 @@ private:
 
   std::string gspState;
   uint256 bestBlockHash;
+
+  /** If set, the next getchannel call will throw an exception.  */
+  bool failNextGetChannel = false;
 
   /* Mutex and condition variable for the faked waitforchange.  */
   std::mutex mut;
@@ -140,11 +145,29 @@ public:
     cv.notify_all ();
   }
 
+  /**
+   * Makes the next getchannel call throw an exception.
+   */
+  void
+  FailNextGetchannel ()
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    failNextGetChannel = true;
+  }
+
   Json::Value
   getchannel (const std::string& channelIdHex) override
   {
     LOG (INFO) << "RPC call: getchannel " << channelIdHex;
     std::lock_guard<std::mutex> lock(mut);
+
+    if (failNextGetChannel)
+      {
+        failNextGetChannel = false;
+        throw jsonrpc::JsonRpcException (
+            jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR,
+            "injected getchannel error");
+      }
 
     Json::Value res(Json::objectValue);
     res["state"] = gspState;
@@ -407,6 +430,26 @@ TEST_F (WaitForChangeLoopTests, TimeoutsGetRepeated)
   gspServer->NotifyChange ();
   SleepSome ();
   EXPECT_EQ (GetLatestState (), "10 5");
+}
+
+TEST_F (WaitForChangeLoopTests, GetChannelErrorsAreRetried)
+{
+  gspServer->SetState ("blk 2", "up-to-date", "0 0", ValidProof ("20 6"), 0);
+  gspServer->FailNextGetchannel ();
+  gspServer->NotifyChange ();
+
+  /* The first update attempt fails on getchannel; the loop should retry
+     after its delay and then apply the new state.  */
+  while (true)
+    {
+      SleepSome ();
+      const auto state = GetLatestState ();
+      if (state == "0 0")
+        continue;
+
+      EXPECT_EQ (GetLatestState (), "20 6");
+      break;
+    }
 }
 
 /* ************************************************************************** */
