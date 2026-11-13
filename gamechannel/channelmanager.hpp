@@ -108,6 +108,13 @@ private:
   OffChainBroadcast* offChainSender = nullptr;
 
   /**
+   * Set if the latest state still needs to be broadcast off-chain.  This is
+   * kept set until SendNewState returns successfully, so that a failed
+   * broadcast is retried on the next state update.
+   */
+  bool pendingBroadcast = false;
+
+  /**
    * Instance for sending on-chain moves (disputes / resolutions).  This must
    * be set before any functions may be called that trigger such moves.
    */
@@ -179,9 +186,17 @@ private:
    * and WaitForChange listeners about a new change.
    *
    * If automoves were found or broadcast is true, then it also broadcasts
-   * the new state to the off-chain channel.
+   * the new state to the off-chain channel.  This happens after the on-chain
+   * recovery and notification, and a failed broadcast is only logged.
    */
   void ProcessStateUpdate (bool broadcast);
+
+  /**
+   * Sends the latest state off-chain if a previous broadcast is still pending.
+   * The pending flag is cleared only after the send succeeds.  Failures are
+   * logged and leave the flag set, so that the broadcast is retried later.
+   */
+  void BroadcastStateIfNeeded ();
 
   /**
    * Notifies threads waiting on cvStateChanged that a new state is available.

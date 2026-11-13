@@ -7,6 +7,8 @@
 #include "channelstatejson.hpp"
 #include "stateproof.hpp"
 
+#include <exception>
+
 namespace xaya
 {
 
@@ -130,10 +132,36 @@ ChannelManager::ProcessAutoMoves ()
 
       LOG (INFO) << "Found automove: " << mv;
       CHECK (ApplyLocalMove (mv));
+      pendingBroadcast = true;
       found = true;
     }
 
   return found;
+}
+
+void
+ChannelManager::BroadcastStateIfNeeded ()
+{
+  if (!pendingBroadcast)
+    return;
+
+  CHECK (offChainSender != nullptr);
+  try
+    {
+      offChainSender->SendNewState (boardStates.GetReinitId (),
+                                    boardStates.GetStateProof ());
+    }
+  catch (const std::exception& exc)
+    {
+      LOG (WARNING)
+          << "Failed to broadcast state for channel " << channelId.ToHex ()
+          << ", will retry: " << exc.what ();
+      return;
+    }
+
+  /* Only clear the flag after the send succeeded.  If it failed, the next
+     state update will retry the broadcast.  */
+  pendingBroadcast = false;
 }
 
 void
@@ -143,18 +171,19 @@ ChannelManager::ProcessStateUpdate (bool broadcast)
     broadcast = true;
 
   if (broadcast)
-    {
-      CHECK (offChainSender != nullptr);
-      offChainSender->SendNewState (boardStates.GetReinitId (),
-                                    boardStates.GetStateProof ());
-    }
+    pendingBroadcast = true;
 
+  /* On-chain recovery must not be blocked by a failed off-chain broadcast.
+     The broadcast is retried afterwards, and a failure keeps the pending
+     flag set for the next update.  */
   TryResolveDispute ();
 
   if (onChainSender != nullptr)
     game.MaybeOnChainMove (boardStates.GetLatestState (), *onChainSender);
 
   NotifyStateChange ();
+
+  BroadcastStateIfNeeded ();
 }
 
 void
@@ -162,7 +191,12 @@ ChannelManager::ProcessOffChain (const std::string& reinitId,
                                  const proto::StateProof& proof)
 {
   if (!boardStates.UpdateWithMove (reinitId, proof))
-    return;
+    {
+      /* A repeated update is not fresher, but it may still be the retry of
+         a message whose broadcast failed before.  */
+      BroadcastStateIfNeeded ();
+      return;
+    }
 
   ProcessStateUpdate (false);
 }
@@ -327,6 +361,7 @@ ChannelManager::TriggerAutoMoves ()
   if (!ProcessAutoMoves ())
     {
       LOG (INFO) << "Automoves triggered explicitly, but none found";
+      BroadcastStateIfNeeded ();
       return;
     }
 

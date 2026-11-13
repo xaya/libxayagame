@@ -375,6 +375,31 @@ TEST_F (AutoMoveTests, TwoMoves)
   EXPECT_EQ (GetLatestState (), "30 7");
 }
 
+TEST_F (AutoMoveTests, FailedBroadcastIsRetriedAndCleared)
+{
+  const auto isLatestProof = [this] (const std::string& msg)
+    {
+      proto::BroadcastMessage pb;
+      CHECK (pb.ParseFromString (msg));
+      return MessageDifferencer::Equals (pb.proof (),
+                                         GetBoardStates ().GetStateProof ());
+    };
+
+  EXPECT_CALL (offChain, SendMessage (Truly (isLatestProof)))
+      .Times (2)
+      .WillOnce (Throw (std::runtime_error ("injected broadcast error")));
+
+  EXPECT_NO_THROW (ProcessOnChain ("0 0", ValidProof ("18 5"), 0));
+  EXPECT_EQ (GetLatestState (), "20 6");
+
+  /* Replaying the on-chain update retries the failed broadcast.  */
+  ProcessOnChain ("0 0", ValidProof ("18 5"), 0);
+  EXPECT_EQ (GetLatestState (), "20 6");
+
+  /* The successful retry cleared the pending flag, so this sends nothing.  */
+  ProcessOnChain ("0 0", ValidProof ("18 5"), 0);
+}
+
 TEST_F (AutoMoveTests, NoTurnState)
 {
   ProcessOnChain ("0 0", ValidProof ("108 5"), 0);
@@ -559,6 +584,28 @@ TEST_F (ResolveDisputeTests, RetryAfterBlock)
   txSender.ClearMempool ();
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("14 8"));
+}
+
+TEST_F (ResolveDisputeTests, FailedBroadcastDoesNotBlockResolution)
+{
+  EXPECT_CALL (offChain, SendMessage (_))
+      .Times (2)
+      .WillRepeatedly (Throw (std::runtime_error ("injected broadcast error")));
+
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  EXPECT_NO_THROW (cm.ProcessOffChain ("", ValidProof ("16 6")));
+  EXPECT_EQ (GetLatestState (), "20 8");
+
+  /* Make sure no stale pending transaction can mask a missing resolution.  */
+  txSender.ClearMempool ();
+
+  ExpectMove ("resolution");
+  const int oldVersion = cm.ToJson ()["version"].asInt ();
+  EXPECT_NO_THROW (ProcessOnChain ("0 0", ValidProof ("10 5"), 1));
+
+  ASSERT_NE (GetDispute (), nullptr);
+  EXPECT_FALSE (GetDispute ()->pendingResolution.IsNull ());
+  EXPECT_EQ (cm.ToJson ()["version"].asInt (), oldVersion + 1);
 }
 
 /* ************************************************************************** */
