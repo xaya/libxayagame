@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -173,15 +173,14 @@ ChannelManager::ProcessOnChainNonExistant (const uint256& blk, const unsigned h)
   LOG_IF (INFO, exists)
       << "Channel " << channelId.ToHex () << " no longer exists on-chain";
 
-  blockHash = blk;
-  onChainHeight = h;
-
-  exists = false;
-
   /* If the channel no longer exists on chain, set the list of participants
      for the broadcaster to empty.  */
   if (offChainSender != nullptr)
     offChainSender->SetParticipants (proto::ChannelMetadata ());
+
+  blockHash = blk;
+  onChainHeight = h;
+  exists = false;
 
   NotifyStateChange ();
 }
@@ -225,13 +224,27 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
   LOG_IF (INFO, !exists)
       << "Channel " << channelId.ToHex () << " is now found on-chain";
 
+  /* Update the rolling state first.  This is the only part of an on-chain
+     update that may throw due to verification failures, and it must not
+     publish the channel as existing unless it was initialised successfully.  */
+  boardStates.UpdateOnChain (meta, reinitState, proof);
+
+  /* Parse dispute data before mutating the dispute state, so that a failure
+     cannot leave it partially updated.  */
+  std::unique_ptr<ParsedBoardState> disputedState;
+  if (disputeHeight != 0)
+    {
+      disputedState = rules.ParseState (channelId, meta,
+                                        UnverifiedProofEndState (proof));
+      CHECK (disputedState != nullptr);
+    }
+
   blockHash = blk;
   onChainHeight = h;
 
   ResetMinedTxid (onChainSender, pendingPutStateOnChain);
   ResetMinedTxid (onChainSender, pendingDispute);
   exists = true;
-  boardStates.UpdateOnChain (meta, reinitState, proof);
 
   if (disputeHeight == 0)
     {
@@ -252,10 +265,8 @@ ChannelManager::ProcessOnChain (const uint256& blk, const unsigned h,
       dispute->height = disputeHeight;
       ResetMinedTxid (onChainSender, dispute->pendingResolution);
 
-      auto p = rules.ParseState (channelId, meta,
-                                 UnverifiedProofEndState (proof));
-      dispute->turn = p->WhoseTurn ();
-      dispute->count = p->TurnCount ();
+      dispute->turn = disputedState->WhoseTurn ();
+      dispute->count = disputedState->TurnCount ();
     }
 
   /* Update the list of participants for the off-chain broadcaster to the

@@ -12,9 +12,12 @@
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <glog/logging.h>
+
+#include <stdexcept>
 
 namespace xaya
 {
@@ -23,6 +26,9 @@ namespace
 
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
+using testing::_;
+using testing::Return;
+using testing::Throw;
 
 /**
  * Parses a StateProof from text proto.
@@ -265,6 +271,155 @@ TEST_F (RollingStateTests, UpdateWithMoveUnknownReinit)
     initial_state: { data: "25 4" }
   )"));
   ExpectState ("65 5", "reinit 2");
+}
+
+TEST_F (RollingStateTests, QueuedProofFailureKeepsNewReinitReadable)
+{
+  /* Queue an off-chain update before the reinit is known on chain.  */
+  state.UpdateWithMove ("reinit 2", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+    transitions:
+      {
+        move: "40"
+        new_state:
+          {
+            data: "65 5"
+            signatures: "sgn 2"
+          }
+      }
+  )"));
+
+  EXPECT_CALL (verifier, RecoverSigner (_, "sgn 2"))
+      .WillOnce (Throw (std::runtime_error ("injected queued error")))
+      .WillRepeatedly (Return ("addr 2"));
+
+  EXPECT_THROW (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+  )")), std::runtime_error);
+
+  /* The verified on-chain state must remain readable, while the failed
+     queued proof is not applied.  */
+  ExpectState ("25 4", "reinit 2");
+  EXPECT_NO_THROW (state.GetMetadata ());
+
+  EXPECT_TRUE (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+  )")));
+  ExpectState ("65 5", "reinit 2");
+}
+
+TEST_F (RollingStateTests, QueuedUpdatesProcessedWhenReinitChanges)
+{
+  state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
+    initial_state: { data: "13 5" }
+  )"));
+  ExpectState ("13 5", "reinit 1");
+
+  state.UpdateWithMove ("reinit 2", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+    transitions:
+      {
+        move: "40"
+        new_state:
+          {
+            data: "65 5"
+            signatures: "sgn 2"
+          }
+      }
+  )"));
+
+  EXPECT_CALL (verifier, RecoverSigner (_, "sgn 2"))
+      .WillOnce (Throw (std::runtime_error ("injected queued error")))
+      .WillRepeatedly (Return ("addr 2"));
+
+  EXPECT_THROW (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+  )")), std::runtime_error);
+  ExpectState ("25 4", "reinit 2");
+
+  /* Switch back to reinit 1, then to reinit 2 with an on-chain state that is
+     not fresher.  The queued proof must still be drained even though the
+     current reinit changed.  */
+  EXPECT_TRUE (state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
+    initial_state: { data: "13 5" }
+  )")));
+  ExpectState ("13 5", "reinit 1");
+
+  EXPECT_TRUE (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+  )")));
+  ExpectState ("65 5", "reinit 2");
+}
+
+TEST_F (RollingStateTests, PartialQueueFailureOnlyRequeuesUnprocessed)
+{
+  /* Two queued updates for the same unknown reinit.  The first one is applied
+     before the second one fails, so only the second should be queued again.  */
+  state.UpdateWithMove ("reinit 2", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+    transitions:
+      {
+        move: "10"
+        new_state:
+          {
+            data: "35 5"
+            signatures: "sgn 2"
+            signatures: "sgn 3"
+          }
+      }
+  )"));
+  state.UpdateWithMove ("reinit 2", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+    transitions:
+      {
+        move: "10"
+        new_state:
+          {
+            data: "35 5"
+            signatures: "sgn 2"
+          }
+      }
+    transitions:
+      {
+        move: "10"
+        new_state:
+          {
+            data: "45 6"
+            signatures: "sgn 2"
+            signatures: "fail sgn"
+          }
+      }
+  )"));
+
+  /* "sgn 3" is only in the first proof.  It must not be verified more than
+     twice: once on the staging attempt, once when retrying the existing entry.
+     Requeueing the already-applied proof would verify it a third time.  */
+  EXPECT_CALL (verifier, RecoverSigner (_, "sgn 3"))
+      .Times (2)
+      .WillRepeatedly (Return ("unused"));
+  EXPECT_CALL (verifier, RecoverSigner (_, "fail sgn"))
+      .WillOnce (Throw (std::runtime_error ("injected queued error")))
+      .WillOnce (Throw (std::runtime_error ("injected queued error")))
+      .WillRepeatedly (Return ("unused"));
+
+  /* First attempt uses staging: first proof applies, second proof throws.  */
+  EXPECT_THROW (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+  )")), std::runtime_error);
+  ExpectState ("25 4", "reinit 2");
+
+  /* Retry against the existing entry: first proof applies, second throws.  */
+  EXPECT_THROW (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+  )")), std::runtime_error);
+  ExpectState ("35 5", "reinit 2");
+
+  /* The first proof must not have been requeued, and the second one now
+     succeeds.  */
+  EXPECT_TRUE (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
+    initial_state: { data: "25 4" }
+  )")));
+  ExpectState ("45 6", "reinit 2");
 }
 
 TEST_F (RollingStateTests, UpdateWithMoveInvalidProof)

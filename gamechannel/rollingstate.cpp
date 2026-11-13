@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -153,122 +153,9 @@ RollingState::GetMetadata () const
 }
 
 bool
-RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
-                             const BoardState& reinitState,
-                             const proto::StateProof& proof)
+RollingState::UpdateReinitWithMove (ReinitData& entry,
+                                    const proto::StateProof& proof)
 {
-  /* Since this comes from on-chain, it "should" be valid!  */
-  CHECK (CheckVersionedProto (rules, meta, proof));
-
-  BoardState provenState;
-  CHECK (VerifyStateProof (verifier, rules, gameId, channelId, meta,
-                           reinitState, proof, provenState))
-      << "State proof provided on-chain is not valid";
-
-  /* First of all, store the current on-chain update's reinit ID as the
-     "latest known".  We also keep track of whether or not the ID changed,
-     which we need to determine what to return for the case that the
-     ID exists already and our state is not as fresh as the known one.  */
-  const bool reinitChange = (reinitId != meta.reinit ());
-  reinitId = meta.reinit ();
-  LOG (INFO)
-      << "Performing on-chain update for channel " << channelId.ToHex ()
-      << " and reinitialisation " << EncodeBase64 (reinitId);
-
-  /* Add a new entry for the reinit map if we don't have the ID yet.  */
-  const auto mit = reinits.find (reinitId);
-  if (mit == reinits.end ())
-    {
-      ReinitData entry;
-      entry.meta = std::make_unique<proto::ChannelMetadata> (meta);
-      entry.reinitState = reinitState;
-      entry.proof = proof;
-      entry.latestState = rules.ParseState (channelId, *entry.meta,
-                                            provenState);
-      CHECK (entry.latestState != nullptr);
-      entry.onChainTurn = entry.latestState->TurnCount ();
-
-      LOG (INFO)
-          << "Added previously unknown reinitialisation.  Turn count: "
-          << entry.latestState->TurnCount ();
-
-      reinits.emplace (reinitId, std::move (entry));
-
-      /* If we have any queued up off-chain updates for this reinit,
-         process them now.  */
-      const auto updateQueue = unknownReinitMoves.ExtractQueue (reinitId);
-      if (!updateQueue.empty ())
-        {
-          LOG (INFO)
-              << "Processing " << updateQueue.size ()
-              << " queued off-chain updates for the new reinit";
-          for (const auto& sp : updateQueue)
-            UpdateWithMove (reinitId, sp);
-        }
-
-      return true;
-    }
-
-  /* Update the entry to the new state, in case it is actually fresher
-     than the state that we already have.  */
-  ReinitData& entry = mit->second;
-  CHECK (MessageDifferencer::Equals (meta, *entry.meta));
-  CHECK_EQ (reinitState, entry.reinitState);
-
-  auto parsed = rules.ParseState (channelId, *entry.meta, provenState);
-  CHECK (parsed != nullptr);
-  const unsigned parsedCnt = parsed->TurnCount ();
-  LOG (INFO) << "Turn count provided in the update: " << parsedCnt;
-
-  if (parsedCnt > entry.onChainTurn)
-    {
-      LOG (INFO) << "Updating on-chain turn count to " << parsedCnt;
-      entry.onChainTurn = parsedCnt;
-    }
-
-  const unsigned currentCnt = entry.latestState->TurnCount ();
-  if (currentCnt >= parsedCnt)
-    {
-      LOG (INFO)
-          << "The new state is not fresher than the known one"
-          << " with turn count " << currentCnt;
-      return reinitChange;
-    }
-
-  LOG (INFO) << "The new state is fresher, updating";
-  entry.proof = proof;
-  entry.latestState = std::move (parsed);
-  return true;
-}
-
-bool
-RollingState::UpdateWithMove (const std::string& updReinit,
-                              const proto::StateProof& proof)
-{
-  /* For this update, we do not care whether the reinit ID is the "current" one
-     or not.  We simply update the associated state if have any, so that we
-     stay up-to-date as much as possible.  For instance, it could happen that
-     we receive an off-chain move later than an on-chain update that changed
-     the channel; then we still want to apply the off-chain update, in case
-     the on-chain move gets detached again or something like that.
-
-     Similarly, if we receive an update for a reinit that is not known at all
-     yet, we queue it up so that we can process it later in case the reinit
-     gets created.  This is needed for situations where our peer might have
-     received an on-chain update earlier than us, and we receive their
-     off-chain move before the on-chain update.  */
-
-  const auto mit = reinits.find (updReinit);
-  if (mit == reinits.end ())
-    {
-      LOG (WARNING)
-          << "Off-chain update for channel " << channelId.ToHex ()
-          << " has unknown reinitialisation ID: " << EncodeBase64 (updReinit);
-      unknownReinitMoves.Insert (updReinit, proof);
-      return false;
-    }
-  ReinitData& entry = mit->second;
-
   /* Verify that the StateProof proto is valid with the expected version
      and has no unknown fields.  We do not want to accept a current state
      proof that would then be invalid when put on chain!  */
@@ -313,11 +200,182 @@ RollingState::UpdateWithMove (const std::string& updReinit,
   entry.proof = proof;
   entry.latestState = std::move (parsed);
 
+  return true;
+}
+
+bool
+RollingState::ProcessQueuedUpdates (const std::string& reinit, ReinitData& entry,
+                                    const bool requeueAllOnFailure)
+{
+  auto updateQueue = unknownReinitMoves.ExtractQueue (reinit);
+
+  bool changed = false;
+  size_t i = 0;
+  try
+    {
+      for (; i < updateQueue.size (); ++i)
+        changed = UpdateReinitWithMove (entry, updateQueue[i]) || changed;
+    }
+  catch (...)
+    {
+      /* For an existing entry, already applied updates remain valid and should
+         not be queued again.  For a staging entry, the caller discards it, so
+         all extracted updates need to be retried.  */
+      const size_t firstToRequeue = requeueAllOnFailure ? 0 : i;
+      for (size_t j = firstToRequeue; j < updateQueue.size (); ++j)
+        unknownReinitMoves.Insert (reinit, updateQueue[j]);
+      throw;
+    }
+
+  return changed;
+}
+
+bool
+RollingState::UpdateOnChain (const proto::ChannelMetadata& meta,
+                             const BoardState& reinitState,
+                             const proto::StateProof& proof)
+{
+  /* Since this comes from on-chain, it "should" be valid!  */
+  CHECK (CheckVersionedProto (rules, meta, proof));
+
+  BoardState provenState;
+  CHECK (VerifyStateProof (verifier, rules, gameId, channelId, meta,
+                           reinitState, proof, provenState))
+      << "State proof provided on-chain is not valid";
+
+  /* We keep track of whether or not the reinit ID changed, which we need to
+     determine what to return for the case that the ID exists already and our
+     state is not as fresh as the known one.  We only update the state variable
+     reinitId later, after calls that may potentially throw.  */
+  const std::string newReinitId = meta.reinit ();
+  const bool reinitChange = (reinitId != newReinitId);
+
+  LOG (INFO)
+      << "Performing on-chain update for channel " << channelId.ToHex ()
+      << " and reinitialisation " << EncodeBase64 (newReinitId);
+
+  /* Add a new entry for the reinit map if we don't have the ID yet.  All
+     potentially throwing work is done before the entry is inserted, so that
+     a failure leaves the current state fully initialised and readable.  */
+  const auto mit = reinits.find (newReinitId);
+  if (mit == reinits.end ())
+    {
+      ReinitData entry;
+      entry.meta = std::make_unique<proto::ChannelMetadata> (meta);
+      entry.reinitState = reinitState;
+      entry.proof = proof;
+      entry.latestState = rules.ParseState (channelId, *entry.meta,
+                                            provenState);
+      CHECK (entry.latestState != nullptr);
+      entry.onChainTurn = entry.latestState->TurnCount ();
+
+      LOG (INFO)
+          << "Added previously unknown reinitialisation.  Turn count: "
+          << entry.latestState->TurnCount ();
+
+      /* Process any queued off-chain updates on a staging entry, so that a
+         failure does not leave a partially-updated entry committed.  The
+         verified on-chain base state remains available either way.  */
+      ReinitData staging;
+      staging.meta
+          = std::make_unique<proto::ChannelMetadata> (*entry.meta);
+      staging.reinitState = entry.reinitState;
+      staging.onChainTurn = entry.onChainTurn;
+      staging.proof = entry.proof;
+      staging.latestState = rules.ParseState (channelId, *staging.meta,
+                                              provenState);
+      CHECK (staging.latestState != nullptr);
+
+      try
+        {
+          ProcessQueuedUpdates (newReinitId, staging, true);
+        }
+      catch (...)
+        {
+          /* Keep the verified on-chain state readable, and let the queued
+             updates be retried later.  */
+          reinits.emplace (newReinitId, std::move (entry));
+          reinitId = newReinitId;
+          throw;
+        }
+
+      reinits.emplace (newReinitId, std::move (staging));
+      reinitId = newReinitId;
+
+      return true;
+    }
+
+  /* Update the entry to the new state, in case it is actually fresher
+     than the state that we already have.  */
+  ReinitData& entry = mit->second;
+  CHECK (MessageDifferencer::Equals (meta, *entry.meta));
+  CHECK_EQ (reinitState, entry.reinitState);
+
+  auto parsed = rules.ParseState (channelId, *entry.meta, provenState);
+  CHECK (parsed != nullptr);
+  const unsigned parsedCnt = parsed->TurnCount ();
+  LOG (INFO) << "Turn count provided in the update: " << parsedCnt;
+
+  reinitId = newReinitId;
+
+  if (parsedCnt > entry.onChainTurn)
+    {
+      LOG (INFO) << "Updating on-chain turn count to " << parsedCnt;
+      entry.onChainTurn = parsedCnt;
+    }
+
+  const unsigned currentCnt = entry.latestState->TurnCount ();
+  if (currentCnt >= parsedCnt)
+    {
+      LOG (INFO)
+          << "The new state is not fresher than the known one"
+          << " with turn count " << currentCnt;
+      const bool queuedChanged
+          = ProcessQueuedUpdates (newReinitId, entry, false);
+      return reinitChange || queuedChanged;
+    }
+
+  LOG (INFO) << "The new state is fresher, updating";
+  entry.proof = proof;
+  entry.latestState = std::move (parsed);
+  ProcessQueuedUpdates (newReinitId, entry, false);
+  return true;
+}
+
+bool
+RollingState::UpdateWithMove (const std::string& updReinit,
+                              const proto::StateProof& proof)
+{
+  /* For this update, we do not care whether the reinit ID is the "current" one
+     or not.  We simply update the associated state if have any, so that we
+     stay up-to-date as much as possible.  For instance, it could happen that
+     we receive an off-chain move later than an on-chain update that changed
+     the channel; then we still want to apply the off-chain update, in case
+     the on-chain move gets detached again or something like that.
+
+     Similarly, if we receive an update for a reinit that is not known at all
+     yet, we queue it up so that we can process it later in case the reinit
+     gets created.  This is needed for situations where our peer might have
+     received an on-chain update earlier than us, and we receive their
+     off-chain move before the on-chain update.  */
+
+  const auto mit = reinits.find (updReinit);
+  if (mit == reinits.end ())
+    {
+      LOG (WARNING)
+          << "Off-chain update for channel " << channelId.ToHex ()
+          << " has unknown reinitialisation ID: " << EncodeBase64 (updReinit);
+      unknownReinitMoves.Insert (updReinit, proof);
+      return false;
+    }
+  ReinitData& entry = mit->second;
+
   /* In this case, we return a change if and only if the update was done to
      the current reinit ID.  We do not want to signal a change when another
      reinit ID was updated (that will instead be signalled by UpdateOnChain
      when switching to that reinit ID).  */
-  return (updReinit == reinitId);
+  const bool advanced = UpdateReinitWithMove (entry, proof);
+  return advanced && (updReinit == reinitId);
 }
 
 /* ************************************************************************** */

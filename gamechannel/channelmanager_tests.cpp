@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -17,10 +17,13 @@
 
 #include <glog/logging.h>
 
+#include <stdexcept>
+
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
 using testing::_;
 using testing::Return;
+using testing::Throw;
 using testing::Truly;
 
 namespace xaya
@@ -219,6 +222,50 @@ TEST_F (ProcessOnChainTests, Basic)
   EXPECT_TRUE (GetExists ());
   EXPECT_EQ (GetLatestState (), "10 5");
   EXPECT_EQ (GetDispute (), nullptr);
+}
+
+TEST_F (ProcessOnChainTests, VerificationFailureKeepsManagerReadable)
+{
+  EXPECT_CALL (verifier, RecoverSigner (_, "sgn"))
+      .WillOnce (Throw (std::runtime_error ("injected verification error")))
+      .WillRepeatedly (Return ("my addr"));
+
+  EXPECT_THROW (ProcessOnChain ("0 0", ValidProof ("10 5"), 0),
+                std::runtime_error);
+
+  EXPECT_FALSE (GetExists ());
+  const auto json = cm.ToJson ();
+  EXPECT_FALSE (json["existsonchain"].asBool ());
+  EXPECT_FALSE (json.isMember ("current"));
+
+  /* Retrying after the transient failure should initialise the channel.  */
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  EXPECT_TRUE (GetExists ());
+  EXPECT_EQ (GetLatestState (), "10 5");
+}
+
+TEST_F (ProcessOnChainTests, VerificationFailureKeepsOldReinitReadable)
+{
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  EXPECT_EQ (GetBoardStates ().GetReinitId (), "");
+
+  meta.set_reinit ("new reinit");
+  EXPECT_CALL (verifier, RecoverSigner (_, "sgn"))
+      .WillOnce (Throw (std::runtime_error ("injected verification error")))
+      .WillRepeatedly (Return ("my addr"));
+
+  EXPECT_THROW (ProcessOnChain ("0 0", ValidProof ("20 6"), 0),
+                std::runtime_error);
+
+  EXPECT_TRUE (GetExists ());
+  EXPECT_EQ (GetLatestState (), "10 5");
+  EXPECT_EQ (GetBoardStates ().GetReinitId (), "");
+  EXPECT_NO_THROW (cm.ToJson ());
+
+  ProcessOnChain ("0 0", ValidProof ("20 6"), 0);
+  EXPECT_TRUE (GetExists ());
+  EXPECT_EQ (GetLatestState (), "20 6");
+  EXPECT_EQ (GetBoardStates ().GetReinitId (), "new reinit");
 }
 
 TEST_F (ProcessOnChainTests, Dispute)
