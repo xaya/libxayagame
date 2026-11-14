@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2019-2022 The Xaya developers
+# Copyright (C) 2019-2026 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -72,6 +72,43 @@ Data Hash: d6b681bfce7155d44721afb79c296ef4f0fa80a9dd6b43c5cf74dd0f64c85512"""
     text_format.Parse ("""
       data: "foobar"
       signatures: "sgn 1"
+    """, expected)
+
+    actual = signatures.createForChannel (rpc, "game id", channel,
+                                          "topic", b"foobar")
+    self.assertEqual (actual, expected)
+
+  def testCreateForChannelDuplicateAddress (self):
+    class FakeRpc:
+      def validateaddress (self, addr):
+        return {"isvalid": True}
+
+      def getaddressinfo (self, addr):
+        return {"ismine": True}
+
+      def signmessage (self, addr, msg):
+        return base64.b64encode (b"sgn")
+
+    meta = metadata_pb2.ChannelMetadata ()
+    text_format.Parse ("""
+      reinit: "reinit"
+      participants: { address: "addr" }
+      participants: { address: "addr" }
+    """, meta)
+
+    rpc = FakeRpc ()
+    channel = {
+      "id": "ab" * 32,
+      "meta":
+        {
+          "proto": base64.b64encode (meta.SerializeToString ()),
+        },
+    }
+
+    expected = signatures_pb2.SignedData ()
+    text_format.Parse ("""
+      data: "foobar"
+      signatures: "sgn"
     """, expected)
 
     actual = signatures.createForChannel (rpc, "game id", channel,

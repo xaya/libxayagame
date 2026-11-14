@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -84,6 +84,28 @@ TEST_F (DisputeTests, InvalidStateProof)
     initial_state:
       {
         data: "42 5"
+      }
+  )")));
+
+  EXPECT_EQ (ch->GetLatestState (), "0 1");
+  EXPECT_FALSE (ch->HasDispute ());
+}
+
+TEST_F (DisputeTests, NonParticipantSignature)
+{
+  auto ch = CreateChannel ("test", "0 1");
+
+  ASSERT_FALSE (game.ProcessDispute (*ch, 100, ParseStateProof (R"(
+    initial_state: { data: "0 1" }
+    transitions:
+      {
+        move: "2"
+        new_state:
+          {
+            data: "2 2"
+            signatures: "sgn0"
+            signatures: "sgn42"
+          }
       }
   )")));
 

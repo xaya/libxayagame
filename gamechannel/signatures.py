@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2022 The Xaya developers
+# Copyright (C) 2019-2026 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -54,7 +54,12 @@ def createForChannel (rpc, gameId, channel, topic, data):
   meta.ParseFromString (base64.b64decode (channel["meta"]["proto"]))
   msg = getChannelMessage (gameId, channelId, meta, topic, data)
 
+  seen = set ()
   for p in meta.participants:
+    if p.address in seen:
+      continue
+    seen.add (p.address)
+
     valid = rpc.validateaddress (p.address)
     if not valid["isvalid"]:
       continue

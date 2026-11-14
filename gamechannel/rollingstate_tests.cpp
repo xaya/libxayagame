@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -364,7 +364,7 @@ TEST_F (RollingStateTests, PartialQueueFailureOnlyRequeuesUnprocessed)
           {
             data: "35 5"
             signatures: "sgn 2"
-            signatures: "sgn 3"
+            signatures: "sgn 0 alt"
           }
       }
   )"));
@@ -391,16 +391,17 @@ TEST_F (RollingStateTests, PartialQueueFailureOnlyRequeuesUnprocessed)
       }
   )"));
 
-  /* "sgn 3" is only in the first proof.  It must not be verified more than
-     twice: once on the staging attempt, once when retrying the existing entry.
-     Requeueing the already-applied proof would verify it a third time.  */
-  EXPECT_CALL (verifier, RecoverSigner (_, "sgn 3"))
+  /* "sgn 0 alt" is only in the first proof.  It must not be verified more
+     than twice: once on the staging attempt, once when retrying the existing
+     entry.  Requeueing the already-applied proof would verify it a third
+     time.  */
+  EXPECT_CALL (verifier, RecoverSigner (_, "sgn 0 alt"))
       .Times (2)
-      .WillRepeatedly (Return ("unused"));
+      .WillRepeatedly (Return ("addr 0"));
   EXPECT_CALL (verifier, RecoverSigner (_, "fail sgn"))
       .WillOnce (Throw (std::runtime_error ("injected queued error")))
       .WillOnce (Throw (std::runtime_error ("injected queued error")))
-      .WillRepeatedly (Return ("unused"));
+      .WillRepeatedly (Return ("addr 0"));
 
   /* First attempt uses staging: first proof applies, second proof throws.  */
   EXPECT_THROW (state.UpdateOnChain (meta2, "25 4", ParseStateProof (R"(
@@ -430,6 +431,31 @@ TEST_F (RollingStateTests, UpdateWithMoveInvalidProof)
 
   EXPECT_FALSE (state.UpdateWithMove ("reinit 1", ParseStateProof (R"(
     initial_state: { data: "50 6" }
+  )")));
+
+  ExpectState ("13 5", "reinit 1");
+}
+
+TEST_F (RollingStateTests, UpdateWithMoveNonParticipantSignature)
+{
+  state.UpdateOnChain (meta1, "13 5", ParseStateProof (R"(
+    initial_state: { data: "13 5" }
+  )"));
+
+  verifier.SetValid ("sgn 42", "addr 42");
+
+  EXPECT_FALSE (state.UpdateWithMove ("reinit 1", ParseStateProof (R"(
+    initial_state: { data: "13 5" }
+    transitions:
+      {
+        move: "1"
+        new_state:
+          {
+            data: "14 6"
+            signatures: "sgn 1"
+            signatures: "sgn 42"
+          }
+      }
   )")));
 
   ExpectState ("13 5", "reinit 1");

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -78,18 +78,110 @@ TEST_F (SignaturesTests, VerifyParticipantSignatures)
   data.set_data ("foobar");
   data.add_signatures ("signature 0");
   data.add_signatures ("signature 1");
+
+  verifier.ExpectOne (gameId, channelId, meta, "topic", data.data (),
+                      "signature 0", "address 0");
+  verifier.ExpectOne (gameId, channelId, meta, "topic", data.data (),
+                      "signature 1", "address 1");
+
+  const auto actual
+      = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                     "topic", data);
+  ASSERT_TRUE (actual);
+  EXPECT_EQ (*actual, std::set<int> ({0, 1}));
+}
+
+TEST_F (SignaturesTests, VerifyNoSignatures)
+{
+  proto::SignedData data;
+  data.set_data ("foobar");
+
+  const auto actual
+      = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                     "topic", data);
+  ASSERT_TRUE (actual);
+  EXPECT_TRUE (actual->empty ());
+}
+
+TEST_F (SignaturesTests, VerifyTooManySignatures)
+{
+  proto::SignedData data;
+  data.set_data ("foobar");
+  data.add_signatures ("signature 0");
+  data.add_signatures ("signature 1");
   data.add_signatures ("signature 2");
+
+  EXPECT_CALL (verifier, RecoverSigner (_, _)).Times (0);
+  EXPECT_FALSE (VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                             "topic", data));
+}
+
+TEST_F (SignaturesTests, VerifyNonParticipantSignature)
+{
+  proto::SignedData data;
+  data.set_data ("foobar");
+  data.add_signatures ("signature 0");
 
   verifier.ExpectOne (gameId, channelId, meta, "topic", data.data (),
                       "signature 0", "some other address");
-  verifier.ExpectOne (gameId, channelId, meta, "topic", data.data (),
-                      "signature 1", "address 1");
-  verifier.ExpectOne (gameId, channelId, meta, "topic", data.data (),
-                      "signature 2", "invalid");
 
-  EXPECT_EQ (VerifyParticipantSignatures (verifier, gameId, channelId, meta,
-                                          "topic", data),
-             std::set<int> ({1}));
+  EXPECT_FALSE (VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                             "topic", data));
+}
+
+TEST_F (SignaturesTests, VerifyDuplicateSignature)
+{
+  proto::SignedData data;
+  data.set_data ("foobar");
+  data.add_signatures ("signature 0");
+  data.add_signatures ("signature 1");
+
+  verifier.SetValid ("signature 0", "address 0");
+  verifier.SetValid ("signature 1", "address 0");
+
+  EXPECT_FALSE (VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                             "topic", data));
+}
+
+TEST_F (SignaturesTests, VerifySharedParticipantAddress)
+{
+  proto::ChannelMetadata sharedMeta;
+  sharedMeta.set_reinit ("shared reinit");
+  sharedMeta.add_participants ()->set_address ("address 0");
+  sharedMeta.add_participants ()->set_address ("address 0");
+  sharedMeta.add_participants ()->set_address ("address 1");
+
+  proto::SignedData data;
+  data.set_data ("foobar");
+  data.add_signatures ("signature 0");
+
+  verifier.ExpectOne (gameId, channelId, sharedMeta, "topic", data.data (),
+                      "signature 0", "address 0");
+
+  const auto actual
+      = VerifyParticipantSignatures (verifier, gameId, channelId, sharedMeta,
+                                     "topic", data);
+  ASSERT_TRUE (actual);
+  EXPECT_EQ (*actual, std::set<int> ({0, 1}));
+}
+
+TEST_F (SignaturesTests, VerifyDuplicateSharedParticipantAddress)
+{
+  proto::ChannelMetadata sharedMeta;
+  sharedMeta.set_reinit ("shared reinit");
+  sharedMeta.add_participants ()->set_address ("address 0");
+  sharedMeta.add_participants ()->set_address ("address 0");
+
+  proto::SignedData data;
+  data.set_data ("foobar");
+  data.add_signatures ("signature 0");
+  data.add_signatures ("signature 1");
+
+  verifier.SetValid ("signature 0", "address 0");
+  verifier.SetValid ("signature 1", "address 0");
+
+  EXPECT_FALSE (VerifyParticipantSignatures (verifier, gameId, channelId,
+                                             sharedMeta, "topic", data));
 }
 
 TEST_F (SignaturesTests, SignDataForParticipantError)
@@ -102,9 +194,11 @@ TEST_F (SignaturesTests, SignDataForParticipantError)
   EXPECT_FALSE (SignDataForParticipant (signer, gameId, channelId, meta,
                                         "topic", 1, data));
 
-  EXPECT_EQ (VerifyParticipantSignatures (verifier, gameId, channelId, meta,
-                                          "topic", data),
-             std::set<int> ({0}));
+  const auto actual
+      = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                     "topic", data);
+  ASSERT_TRUE (actual);
+  EXPECT_EQ (*actual, std::set<int> ({0}));
 }
 
 TEST_F (SignaturesTests, SignDataForParticipantSuccess)
@@ -124,9 +218,11 @@ TEST_F (SignaturesTests, SignDataForParticipantSuccess)
   ASSERT_TRUE (SignDataForParticipant (signer, gameId, channelId, meta,
                                        "topic", 1, data));
 
-  EXPECT_EQ (VerifyParticipantSignatures (verifier, gameId, channelId, meta,
-                                          "topic", data),
-             std::set<int> ({0, 1}));
+  const auto actual
+      = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                     "topic", data);
+  ASSERT_TRUE (actual);
+  EXPECT_EQ (*actual, std::set<int> ({0, 1}));
 }
 
 } // anonymous namespace
