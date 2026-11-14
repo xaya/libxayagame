@@ -57,8 +57,16 @@ ExtraVerifyStateTransition (const SignatureVerifier& verifier,
       return false;
     }
 
-  signatures = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
-                                            "state", transition.new_state ());
+  const auto newSignatures
+      = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
+                                     "state", transition.new_state ());
+  if (!newSignatures)
+    {
+      LOG (WARNING) << "Invalid signatures on state transition";
+      return false;
+    }
+  signatures = *newSignatures;
+
   if (signatures.count (turn) == 0)
     {
       LOG (WARNING)
@@ -103,9 +111,15 @@ VerifyStateProof (const SignatureVerifier& verifier, const BoardRules& rules,
                   const proto::StateProof& proof,
                   BoardState& endState)
 {
-  std::set<int> signatures
+  const auto initialSignatures
       = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
                                      "state", proof.initial_state ());
+  if (!initialSignatures)
+    {
+      LOG (WARNING) << "Invalid signatures on initial state for state proof";
+      return false;
+    }
+  std::set<int> signatures = *initialSignatures;
 
   auto parsed = rules.ParseState (channelId, meta,
                                   proof.initial_state ().data ());
@@ -223,7 +237,12 @@ ExtendStateProof (const SignatureVerifier& verifier, SignatureSigner& signer,
       const auto newSigs
           = VerifyParticipantSignatures (verifier, gameId, channelId, meta,
                                          "state", begin->new_state ());
-      signatures.insert (newSigs.begin (), newSigs.end ());
+      if (!newSigs)
+        {
+          LOG (WARNING) << "Invalid signatures in old state proof";
+          return false;
+        }
+      signatures.insert (newSigs->begin (), newSigs->end ());
 
       CHECK_LE (signatures.size (), n);
       if (signatures.size () == n || begin == transitions.begin ())

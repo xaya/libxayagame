@@ -1,4 +1,4 @@
-// Copyright (C) 2019 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -38,6 +38,11 @@ message StateTransition
  * proper players).  It is also fine if someone signed only a state even
  * if they were not the one who did a move, although that is unlikely to occur
  * in practice.
+ *
+ * Every SignedData in a valid state proof must be canonical:  It can contain
+ * at most one signature per participant, and every signature must recover to
+ * a participant of the channel.  A single signature may cover multiple
+ * participants if those participants share the same address.
  *
  * A state proof is always seen in context of a particular channel and its
  * current reinitialisation (i.e. these are not part of the explicit

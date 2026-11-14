@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -146,6 +146,18 @@ TEST_F (StateTransitionTests, InvalidSignature)
       {
         data: "11 2"
         signatures: "sgn1"
+      }
+  )"));
+}
+
+TEST_F (StateTransitionTests, NonParticipantSignature)
+{
+  EXPECT_FALSE (VerifyTransition ("10 1", R"(
+    move: "1",
+    new_state:
+      {
+        data: "11 2"
+        signatures: "sgn0"
         signatures: "sgn42"
       }
   )"));
@@ -162,7 +174,6 @@ TEST_F (StateTransitionTests, Valid)
       {
         data: " 11 2 "
         signatures: "signed by zero"
-        signatures: "sgn42"
       }
   )"));
 }
@@ -241,10 +252,20 @@ TEST_F (StateProofTests, OnlyInitialOnChain)
     initial_state:
       {
         data: "42 5"
-        signatures: "sgn42"
       }
   )"));
   EXPECT_EQ (endState, "42 5");
+}
+
+TEST_F (StateProofTests, NonParticipantInitialSignature)
+{
+  EXPECT_FALSE (VerifyProof (" 42 5 ", R"(
+    initial_state:
+      {
+        data: "42 5"
+        signatures: "sgn42"
+      }
+  )"));
 }
 
 TEST_F (StateProofTests, OnlyInitialSigned)
@@ -272,7 +293,6 @@ TEST_F (StateProofTests, OnlyInitialNotSigned)
       {
         data: "42 5"
         signatures: "sgn0"
-        signatures: "sgn42"
       }
   )"));
 }
@@ -459,6 +479,21 @@ TEST_F (ExtendStateProofTests, SignatureFailure)
         data: "10 5"
         signatures: "sgn0"
         signatures: "sgn1"
+      }
+  )", "5"));
+}
+
+TEST_F (ExtendStateProofTests, NonParticipantOldSignature)
+{
+  signer.SetAddress ("addr0");
+  EXPECT_CALL (signer, SignMessage (_)).WillOnce (Return ("sgn0"));
+
+  EXPECT_FALSE (ExtendProof (R"(
+    initial_state:
+      {
+        data: "10 2"
+        signatures: "sgn1"
+        signatures: "sgn42"
       }
   )", "5"));
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,6 +10,7 @@
 
 #include <xayautil/uint256.hpp>
 
+#include <optional>
 #include <set>
 #include <string>
 
@@ -89,7 +90,12 @@ std::string GetChannelSignatureMessage (const std::string& gameId,
  * Verifies the signatures on a SignedData instance in relation to the
  * participants and their signing keys of the given channel metadata.
  * This function returns a set of the participant indices for which a valid
- * signature was found on the data.
+ * signature was found on the data.  It returns std::nullopt if the signatures
+ * are not canonical:  There must be at most one signature per participant, and
+ * every signature must recover to a participant of the channel.
+ *
+ * A single signature may correspond to multiple participants if those
+ * participants share the same address.
  *
  * The topic string describes what the data is, so that e.g. a signed state
  * cannot be mistaken as a signed message stating the winner.  This string
@@ -97,12 +103,13 @@ std::string GetChannelSignatureMessage (const std::string& gameId,
  * with a game-specific BoardState and BoardMove value, respectively.  Other
  * values can be used for game-specific needs.
  */
-std::set<int> VerifyParticipantSignatures (const SignatureVerifier& verifier,
-                                           const std::string& gameId,
-                                           const uint256& channelId,
-                                           const proto::ChannelMetadata& meta,
-                                           const std::string& topic,
-                                           const proto::SignedData& data);
+std::optional<std::set<int>>
+VerifyParticipantSignatures (const SignatureVerifier& verifier,
+                             const std::string& gameId,
+                             const uint256& channelId,
+                             const proto::ChannelMetadata& meta,
+                             const std::string& topic,
+                             const proto::SignedData& data);
 
 /**
  * Tries to sign the given data for the given participant index, using

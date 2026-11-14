@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,7 +9,9 @@
 
 #include <glog/logging.h>
 
+#include <map>
 #include <sstream>
+#include <vector>
 
 namespace xaya
 {
@@ -38,7 +40,7 @@ GetChannelSignatureMessage (const std::string& gameId,
   return res.str ();
 }
 
-std::set<int>
+std::optional<std::set<int>>
 VerifyParticipantSignatures (const SignatureVerifier& verifier,
                              const std::string& gameId,
                              const uint256& channelId,
@@ -46,18 +48,41 @@ VerifyParticipantSignatures (const SignatureVerifier& verifier,
                              const std::string& topic,
                              const proto::SignedData& data)
 {
+  const int n = meta.participants_size ();
+  if (data.signatures_size () > n)
+    {
+      LOG (WARNING)
+          << "Signed data has " << data.signatures_size ()
+          << " signatures for " << n << " participants";
+      return std::nullopt;
+    }
+
+  std::map<std::string, std::vector<int>> participants;
+  for (int i = 0; i < n; ++i)
+    participants[meta.participants (i).address ()].push_back (i);
+
   const auto msg
       = GetChannelSignatureMessage (gameId, channelId, meta,
                                     topic, data.data ());
 
-  std::set<std::string> addresses;
-  for (const auto& sgn : data.signatures ())
-    addresses.emplace (verifier.RecoverSigner (msg, sgn));
-
   std::set<int> res;
-  for (int i = 0; i < meta.participants_size (); ++i)
-    if (addresses.count (meta.participants (i).address ()) > 0)
-      res.emplace (i);
+  for (const auto& sgn : data.signatures ())
+    {
+      const auto addr = verifier.RecoverSigner (msg, sgn);
+      const auto mit = participants.find (addr);
+      if (mit == participants.end ())
+        {
+          LOG (WARNING) << "Signature recovers to non-participant " << addr;
+          return std::nullopt;
+        }
+
+      for (const int i : mit->second)
+        if (!res.insert (i).second)
+          {
+            LOG (WARNING) << "Duplicate signature for participant " << i;
+            return std::nullopt;
+          }
+    }
 
   return res;
 }
