@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -168,6 +168,23 @@ private:
 
   /** The reinit ID of the current reinitialisation.  */
   std::string reinitId;
+
+  /**
+   * Applies a verified off-chain move to the given reinit entry.  Returns true
+   * if the entry advanced to a fresher state.
+   */
+  bool UpdateReinitWithMove (ReinitData& entry, const proto::StateProof& proof);
+
+  /**
+   * Processes any queued off-chain updates for the given reinit into the
+   * provided entry.  If processing throws, the failed and remaining updates
+   * are put back into the queue.  For a staging entry that will be discarded,
+   * all extracted updates must be requeued instead.
+   *
+   * Returns true if at least one update changed the state.
+   */
+  bool ProcessQueuedUpdates (const std::string& reinit, ReinitData& entry,
+                             bool requeueAllOnFailure);
 
 public:
 

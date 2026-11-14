@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2022 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,10 +11,12 @@
 
 #include <xayautil/base64.hpp>
 
-#include <jsonrpccpp/common/errors.h>
 #include <jsonrpccpp/common/exception.h>
 
 #include <glog/logging.h>
+
+#include <chrono>
+#include <exception>
 
 namespace xaya
 {
@@ -37,6 +39,9 @@ ChainToChannelFeeder::~ChainToChannelFeeder ()
 
 namespace
 {
+
+/** Time to wait before retrying after an RPC error in the update loop.  */
+constexpr auto RETRY_DELAY = std::chrono::seconds (1);
 
 /**
  * Decodes a JSON value (which must be a base64-encoded string) into a
@@ -126,40 +131,55 @@ ChainToChannelFeeder::UpdateOnce ()
 void
 ChainToChannelFeeder::RunLoop ()
 {
-  UpdateOnce ();
-
   while (!stopLoop)
     {
-      const std::string lastBlockHex = lastBlock.ToHex ();
-
-      std::string newBlockHex;
       try
         {
-          newBlockHex = rpc.waitforchange (lastBlockHex);
+          UpdateOnce ();
         }
-      catch (const jsonrpc::JsonRpcException& exc)
+      catch (const std::exception& exc)
         {
-          /* Especially timeouts are fine, we should just ignore them.
-             A relatively small timeout is needed in order to not block
-             too long when waiting for shutting down the loop.  */
-          VLOG (1) << "Error calling waitforchange: " << exc.what ();
-          CHECK_EQ (exc.GetCode (), jsonrpc::Errors::ERROR_CLIENT_CONNECTOR);
+          LOG (WARNING)
+              << "Failed to update channel from GSP, retrying: " << exc.what ();
+          std::this_thread::sleep_for (RETRY_DELAY);
           continue;
         }
 
-      if (newBlockHex.empty ())
+      /* Wait for the next change, then loop around to update again.  */
+      while (!stopLoop)
         {
-          VLOG (1) << "GSP does not have any state yet";
-          continue;
-        }
+          const std::string lastBlockHex = lastBlock.ToHex ();
 
-      if (newBlockHex == lastBlockHex)
-        {
-          VLOG (1) << "We are already at newest block";
-          continue;
-        }
+          std::string newBlockHex;
+          try
+            {
+              newBlockHex = rpc.waitforchange (lastBlockHex);
+            }
+          catch (const jsonrpc::JsonRpcException& exc)
+            {
+              /* Failures may return immediately (e.g. if the connection is
+                 refused), so back off before retrying to avoid busy-looping.
+                 Normal calls block until a change or their own timeout.  */
+              LOG (WARNING)
+                  << "Error calling waitforchange, retrying: " << exc.what ();
+              std::this_thread::sleep_for (RETRY_DELAY);
+              continue;
+            }
 
-      UpdateOnce ();
+          if (newBlockHex.empty ())
+            {
+              VLOG (1) << "GSP does not have any state yet";
+              continue;
+            }
+
+          if (newBlockHex == lastBlockHex)
+            {
+              VLOG (1) << "We are already at newest block";
+              continue;
+            }
+
+          break;
+        }
     }
 }
 

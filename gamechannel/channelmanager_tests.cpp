@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -17,10 +17,13 @@
 
 #include <glog/logging.h>
 
+#include <stdexcept>
+
 using google::protobuf::TextFormat;
 using google::protobuf::util::MessageDifferencer;
 using testing::_;
 using testing::Return;
+using testing::Throw;
 using testing::Truly;
 
 namespace xaya
@@ -221,6 +224,50 @@ TEST_F (ProcessOnChainTests, Basic)
   EXPECT_EQ (GetDispute (), nullptr);
 }
 
+TEST_F (ProcessOnChainTests, VerificationFailureKeepsManagerReadable)
+{
+  EXPECT_CALL (verifier, RecoverSigner (_, "sgn"))
+      .WillOnce (Throw (std::runtime_error ("injected verification error")))
+      .WillRepeatedly (Return ("my addr"));
+
+  EXPECT_THROW (ProcessOnChain ("0 0", ValidProof ("10 5"), 0),
+                std::runtime_error);
+
+  EXPECT_FALSE (GetExists ());
+  const auto json = cm.ToJson ();
+  EXPECT_FALSE (json["existsonchain"].asBool ());
+  EXPECT_FALSE (json.isMember ("current"));
+
+  /* Retrying after the transient failure should initialise the channel.  */
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  EXPECT_TRUE (GetExists ());
+  EXPECT_EQ (GetLatestState (), "10 5");
+}
+
+TEST_F (ProcessOnChainTests, VerificationFailureKeepsOldReinitReadable)
+{
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  EXPECT_EQ (GetBoardStates ().GetReinitId (), "");
+
+  meta.set_reinit ("new reinit");
+  EXPECT_CALL (verifier, RecoverSigner (_, "sgn"))
+      .WillOnce (Throw (std::runtime_error ("injected verification error")))
+      .WillRepeatedly (Return ("my addr"));
+
+  EXPECT_THROW (ProcessOnChain ("0 0", ValidProof ("20 6"), 0),
+                std::runtime_error);
+
+  EXPECT_TRUE (GetExists ());
+  EXPECT_EQ (GetLatestState (), "10 5");
+  EXPECT_EQ (GetBoardStates ().GetReinitId (), "");
+  EXPECT_NO_THROW (cm.ToJson ());
+
+  ProcessOnChain ("0 0", ValidProof ("20 6"), 0);
+  EXPECT_TRUE (GetExists ());
+  EXPECT_EQ (GetLatestState (), "20 6");
+  EXPECT_EQ (GetBoardStates ().GetReinitId (), "new reinit");
+}
+
 TEST_F (ProcessOnChainTests, Dispute)
 {
   ProcessOnChain ("0 0", ValidProof ("11 5"), 10);
@@ -328,6 +375,92 @@ TEST_F (AutoMoveTests, TwoMoves)
   EXPECT_EQ (GetLatestState (), "30 7");
 }
 
+TEST_F (AutoMoveTests, FailedBroadcastIsRetriedAndCleared)
+{
+  const auto isLatestProof = [this] (const std::string& msg)
+    {
+      proto::BroadcastMessage pb;
+      CHECK (pb.ParseFromString (msg));
+      return MessageDifferencer::Equals (pb.proof (),
+                                         GetBoardStates ().GetStateProof ());
+    };
+
+  EXPECT_CALL (offChain, SendMessage (Truly (isLatestProof)))
+      .Times (2)
+      .WillOnce (Throw (std::runtime_error ("injected broadcast error")));
+
+  EXPECT_NO_THROW (ProcessOnChain ("0 0", ValidProof ("18 5"), 0));
+  EXPECT_EQ (GetLatestState (), "20 6");
+
+  /* Replaying the on-chain update retries the failed broadcast.  */
+  ProcessOnChain ("0 0", ValidProof ("18 5"), 0);
+  EXPECT_EQ (GetLatestState (), "20 6");
+
+  /* The successful retry cleared the pending flag, so this sends nothing.  */
+  ProcessOnChain ("0 0", ValidProof ("18 5"), 0);
+}
+
+TEST_F (AutoMoveTests, RetriesAutomoveAfterFailedSignature)
+{
+  EXPECT_CALL (signer, SignMessage (_))
+      .WillOnce (Throw (std::runtime_error ("injected signing error")))
+      .WillRepeatedly (Return ("sgn"));
+
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
+
+  EXPECT_THROW (cm.ProcessOffChain ("", ValidProof ("8 5")),
+                std::runtime_error);
+  EXPECT_EQ (GetLatestState (), "8 5");
+
+  ExpectOneBroadcast ("10 6");
+
+  /* The retained message is not fresher, but it must retry the pending
+     state update and thus the failed automove.  */
+  EXPECT_NO_THROW (cm.ProcessOffChain ("", ValidProof ("8 5")));
+  EXPECT_EQ (GetLatestState (), "10 6");
+}
+
+TEST_F (AutoMoveTests, RetriesPendingAutomoveChain)
+{
+  EXPECT_CALL (signer, SignMessage (_))
+      .WillOnce (Return ("sgn"))
+      .WillOnce (Throw (std::runtime_error ("injected signing error")))
+      .WillRepeatedly (Return ("sgn"));
+
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
+
+  EXPECT_THROW (cm.ProcessOffChain ("", ValidProof ("6 5")),
+                std::runtime_error);
+  EXPECT_EQ (GetLatestState (), "8 6");
+
+  /* Only the final state should be broadcast, not the intermediate one.  */
+  ExpectOneBroadcast ("10 7");
+
+  EXPECT_NO_THROW (cm.ProcessOffChain ("", ValidProof ("6 5")));
+  EXPECT_EQ (GetLatestState (), "10 7");
+}
+
+TEST_F (AutoMoveTests, FailedAutomoveClearedWhenChannelDisappears)
+{
+  EXPECT_CALL (signer, SignMessage (_))
+      .WillOnce (Throw (std::runtime_error ("injected signing error")))
+      .WillRepeatedly (Return ("sgn"));
+
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
+
+  EXPECT_THROW (cm.ProcessOffChain ("", ValidProof ("8 5")),
+                std::runtime_error);
+  EXPECT_EQ (GetLatestState (), "8 5");
+
+  ProcessOnChainNonExistant ();
+  EXPECT_FALSE (GetExists ());
+
+  /* The pending update must not retry automoves for the non-existent
+     channel.  */
+  EXPECT_NO_THROW (cm.ProcessOffChain ("", ValidProof ("8 5")));
+  EXPECT_FALSE (GetExists ());
+}
+
 TEST_F (AutoMoveTests, NoTurnState)
 {
   ProcessOnChain ("0 0", ValidProof ("108 5"), 0);
@@ -399,6 +532,24 @@ TEST_F (TriggerAutoMovesTests, SendsMoves)
 
   game.channel.SetAutomovesEnabled (true);
   cm.TriggerAutoMoves ();
+  EXPECT_EQ (GetLatestState (), "10 6");
+}
+
+TEST_F (TriggerAutoMovesTests, RetriesPendingStateUpdate)
+{
+  EXPECT_CALL (signer, SignMessage (_))
+      .WillOnce (Throw (std::runtime_error ("injected signing error")))
+      .WillRepeatedly (Return ("sgn"));
+
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
+
+  EXPECT_THROW (cm.ProcessOffChain ("", ValidProof ("8 5")),
+                std::runtime_error);
+  EXPECT_EQ (GetLatestState (), "8 5");
+
+  ExpectOneBroadcast ("10 6");
+
+  EXPECT_NO_THROW (cm.TriggerAutoMoves ());
   EXPECT_EQ (GetLatestState (), "10 6");
 }
 
@@ -512,6 +663,28 @@ TEST_F (ResolveDisputeTests, RetryAfterBlock)
   txSender.ClearMempool ();
   ProcessOnChain ("0 0", ValidProof ("10 5"), 1);
   cm.ProcessOffChain ("", ValidProof ("14 8"));
+}
+
+TEST_F (ResolveDisputeTests, FailedBroadcastDoesNotBlockResolution)
+{
+  EXPECT_CALL (offChain, SendMessage (_))
+      .Times (2)
+      .WillRepeatedly (Throw (std::runtime_error ("injected broadcast error")));
+
+  ProcessOnChain ("0 0", ValidProof ("10 5"), 0);
+  EXPECT_NO_THROW (cm.ProcessOffChain ("", ValidProof ("16 6")));
+  EXPECT_EQ (GetLatestState (), "20 8");
+
+  /* Make sure no stale pending transaction can mask a missing resolution.  */
+  txSender.ClearMempool ();
+
+  ExpectMove ("resolution");
+  const int oldVersion = cm.ToJson ()["version"].asInt ();
+  EXPECT_NO_THROW (ProcessOnChain ("0 0", ValidProof ("10 5"), 1));
+
+  ASSERT_NE (GetDispute (), nullptr);
+  EXPECT_FALSE (GetDispute ()->pendingResolution.IsNull ());
+  EXPECT_EQ (cm.ToJson ()["version"].asInt (), oldVersion + 1);
 }
 
 /* ************************************************************************** */
