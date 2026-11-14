@@ -167,6 +167,8 @@ ChannelManager::BroadcastStateIfNeeded ()
 void
 ChannelManager::ProcessStateUpdate (bool broadcast)
 {
+  pendingStateUpdate = true;
+
   if (ProcessAutoMoves ())
     broadcast = true;
 
@@ -183,6 +185,10 @@ ChannelManager::ProcessStateUpdate (bool broadcast)
 
   NotifyStateChange ();
 
+  /* The post-update work is complete.  A failed broadcast is tracked
+     separately by pendingBroadcast.  */
+  pendingStateUpdate = false;
+
   BroadcastStateIfNeeded ();
 }
 
@@ -193,8 +199,12 @@ ChannelManager::ProcessOffChain (const std::string& reinitId,
   if (!boardStates.UpdateWithMove (reinitId, proof))
     {
       /* A repeated update is not fresher, but it may still be the retry of
-         a message whose broadcast failed before.  */
-      BroadcastStateIfNeeded ();
+         a state update whose processing (e.g. signing an automove) failed
+         before, or of a message whose broadcast failed.  */
+      if (pendingStateUpdate)
+        ProcessStateUpdate (false);
+      else
+        BroadcastStateIfNeeded ();
       return;
     }
 
@@ -215,6 +225,10 @@ ChannelManager::ProcessOnChainNonExistant (const uint256& blk, const unsigned h)
   blockHash = blk;
   onChainHeight = h;
   exists = false;
+
+  /* Any pending state update no longer makes sense without an on-chain
+     channel, in particular automoves must not be retried.  */
+  pendingStateUpdate = false;
 
   NotifyStateChange ();
 }
@@ -355,6 +369,13 @@ ChannelManager::TriggerAutoMoves ()
   if (!exists)
     {
       LOG (INFO) << "Channel does not exist on chain, not triggering automoves";
+      return;
+    }
+
+  if (pendingStateUpdate)
+    {
+      LOG (INFO) << "Retrying pending state update before automoves";
+      ProcessStateUpdate (false);
       return;
     }
 

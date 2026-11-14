@@ -400,6 +400,67 @@ TEST_F (AutoMoveTests, FailedBroadcastIsRetriedAndCleared)
   ProcessOnChain ("0 0", ValidProof ("18 5"), 0);
 }
 
+TEST_F (AutoMoveTests, RetriesAutomoveAfterFailedSignature)
+{
+  EXPECT_CALL (signer, SignMessage (_))
+      .WillOnce (Throw (std::runtime_error ("injected signing error")))
+      .WillRepeatedly (Return ("sgn"));
+
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
+
+  EXPECT_THROW (cm.ProcessOffChain ("", ValidProof ("8 5")),
+                std::runtime_error);
+  EXPECT_EQ (GetLatestState (), "8 5");
+
+  ExpectOneBroadcast ("10 6");
+
+  /* The retained message is not fresher, but it must retry the pending
+     state update and thus the failed automove.  */
+  EXPECT_NO_THROW (cm.ProcessOffChain ("", ValidProof ("8 5")));
+  EXPECT_EQ (GetLatestState (), "10 6");
+}
+
+TEST_F (AutoMoveTests, RetriesPendingAutomoveChain)
+{
+  EXPECT_CALL (signer, SignMessage (_))
+      .WillOnce (Return ("sgn"))
+      .WillOnce (Throw (std::runtime_error ("injected signing error")))
+      .WillRepeatedly (Return ("sgn"));
+
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
+
+  EXPECT_THROW (cm.ProcessOffChain ("", ValidProof ("6 5")),
+                std::runtime_error);
+  EXPECT_EQ (GetLatestState (), "8 6");
+
+  /* Only the final state should be broadcast, not the intermediate one.  */
+  ExpectOneBroadcast ("10 7");
+
+  EXPECT_NO_THROW (cm.ProcessOffChain ("", ValidProof ("6 5")));
+  EXPECT_EQ (GetLatestState (), "10 7");
+}
+
+TEST_F (AutoMoveTests, FailedAutomoveClearedWhenChannelDisappears)
+{
+  EXPECT_CALL (signer, SignMessage (_))
+      .WillOnce (Throw (std::runtime_error ("injected signing error")))
+      .WillRepeatedly (Return ("sgn"));
+
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
+
+  EXPECT_THROW (cm.ProcessOffChain ("", ValidProof ("8 5")),
+                std::runtime_error);
+  EXPECT_EQ (GetLatestState (), "8 5");
+
+  ProcessOnChainNonExistant ();
+  EXPECT_FALSE (GetExists ());
+
+  /* The pending update must not retry automoves for the non-existent
+     channel.  */
+  EXPECT_NO_THROW (cm.ProcessOffChain ("", ValidProof ("8 5")));
+  EXPECT_FALSE (GetExists ());
+}
+
 TEST_F (AutoMoveTests, NoTurnState)
 {
   ProcessOnChain ("0 0", ValidProof ("108 5"), 0);
@@ -471,6 +532,24 @@ TEST_F (TriggerAutoMovesTests, SendsMoves)
 
   game.channel.SetAutomovesEnabled (true);
   cm.TriggerAutoMoves ();
+  EXPECT_EQ (GetLatestState (), "10 6");
+}
+
+TEST_F (TriggerAutoMovesTests, RetriesPendingStateUpdate)
+{
+  EXPECT_CALL (signer, SignMessage (_))
+      .WillOnce (Throw (std::runtime_error ("injected signing error")))
+      .WillRepeatedly (Return ("sgn"));
+
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
+
+  EXPECT_THROW (cm.ProcessOffChain ("", ValidProof ("8 5")),
+                std::runtime_error);
+  EXPECT_EQ (GetLatestState (), "8 5");
+
+  ExpectOneBroadcast ("10 6");
+
+  EXPECT_NO_THROW (cm.TriggerAutoMoves ());
   EXPECT_EQ (GetLatestState (), "10 6");
 }
 

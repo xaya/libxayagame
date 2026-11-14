@@ -115,6 +115,14 @@ private:
   bool pendingBroadcast = false;
 
   /**
+   * Set while a state update is being processed, and cleared only after the
+   * post-update work (in particular automoves) has completed successfully.
+   * If processing throws, this remains set so that a later input can retry
+   * the pending update.
+   */
+  bool pendingStateUpdate = false;
+
+  /**
    * Instance for sending on-chain moves (disputes / resolutions).  This must
    * be set before any functions may be called that trigger such moves.
    */
