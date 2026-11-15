@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2023 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -122,33 +122,15 @@ protected:
   }
 
   /**
-   * Processes forward one block:  The move data is given, and the result
-   * is compared to the expected data.  State and undo data are recorded
+   * Processes forward one block with the given moves array.  The result is
+   * compared to the expected data.  State and undo data are recorded
    * internally.
-   *
-   * Note that move data here is a text-format JSON dictionary mapping names
-   * to their moves directly; not the "moves" array from the ZMQ notification
-   * format.  This is all that is used by the Mover game, and thus makes it
-   * simpler to specify those moves in test cases.
    */
   void
-  VerifyForwardStep (const std::string& movesJson,
-                     const std::string& expectedStateText)
+  ProcessForwardStep (const Json::Value& moveArray,
+                      const std::string& expectedStateText)
   {
     ForBlockData d;
-
-    Json::Value moves;
-    std::istringstream in(movesJson);
-    in >> moves;
-
-    Json::Value moveArray(Json::arrayValue);
-    for (const auto& nm : moves.getMemberNames ())
-      {
-        Json::Value elem(Json::objectValue);
-        elem["name"] = nm;
-        elem["move"] = moves[nm];
-        moveArray.append (elem);
-      }
 
     Json::Value blk(Json::objectValue);
     blk["rngseed"]
@@ -170,6 +152,51 @@ protected:
 
     currentState = d.newState;
     blocks.push (std::move (d));
+  }
+
+  /**
+   * Processes forward one block with the moves array given directly in the
+   * ZMQ notification format.
+   */
+  void
+  VerifyForwardStepRaw (const std::string& movesJson,
+                        const std::string& expectedStateText)
+  {
+    Json::Value moveArray;
+    std::istringstream in(movesJson);
+    in >> moveArray;
+
+    ProcessForwardStep (moveArray, expectedStateText);
+  }
+
+  /**
+   * Processes forward one block:  The move data is given, and the result
+   * is compared to the expected data.  State and undo data are recorded
+   * internally.
+   *
+   * Note that move data here is a text-format JSON dictionary mapping names
+   * to their moves directly; not the "moves" array from the ZMQ notification
+   * format.  This is all that is used by the Mover game, and thus makes it
+   * simpler to specify those moves in test cases.
+   */
+  void
+  VerifyForwardStep (const std::string& movesJson,
+                     const std::string& expectedStateText)
+  {
+    Json::Value moves;
+    std::istringstream in(movesJson);
+    in >> moves;
+
+    Json::Value moveArray(Json::arrayValue);
+    for (const auto& nm : moves.getMemberNames ())
+      {
+        Json::Value elem(Json::objectValue);
+        elem["name"] = nm;
+        elem["move"] = moves[nm];
+        moveArray.append (elem);
+      }
+
+    ProcessForwardStep (moveArray, expectedStateText);
   }
 
 };
@@ -216,6 +243,26 @@ TEST_F (StateProcessingTests, MovingAround)
     players: {key: "a", value: {x: 0, y: 0, dir: NONE, steps_left: 0}}
     players: {key: "b", value: {x: 1, y: 0, dir: NONE, steps_left: 0}}
     players: {key: "c", value: {x: -2, y: 2, dir: NONE, steps_left: 0}}
+  )");
+}
+
+TEST_F (StateProcessingTests, ChainedMovesInOneBlock)
+{
+  VerifyForwardStep (R"(
+    {
+      "a": {"d": "l", "n": 1}
+    }
+  )", R"(
+    players: {key: "a", value: {x: 1, y: 0, dir: NONE, steps_left: 0}}
+  )");
+
+  VerifyForwardStepRaw (R"(
+    [
+      {"name": "a", "move": {"d": "l", "n": 2}},
+      {"name": "a", "move": {"d": "h", "n": 4}}
+    ]
+  )", R"(
+    players: {key: "a", value: {x: 0, y: 0, dir: LEFT, steps_left: 3}}
   )");
 }
 

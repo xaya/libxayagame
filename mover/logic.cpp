@@ -1,4 +1,4 @@
-// Copyright (C) 2018-2019 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -90,7 +90,12 @@ MoverLogic::ProcessForwardInternal (const GameStateData& oldState,
           p->set_x (0);
           p->set_y (0);
         }
-      else
+      /* We only want to record the previous direction if the player
+         is not new; also if there are multiple moves in one block, we
+         want to record it for the first move (where it actually
+         represents the before-this-block direction).  */
+      else if (!u.is_new () && !u.has_previous_dir ()
+                  && !u.has_previous_steps_left ())
         {
           u.set_previous_dir (p->dir ());
           u.set_previous_steps_left (p->steps_left ());

@@ -1,4 +1,4 @@
-# Copyright (C) 2019-2024 The Xaya developers
+# Copyright (C) 2019-2026 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -37,8 +37,10 @@ class PendingMovesTest (MoverTest):
     }})
 
     # Do some pending moves.  They include both new players and the existing
-    # player, and multiple updates per player in the mempool.
+    # player, and multiple updates per player in the mempool.  We do that both
+    # on a new and an existing player.
     self.move ("a", "h", 3)
+    self.move ("a", "j", 1)
     self.move ("c", "l", 1)
     self.move ("c", "k", 2)
     time.sleep (0.1)
@@ -46,9 +48,9 @@ class PendingMovesTest (MoverTest):
     self.assertEqual (oldPending, {
       "a":
         {
-          "dir": "left",
-          "steps": 3,
-          "target": {"x": -3, "y": 1},
+          "dir": "down",
+          "steps": 1,
+          "target": {"x": 0, "y": 0},
         },
       "c":
         {
@@ -64,7 +66,7 @@ class PendingMovesTest (MoverTest):
     reorgBlock = self.rpc.xaya.getbestblockhash ()
     newState = self.getGameState ()
     self.assertEqual (newState, {"players": {
-      "a": {"x": -1, "y": 1, "dir": "left", "steps": 2},
+      "a": {"x": 0, "y": 0},
       "b": {"x": 0, "y": -2, "dir": "down", "steps": 3},
       "c": {"x": 0, "y": 1, "dir": "up", "steps": 1},
     }})
