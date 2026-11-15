@@ -74,6 +74,7 @@ private:
   Chain chain = Chain::MAIN;
   int height = -1;
   uint256 bestBlock;
+  bool throwInBlockchainInfo = false;
 
 public:
 
@@ -102,11 +103,26 @@ public:
     bestBlock = hash;
   }
 
+  /**
+   * Makes getblockchaininfo throw on the next calls if the flag is set.
+   */
+  void
+  SetThrowBlockchainInfo (const bool v)
+  {
+    std::lock_guard<std::mutex> lock(mut);
+    throwInBlockchainInfo = v;
+  }
+
   Json::Value
   getblockchaininfo () override
   {
     CHECK (height >= -1);
     std::lock_guard<std::mutex> lock(mut);
+
+    if (throwInBlockchainInfo)
+      throw jsonrpc::JsonRpcException (
+          jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR,
+          "Mocked getblockchaininfo failure");
 
     Json::Value res(Json::objectValue);
     res["chain"] = ChainToString (chain);
@@ -735,6 +751,21 @@ TEST_F (InitialStateTests, AfterGenesis)
   ReinitialiseState (g);
   EXPECT_EQ (GetState (g), State::CATCHING_UP);
   ExpectInitialStateInStorage ();
+}
+
+TEST_F (InitialStateTests, ReinitFailureAfterStorageClear)
+{
+  mockXayaServer->SetBestBlock (20, BlockHash (20));
+  EXPECT_CALL (*mockXayaServer, getblockhash (GAME_GENESIS_HEIGHT))
+      .WillOnce (testing::Throw (jsonrpc::JsonRpcException (
+          jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR,
+          "Mocked getblockhash failure")));
+
+  EXPECT_THROW (ReinitialiseState (g), jsonrpc::JsonRpcException);
+  EXPECT_EQ (GetState (g), State::PREGENESIS);
+
+  uint256 hash;
+  EXPECT_FALSE (storage.GetCurrentBlockHash (hash));
 }
 
 TEST_F (InitialStateTests, WaitingForGenesis)
@@ -1794,6 +1825,21 @@ TEST_F (SyncingTests, CatchingUpBackwards)
   ExpectGameState (TestGame::GenesisBlockHash (), "");
 }
 
+TEST_F (SyncingTests, FailedUpdateRequestKeepsState)
+{
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+
+  Json::Value upd(Json::objectValue);
+  upd["error"] = true;
+  EXPECT_CALL (*mockXayaServer,
+               game_sendupdates (BlockHash (11).ToHex (), GAME_ID))
+      .WillOnce (Return (upd));
+
+  g.SetTargetBlock (BlockHash (10));
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+}
+
 TEST_F (SyncingTests, CatchingUpMultistep)
 {
   /* Tests the situation where a single game_sendupdates call is not enough
@@ -1990,6 +2036,21 @@ TEST_F (TargetBlockTests, AtTargetWhileSetting)
 
   EXPECT_EQ (GetState (g), State::AT_TARGET);
   EXPECT_EQ (rules.GetLastInstanceState ()["state"].asString (), "at-target");
+}
+
+TEST_F (TargetBlockTests, ReinitFailureWhileSetting)
+{
+  AttachBlock (g, BlockHash (11), Moves ("a0b1"));
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+
+  mockXayaServer->SetThrowBlockchainInfo (true);
+  g.SetTargetBlock (BlockHash (12));
+  EXPECT_EQ (GetState (g), State::UP_TO_DATE);
+
+  mockXayaServer->SetThrowBlockchainInfo (false);
+  AttachBlock (g, BlockHash (12), Moves ("a2"));
+  EXPECT_EQ (GetState (g), State::AT_TARGET);
+  ExpectGameState (BlockHash (12), "a2b1");
 }
 
 /* ************************************************************************** */
@@ -2931,6 +2992,42 @@ TEST_F (GameProbeAndFixConnectionTests, DisconnectAndReconnect)
   EXPECT_EQ (GetState (g), State::UP_TO_DATE);
   EXPECT_EQ (rules.GetLastInstanceState ()["state"].asString (), "up-to-date");
   EXPECT_TRUE (GameTestFixture::GetZmq (g).IsRunning ());
+}
+
+TEST_F (GameProbeAndFixConnectionTests,
+        FailedReconnectWhileSubscriberStopping)
+{
+  ExpectPings (0);
+  EXPECT_CALL (*mockXayaServer, trackedgames ("add", GAME_ID));
+
+  std::this_thread::sleep_for (2 * MAX_STALENESS);
+  ProbeAndFix ();
+  ASSERT_EQ (GetState (g), State::DISCONNECTED);
+  ASSERT_FALSE (GameTestFixture::GetZmq (g).IsRunning ());
+
+  g.SetTargetBlock (BlockHash (12));
+
+  mockXayaServer->SetBestBlock (12, BlockHash (12));
+  EXPECT_CALL (*mockXayaServer,
+               game_sendupdates (BlockHash (11).ToHex (), GAME_ID))
+      .WillOnce (Return (SendupdatesResponse (BlockHash (12), "reqtoken")));
+
+  mockXayaServer->SetThrowBlockchainInfo (true);
+  GameTestFixture::ProbeAndFixConnection (g);
+  ASSERT_EQ (GetState (g), State::DISCONNECTED);
+  ASSERT_TRUE (GameTestFixture::GetZmq (g).IsRunning ());
+
+  GameTestFixture::ProbeAndFixConnection (g);
+  EXPECT_EQ (GetState (g), State::DISCONNECTED);
+
+  std::this_thread::sleep_for (MAX_STALENESS / 5);
+  mockXayaServer->SetThrowBlockchainInfo (false);
+  ProbeAndFix ();
+  ASSERT_EQ (GetState (g), State::CATCHING_UP);
+
+  CallBlockAttach (g, "reqtoken", BlockHash (11), BlockHash (12), 12,
+                   Moves ("a2"), NO_SEQ_MISMATCH);
+  EXPECT_EQ (GetState (g), State::AT_TARGET);
 }
 
 class GameProbeWithoutPreviousBlockTests

@@ -13,6 +13,7 @@
 #include <glog/logging.h>
 
 #include <sstream>
+#include <stdexcept>
 #include <thread>
 
 /**
@@ -705,10 +706,23 @@ Game::SetTargetBlock (const uint256& blk)
   targetBlock = blk;
 
   if (state != State::DISCONNECTED)
-    {
-      ReinitialiseState ();
-      NotifyInstanceStateChanged ();
-    }
+    try
+      {
+        ReinitialiseState ();
+        NotifyInstanceStateChanged ();
+      }
+    catch (const std::exception& exc)
+      {
+        LOG (ERROR)
+            << "Failed to reinitialise after setting target block: "
+            << exc.what ();
+      }
+    catch (...)
+      {
+        LOG (ERROR)
+            << "Unknown exception while reinitialising after setting target"
+               " block";
+      }
 }
 
 void
@@ -1219,22 +1233,21 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
   }
 
   /* If an error is returned, such as when Xaya X is not yet synced to
-     our "fromblock", reset the ZMQ connection so it gets restored and
-     the sync retried later.
+     our "fromblock", we cannot proceed.  Throw an exception so that
+     ReinitialiseState can restore a consistent state and reset the ZMQ
+     connection for a later retry.
 
      In an edge case (load-balanced RPC node or a reorg race condition
      with the "best chain tip" we checked against above), it may also happen
      that there is no real error returned, but the server is not able to
-     provide any step towards our target.  In this case, we also fall back
-     to the retry logic.  */
+     provide any step towards our target.  In this case, we also fail.  */
   const auto errValue = upd["error"];
   if ((errValue.isBool () && errValue.asBool ())
         || (currentHash.ToHex () == upd["toblock"].asString ()))
     {
       LOG (ERROR)
           << "Game blocks update request failed, resetting ZMQ connection...";
-      zmq.RequestStop ();
-      return;
+      throw std::runtime_error ("Game blocks update request failed");
     }
 
   LOG (INFO)
@@ -1253,135 +1266,153 @@ Game::SyncFromCurrentState (const Json::Value& blockchainInfo,
 void
 Game::ReinitialiseState ()
 {
-  state = State::UNKNOWN;
-  LOG (INFO) << "Reinitialising game state";
+  const State oldState = state;
+  bool storageReset = false;
 
-  const Json::Value data = (**rpcProvider).getblockchaininfo ();
-
-  uint256 currentHash;
-  if (storage->GetCurrentBlockHash (currentHash))
-    {
-      LOG (INFO) << "We have a current game state, syncing from there";
-      state = State::OUT_OF_SYNC;
-      SyncFromCurrentState (data, currentHash);
-      return;
-    }
-
-  /* We do not have a current state in the storage.  This means that we have
-     to reset to the initial state.  */
-
-  if (genesisHeight < 0)
-    {
-      CHECK_EQ (genesisHeight, -1);
-
-      /* GetInitialState may be expensive, and it may do things like update
-         some external game state (setting it to the initial one) as we do
-         e.g. with SQLiteGame.  Hence we should avoid calling it often, and
-         cache the genesis height once known.  That way, we call the function
-         exactly twice, independent of how many blocks / reinitialisations
-         we process in the mean time.  */
-
-      std::string genesisHashHex;
-      unsigned genesisHeightFromGame;
-      rules->GetInitialState (genesisHeightFromGame, genesisHashHex, nullptr);
-      genesisHeight = genesisHeightFromGame;
-      LOG (INFO) << "Got genesis height from game: " << genesisHeight;
-    }
-  CHECK_GE (genesisHeight, 0);
-
-  /* If the current block height in the daemon is not yet the game's genesis
-     height, simply wait for the genesis hash to be attached.  */
-  if (data["blocks"].asUInt () < static_cast<unsigned> (genesisHeight))
-    {
-      LOG (INFO)
-          << "Block height " << data["blocks"].asInt ()
-          << " is before the genesis height " << genesisHeight;
-      state = State::PREGENESIS;
-      return;
-    }
-
-  /* Otherwise, we can store the initial state and start to sync from there.
-     Note that we need to clear the storage *before* we call GetInitialState
-     again here, because the latter will update the external state for
-     the initial game state with SQLiteGame (and potentially other
-     storage modules in the future).  */
-
-  transactionManager.TryAbortTransaction ();
-  storage->Clear ();
-  coproc.Clear ();
-
-  const std::string blockHashHex = (**rpcProvider).getblockhash (genesisHeight);
-  uint256 blockHash;
-  CHECK (blockHash.FromHex (blockHashHex));
-
-  Json::Value stateBlockHeader(Json::objectValue);
-  stateBlockHeader["height"] = static_cast<Json::Int64> (genesisHeight);
-  stateBlockHeader["hash"] = blockHash.ToHex ();
-
-  std::string genesisHashHex;
-  unsigned genesisHeightDummy;
-  GameStateData genesisData;
   try
     {
-      /* The coprocessor batch is started before we call GetInitialState, which
-         will be able to access coprocessors from the Context.  We manage the
-         Coprocessor transaction manually here, since it is detached
-         from the storage update later (which uses the transactionManager).  */
-      CoprocessorBatch::Block coprocBlk(coproc, stateBlockHeader,
-                                        Coprocessor::Op::INITIALISATION);
-      coproc.BeginTransaction ();
-      coprocBlk.Start ();
-      genesisData = rules->GetInitialState (genesisHeightDummy, genesisHashHex,
-                                            &coprocBlk);
-      coprocBlk.Finish ();
-      coproc.CommitTransaction ();
+      state = State::UNKNOWN;
+      LOG (INFO) << "Reinitialising game state";
+
+      const Json::Value data = (**rpcProvider).getblockchaininfo ();
+
+      uint256 currentHash;
+      if (storage->GetCurrentBlockHash (currentHash))
+        {
+          LOG (INFO) << "We have a current game state, syncing from there";
+          state = State::OUT_OF_SYNC;
+          SyncFromCurrentState (data, currentHash);
+          return;
+        }
+
+      /* We do not have a current state in the storage.  This means that we
+         have to reset to the initial state.  */
+
+      if (genesisHeight < 0)
+        {
+          CHECK_EQ (genesisHeight, -1);
+
+          /* GetInitialState may be expensive, and it may do things like update
+             some external game state (setting it to the initial one) as we do
+             e.g. with SQLiteGame.  Hence we should avoid calling it often, and
+             cache the genesis height once known.  That way, we call the
+             function exactly twice, independent of how many blocks /
+             reinitialisations we process in the mean time.  */
+
+          std::string genesisHashHex;
+          unsigned genesisHeightFromGame;
+          rules->GetInitialState (genesisHeightFromGame, genesisHashHex,
+                                  nullptr);
+          genesisHeight = genesisHeightFromGame;
+          LOG (INFO) << "Got genesis height from game: " << genesisHeight;
+        }
+      CHECK_GE (genesisHeight, 0);
+
+      /* If the current block height in the daemon is not yet the game's
+         genesis height, simply wait for the genesis hash to be attached.  */
+      if (data["blocks"].asUInt () < static_cast<unsigned> (genesisHeight))
+        {
+          LOG (INFO)
+              << "Block height " << data["blocks"].asInt ()
+              << " is before the genesis height " << genesisHeight;
+          state = State::PREGENESIS;
+          return;
+        }
+
+      /* Otherwise, we can store the initial state and start to sync from
+         there.  Note that we need to clear the storage *before* we call
+         GetInitialState again here, because the latter will update the
+         external state for the initial game state with SQLiteGame (and
+         potentially other storage modules in the future).  */
+
+      storageReset = true;
+      transactionManager.TryAbortTransaction ();
+      storage->Clear ();
+      coproc.Clear ();
+
+      const std::string blockHashHex
+          = (**rpcProvider).getblockhash (genesisHeight);
+      uint256 blockHash;
+      CHECK (blockHash.FromHex (blockHashHex));
+
+      Json::Value stateBlockHeader(Json::objectValue);
+      stateBlockHeader["height"] = static_cast<Json::Int64> (genesisHeight);
+      stateBlockHeader["hash"] = blockHash.ToHex ();
+
+      std::string genesisHashHex;
+      unsigned genesisHeightDummy;
+      GameStateData genesisData;
+      try
+        {
+          /* The coprocessor batch is started before we call GetInitialState,
+             which will be able to access coprocessors from the Context.  We
+             manage the Coprocessor transaction manually here, since it is
+             detached from the storage update later (which uses the
+             transactionManager).  */
+          CoprocessorBatch::Block coprocBlk(coproc, stateBlockHeader,
+                                            Coprocessor::Op::INITIALISATION);
+          coproc.BeginTransaction ();
+          coprocBlk.Start ();
+          genesisData = rules->GetInitialState (genesisHeightDummy,
+                                                genesisHashHex, &coprocBlk);
+          coprocBlk.Finish ();
+          coproc.CommitTransaction ();
+        }
+      catch (...)
+        {
+          coproc.AbortTransaction ();
+          throw;
+        }
+      CHECK_EQ (genesisHeight, genesisHeightDummy);
+
+      if (genesisHashHex.empty ())
+        {
+          LOG (WARNING)
+              << "Game did not specify genesis hash, retrieved "
+              << blockHash.ToHex ();
+          genesisHash = blockHash;
+        }
+      else
+        {
+          CHECK (genesisHash.FromHex (genesisHashHex));
+          CHECK (blockHash == genesisHash)
+            << "The game's genesis block hash and height do not match";
+        }
+
+      while (true)
+        try
+          {
+            internal::ActiveTransaction tx(transactionManager);
+
+            storage->SetCurrentGameStateWithHeight (genesisHash, genesisHeight,
+                                                    genesisData);
+
+            tx.Commit ();
+            rules->GameStateUpdated (genesisData, stateBlockHeader);
+
+            break;
+          }
+        catch (const StorageInterface::RetryWithNewTransaction& exc)
+          {
+            LOG (WARNING)
+                << "Storage update failed, retrying: " << exc.what ();
+          }
+
+      LOG (INFO)
+          << "We are at the genesis height, stored initial game state for"
+             " block " << genesisHash.ToHex ();
+      NotifyStateChange ();
+
+      state = State::OUT_OF_SYNC;
+      SyncFromCurrentState (data, genesisHash);
     }
   catch (...)
     {
-      coproc.AbortTransaction ();
+      state = storageReset ? State::PREGENESIS : oldState;
+      if (zmq.IsRunning ())
+        zmq.RequestStop ();
       throw;
     }
-  CHECK_EQ (genesisHeight, genesisHeightDummy);
-
-  if (genesisHashHex.empty ())
-    {
-      LOG (WARNING)
-          << "Game did not specify genesis hash, retrieved "
-          << blockHash.ToHex ();
-      genesisHash = blockHash;
-    }
-  else
-    {
-      CHECK (genesisHash.FromHex (genesisHashHex));
-      CHECK (blockHash == genesisHash)
-        << "The game's genesis block hash and height do not match";
-    }
-
-  while (true)
-    try
-      {
-        internal::ActiveTransaction tx(transactionManager);
-
-        storage->SetCurrentGameStateWithHeight (genesisHash, genesisHeight,
-                                                genesisData);
-
-        tx.Commit ();
-        rules->GameStateUpdated (genesisData, stateBlockHeader);
-
-        break;
-      }
-    catch (const StorageInterface::RetryWithNewTransaction& exc)
-      {
-        LOG (WARNING) << "Storage update failed, retrying: " << exc.what ();
-      }
-
-  LOG (INFO)
-      << "We are at the genesis height, stored initial game state for block "
-      << genesisHash.ToHex ();
-  NotifyStateChange ();
-
-  state = State::OUT_OF_SYNC;
-  SyncFromCurrentState (data, genesisHash);
 }
 
 void
@@ -1391,6 +1422,12 @@ Game::ProbeAndFixConnection ()
 
   if (state == State::DISCONNECTED)
     {
+      if (zmq.IsRunning ())
+        {
+          VLOG (1) << "ZMQ subscriber is still stopping, deferring reconnect";
+          return;
+        }
+
       LOG (INFO) << "Attempting to re-establish the Xaya connection...";
       try
         {

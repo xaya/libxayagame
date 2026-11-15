@@ -317,7 +317,7 @@ private:
    * was set to OUT_OF_SYNC.  It checks the current block hash against the
    * best known one from the daemon and then either sets the state to
    * CATCHING_UP and requests game_sendupdates, or sets the state to
-   * UP_TO_DATE if all is already fine.
+   * UP_TO_DATE if all is already fine.  Throws if the update request fails.
    */
   void SyncFromCurrentState (const Json::Value& blockchainInfo,
                              const uint256& currentHash);
