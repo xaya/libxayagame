@@ -461,6 +461,24 @@ TEST_F (AutoMoveTests, FailedAutomoveClearedWhenChannelDisappears)
   EXPECT_FALSE (GetExists ());
 }
 
+TEST_F (AutoMoveTests, AutoMovesWhenChannelComesBackOnChain)
+{
+  ProcessOnChain ("0 0", ValidProof ("0 0"), 0);
+  ProcessOnChainNonExistant ();
+  EXPECT_FALSE (GetExists ());
+
+  /* Advance the off-chain state while the channel is not on chain.  The
+     automove must be deferred until the channel exists again.  */
+  EXPECT_NO_THROW (cm.ProcessOffChain ("", ValidProof ("6 5")));
+  EXPECT_EQ (GetLatestState (), "6 5");
+  EXPECT_FALSE (GetExists ());
+
+  ExpectOneBroadcast ("10 7");
+  ProcessOnChain ("0 0", ValidProof ("6 5"), 0);
+  EXPECT_TRUE (GetExists ());
+  EXPECT_EQ (GetLatestState (), "10 7");
+}
+
 TEST_F (AutoMoveTests, NoTurnState)
 {
   ProcessOnChain ("0 0", ValidProof ("108 5"), 0);

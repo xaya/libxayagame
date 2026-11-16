@@ -102,6 +102,12 @@ ChannelManager::TryResolveDispute ()
 bool
 ChannelManager::ProcessAutoMoves ()
 {
+  if (!exists)
+    {
+      VLOG (1) << "Channel does not exist on chain, not processing automoves";
+      return false;
+    }
+
   VLOG (1) << "Processing potential auto moves...";
   bool found = false;
   while (true)
