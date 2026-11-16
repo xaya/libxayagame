@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -265,6 +265,19 @@ RestApi::Callbacks::Request (void* data, struct MHD_Connection* conn,
       const std::string& msg = exc.what ();
       LOG (WARNING) << "Returning HTTP error " << code << ": " << msg;
       resp.Set (code, "text/plain", msg);
+    }
+  catch (const std::exception& exc)
+    {
+      LOG (ERROR)
+          << "Uncaught exception in REST request handler: " << exc.what ();
+      resp.Set (MHD_HTTP_INTERNAL_SERVER_ERROR, "text/plain",
+                "internal server error");
+    }
+  catch (...)
+    {
+      LOG (ERROR) << "Uncaught unknown exception in REST request handler";
+      resp.Set (MHD_HTTP_INTERNAL_SERVER_ERROR, "text/plain",
+                "internal server error");
     }
 
   return resp.Queue (conn);

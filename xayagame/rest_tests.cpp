@@ -1,4 +1,4 @@
-// Copyright (C) 2020 The Xaya developers
+// Copyright (C) 2020-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -43,6 +43,11 @@ protected:
   SuccessResult
   Process (const std::string& url) override
   {
+    if (url == "/throw-exception")
+      throw std::invalid_argument ("test exception");
+    if (url == "/throw-unknown")
+      throw 42;
+
     const auto mit = results.find (url);
     if (mit == results.end ())
       throw HttpError (MHD_HTTP_NOT_FOUND, "invalid API endpoint");
@@ -151,6 +156,21 @@ TEST_F (RestTests, InvalidEndpoint)
 {
   RestClient::Request req(client);
   EXPECT_FALSE (req.Send ("/invalid"));
+}
+
+TEST_F (RestTests, Exception)
+{
+  srv.AddResult ("/valid", SuccessResult ("text/plain", "ok"));
+
+  RestClient::Request req1(client);
+  EXPECT_FALSE (req1.Send ("/throw-exception"));
+
+  RestClient::Request req2(client);
+  EXPECT_FALSE (req2.Send ("/throw-unknown"));
+
+  RestClient::Request req3(client);
+  ASSERT_TRUE (req3.Send ("/valid"));
+  EXPECT_EQ (req3.GetData (), "ok");
 }
 
 TEST_F (RestTests, InvalidUrl)
