@@ -1,4 +1,4 @@
-// Copyright (C) 2020 The Xaya developers
+// Copyright (C) 2020-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -18,16 +18,17 @@ template <typename Iterator>
 
 template <typename Iterator>
   void
-  Random::ShuffleN (Iterator begin, Iterator end, const size_t n)
+  Random::ShuffleN (Iterator begin, Iterator end, size_t n)
 {
-  if (end - begin <= 1 || n == 0)
-    return;
+  while (end - begin > 1 && n > 0)
+    {
+      const Iterator mid = begin + NextInt (end - begin);
+      if (begin != mid)
+        std::swap (*begin, *mid);
 
-  const Iterator mid = begin + NextInt (end - begin);
-  if (begin != mid)
-    std::swap (*begin, *mid);
-
-  ShuffleN (begin + 1, end, n - 1);
+      ++begin;
+      --n;
+    }
 }
 
 } // namespace xaya
