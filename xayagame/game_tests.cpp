@@ -651,6 +651,96 @@ TEST_F (TrackGameTests, CallsMade)
 {
   {
     InSequence dummy;
+    EXPECT_CALL (*mockXayaServer, trackedgameswithtoken ("add", GAME_ID, _))
+        .WillOnce (testing::Throw (jsonrpc::JsonRpcException (
+            jsonrpc::Errors::ERROR_RPC_METHOD_NOT_FOUND,
+            "Token tracking is not supported")));
+    EXPECT_CALL (*mockXayaServer, trackedgames ("add", GAME_ID));
+    EXPECT_CALL (*mockXayaServer, trackedgames ("remove", GAME_ID));
+  }
+
+  Game g(GAME_ID);
+  mockXayaServer->SetBestBlock (0, BlockHash (0));
+  ConnectToMockRpc (g);
+  TrackGame (g);
+  UntrackGame (g);
+}
+
+TEST_F (TrackGameTests, TokenTracking)
+{
+  std::string token;
+  {
+    InSequence dummy;
+    EXPECT_CALL (*mockXayaServer, trackedgameswithtoken ("add", GAME_ID, _))
+        .WillOnce (testing::DoAll (testing::SaveArg<2> (&token),
+                                  Return (true)))
+        .WillOnce ([&token] (const std::string&, const std::string&,
+                            const std::string& t)
+          {
+            EXPECT_EQ (t, token);
+            return true;
+          });
+    EXPECT_CALL (*mockXayaServer,
+                 trackedgameswithtoken ("remove", GAME_ID, _))
+        .WillOnce ([&token] (const std::string&, const std::string&,
+                            const std::string& t)
+          {
+            EXPECT_EQ (t, token);
+            return true;
+          });
+  }
+
+  Game g(GAME_ID);
+  mockXayaServer->SetBestBlock (0, BlockHash (0));
+  ConnectToMockRpc (g);
+  TrackGame (g);
+  TrackGame (g);
+  UntrackGame (g);
+}
+
+TEST_F (TrackGameTests, LegacyTracksOnEveryReconnect)
+{
+  {
+    InSequence dummy;
+    EXPECT_CALL (*mockXayaServer, trackedgameswithtoken ("add", GAME_ID, _))
+        .WillOnce (testing::Throw (jsonrpc::JsonRpcException (
+            jsonrpc::Errors::ERROR_RPC_METHOD_NOT_FOUND,
+            "Token tracking is not supported")));
+    EXPECT_CALL (*mockXayaServer, trackedgames ("add", GAME_ID)).Times (2);
+    EXPECT_CALL (*mockXayaServer, trackedgames ("remove", GAME_ID));
+  }
+
+  Game g(GAME_ID);
+  mockXayaServer->SetBestBlock (0, BlockHash (0));
+  ConnectToMockRpc (g);
+  TrackGame (g);
+  TrackGame (g);
+  UntrackGame (g);
+}
+
+TEST_F (TrackGameTests, TokenDetectionErrorIsNotFallback)
+{
+  EXPECT_CALL (*mockXayaServer, trackedgameswithtoken ("add", GAME_ID, _))
+      .WillOnce (testing::Throw (jsonrpc::JsonRpcException (
+          jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR,
+          "Mocked token tracking failure")));
+  EXPECT_CALL (*mockXayaServer, trackedgames (_, _)).Times (0);
+
+  Game g(GAME_ID);
+  mockXayaServer->SetBestBlock (0, BlockHash (0));
+  ConnectToMockRpc (g);
+  EXPECT_THROW (TrackGame (g), jsonrpc::JsonRpcException);
+}
+
+TEST_F (TrackGameTests, HttpWrappedMethodNotFound)
+{
+  {
+    InSequence dummy;
+    EXPECT_CALL (*mockXayaServer, trackedgameswithtoken ("add", GAME_ID, _))
+        .WillOnce (testing::Throw (jsonrpc::JsonRpcException (
+            jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR,
+            "{\"result\":null,\"error\":{\"code\":-32601,"
+            "\"message\":\"Method not found\"},\"id\":1}")));
     EXPECT_CALL (*mockXayaServer, trackedgames ("add", GAME_ID));
     EXPECT_CALL (*mockXayaServer, trackedgames ("remove", GAME_ID));
   }
@@ -1064,6 +1154,10 @@ protected:
 
   GetPendingJsonStateTests ()
   {
+    EXPECT_CALL (*mockXayaServer, trackedgameswithtoken (_, _, _))
+        .WillRepeatedly (testing::Throw (jsonrpc::JsonRpcException (
+            jsonrpc::Errors::ERROR_RPC_METHOD_NOT_FOUND,
+            "Token tracking is not supported")));
     EXPECT_CALL (*mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
     EXPECT_CALL (*mockXayaServer, getrawmempool ())
         .WillRepeatedly (Return (Json::Value (Json::arrayValue)));
@@ -1303,6 +1397,10 @@ protected:
     EXPECT_CALL (*mockXayaServer, getzmqnotifications ())
         .WillOnce (Return (notifications));
 
+    EXPECT_CALL (*mockXayaServer, trackedgameswithtoken (_, _, _))
+        .WillRepeatedly (testing::Throw (jsonrpc::JsonRpcException (
+            jsonrpc::Errors::ERROR_RPC_METHOD_NOT_FOUND,
+            "Token tracking is not supported")));
     EXPECT_CALL (*mockXayaServer, trackedgames (_, _)).Times (AnyNumber ());
 
     CHECK (g.DetectZmqEndpoint ());
@@ -2979,6 +3077,10 @@ TEST_F (GameProbeAndFixConnectionTests, SendsPing)
 TEST_F (GameProbeAndFixConnectionTests, DisconnectAndReconnect)
 {
   ExpectPings (0);
+  EXPECT_CALL (*mockXayaServer, trackedgameswithtoken ("add", GAME_ID, _))
+      .WillOnce (testing::Throw (jsonrpc::JsonRpcException (
+          jsonrpc::Errors::ERROR_RPC_METHOD_NOT_FOUND,
+          "Token tracking is not supported")));
   EXPECT_CALL (*mockXayaServer, trackedgames ("add", GAME_ID));
 
   std::this_thread::sleep_for (2 * MAX_STALENESS);
@@ -2998,7 +3100,11 @@ TEST_F (GameProbeAndFixConnectionTests,
         FailedReconnectWhileSubscriberStopping)
 {
   ExpectPings (0);
-  EXPECT_CALL (*mockXayaServer, trackedgames ("add", GAME_ID));
+  EXPECT_CALL (*mockXayaServer, trackedgameswithtoken ("add", GAME_ID, _))
+      .WillOnce (testing::Throw (jsonrpc::JsonRpcException (
+          jsonrpc::Errors::ERROR_RPC_METHOD_NOT_FOUND,
+          "Token tracking is not supported")));
+  EXPECT_CALL (*mockXayaServer, trackedgames ("add", GAME_ID)).Times (2);
 
   std::this_thread::sleep_for (2 * MAX_STALENESS);
   ProbeAndFix ();

@@ -62,6 +62,7 @@ MockXayaRpcServer::MockXayaRpcServer (jsonrpc::AbstractServerConnector& conn)
 {
   EXPECT_CALL (*this, getzmqnotifications ()).Times (0);
   EXPECT_CALL (*this, trackedgames (_, _)).Times (0);
+  EXPECT_CALL (*this, trackedgameswithtoken (_, _, _)).Times (0);
   EXPECT_CALL (*this, getnetworkinfo ()).Times (0);
   EXPECT_CALL (*this, getblockchaininfo ()).Times (0);
   EXPECT_CALL (*this, getblockhash (_)).Times (0);

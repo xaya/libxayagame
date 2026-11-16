@@ -6,6 +6,8 @@
 
 #include "perftimer.hpp"
 
+#include <xayautil/cryptorand.hpp>
+
 #include <jsonrpccpp/common/errors.h>
 #include <jsonrpccpp/common/exception.h>
 
@@ -118,7 +120,9 @@ public:
 /* ************************************************************************** */
 
 Game::Game (const std::string& id)
-  : gameId(id), state(State::DISCONNECTED), genesisHeight(-1)
+  : gameId(id), state(State::DISCONNECTED),
+    trackingToken(CryptoRand ().Get<uint256> ().ToHex ()),
+    genesisHeight(-1)
 {
   transactionManager.SetCoprocessor (coproc);
   targetBlock.SetNull ();
@@ -1055,6 +1059,57 @@ Game::WaitForPendingChange (const int oldVersion) const
   return UnlockedPendingJsonState ();
 }
 
+namespace
+{
+
+/**
+ * Checks whether the given RPC error indicates that token-based tracking is
+ * not supported by the daemon.  The HTTP connector turns non-2xx responses
+ * (which Xaya Core sends for unknown methods) into an INTERNAL_ERROR with the
+ * raw response body as message.  Thus we have to inspect both the exception
+ * code and any wrapped JSON-RPC error.
+ */
+bool
+IsUnsupportedTokenTracking (const jsonrpc::JsonRpcException& exc)
+{
+  const int code = exc.GetCode ();
+  if (code == jsonrpc::Errors::ERROR_RPC_METHOD_NOT_FOUND
+        || code == jsonrpc::Errors::ERROR_RPC_INVALID_PARAMS)
+    return true;
+
+  if (code != jsonrpc::Errors::ERROR_RPC_INTERNAL_ERROR)
+    return false;
+
+  const std::string& message = exc.GetMessage ();
+  const auto start = message.find ('{');
+  if (start == std::string::npos)
+    return false;
+
+  Json::Value body;
+  std::string errors;
+  const std::unique_ptr<Json::CharReader> reader
+      = std::unique_ptr<Json::CharReader> (
+            Json::CharReaderBuilder ().newCharReader ());
+  if (!reader->parse (message.data () + start,
+                      message.data () + message.size (),
+                      &body, &errors))
+    return false;
+
+  if (!body.isObject () || !body.isMember ("error")
+        || !body["error"].isObject ())
+    return false;
+
+  const Json::Value& error = body["error"];
+  if (!error.isMember ("code") || !error["code"].isInt ())
+    return false;
+
+  const int innerCode = error["code"].asInt ();
+  return innerCode == jsonrpc::Errors::ERROR_RPC_METHOD_NOT_FOUND
+          || innerCode == jsonrpc::Errors::ERROR_RPC_INVALID_PARAMS;
+}
+
+} // anonymous namespace
+
 void
 Game::TrackGame ()
 {
@@ -1062,15 +1117,38 @@ Game::TrackGame ()
   CHECK (rpcProvider != nullptr && *rpcProvider)
       << "RPC client is not yet set up";
 
-  if (gameTracked)
+  if (trackingMode == TrackingMode::UNKNOWN)
+    try
+      {
+        (**rpcProvider).trackedgameswithtoken ("add", gameId, trackingToken);
+        trackingMode = TrackingMode::TOKEN;
+        gameTracked = true;
+        LOG (INFO) << "Added " << gameId << " to tracked games with token";
+        return;
+      }
+    catch (const jsonrpc::JsonRpcException& exc)
+      {
+        if (!IsUnsupportedTokenTracking (exc))
+          throw;
+
+        LOG (INFO)
+            << "Token-based tracking is not supported, using legacy tracking";
+        trackingMode = TrackingMode::LEGACY;
+      }
+
+  if (trackingMode == TrackingMode::TOKEN)
     {
-      VLOG (1) << "Game " << gameId << " is already tracked";
-      return;
+      (**rpcProvider).trackedgameswithtoken ("add", gameId, trackingToken);
+      LOG (INFO) << "Added " << gameId << " to tracked games with token";
+    }
+  else
+    {
+      CHECK (trackingMode == TrackingMode::LEGACY);
+      (**rpcProvider).trackedgames ("add", gameId);
+      LOG (INFO) << "Added " << gameId << " to tracked games";
     }
 
-  (**rpcProvider).trackedgames ("add", gameId);
   gameTracked = true;
-  LOG (INFO) << "Added " << gameId << " to tracked games";
 }
 
 void
@@ -1089,8 +1167,18 @@ Game::UntrackGame ()
   /* Clear the flag before the RPC call so that it is cleared even if
      the RPC throws.  */
   gameTracked = false;
-  (**rpcProvider).trackedgames ("remove", gameId);
-  LOG (INFO) << "Removed " << gameId << " from tracked games";
+
+  if (trackingMode == TrackingMode::TOKEN)
+    {
+      (**rpcProvider).trackedgameswithtoken ("remove", gameId, trackingToken);
+      LOG (INFO) << "Removed " << gameId << " from tracked games with token";
+    }
+  else
+    {
+      CHECK (trackingMode == TrackingMode::LEGACY);
+      (**rpcProvider).trackedgames ("remove", gameId);
+      LOG (INFO) << "Removed " << gameId << " from tracked games";
+    }
 }
 
 void
@@ -1438,7 +1526,8 @@ Game::ProbeAndFixConnection ()
       catch (const std::exception& exc)
         {
           LOG_FIRST_N (ERROR, 10) << "Exception caught: " << exc.what ();
-          zmq.RequestStop ();
+          if (zmq.IsRunning ())
+            zmq.RequestStop ();
           return;
         }
     }
