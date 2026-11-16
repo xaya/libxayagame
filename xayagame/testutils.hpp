@@ -107,6 +107,9 @@ public:
   MOCK_METHOD0 (getzmqnotifications, Json::Value ());
   MOCK_METHOD2 (trackedgames, void (const std::string& command,
                                     const std::string& gameid));
+  MOCK_METHOD3 (trackedgameswithtoken, bool (const std::string& command,
+                                             const std::string& gameid,
+                                             const std::string& token));
   MOCK_METHOD0 (getnetworkinfo, Json::Value ());
   MOCK_METHOD0 (getblockchaininfo, Json::Value ());
   MOCK_METHOD1 (getblockhash, std::string (int height));

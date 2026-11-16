@@ -13,6 +13,16 @@
       }
   },
   {
+    "name": "trackedgameswithtoken",
+    "params":
+      {
+        "command": "add",
+        "gameid": "huc",
+        "token": "client-token"
+      },
+    "returns": true
+  },
+  {
     "name": "getnetworkinfo",
     "params": {},
     "returns": {}

@@ -143,11 +143,31 @@ private:
    */
   std::atomic<State> state;
 
+  /** The methods available for tracking the game with the block source.  */
+  enum class TrackingMode
+  {
+    /** No tracking method has been selected yet.  */
+    UNKNOWN,
+    /** Token-based tracking, which is idempotent and per GSP.  */
+    TOKEN,
+    /** Legacy depth-based tracking.  */
+    LEGACY,
+  };
+
+  /** The tracking method selected for this instance.  */
+  TrackingMode trackingMode = TrackingMode::UNKNOWN;
+
   /**
-   * Whether or not this game has been registered with the Xaya daemon
-   * as a tracked game (via "trackedgames add").  This is used to avoid
-   * duplicate RPC calls, which would lead to many more tracks than the one
-   * "untrack" we do in Stop().
+   * Random token used for token-based tracking.  This is stable for the
+   * lifetime of this Game instance, so that reconnects can safely re-add it.
+   */
+  const std::string trackingToken;
+
+  /**
+   * Whether or not this game is currently registered with the Xaya daemon
+   * as a tracked game.  This is used to avoid duplicate remove calls at
+   * shutdown.  Tracking is always added again on reconnect, so this flag
+   * does not suppress that.
    */
   bool gameTracked = false;
 
