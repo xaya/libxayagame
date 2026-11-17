@@ -61,6 +61,16 @@ ShipsBoardState::IsValid () const
 
   const auto& pb = GetState ();
 
+  /* Verify structural invariants that are relied upon by consumers of the
+     state (in particular the JSON representation).  */
+  if (pb.positions_size () != 0 && pb.positions_size () != 2)
+    return false;
+  if (pb.known_ships_size () != 0 && pb.known_ships_size () != 2)
+    return false;
+  for (const auto& known : pb.known_ships ())
+    if ((known.hits () & ~known.guessed ()) != 0)
+      return false;
+
   /* If the game is finished, then there must be a winner (with a valid
      participant index) and no turn set.  */
   if (phase == Phase::FINISHED)
@@ -105,10 +115,24 @@ ShipsBoardState::IsValid () const
       break;
 
     case Phase::SHOOT:
-    case Phase::ANSWER:
       /* It can be any player's turn in this case.  This is when we really
          need the turn field and it is not redundant.  */
       break;
+
+    case Phase::ANSWER:
+      {
+        /* It can be any player's turn in this case.  The shot was marked as
+           guessed when it was made.  Verify this relation, as the state may
+           come from an arbitrary signed state proof rather than from applying
+           moves to the reinit state.  */
+        const auto target = pb.current_shot ();
+        if (target >= static_cast<unsigned> (Coord::CELLS))
+          return false;
+        const Grid guessed(pb.known_ships (turn).guessed ());
+        if (!guessed.Get (Coord (static_cast<int> (target))))
+          return false;
+        break;
+      }
 
     case Phase::SECOND_REVEAL_POSITION:
       {
@@ -337,7 +361,7 @@ ShipsBoardState::TurnCount () const
 
         /* We can look at the number of known positions to determine how many
            reveal moves there were really made.  */
-        for (const int p : pb.positions ())
+        for (const uint64_t p : pb.positions ())
           if (p != 0)
             cnt += 1;
 
@@ -510,14 +534,7 @@ ShipsBoardState::ApplyReply (const proto::ReplyMove& mv, const Phase phase,
 
   CHECK (newState.has_current_shot ());
   const Coord target(newState.current_shot ());
-  if (!target.IsOnBoard ())
-    {
-      /* This check is not part of the state validation, so we have to make sure
-         that an invalid state (e.g. committed to chain by signatures of both
-         players) is handled gracefully.  */
-      LOG (WARNING) << "Invalid current shot target";
-      return false;
-    }
+  CHECK (target.IsOnBoard ());
   newState.clear_current_shot ();
 
   switch (mv.reply ())

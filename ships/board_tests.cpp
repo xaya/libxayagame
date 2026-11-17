@@ -356,6 +356,72 @@ TEST_F (IsValidTests, TurnForSecondCommit)
   )");
 }
 
+TEST_F (IsValidTests, InvalidFieldSizes)
+{
+  ExpectValid (R"(
+    winner: 0
+    positions: 1
+    positions: 2
+    known_ships: {}
+    known_ships: {}
+  )");
+
+  ExpectInvalid (R"(
+    winner: 0
+    positions: 1
+  )");
+  ExpectInvalid (R"(
+    winner: 0
+    known_ships: {}
+  )");
+}
+
+TEST_F (IsValidTests, HitsNotSubsetOfGuesses)
+{
+  ExpectInvalid (R"(
+    turn: 0
+    position_hashes: "a"
+    position_hashes: "b"
+    known_ships: { guessed: 1 hits: 2 }
+    known_ships: {}
+  )");
+
+  ExpectInvalid (R"(
+    winner: 0
+    known_ships: { hits: 1 }
+    known_ships: {}
+  )");
+}
+
+TEST_F (IsValidTests, InvalidCurrentShot)
+{
+  ExpectValid (R"(
+    turn: 0
+    position_hashes: "a"
+    position_hashes: "b"
+    known_ships: { guessed: 1 }
+    known_ships: {}
+    current_shot: 0
+  )");
+
+  ExpectInvalid (R"(
+    turn: 0
+    position_hashes: "a"
+    position_hashes: "b"
+    known_ships: {}
+    known_ships: {}
+    current_shot: 0
+  )");
+  ExpectInvalid (R"(
+    turn: 0
+    position_hashes: "a"
+    position_hashes: "b"
+    known_ships: { guessed: 1 }
+    known_ships: {}
+    current_shot: 64
+  )");
+}
+
 TEST_F (IsValidTests, RepeatedFieldsForEarlyPhases)
 {
   ExpectInvalid (R"(
@@ -479,9 +545,9 @@ TEST_F (GetPhaseTests, ShotAndAnswer)
     turn: 0
     position_hashes: "a"
     position_hashes: "b"
+    known_ships: { guessed: 1 }
     known_ships: {}
-    known_ships: {}
-    current_shot: 42
+    current_shot: 0
   )")), Phase::ANSWER);
 }
 
@@ -1112,31 +1178,28 @@ TEST_F (ReplyTests, InvalidPhase)
 
 TEST_F (ReplyTests, NoOrInvalidReply)
 {
+  state.mutable_known_ships (0)->set_guessed (1ULL << 42);
   state.set_current_shot (42);
   ExpectInvalid (state, TextMove ("reply: {}"));
   ExpectInvalid (state, TextMove ("reply: { reply: INVALID }"));
-}
-
-TEST_F (ReplyTests, InvalidCurrentShot)
-{
-  state.set_current_shot (64);
-  ExpectInvalid (state, TextMove ("reply: { reply: MISS }"));
 }
 
 TEST_F (ReplyTests, Miss)
 {
   const auto miss = TextMove ("reply: { reply: MISS }");
 
-  state.mutable_known_ships (0)->set_hits (5);
-  state.mutable_known_ships (1)->set_hits (8);
-  state.set_current_shot (10);
+  state.mutable_known_ships (0)->set_guessed (17);
+  state.mutable_known_ships (0)->set_hits (1);
+  state.mutable_known_ships (1)->set_guessed (18);
+  state.mutable_known_ships (1)->set_hits (2);
+  state.set_current_shot (4);
 
   ExpectNewState (state, miss, TextState (R"(
     turn: 0
     position_hashes: "foo"
     position_hashes: "bar"
-    known_ships: { hits: 5 }
-    known_ships: { hits: 8 }
+    known_ships: { guessed: 17 hits: 1 }
+    known_ships: { guessed: 18 hits: 2 }
   )"));
 
   state.set_turn (1);
@@ -1144,8 +1207,8 @@ TEST_F (ReplyTests, Miss)
     turn: 1
     position_hashes: "foo"
     position_hashes: "bar"
-    known_ships: { hits: 5 }
-    known_ships: { hits: 8 }
+    known_ships: { guessed: 17 hits: 1 }
+    known_ships: { guessed: 18 hits: 2 }
   )"));
 }
 
@@ -1153,7 +1216,9 @@ TEST_F (ReplyTests, Hit)
 {
   const auto hit = TextMove ("reply: { reply: HIT }");
 
+  state.mutable_known_ships (0)->set_guessed (3);
   state.mutable_known_ships (0)->set_hits (1);
+  state.mutable_known_ships (1)->set_guessed (3);
   state.mutable_known_ships (1)->set_hits (2);
 
   state.set_turn (0);
@@ -1162,8 +1227,8 @@ TEST_F (ReplyTests, Hit)
     turn: 1
     position_hashes: "foo"
     position_hashes: "bar"
-    known_ships: { hits: 3 }
-    known_ships: { hits: 2 }
+    known_ships: { guessed: 3 hits: 3 }
+    known_ships: { guessed: 3 hits: 2 }
   )"));
 
   state.set_turn (1);
@@ -1172,8 +1237,8 @@ TEST_F (ReplyTests, Hit)
     turn: 0
     position_hashes: "foo"
     position_hashes: "bar"
-    known_ships: { hits: 1 }
-    known_ships: { hits: 3 }
+    known_ships: { guessed: 3 hits: 1 }
+    known_ships: { guessed: 3 hits: 3 }
   )"));
 
   /* Here, the state is invalid as it already contains a hit for the given
@@ -1329,21 +1394,11 @@ TEST_F (PositionRevealTests, MissingSaltOk)
   )"));
 }
 
-TEST_F (PositionRevealTests, HitsNotSubsetOfGuesses)
-{
-  state.set_turn (0);
-  CommitPosition (validPosition, "");
-  CommitPosition (validPosition, "");
-
-  state.mutable_known_ships (0)->set_hits (1);
-
-  ExpectInvalid (state, ValidPositionMove (""));
-}
-
 TEST_F (PositionRevealTests, InvalidShipConfiguration)
 {
   state.set_turn (0);
-  state.set_current_shot (42);
+  state.set_current_shot (0);
+  state.mutable_known_ships (0)->set_guessed (1);
   CommitPosition (10, "foo");
   CommitPosition (20, "bar");
 
@@ -1355,10 +1410,10 @@ TEST_F (PositionRevealTests, InvalidShipConfiguration)
       }
   )"), TextState (R"(
     winner: 1
-    current_shot: 42
+    current_shot: 0
     position_hashes: ""
     position_hashes: ""
-    known_ships: {}
+    known_ships: { guessed: 1 }
     known_ships: {}
     positions: 10
     positions: 0

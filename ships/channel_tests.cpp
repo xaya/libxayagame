@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -487,6 +487,7 @@ TEST_F (AutoMoveTests, ShootAllShipsHit)
     known_ships: {}
     known_ships: {}
   )");
+  statePb.mutable_known_ships (1)->set_guessed (allAndMore.GetBits ());
   statePb.mutable_known_ships (1)->set_hits (allAndMore.GetBits ());
 
   const auto mv = ExpectAutoMove (*ParseState (statePb));
@@ -506,6 +507,7 @@ TEST_F (AutoMoveTests, Answer)
     known_ships: {}
   )");
 
+  statePb.mutable_known_ships (0)->set_guessed (129);
   statePb.set_current_shot (0);
   auto mv = ExpectAutoMove (*ParseState (statePb));
   ASSERT_TRUE (mv.has_reply ());
