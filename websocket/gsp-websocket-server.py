@@ -5,6 +5,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 import argparse
+import asyncio
 from contextlib import contextmanager
 import json
 import logging
@@ -12,13 +13,22 @@ import threading
 import time
 
 import jsonrpclib
-from websocket_server import WebsocketServer
+import websockets
+from websockets.asyncio.server import serve as websocketServe
 
 
 # Time (in seconds) to sleep between checks for "should stop"
 # while waiting for a retry.  This is the latency that killing the
 # process might incur.
 SLEEP_TIME = 0.1
+
+# Default maximum number of queued messages per client.  Clients that fall
+# further behind than this are disconnected.
+DEFAULT_QUEUE_SIZE = 1000
+
+# Time (in seconds) to wait for closing a connection before websockets
+# aborts it.
+CLOSE_TIMEOUT = 1
 
 
 class Server:
@@ -27,11 +37,18 @@ class Server:
   RPC interfaces and pushes notifications to connected clients.
   """
 
-  def __init__ (self, host, port, gspRpcUrl):
-    self.srv = WebsocketServer (host=host, port=port, loglevel=logging.INFO)
+  def __init__ (self, host, port, gspRpcUrl, clientQueueSize, retryMs):
+    self.host = host
+    self.port = port
     self.rpcUrl = gspRpcUrl
-    self.log = logging.Logger ("")
+    self.clientQueueSize = clientQueueSize
+    self.retryMs = retryMs
+    self.log = logging.getLogger ("gsp-websocket-server")
     self.withPending = False
+
+    self.loop = None
+    self.clients = {}
+    self.nextClientId = 1
 
   def enablePending (self):
     self.withPending = True
@@ -43,8 +60,19 @@ class Server:
     the server is running.
     """
 
-    with self.pollingWorker ():
-      self.srv.run_forever ()
+    asyncio.run (self._run ())
+
+  async def _run (self):
+    self.loop = asyncio.get_running_loop ()
+
+    try:
+      with self.pollingWorker ():
+        async with websocketServe (self._handleClient, self.host, self.port,
+                                   close_timeout=CLOSE_TIMEOUT):
+          self.log.info ("Listening on %s:%d" % (self.host, self.port))
+          await asyncio.Event ().wait ()
+    finally:
+      await self._closeAllClients ()
 
   @contextmanager
   def pollingWorker (self):
@@ -80,7 +108,7 @@ class Server:
           # In case of an error (RPC or websocket sending), we wait for a
           # predefined time before retrying again.
           self.log.exception (exc)
-          toSleep = args.retry_ms / 1_000.0
+          toSleep = self.retryMs / 1_000.0
 
     threads = []
 
@@ -119,7 +147,7 @@ class Server:
       "params": [blockHash],
     }
     msg = json.dumps (data, separators=(",", ":"))
-    self.srv.send_message_to_all (msg)
+    self._pushMessage (msg)
 
   def pushPendingUpdate (self, data):
     data = {
@@ -128,7 +156,139 @@ class Server:
       "params": [data],
     }
     msg = json.dumps (data, separators=(",", ":"))
-    self.srv.send_message_to_all (msg)
+    self._pushMessage (msg)
+
+  def _pushMessage (self, msg):
+    """
+    Enqueues a message for all clients from a polling thread.
+    """
+
+    loop = self.loop
+    if loop is None:
+      return
+
+    try:
+      loop.call_soon_threadsafe (self._broadcast, msg)
+    except RuntimeError:
+      # The event loop has already been closed.
+      pass
+
+  def _broadcast (self, msg):
+    """
+    Enqueues a message for all clients.  This runs in the event loop.
+    """
+
+    for client in list (self.clients.values ()):
+      try:
+        client["queue"].put_nowait (msg)
+      except asyncio.QueueFull:
+        self._dropClient (client)
+
+  def _dropClient (self, client):
+    """
+    Drops a slow client whose queue is full.  This runs in the event loop.
+    """
+
+    if self.clients.pop (client["id"], None) is None:
+      return
+
+    self.log.warning ("Dropping slow client %d" % client["id"])
+
+    writer = client["writer"]
+    if writer is not None:
+      writer.cancel ()
+
+    asyncio.create_task (self._closeConnection (client, 1013,
+                                                "client too slow"))
+
+  async def _handleClient (self, websocket):
+    """
+    Handles a new websocket connection.
+    """
+
+    client = {
+      "id": self.nextClientId,
+      "websocket": websocket,
+      "address": getattr (websocket, "remote_address", None),
+      "queue": asyncio.Queue (maxsize=self.clientQueueSize),
+      "writer": None,
+    }
+    self.nextClientId += 1
+    self.clients[client["id"]] = client
+
+    client["writer"] = asyncio.create_task (self._writerLoop (client))
+    self.log.info ("Client %d connected from %s"
+                     % (client["id"], client["address"]))
+
+    try:
+      async for _ in websocket:
+        pass
+    except asyncio.CancelledError:
+      raise
+    except Exception:
+      pass
+    finally:
+      await self._removeClient (client)
+      self.log.info ("Client %d disconnected" % client["id"])
+
+  async def _writerLoop (self, client):
+    """
+    Sends queued messages to one client.
+    """
+
+    try:
+      while True:
+        msg = await client["queue"].get ()
+        await client["websocket"].send (msg)
+    except asyncio.CancelledError:
+      pass
+    except websockets.ConnectionClosed:
+      await self._removeClient (client)
+    except Exception as exc:
+      self.log.warning ("Sending to client %d failed: %s"
+                          % (client["id"], exc))
+      await self._removeClient (client)
+
+  async def _removeClient (self, client):
+    """
+    Removes a client and closes its connection.
+    """
+
+    if self.clients.pop (client["id"], None) is None:
+      return
+
+    writer = client["writer"]
+    if writer is not None and writer is not asyncio.current_task ():
+      writer.cancel ()
+
+    await self._closeConnection (client, 1000, "")
+
+  async def _closeConnection (self, client, code, reason):
+    try:
+      await client["websocket"].close (code=code, reason=reason)
+    except asyncio.CancelledError:
+      pass
+    except Exception:
+      pass
+
+  async def _closeAllClients (self):
+    clients = list (self.clients.values ())
+    self.clients.clear ()
+
+    writers = []
+    for client in clients:
+      writer = client["writer"]
+      if writer is not None and writer is not asyncio.current_task ():
+        writer.cancel ()
+        writers.append (writer)
+
+    await asyncio.gather (
+        *(self._closeConnection (c, 1001, "server shutting down")
+          for c in clients),
+        return_exceptions=True)
+
+    if writers:
+      await asyncio.gather (*writers, return_exceptions=True)
 
 
 if __name__ == "__main__":
@@ -145,9 +305,18 @@ if __name__ == "__main__":
                        help="Also track and push updates to pending moves")
   parser.add_argument ("--retry_ms", type=int, default=10_000,
                        help="Time to wait before retrying on errors")
+  parser.add_argument ("--client_queue_size", type=int,
+                       default=DEFAULT_QUEUE_SIZE,
+                       help="Maximum queued messages per client before"
+                            " dropping it as too slow")
   args = parser.parse_args ()
 
-  srv = Server (args.host, args.port, args.gsp_rpc_url)
+  logging.basicConfig (level=logging.INFO,
+                       format="%(asctime)s %(levelname)s: %(message)s")
+
+  srv = Server (args.host, args.port, args.gsp_rpc_url,
+                clientQueueSize=args.client_queue_size,
+                retryMs=args.retry_ms)
   if args.enable_pending:
     srv.enablePending ()
   srv.run ()
