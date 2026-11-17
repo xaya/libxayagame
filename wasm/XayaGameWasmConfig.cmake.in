@@ -109,6 +109,7 @@ function (xaya_wasm_setup_target TARGET_NAME EXPORT_NAME)
     -Wno-unused-variable
     -Wno-unused-but-set-variable
     -sUSE_ZLIB=1
+    -sDISABLE_EXCEPTION_CATCHING=0
   )
 
 endfunction ()

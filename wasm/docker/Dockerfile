@@ -102,6 +102,7 @@ RUN git clone https://github.com/open-source-parsers/jsoncpp . \
     && git checkout "${JSONCPP_VERSION}" \
     && emcmake cmake -B build . \
           -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_FLAGS="-sDISABLE_EXCEPTION_CATCHING=0" \
           -DCMAKE_INSTALL_PREFIX="${WASM_PREFIX}" \
           -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_LIBS=ON \
           -DJSONCPP_WITH_TESTS=OFF \

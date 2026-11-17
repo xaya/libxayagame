@@ -34,6 +34,7 @@ add_compile_definitions (GLOG_NO_ABBREVIATED_SEVERITIES)
 
 # zlib is provided by Emscripten's built-in port.
 add_compile_options (-sUSE_ZLIB=1)
+add_compile_options (-sDISABLE_EXCEPTION_CATCHING=0)
 
 set (LIBXAYAGAME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
