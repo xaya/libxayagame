@@ -29,7 +29,8 @@ ExtraVerifyStateTransition (const SignatureVerifier& verifier,
                             const ParsedBoardState& oldState,
                             const proto::StateTransition& transition,
                             std::set<int>& signatures,
-                            std::unique_ptr<ParsedBoardState>& parsedNew)
+                            std::unique_ptr<ParsedBoardState>& parsedNew,
+                            BoardState& computedNewState)
 {
 
   const int turn = oldState.WhoseTurn ();
@@ -51,7 +52,18 @@ ExtraVerifyStateTransition (const SignatureVerifier& verifier,
      so it should be guaranteed to be valid.  */
   CHECK (parsedNew != nullptr);
 
-  if (!parsedNew->Equals (transition.new_state ().data ()))
+  /* Parse the user-supplied state and compare the computed state against it.
+     This is stricter than simply comparing via Equals, as ParseState also
+     performs any additional validation the game rules may implement.  */
+  const auto parsedClaimed
+      = rules.ParseState (channelId, meta, transition.new_state ().data ());
+  if (parsedClaimed == nullptr)
+    {
+      LOG (WARNING) << "Invalid new state claimed in state transition";
+      return false;
+    }
+
+  if (!parsedClaimed->Equals (newState))
     {
       LOG (WARNING) << "Wrong new state claimed in state transition";
       return false;
@@ -74,6 +86,7 @@ ExtraVerifyStateTransition (const SignatureVerifier& verifier,
       return false;
     }
 
+  computedNewState = std::move (newState);
   return true;
 }
 
@@ -97,9 +110,11 @@ VerifyStateTransition (const SignatureVerifier& verifier,
 
   std::unique_ptr<ParsedBoardState> parsedNew;
   std::set<int> signatures;
+  BoardState computedNewState;
   return ExtraVerifyStateTransition (verifier, rules,
                                      gameId, channelId, meta, *parsedOld,
-                                     transition, signatures, parsedNew);
+                                     transition, signatures, parsedNew,
+                                     computedNewState);
 }
 
 bool
@@ -136,13 +151,15 @@ VerifyStateProof (const SignatureVerifier& verifier, const BoardRules& rules,
     {
       std::unique_ptr<ParsedBoardState> parsedNew;
       std::set<int> newSignatures;
+      BoardState computedNewState;
       if (!ExtraVerifyStateTransition (verifier, rules, gameId, channelId, meta,
-                                       *parsed, t, newSignatures, parsedNew))
+                                       *parsed, t, newSignatures, parsedNew,
+                                       computedNewState))
         return false;
 
       signatures.insert (newSignatures.begin (), newSignatures.end ());
       parsed = std::move (parsedNew);
-      endState = t.new_state ().data ();
+      endState = std::move (computedNewState);
     }
 
   if (foundOnChain)

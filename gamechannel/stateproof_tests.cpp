@@ -105,7 +105,7 @@ TEST_F (StateTransitionTests, InvalidOldState)
 TEST_F (StateTransitionTests, InvalidClaimedNewState)
 {
   EXPECT_FALSE (VerifyTransition ("10 1", R"(
-    move: "0",
+    move: "1",
     new_state:
       {
         data: "invalid"
@@ -399,6 +399,26 @@ TEST_F (StateProofTests, MultiSignedLaterState)
       }
   )"));
   EXPECT_EQ (endState, "43 6");
+}
+
+TEST_F (StateProofTests, ComputedEndState)
+{
+  ASSERT_TRUE (VerifyProof ("10 1", R"(
+    initial_state:
+      {
+        data: "10 1"
+      }
+    transitions:
+      {
+        move: "1"
+        new_state:
+          {
+            data: " 11 2 "
+            signatures: "sgn0"
+          }
+      }
+  )"));
+  EXPECT_EQ (endState, "11 2");
 }
 
 /* ************************************************************************** */

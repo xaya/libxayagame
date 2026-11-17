@@ -34,7 +34,9 @@ bool VerifyStateTransition (const SignatureVerifier& verifier,
 /**
  * Verifies a state proof for the given channel.  If the proof is complete
  * and valid, then true is returned and the resulting board state is returned
- * in endState.
+ * in endState.  This is the state computed locally from applying the moves,
+ * which may differ from the exact bytes of the proven state in case they
+ * are only equivalent according to the game rules.
  */
 bool VerifyStateProof (const SignatureVerifier& verifier,
                        const BoardRules& rules,
