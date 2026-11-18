@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -143,6 +143,7 @@ ChannelData::Reinitialise (const proto::ChannelMetadata& m,
   metadata = m;
   reinit = initialisedState;
   StateProofFromReinit (reinit, proof);
+  ClearDispute ();
 
   initialised = true;
   dirty = true;

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -96,7 +96,8 @@ public:
 
   /**
    * Reinitialises the channel.  This allows changes to the metadata, purges
-   * all archived states and sets the state to the given initial state.
+   * all archived states and sets the state to the given initial state.  Any
+   * open dispute is cleared, as it belongs to the previous reinitialisation.
    */
   void Reinitialise (const proto::ChannelMetadata& m,
                      const BoardState& initialState);

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -26,11 +26,11 @@ protected:
     h.reset ();
 
     h = tbl.CreateNew (id2);
-    h->SetDisputeHeight (55);
     h->Reinitialise (meta2, "40 10");
     proto::StateProof proof;
     proof.mutable_initial_state ()->set_data ("50 20");
     h->SetStateProof (proof);
+    h->SetDisputeHeight (55);
     h.reset ();
   }
 

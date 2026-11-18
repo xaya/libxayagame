@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2020 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -84,7 +84,6 @@ TEST_F (ChannelDbTests, UpdatingWithReinit)
   meta.Clear ();
   meta.set_reinit ("init 2");
   h->Reinitialise (meta, "other state");
-  h->ClearDispute ();
   h.reset ();
 
   h = tbl.GetById (SHA256::Hash ("id"));
@@ -94,6 +93,25 @@ TEST_F (ChannelDbTests, UpdatingWithReinit)
   EXPECT_EQ (h->GetMetadata ().reinit (), "init 2");
   EXPECT_EQ (h->GetReinitState (), "other state");
   EXPECT_EQ (h->GetLatestState (), "other state");
+  EXPECT_FALSE (h->HasDispute ());
+}
+
+TEST_F (ChannelDbTests, ReinitClearsDispute)
+{
+  const auto id = SHA256::Hash ("id");
+
+  auto h = tbl.CreateNew (id);
+  h->Reinitialise (meta, "state");
+  h->SetDisputeHeight (1234);
+  ASSERT_TRUE (h->HasDispute ());
+
+  meta.set_reinit ("new reinit");
+  h->Reinitialise (meta, "other state");
+  EXPECT_FALSE (h->HasDispute ());
+  h.reset ();
+
+  h = tbl.GetById (id);
+  ASSERT_NE (h, nullptr);
   EXPECT_FALSE (h->HasDispute ());
 }
 
