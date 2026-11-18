@@ -204,6 +204,31 @@ TEST_F (RestTests, Compression)
   EXPECT_EQ (req2.GetData (), rawData);
 }
 
+TEST_F (RestTests, InvalidGzip)
+{
+  srv.AddResult ("/invalid.gz", SuccessResult ("text/plain+gzip", "not gzip"));
+
+  RestClient::Request req(client);
+  EXPECT_FALSE (req.Send ("/invalid.gz"));
+  EXPECT_FALSE (req.GetError ().empty ());
+}
+
+TEST_F (RestTests, TruncatedGzip)
+{
+  const std::string rawData(1 << 10, 'x');
+  const SuccessResult rawResult("text/plain", rawData);
+  const std::string full = rawResult.Gzip ().GetPayload ();
+
+  ASSERT_GT (full.size (), 10);
+  srv.AddResult ("/truncated.gz",
+                 SuccessResult ("text/plain+gzip",
+                                full.substr (0, full.size () / 2)));
+
+  RestClient::Request req(client);
+  EXPECT_FALSE (req.Send ("/truncated.gz"));
+  EXPECT_FALSE (req.GetError ().empty ());
+}
+
 TEST_F (RestTests, Json)
 {
   const auto value = ParseJson (R"({

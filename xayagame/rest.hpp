@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -134,7 +134,7 @@ public:
 
   /**
    * Compresses the existing result with gzip format and turns it into
-   * a new result.
+   * a new result.  Throws std::runtime_error if compression fails.
    */
   SuccessResult Gzip () const;
 

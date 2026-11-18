@@ -4,18 +4,14 @@
 
 #include "rest.hpp"
 
-#include "xayautil/cryptorand.hpp"
-
 #include <microhttpd.h>
 
 #include <zlib.h>
 
 #include <glog/logging.h>
 
-#include <experimental/filesystem>
-
-#include <cstdio>
-#include <cstring>
+#include <algorithm>
+#include <limits>
 
 namespace xaya
 {
@@ -23,51 +19,274 @@ namespace xaya
 namespace
 {
 
-namespace fs = std::experimental::filesystem;
-
-/** Buffer size for IO with temporary files (to use zlib's gzip interface).  */
-constexpr size_t TEMP_BUF_SIZE = 4'096;
+/** Buffer size for IO with zlib's buffer-based gzip interface.  */
+constexpr size_t GZIP_BUF_SIZE = 4'096;
 
 /** Default timeout for the REST client.  */
 constexpr auto REST_CLIENT_DEFAULT_TIMEOUT = std::chrono::seconds (10);
 
 /**
- * RAII helper that generates the name for a temporary file and removes the
- * file again on destruction.
+ * Base helper for processing data through a zlib stream.  It handles feeding
+ * input in chunks and collecting the produced output, while derived classes
+ * initialise the stream and perform the actual deflate or inflate step.
  */
-class TempFileName
+class ZlibStream
+{
+
+protected:
+
+  /** Result of one step of a zlib stream operation.  */
+  enum class StepResult
+  {
+    CONTINUE,
+    END,
+    INCOMPLETE,
+    ERROR,
+  };
+
+  /** The underlying zlib stream struct.  */
+  z_stream stream{};
+
+  virtual ~ZlibStream () = default;
+
+  /**
+   * Returns a human-readable error message for a zlib return code.
+   */
+  std::string
+  GetError (const int rc) const
+  {
+    if (stream.msg != nullptr)
+      return stream.msg;
+    return "zlib error code " + std::to_string (rc);
+  }
+
+  /**
+   * Performs one operation step of the underlying stream.  This is passed
+   * whether more input remains to be fed, and an error string to fill in
+   * on failure.
+   */
+  virtual StepResult Step (bool moreInput, std::string& error) = 0;
+
+  /**
+   * Processes the given input through the stream, calling Step for each
+   * chunk of output.
+   */
+  bool
+  Process (const std::string& input, std::string& output,
+           std::string& error)
+  {
+    const size_t maxChunk = std::numeric_limits<uInt>::max ();
+    size_t offset = 0;
+    char buf[GZIP_BUF_SIZE];
+
+    while (true)
+      {
+        if (stream.avail_in == 0 && offset < input.size ())
+          {
+            const size_t n = std::min (input.size () - offset, maxChunk);
+            stream.next_in = reinterpret_cast<Bytef*> (
+                const_cast<char*> (input.data () + offset));
+            stream.avail_in = static_cast<uInt> (n);
+            offset += n;
+          }
+
+        stream.next_out = reinterpret_cast<Bytef*> (buf);
+        stream.avail_out = sizeof (buf);
+
+        const bool moreInput = (offset < input.size ());
+        const auto res = Step (moreInput, error);
+        output.append (buf, sizeof (buf) - stream.avail_out);
+
+        switch (res)
+          {
+          case StepResult::CONTINUE:
+            break;
+
+          case StepResult::END:
+            return true;
+
+          case StepResult::INCOMPLETE:
+          case StepResult::ERROR:
+            return false;
+          }
+      }
+  }
+
+};
+
+/**
+ * Helper that deflates data into a gzip stream.
+ */
+class GzipDeflater : public ZlibStream
 {
 
 private:
 
-  /** The name of the temporary file.  */
-  std::string name;
+  /** Whether the stream has already been ended.  */
+  bool ended = false;
+
+  StepResult
+  Step (const bool moreInput, std::string& error) override
+  {
+    const bool noMoreInput = (!moreInput && stream.avail_in == 0);
+    const int rc
+        = deflate (&stream, noMoreInput ? Z_FINISH : Z_NO_FLUSH);
+    if (rc == Z_OK)
+      return StepResult::CONTINUE;
+    if (rc == Z_STREAM_END)
+      return StepResult::END;
+
+    error = "gzip compression failed: " + GetError (rc);
+    return StepResult::ERROR;
+  }
 
 public:
 
-  TempFileName ()
+  GzipDeflater ()
   {
-    const uint256 val = CryptoRand ().Get<uint256> ();
-
-    std::ostringstream suffix;
-    suffix << "xaya" << val.ToHex ().substr (0, 8);
-
-    name = (fs::temp_directory_path () / suffix.str ()).string ();
-    LOG (INFO) << "Filename: " << name;
+    const int rc = deflateInit2 (&stream, 9, Z_DEFLATED, MAX_WBITS + 16, 8,
+                                 Z_DEFAULT_STRATEGY);
+    if (rc != Z_OK)
+      throw std::runtime_error (
+          "deflateInit2 failed: " + GetError (rc));
   }
 
-  ~TempFileName ()
+  ~GzipDeflater ()
   {
-    /* Just optimistically try to delete the file, and ignore any
-       potential errors (e.g. because the file hasn't actually been
-       created by the calling code).  */
-    std::remove (name.c_str ());
+    if (!ended)
+      deflateEnd (&stream);
   }
 
-  const std::string&
-  GetName () const
+  GzipDeflater (const GzipDeflater&) = delete;
+  void operator= (const GzipDeflater&) = delete;
+
+  /**
+   * Compresses the given input into a gzip stream, throwing on errors.
+   */
+  std::string
+  Compress (const std::string& input)
   {
-    return name;
+    std::string output;
+    std::string error;
+    if (!Process (input, output, error))
+      throw std::runtime_error (error);
+
+    const int rc = deflateEnd (&stream);
+    ended = true;
+    if (rc != Z_OK)
+      throw std::runtime_error (
+          "deflateEnd failed with error code " + std::to_string (rc));
+
+    return output;
+  }
+
+};
+
+/**
+ * Helper that inflates data from a gzip stream.
+ */
+class GzipInflater : public ZlibStream
+{
+
+private:
+
+  /** Whether the stream was initialised successfully.  */
+  bool initialised = false;
+
+  /** Error message from a failed initialisation.  */
+  std::string initError;
+
+  StepResult
+  Step (const bool moreInput, std::string& error) override
+  {
+    const int rc = inflate (&stream, Z_NO_FLUSH);
+    const bool inputExhausted = (!moreInput && stream.avail_in == 0);
+
+    if (rc == Z_STREAM_END)
+      {
+        /* Handle concatenated gzip members.  */
+        if (!inputExhausted)
+          {
+            const int resetRc = inflateReset (&stream);
+            if (resetRc != Z_OK)
+              {
+                error = "gzip error: " + GetError (resetRc);
+                return StepResult::ERROR;
+              }
+            return StepResult::CONTINUE;
+          }
+        return StepResult::END;
+      }
+
+    if (rc == Z_OK)
+      {
+        /* If no more input is available and the output buffer is not
+           full, then the stream ended before its end marker.  */
+        if (inputExhausted && stream.avail_out > 0)
+          {
+            error = "incomplete gzip stream";
+            return StepResult::INCOMPLETE;
+          }
+        return StepResult::CONTINUE;
+      }
+
+    if (rc == Z_BUF_ERROR && inputExhausted)
+      {
+        error = "incomplete gzip stream";
+        return StepResult::INCOMPLETE;
+      }
+
+    error = "gzip error: " + GetError (rc);
+    error += " (code " + std::to_string (rc) + ")";
+    return StepResult::ERROR;
+  }
+
+public:
+
+  GzipInflater ()
+  {
+    const int rc = inflateInit2 (&stream, MAX_WBITS + 16);
+    if (rc == Z_OK)
+      initialised = true;
+    else
+      initError = "gzip error: " + GetError (rc);
+  }
+
+  ~GzipInflater ()
+  {
+    if (initialised)
+      inflateEnd (&stream);
+  }
+
+  GzipInflater (const GzipInflater&) = delete;
+  void operator= (const GzipInflater&) = delete;
+
+  /**
+   * Uncompresses the given gzip data, returning false with an error message
+   * on failure.
+   */
+  bool
+  Uncompress (const std::string& input, std::string& output,
+              std::string& error)
+  {
+    if (!initialised)
+      {
+        error = initError;
+        return false;
+      }
+
+    if (!Process (input, output, error))
+      return false;
+
+    const int rc = inflateEnd (&stream);
+    initialised = false;
+    if (rc != Z_OK)
+      {
+        error = "gzip error: zlib error code " + std::to_string (rc);
+        return false;
+      }
+
+    return true;
   }
 
 };
@@ -94,51 +313,7 @@ RestApi::SuccessResult::Gzip () const
 {
   SuccessResult res;
   res.type = type + "+gzip";
-
-  /* Unfortunately, it seems zlib supports the gzip format mainly through
-     a wrapper around files / file descriptors.  Thus we can't just encode
-     a buffer in gzip format, but have to serve it through such a descriptor.
-     We use a temporary file for this.  */
-  TempFileName file;
-
-  {
-    gzFile gz = gzopen (file.GetName ().c_str (), "wb9");
-    CHECK (gz != nullptr);
-
-    const char* data = payload.data ();
-    size_t len = payload.size ();
-    while (len > 0)
-      {
-        const int n = gzwrite (gz, data, len);
-        CHECK_GT (n, 0) << "gzwrite failed";
-        CHECK_LE (n, len);
-        data += n;
-        len -= n;
-      }
-
-    CHECK_EQ (gzclose (gz), Z_OK);
-  }
-
-  {
-    FILE* f = std::fopen (file.GetName ().c_str (), "rb");
-    CHECK (f != nullptr)
-        << "Failed to open " << file.GetName () << " for reading: "
-        << std::strerror (errno);
-
-    while (true)
-      {
-        char buf[TEMP_BUF_SIZE];
-        const int n = std::fread (buf, 1, TEMP_BUF_SIZE, f);
-        CHECK_GE (n, 0);
-        res.payload.append (buf, n);
-
-        if (std::feof (f))
-          break;
-        CHECK_EQ (n, TEMP_BUF_SIZE);
-      }
-
-    CHECK_EQ (std::fclose (f), 0);
-  }
+  res.payload = GzipDeflater ().Compress (payload);
 
   return res;
 }
@@ -499,57 +674,15 @@ RestClient::Request::ProcessGzip ()
     return true;
   type = type.substr (0, type.size () - suffix.size ());
 
-  /* As before, we use a temporary for zlib's gzip interface.  */
-  TempFileName file;
+  std::string uncompressed;
+  std::string err;
+  if (!GzipInflater ().Uncompress (data, uncompressed, err))
+    {
+      error << err;
+      return false;
+    }
 
-  {
-    FILE* f = std::fopen (file.GetName ().c_str (), "wb");
-    CHECK (f != nullptr)
-        << "Failed to open " << file.GetName () << " for writing: "
-        << std::strerror (errno);
-
-    const int n = std::fwrite (data.data (), 1, data.size (), f);
-    CHECK_EQ (n, data.size ());
-
-    CHECK_EQ (std::fclose (f), 0);
-  }
-
-  {
-    gzFile gz = gzopen (file.GetName ().c_str (), "rb");
-    CHECK (gz != nullptr);
-
-    std::string uncompressed;
-    char buf[TEMP_BUF_SIZE];
-    while (true)
-      {
-        const int n = gzread (gz, buf, TEMP_BUF_SIZE);
-        if (n == -1)
-          {
-            int err;
-            error << "gzip error: " << gzerror (gz, &err);
-            error << " (code " << err << ")";
-
-            gzclose (gz);
-            return false;
-          }
-        CHECK_GE (n, 0);
-
-        uncompressed.append (buf, n);
-        if (n == 0)
-          break;
-      }
-
-    const int rc = gzclose (gz);
-    if (rc == Z_BUF_ERROR)
-      {
-        error << "incomplete gzip stream";
-        return false;
-      }
-    CHECK_EQ (rc, Z_OK);
-
-    data = std::move (uncompressed);
-  }
-
+  data = std::move (uncompressed);
   return true;
 }
 
