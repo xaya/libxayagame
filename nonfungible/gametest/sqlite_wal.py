@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# Copyright (C) 2022-2023 The Xaya developers
+# Copyright (C) 2022-2026 The Xaya developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -30,6 +30,7 @@ class ReaderThread (threading.Thread):
 
     self.lock = threading.Lock ()
     self.calls = 0
+    self.error = False
     self.shouldStop = False
     self.start ()
 
@@ -40,18 +41,26 @@ class ReaderThread (threading.Thread):
 
   def run (self):
     while True:
+      try:
+        self.test.assertEqual (
+          self.gsp.getassetdetails ({"m": "domob", "a": "foo"})["data"], {
+          "asset": {"m": "domob", "a": "foo"},
+          "supply": 10,
+          "data": None,
+          "balances": {"domob": 10},
+        })
+      except:
+        self.error = True
+        break
+
+      # We increment calls after actually running the sucessful call,
+      # to ensure a failed or blocked call doesn't count as a successful
+      # one made later when we check that some were made during
+      # block mining.
       with self.lock:
         if self.shouldStop:
           break
         self.calls += 1
-
-    self.test.assertEqual (
-      self.gsp.getassetdetails ({"m": "domob", "a": "foo"})["data"], {
-      "asset": {"m": "domob", "a": "foo"},
-      "supply": 10,
-      "data": None,
-      "balances": {"domob": 10},
-    })
 
 
 class SQLiteWalTest (NonFungibleTest):
@@ -71,17 +80,34 @@ class SQLiteWalTest (NonFungibleTest):
     self.log.info ("Starting reader threads...")
     readers = [ReaderThread (self) for _ in range (10)]
 
+    def getTotalCalls ():
+      res = 0
+      for r in readers:
+        with r.lock:
+          res += r.calls
+      return res
+
     self.log.info ("Mining blocks...")
+    before = getTotalCalls ()
     for _ in range (10):
       time.sleep (0.01)
       self.generate (1)
+    after = getTotalCalls ()
+    # Make sure that there were successful calls while mining blocks
+    # (and not, for instance, all readers were blocked and just do some
+    # calls later while shutting down).
+    totalCalls = after - before
+    self.mainLogger.info ("Processed %d read calls while mining" % totalCalls)
 
     self.log.info ("Stopping reader threads...")
-    totalCalls = 0
     for r in readers:
       r.stop ()
-      totalCalls += r.calls
-    self.mainLogger.info ("Processed %d read calls" % totalCalls)
+
+    # Apply final checks for errors once the threads are cleaned up.
+    for r in readers:
+      if r.error:
+        raise RuntimeError ("reader thread failed")
+    assert totalCalls > 0
 
     self.stopGameDaemon ()
     assert self.gamenode.logMatches (TRUNCATION_SUCCESS)
