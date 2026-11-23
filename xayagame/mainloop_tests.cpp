@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include <csignal>
 #include <memory>
 #include <thread>
 
@@ -86,6 +87,12 @@ protected:
 namespace
 {
 
+#ifndef _WIN32
+void
+SentinelHandler (int signum)
+{}
+#endif // !_WIN32
+
 TEST_F (MainLoopTests, LoopWithStop)
 {
   MainLoop loop;
@@ -130,6 +137,57 @@ TEST_F (MainLoopTests, LoopWithInterrupt)
   EXPECT_TRUE (stopCalled);
   EXPECT_FALSE (loop.IsRunning ());
 }
+
+#ifndef _WIN32
+TEST_F (MainLoopTests, LoopWithRaisedSignal)
+{
+  MainLoop loop;
+
+  RunWithFlags (loop);
+  EXPECT_TRUE (startCalled);
+  EXPECT_FALSE (stopCalled);
+  EXPECT_TRUE (loop.IsRunning ());
+
+  ASSERT_EQ (std::raise (SIGTERM), 0);
+  ASSERT_NE (loopThread, nullptr);
+  loopThread->join ();
+  EXPECT_TRUE (startCalled);
+  EXPECT_TRUE (stopCalled);
+  EXPECT_FALSE (loop.IsRunning ());
+}
+
+TEST_F (MainLoopTests, RestoresSignalHandlers)
+{
+  struct sigaction originalTerm;
+  struct sigaction originalInt;
+  ASSERT_EQ (sigaction (SIGTERM, nullptr, &originalTerm), 0);
+  ASSERT_EQ (sigaction (SIGINT, nullptr, &originalInt), 0);
+
+  struct sigaction sentinel = {};
+  sentinel.sa_handler = &SentinelHandler;
+  ASSERT_EQ (sigaction (SIGTERM, &sentinel, nullptr), 0);
+  ASSERT_EQ (sigaction (SIGINT, &sentinel, nullptr), 0);
+
+  {
+    MainLoop loop;
+    RunWithFlags (loop);
+    StopAndJoin (loop);
+  }
+
+  struct sigaction currentTerm;
+  struct sigaction currentInt;
+  const int termResult = sigaction (SIGTERM, nullptr, &currentTerm);
+  const int intResult = sigaction (SIGINT, nullptr, &currentInt);
+
+  ASSERT_EQ (sigaction (SIGTERM, &originalTerm, nullptr), 0);
+  ASSERT_EQ (sigaction (SIGINT, &originalInt, nullptr), 0);
+
+  ASSERT_EQ (termResult, 0);
+  ASSERT_EQ (intResult, 0);
+  EXPECT_EQ (currentTerm.sa_handler, &SentinelHandler);
+  EXPECT_EQ (currentInt.sa_handler, &SentinelHandler);
+}
+#endif // !_WIN32
 
 TEST_F (MainLoopTests, CanRunMultipleTimes)
 {

@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,6 +6,9 @@
 
 #include <glog/logging.h>
 
+#include <array>
+#include <atomic>
+#include <chrono>
 #include <cstring>
 
 namespace xaya
@@ -63,14 +66,97 @@ public:
 
 };
 
-/**
- * Global variable holding the instance of MainLoop which is currently running
- * thus handled SIGTERM's are meant.
- */
-MainLoop* instanceForSignals = nullptr;
+/** Whether a MainLoop is currently running.  */
+std::atomic<bool> mainLoopActive = false;
 
-/** Mutex guarding instanceForSignals.  */
-std::mutex instanceForSignalsMutex;
+/** Set by the interrupt handler to request a stop.  */
+std::atomic<bool> stopRequested = false;
+
+/**
+ * Helper class to mark a MainLoop as active with RAII.
+ */
+class MainLoopActiveGuard
+{
+
+public:
+
+  MainLoopActiveGuard ()
+  {
+    CHECK (!mainLoopActive.exchange (true))
+        << "Another main loop is already running";
+  }
+
+  ~MainLoopActiveGuard ()
+  {
+    mainLoopActive = false;
+  }
+
+  MainLoopActiveGuard (const MainLoopActiveGuard&) = delete;
+  void operator= (const MainLoopActiveGuard&) = delete;
+
+};
+
+static_assert (std::atomic<bool>::is_always_lock_free,
+               "The signal handler requires lock-free atomics");
+
+#ifndef _WIN32
+
+constexpr std::array<int, 2> interruptSignals = {SIGTERM, SIGINT};
+
+/**
+ * Helper class to install the signal handlers and restore the previous
+ * dispositions with RAII.
+ */
+class SignalHandlerGuard
+{
+
+private:
+
+  std::array<struct sigaction, interruptSignals.size ()> oldActions;
+  std::array<bool, interruptSignals.size ()> installed{};
+
+  void
+  Restore ()
+  {
+    for (size_t i = 0; i < interruptSignals.size (); ++i)
+      if (installed[i])
+        {
+          if (sigaction (interruptSignals[i], &oldActions[i], nullptr) != 0)
+            LOG (ERROR)
+                << "Restoring signal handler failed for signal "
+                << interruptSignals[i];
+          installed[i] = false;
+        }
+  }
+
+public:
+
+  explicit SignalHandlerGuard (const struct sigaction& handler)
+  {
+    for (size_t i = 0; i < interruptSignals.size (); ++i)
+      {
+        if (sigaction (interruptSignals[i], &handler, &oldActions[i]) != 0)
+          {
+            Restore ();
+            LOG (FATAL)
+                << "Installing signal handler failed for signal "
+                << interruptSignals[i];
+          }
+        installed[i] = true;
+      }
+  }
+
+  ~SignalHandlerGuard ()
+  {
+    Restore ();
+  }
+
+  SignalHandlerGuard (const SignalHandlerGuard&) = delete;
+  void operator= (const SignalHandlerGuard&) = delete;
+
+};
+
+#endif // !_WIN32
 
 } // anonymous namespace
 
@@ -80,21 +166,12 @@ MainLoop::Run (const Functor& start, const Functor& stop)
   std::unique_lock<std::mutex> mainLoopLock(mut);
   CHECK (!running) << "Main loop is already running, cannot start it again";
 
-#ifndef _WIN32
-  const int signals[] = {SIGTERM, SIGINT};
-#endif // !_WIN32
-  {
-    std::lock_guard<std::mutex> instanceLock(instanceForSignalsMutex);
-    CHECK (instanceForSignals == nullptr)
-        << "Another main loop is already running";
-    instanceForSignals = this;
+  stopRequested = false;
 
+  MainLoopActiveGuard activeGuard;
 #ifndef _WIN32
-    for (const int sig : signals)
-      if (sigaction (sig, &sigtermHandler, nullptr) != 0)
-        LOG (FATAL) << "Installing signal handler failed for signal " << sig;
+  SignalHandlerGuard signalGuard(sigtermHandler);
 #endif // !_WIN32
-  }
 
   shouldStop = false;
   running = true;
@@ -102,21 +179,20 @@ MainLoop::Run (const Functor& start, const Functor& stop)
     LOG (INFO) << "Starting main loop";
     StartStopRunner<Functor> startStop(start, stop);
     while (!shouldStop)
-      cv.wait (mainLoopLock);
+      {
+        const auto pred = [this] ()
+           {
+             return shouldStop
+                || stopRequested.load (std::memory_order_acquire);
+           };
+        cv.wait_for (mainLoopLock, std::chrono::milliseconds (100), pred);
+
+        if (stopRequested.load (std::memory_order_acquire))
+          shouldStop = true;
+      }
     LOG (INFO) << "Stopping main loop";
   }
   running = false;
-
-  {
-    std::lock_guard<std::mutex> instanceLock(instanceForSignalsMutex);
-    instanceForSignals = nullptr;
-
-#ifndef _WIN32
-    for (const int sig : signals)
-      if (sigaction (sig, nullptr, nullptr) != 0)
-        LOG (FATAL) << "Uninstalling signal handler failed for signal " << sig;
-#endif // !_WIN32
-  }
 }
 
 void
@@ -130,10 +206,7 @@ MainLoop::Stop ()
 void
 MainLoop::HandleInterrupt (const int signum)
 {
-  std::lock_guard<std::mutex> lock(instanceForSignalsMutex);
-  if (instanceForSignals == nullptr)
-    return;
-  instanceForSignals->Stop ();
+  stopRequested.store (true, std::memory_order_relaxed);
 }
 
 } // namespace internal
