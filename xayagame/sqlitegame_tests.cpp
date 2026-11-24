@@ -1696,7 +1696,8 @@ class SQLitePendingMoveTests : public SQLiteGameTests<ChatGame>
 private:
 
   XayaRpcProvider provider;
-  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
+  HttpRpcServer<MockXayaRpcServer> mockXayaServer{
+      MockXayaRpcServer::HTTP_PORT, MockXayaRpcServer::HTTP_URL};
 
 protected:
 
@@ -1779,7 +1780,8 @@ class ReadOnlyPendingMoveTests : public SQLiteGameTests<ChatGame>
 private:
 
   XayaRpcProvider provider;
-  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
+  HttpRpcServer<MockXayaRpcServer> mockXayaServer{
+      MockXayaRpcServer::HTTP_PORT, MockXayaRpcServer::HTTP_URL};
 
 protected:
 

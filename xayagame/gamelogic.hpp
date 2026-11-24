@@ -17,8 +17,11 @@
 
 #include <json/json.h>
 
+#include <map>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 
 namespace xaya
 {
@@ -74,32 +77,42 @@ private:
   jsonrpc::clientVersion_t version;
 
   /**
-   * The data about each thread's client that is held in thread-local storage.
+   * The data about the RPC client used for one particular thread.
    */
   struct PerThreadData
   {
 
     /** The underlying HTTP client.  */
-    std::unique_ptr<jsonrpc::HttpClient> httpClient;
+    jsonrpc::HttpClient httpClient;
 
     /** The actual RPC client.  */
-    std::unique_ptr<XayaRpcClient> rpcClient;
+    XayaRpcClient rpcClient;
+
+    PerThreadData (const std::string& u, const jsonrpc::clientVersion_t v)
+      : httpClient(u), rpcClient(httpClient, v)
+    {}
 
   };
 
+  /** Mutex guarding threadData.  */
+  mutable std::mutex dataMut;
+
+  /** Per-thread clients, keyed by the ID of the thread using them.  */
+  mutable std::map<std::thread::id, PerThreadData> threadData;
+
   /**
-   * Helper function that returns the current thread's data.
+   * Helper function that returns the current thread's data, constructing it
+   * if it does not exist yet.
    */
-  PerThreadData& GetThreadLocalData () const;
+  PerThreadData& GetThreadData () const;
 
 public:
 
   XayaRpcProvider () = default;
-  ~XayaRpcProvider ();
 
   /**
    * Sets the connection settings.  Can only be done once and the settings
-   * cannot be changed afterwards (so that existing thread-local clients
+   * cannot be changed afterwards (so that existing per-thread clients
    * remain valid).
    */
   void Set (const std::string& u, jsonrpc::clientVersion_t v);
@@ -114,8 +127,10 @@ public:
 
   /**
    * Returns the RPC client.  Must only be called if the settings are provided.
-   * This returns a thread-local instance, so that it is safe to use this
-   * from multiple threads and use the returned RPC clients in parallel.
+   * This returns a per-thread instance owned by the provider, so that it is
+   * safe to use this from multiple threads and use the returned RPC clients
+   * in parallel.  The provider must outlive all threads that use it; all
+   * clients are destroyed with the provider.
    */
   XayaRpcClient& operator* () const;
 

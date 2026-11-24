@@ -150,7 +150,8 @@ class PendingMovesTests : public testing::Test
 private:
 
   XayaRpcProvider provider;
-  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
+  HttpRpcServer<MockXayaRpcServer> mockXayaServer{
+      MockXayaRpcServer::HTTP_PORT, MockXayaRpcServer::HTTP_URL};
 
 protected:
 

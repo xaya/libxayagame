@@ -270,7 +270,8 @@ protected:
 
   ChainToChannelFeederTests ()
     : scm(cm), feeder(gspServer.GetClient (), scm),
-      gspServer(channelId, meta, GetDb (), game)
+      gspServer(TestGspServer::HTTP_PORT, TestGspServer::HTTP_URL,
+                channelId, meta, GetDb (), game)
   {
     gspServer.GetClientConnector ().SetTimeout (RPC_TIMEOUT_MS);
   }

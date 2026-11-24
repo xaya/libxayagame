@@ -482,7 +482,8 @@ private:
 
 protected:
 
-  HttpRpcServer<MockXayaRpcServerWithState> mockXayaServer;
+  HttpRpcServer<MockXayaRpcServerWithState> mockXayaServer{
+      MockXayaRpcServer::HTTP_PORT, MockXayaRpcServer::HTTP_URL};
 
   /** In-memory storage that can be used in tests.  */
   MemoryStorage storage;

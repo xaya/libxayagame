@@ -67,22 +67,14 @@ ChainFromString (const std::string& name)
 
 /* ************************************************************************** */
 
-XayaRpcProvider::~XayaRpcProvider ()
-{
-  /* We explicitly destruct the main thread's thread-local RPC client
-     here, to avoid it staying around until program shutdown, where other
-     things are already destructed that it might depend on for its own
-     shutdown.  */
-  auto& data = GetThreadLocalData ();
-  data.rpcClient.reset ();
-  data.httpClient.reset ();
-}
-
 XayaRpcProvider::PerThreadData&
-XayaRpcProvider::GetThreadLocalData () const
+XayaRpcProvider::GetThreadData () const
 {
-  thread_local PerThreadData data;
-  return data;
+  std::lock_guard<std::mutex> lock (dataMut);
+
+  const auto res = threadData.try_emplace (std::this_thread::get_id (),
+                                           url, version);
+  return res.first->second;
 }
 
 void
@@ -98,16 +90,7 @@ XayaRpcClient&
 XayaRpcProvider::operator* () const
 {
   CHECK (!url.empty ()) << "Xaya RPC settings not configured";
-
-  auto& data = GetThreadLocalData ();
-  if (data.rpcClient == nullptr)
-    {
-      data.httpClient = std::make_unique<jsonrpc::HttpClient> (url);
-      data.rpcClient
-          = std::make_unique<XayaRpcClient> (*data.httpClient, version);
-    }
-
-  return *data.rpcClient;
+  return GetThreadData ().rpcClient;
 }
 
 /* ************************************************************************** */
