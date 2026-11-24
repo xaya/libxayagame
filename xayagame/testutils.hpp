@@ -173,6 +173,9 @@ template <typename MockServer>
 
 private:
 
+  /** The URL the mock server listens on.  */
+  const std::string url;
+
   jsonrpc::HttpServer httpServer;
   MockServer srv;
 
@@ -181,11 +184,17 @@ private:
 
 public:
 
+  /**
+   * Constructs a mock server with an explicit port and URL.  This can be used
+   * to run multiple servers of the same type in parallel.  Extra arguments
+   * are forwarded to the MockServer constructor.
+   */
   template <typename... Args>
-    HttpRpcServer (Args&... args)
-    : httpServer(MockServer::HTTP_PORT),
+    HttpRpcServer (const int port, const std::string& u, Args&... args)
+    : url(u),
+      httpServer(port),
       srv(httpServer, args...),
-      httpClient(MockServer::HTTP_URL),
+      httpClient(url),
       rpcClient(httpClient)
   {
     srv.StartListening ();
@@ -233,9 +242,9 @@ public:
    * Returns the HTTP URL.
    */
   std::string
-  GetUrl ()
+  GetUrl () const
   {
-    return MockServer::HTTP_URL;
+    return url;
   }
 
 };

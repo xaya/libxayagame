@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -148,7 +148,11 @@ const SignatureVerifier&
 ChannelGame::GetSignatureVerifier ()
 {
   if (verifier == nullptr)
-    verifier = std::make_unique<RpcSignatureVerifier> (GetXayaRpc ());
+    {
+      const auto* provider = GetXayaRpcProvider ();
+      CHECK (provider != nullptr && *provider);
+      verifier = std::make_unique<RpcSignatureVerifier> (*provider);
+    }
 
   CHECK (verifier != nullptr);
   return *verifier;

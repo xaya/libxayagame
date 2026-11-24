@@ -16,6 +16,7 @@
 
 #include <sstream>
 #include <stack>
+#include <string>
 
 namespace xaya
 {
@@ -40,6 +41,31 @@ TEST_F (ChainNameTests, Roundtrip)
                        Chain::POLYGON, Chain::MUMBAI,
                        Chain::GANACHE})
     EXPECT_EQ (ChainFromString (ChainToString (c)), c);
+}
+
+/* ************************************************************************** */
+
+TEST (XayaRpcProviderTests, IndependentEndpoints)
+{
+  int port1 = 32110;
+  std::string url1 = "http://localhost:32110";
+  HttpRpcServer<MockXayaRpcServer> server1(port1, url1);
+  int port2 = 32111;
+  std::string url2 = "http://localhost:32111";
+  HttpRpcServer<MockXayaRpcServer> server2(port2, url2);
+
+  XayaRpcProvider provider1;
+  provider1.Set (server1.GetUrl (), jsonrpc::JSONRPC_CLIENT_V2);
+  XayaRpcProvider provider2;
+  provider2.Set (server2.GetUrl (), jsonrpc::JSONRPC_CLIENT_V2);
+
+  EXPECT_CALL (*server1, getnetworkinfo ())
+      .WillOnce (::testing::Return (ParseJson (R"({"version": 1})")));
+  EXPECT_CALL (*server2, getnetworkinfo ())
+      .WillOnce (::testing::Return (ParseJson (R"({"version": 2})")));
+
+  EXPECT_EQ ((*provider1).getnetworkinfo ()["version"].asInt (), 1);
+  EXPECT_EQ ((*provider2).getnetworkinfo ()["version"].asInt (), 2);
 }
 
 /* ************************************************************************** */

@@ -21,7 +21,8 @@ class SignaturesTests : public testing::Test
 
 protected:
 
-  HttpRpcServer<MockXayaRpcServer> mockXayaServer;
+  HttpRpcServer<MockXayaRpcServer> mockXayaServer{
+      MockXayaRpcServer::HTTP_PORT, MockXayaRpcServer::HTTP_URL};
 
 };
 

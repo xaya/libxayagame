@@ -67,51 +67,6 @@ ChainFromString (const std::string& name)
 
 /* ************************************************************************** */
 
-XayaRpcProvider::~XayaRpcProvider ()
-{
-  /* We explicitly destruct the main thread's thread-local RPC client
-     here, to avoid it staying around until program shutdown, where other
-     things are already destructed that it might depend on for its own
-     shutdown.  */
-  auto& data = GetThreadLocalData ();
-  data.rpcClient.reset ();
-  data.httpClient.reset ();
-}
-
-XayaRpcProvider::PerThreadData&
-XayaRpcProvider::GetThreadLocalData () const
-{
-  thread_local PerThreadData data;
-  return data;
-}
-
-void
-XayaRpcProvider::Set (const std::string& u, const jsonrpc::clientVersion_t v)
-{
-  CHECK (url.empty ()) << "XayaRpcProvider is already configured";
-
-  url = u;
-  version = v;
-}
-
-XayaRpcClient&
-XayaRpcProvider::operator* () const
-{
-  CHECK (!url.empty ()) << "Xaya RPC settings not configured";
-
-  auto& data = GetThreadLocalData ();
-  if (data.rpcClient == nullptr)
-    {
-      data.httpClient = std::make_unique<jsonrpc::HttpClient> (url);
-      data.rpcClient
-          = std::make_unique<XayaRpcClient> (*data.httpClient, version);
-    }
-
-  return *data.rpcClient;
-}
-
-/* ************************************************************************** */
-
 Context::Context (const GameLogic& l, const uint256& rndSeed,
                   CoprocessorBatch::Block* cb)
   : logic(l), coprocBlk(cb)

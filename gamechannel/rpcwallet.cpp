@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,14 +16,14 @@ std::string
 RpcSignatureVerifier::RecoverSigner (const std::string& msg,
                                      const std::string& sgn) const
 {
-  return VerifyMessage (rpc, msg, EncodeBase64 (sgn));
+  return VerifyMessage (*provider, msg, EncodeBase64 (sgn));
 }
 
-RpcSignatureSigner::RpcSignatureSigner (XayaWalletRpcClient& w,
+RpcSignatureSigner::RpcSignatureSigner (const XayaWalletRpcProvider& w,
                                         const std::string& addr)
   : wallet(w), address(addr)
 {
-  const auto info = wallet.getaddressinfo (address);
+  const auto info = (*wallet).getaddressinfo (address);
   CHECK (info.isObject ());
   const auto& mineVal = info["ismine"];
   CHECK (mineVal.isBool ());
@@ -41,7 +41,7 @@ RpcSignatureSigner::GetAddress () const
 std::string
 RpcSignatureSigner::SignMessage (const std::string& msg)
 {
-  const std::string sgn = wallet.signmessage (address, msg);
+  const std::string sgn = (*wallet).signmessage (address, msg);
   std::string decoded;
   CHECK (DecodeBase64 (sgn, decoded));
   return decoded;
@@ -52,7 +52,7 @@ RpcTransactionSender::SendRawMove (const std::string& name,
                                    const std::string& value)
 {
   const std::string fullName = "p/" + name;
-  const std::string txidHex = wallet.name_update (fullName, value);
+  const std::string txidHex = (*wallet).name_update (fullName, value);
 
   uint256 txid;
   CHECK (txid.FromHex (txidHex));
@@ -65,7 +65,7 @@ RpcTransactionSender::IsPending (const uint256& txid) const
 {
   const std::string txidHex = txid.ToHex ();
 
-  const auto mempool = rpc.getrawmempool ();
+  const auto mempool = (*rpc).getrawmempool ();
   for (const auto& tx : mempool)
     if (tx.asString () == txidHex)
       return true;
