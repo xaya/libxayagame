@@ -841,6 +841,7 @@ SQLiteGame::GetCustomStateData (
 
       /* If we failed to make a copy of the snapshot to use in lock-free
          RPC processing, fall through to the main-lock code path below.  */
+      anchorDb.reset ();
     }
 
   /* Otherwise use Game::GetCustomStateData to retrieve the state

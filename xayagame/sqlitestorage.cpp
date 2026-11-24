@@ -628,16 +628,32 @@ SQLiteDatabase::GetSnapshot () const
       return nullptr;
     }
 
-  std::lock_guard<std::mutex> lock(mutSnapshots);
-  if (waitingForSnapshots)
-    {
-      LOG (WARNING) << "Waiting for snapshots to close, can't open new one";
-      return nullptr;
-    }
-  ++snapshots;
+  std::unique_ptr<SQLiteDatabase> res;
 
-  auto res = std::make_unique<SQLiteDatabase> (filename, SQLITE_OPEN_READONLY);
-  res->SetReadonlySnapshot (*this, sqliteSnapshot);
+  {
+    std::lock_guard<std::mutex> lock(mutSnapshots);
+    if (waitingForSnapshots)
+      {
+        LOG (WARNING) << "Waiting for snapshots to close, can't open new one";
+        return nullptr;
+      }
+    ++snapshots;
+  }
+
+  try
+    {
+      res = std::make_unique<SQLiteDatabase> (filename, SQLITE_OPEN_READONLY);
+      res->SetReadonlySnapshot (*this, sqliteSnapshot);
+    }
+  catch (...)
+    {
+      /* If SetReadonlySnapshot got as far as taking ownership, the child's
+         destructor will release the reference to us.  Otherwise we have to
+         release it ourselves.  */
+      if (res == nullptr || res->parent == nullptr)
+        UnrefSnapshot ();
+      throw;
+    }
 
   return res;
 }
