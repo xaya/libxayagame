@@ -6,22 +6,15 @@
 #define XAYAGAME_GAMELOGIC_HPP
 
 #include "coprocessor.hpp"
+#include "rpcprovider.hpp"
 #include "storage.hpp"
-
-#include "rpc-stubs/xayarpcclient.h"
 
 #include <xayautil/random.hpp>
 #include <xayautil/uint256.hpp>
 
-#include <jsonrpccpp/client/connectors/httpclient.h>
-
 #include <json/json.h>
 
-#include <map>
-#include <memory>
-#include <mutex>
 #include <string>
-#include <thread>
 
 namespace xaya
 {
@@ -60,81 +53,6 @@ std::string ChainToString (Chain c);
  * if the string value does not match any of the expected values.
  */
 Chain ChainFromString (const std::string& name);
-
-/**
- * Settings for the JSON-RPC connection to Xaya and a utility class to provide
- * an RPC client based on them.
- */
-class XayaRpcProvider
-{
-
-private:
-
-  /** The connection URL (we always use HTTP).  */
-  std::string url;
-
-  /** The protocol version to use.  */
-  jsonrpc::clientVersion_t version;
-
-  /**
-   * The data about the RPC client used for one particular thread.
-   */
-  struct PerThreadData
-  {
-
-    /** The underlying HTTP client.  */
-    jsonrpc::HttpClient httpClient;
-
-    /** The actual RPC client.  */
-    XayaRpcClient rpcClient;
-
-    PerThreadData (const std::string& u, const jsonrpc::clientVersion_t v)
-      : httpClient(u), rpcClient(httpClient, v)
-    {}
-
-  };
-
-  /** Mutex guarding threadData.  */
-  mutable std::mutex dataMut;
-
-  /** Per-thread clients, keyed by the ID of the thread using them.  */
-  mutable std::map<std::thread::id, PerThreadData> threadData;
-
-  /**
-   * Helper function that returns the current thread's data, constructing it
-   * if it does not exist yet.
-   */
-  PerThreadData& GetThreadData () const;
-
-public:
-
-  XayaRpcProvider () = default;
-
-  /**
-   * Sets the connection settings.  Can only be done once and the settings
-   * cannot be changed afterwards (so that existing per-thread clients
-   * remain valid).
-   */
-  void Set (const std::string& u, jsonrpc::clientVersion_t v);
-
-  /**
-   * Checks if the settings are provided.
-   */
-  operator bool () const
-  {
-    return !url.empty ();
-  }
-
-  /**
-   * Returns the RPC client.  Must only be called if the settings are provided.
-   * This returns a per-thread instance owned by the provider, so that it is
-   * safe to use this from multiple threads and use the returned RPC clients
-   * in parallel.  The provider must outlive all threads that use it; all
-   * clients are destroyed with the provider.
-   */
-  XayaRpcClient& operator* () const;
-
-};
 
 /**
  * Generic class for a processor game state, which mainly holds some contextual
@@ -181,6 +99,16 @@ protected:
    * after InitialiseGameContext was invoked with a non-null RPC client.
    */
   XayaRpcClient& GetXayaRpc ();
+
+  /**
+   * Returns the RPC provider for this instance, or null if none was
+   * configured.
+   */
+  const XayaRpcProvider*
+  GetXayaRpcProvider () const
+  {
+    return rpcProvider;
+  }
 
 public:
 

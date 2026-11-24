@@ -67,34 +67,6 @@ ChainFromString (const std::string& name)
 
 /* ************************************************************************** */
 
-XayaRpcProvider::PerThreadData&
-XayaRpcProvider::GetThreadData () const
-{
-  std::lock_guard<std::mutex> lock (dataMut);
-
-  const auto res = threadData.try_emplace (std::this_thread::get_id (),
-                                           url, version);
-  return res.first->second;
-}
-
-void
-XayaRpcProvider::Set (const std::string& u, const jsonrpc::clientVersion_t v)
-{
-  CHECK (url.empty ()) << "XayaRpcProvider is already configured";
-
-  url = u;
-  version = v;
-}
-
-XayaRpcClient&
-XayaRpcProvider::operator* () const
-{
-  CHECK (!url.empty ()) << "Xaya RPC settings not configured";
-  return GetThreadData ().rpcClient;
-}
-
-/* ************************************************************************** */
-
 Context::Context (const GameLogic& l, const uint256& rndSeed,
                   CoprocessorBatch::Block* cb)
   : logic(l), coprocBlk(cb)

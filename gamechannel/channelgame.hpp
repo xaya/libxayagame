@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -33,8 +33,8 @@ private:
 
   /**
    * The default signature verifier based on the game's underlying
-   * RPC connection.  This is lazy constructed on first request (and then
-   * uses GetXayaRpc() under the hood).
+   * RPC connection.  This is lazy constructed on first request and then
+   * resolves the current thread's RPC client from the provider on each use.
    */
   std::unique_ptr<RpcSignatureVerifier> verifier;
 

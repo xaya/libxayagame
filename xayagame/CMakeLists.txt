@@ -184,6 +184,7 @@ install (FILES
     perftimer.hpp
     pruningqueue.hpp
     rest.hpp
+    rpcprovider.hpp rpcprovider.tpp
     signatures.hpp
     sqlitegame.hpp
     sqliteintro.hpp sqliteintro.tpp

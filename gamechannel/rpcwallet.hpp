@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,8 +8,7 @@
 #include "movesender.hpp"
 #include "signatures.hpp"
 
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
+#include <xayagame/rpcprovider.hpp>
 
 #include <string>
 
@@ -28,13 +27,13 @@ class RpcSignatureVerifier : public SignatureVerifier
 
 private:
 
-  /** The underlying RPC client for verification.  */
-  XayaRpcClient& rpc;
+  /** The RPC provider used for verification.  */
+  const XayaRpcProvider& provider;
 
 public:
 
-  explicit RpcSignatureVerifier (XayaRpcClient& r)
-    : rpc(r)
+  explicit RpcSignatureVerifier (const XayaRpcProvider& p)
+    : provider(p)
   {}
 
   std::string RecoverSigner (const std::string& msg,
@@ -50,15 +49,16 @@ class RpcSignatureSigner : public SignatureSigner
 
 private:
 
-  /** The underlying RPC wallet for signing.  */
-  XayaWalletRpcClient& wallet;
+  /** The RPC wallet provider used for signing.  */
+  const XayaWalletRpcProvider& wallet;
 
   /** The address used for signing (must be in the wallet).  */
   const std::string address;
 
 public:
 
-  explicit RpcSignatureSigner (XayaWalletRpcClient& w, const std::string& addr);
+  explicit RpcSignatureSigner (const XayaWalletRpcProvider& w,
+                               const std::string& addr);
 
   std::string GetAddress () const override;
   std::string SignMessage (const std::string& msg) override;
@@ -74,15 +74,16 @@ class RpcTransactionSender : public TransactionSender
 
 private:
 
-  /** Xaya RPC connection to use.  */
-  XayaRpcClient& rpc;
+  /** Xaya RPC provider to use.  */
+  const XayaRpcProvider& rpc;
 
-  /** Xaya wallet RPC that we use.  */
-  XayaWalletRpcClient& wallet;
+  /** Xaya wallet RPC provider to use.  */
+  const XayaWalletRpcProvider& wallet;
 
 public:
 
-  explicit RpcTransactionSender (XayaRpcClient& r, XayaWalletRpcClient& w)
+  explicit RpcTransactionSender (const XayaRpcProvider& r,
+                                 const XayaWalletRpcProvider& w)
     : rpc(r), wallet(w)
   {}
 

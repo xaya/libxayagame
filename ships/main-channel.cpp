@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022 The Xaya developers
+// Copyright (C) 2019-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,10 +10,8 @@
 #include <gamechannel/daemon.hpp>
 #include <gamechannel/rpcbroadcast.hpp>
 #include <gamechannel/rpcwallet.hpp>
-#include <xayagame/rpc-stubs/xayarpcclient.h>
-#include <xayagame/rpc-stubs/xayawalletrpcclient.h>
+#include <xayagame/rpcprovider.hpp>
 
-#include <jsonrpccpp/client/connectors/httpclient.h>
 #include <jsonrpccpp/server.h>
 #include <jsonrpccpp/server/connectors/httpserver.h>
 
@@ -102,13 +100,14 @@ main (int argc, char** argv)
   const auto rpcVersion = (FLAGS_xaya_rpc_legacy_protocol
                               ? jsonrpc::JSONRPC_CLIENT_V1
                               : jsonrpc::JSONRPC_CLIENT_V2);
-  jsonrpc::HttpClient xayaClient(FLAGS_xaya_rpc_url);
-  XayaRpcClient xayaRpc(xayaClient, rpcVersion);
-  XayaWalletRpcClient xayaWallet(xayaClient, rpcVersion);
+  xaya::XayaRpcProvider rpcProvider;
+  rpcProvider.Set (FLAGS_xaya_rpc_url, rpcVersion);
+  xaya::XayaWalletRpcProvider walletProvider;
+  walletProvider.Set (FLAGS_xaya_rpc_url, rpcVersion);
 
-  const xaya::RpcSignatureVerifier verifier(xayaRpc);
-  xaya::RpcSignatureSigner signer(xayaWallet, FLAGS_address);
-  xaya::RpcTransactionSender sender(xayaRpc, xayaWallet);
+  const xaya::RpcSignatureVerifier verifier(rpcProvider);
+  xaya::RpcSignatureSigner signer(walletProvider, FLAGS_address);
+  xaya::RpcTransactionSender sender(rpcProvider, walletProvider);
 
   ships::ShipsBoardRules rules;
   ships::ShipsChannel channel(FLAGS_playername);
