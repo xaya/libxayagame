@@ -66,6 +66,9 @@ SQLiteDatabase::Statement::Clear ()
   if (entry != nullptr)
     {
       VLOG (2) << "Releasing cached SQL statement at " << entry;
+      /* Make sure to reset the statement also, so that no open cursor
+         remains in case it was not stepped to completion.  */
+      Reset ();
       entry->used.clear ();
     }
 }
