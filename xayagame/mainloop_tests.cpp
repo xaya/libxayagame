@@ -10,6 +10,7 @@
 
 #include <csignal>
 #include <memory>
+#include <stdexcept>
 #include <thread>
 
 namespace xaya
@@ -212,6 +213,28 @@ TEST_F (MainLoopTests, CanRunMultipleTimes)
       startCalled = false;
       stopCalled = false;
     }
+}
+
+TEST_F (MainLoopTests, ThrowingStartStopsAndClearsRunning)
+{
+  MainLoop loop;
+  bool stopCalled = false;
+
+  EXPECT_THROW (
+    loop.Run (
+      [] ()
+        {
+          throw std::runtime_error ("startup failed");
+        },
+      [&stopCalled] ()
+        {
+          EXPECT_FALSE (stopCalled);
+          stopCalled = true;
+        }),
+    std::runtime_error);
+
+  EXPECT_TRUE (stopCalled);
+  EXPECT_FALSE (loop.IsRunning ());
 }
 
 TEST_F (MainLoopTests, NeverRunningIsOk)
