@@ -454,7 +454,32 @@ SQLiteGame::SQLiteGame ()
   : stateSnapshot(std::make_unique<StateSnapshot> ())
 {}
 
-SQLiteGame::~SQLiteGame () = default;
+SQLiteGame::~SQLiteGame ()
+{
+  /* Close the database explicitly while our own stateSnapshot and the
+     processor references are still alive.  This runs the derived
+     Storage::CloseDatabase implementation, which finishes all processors
+     before the underlying database is closed.  Relying on the base-class
+     destructor alone would bypass that override.  */
+  if (database == nullptr || !database->IsOpen ())
+    return;
+
+  try
+    {
+      database->CloseDatabase ();
+    }
+  catch (const std::exception& exc)
+    {
+      LOG (ERROR)
+          << "Exception while closing SQLite database on destruction: "
+          << exc.what ();
+    }
+  catch (...)
+    {
+      LOG (ERROR)
+          << "Unknown exception while closing SQLite database on destruction";
+    }
+}
 
 void
 SQLiteGame::EnsureCurrentState (const GameStateData& state) const

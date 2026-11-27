@@ -24,6 +24,7 @@
 
 #include <glog/logging.h>
 
+#include <atomic>
 #include <chrono>
 #include <map>
 #include <sstream>
@@ -859,6 +860,87 @@ public:
   }
 
 };
+
+/**
+ * Hasher that blocks in Compute() until the test releases it and records
+ * whether Store() was called.  This lets us verify that SQLiteGame's
+ * destructor finishes pending processors before closing the database.
+ */
+class BlockingHasher : public SQLiteHasher
+{
+
+private:
+
+  std::atomic<bool> computeStarted{false};
+  std::atomic<bool> release{false};
+
+public:
+
+  bool stored = false;
+
+  using SQLiteHasher::SQLiteHasher;
+
+  void
+  WaitForCompute ()
+  {
+    while (!computeStarted)
+      std::this_thread::sleep_for (std::chrono::milliseconds (1));
+  }
+
+  void
+  Release ()
+  {
+    release = true;
+  }
+
+protected:
+
+  void
+  Compute (const Json::Value& blockData, const SQLiteDatabase& db) override
+  {
+    computeStarted = true;
+    while (!release)
+      std::this_thread::sleep_for (std::chrono::milliseconds (1));
+    SQLiteHasher::Compute (blockData, db);
+  }
+
+  void
+  Store (SQLiteDatabase& db) override
+  {
+    SQLiteHasher::Store (db);
+    stored = true;
+  }
+
+};
+
+TEST (SQLiteGameDestructorTests, FinishesProcessors)
+{
+  TempFileName file;
+  BlockingHasher hasher;
+
+  {
+    ChatGame rules;
+    rules.AddProcessor (hasher);
+    rules.Initialise (file.GetName ());
+    rules.GetStorage ().Initialise ();
+
+    hasher.SetInterval (1);
+    auto snapshot
+        = rules.GetDatabaseForTesting ().GetSnapshot ();
+    ASSERT_NE (snapshot, nullptr);
+
+    Json::Value blockData(Json::objectValue);
+    blockData["hash"] = BlockHash (11).ToHex ();
+    blockData["height"] = static_cast<Json::UInt64> (11);
+
+    hasher.Process (blockData, rules.GetDatabaseForTesting (),
+                    std::move (snapshot));
+    hasher.WaitForCompute ();
+    hasher.Release ();
+  }
+
+  EXPECT_TRUE (hasher.stored);
+}
 
 class SQLiteGameHashingTests : public UninitialisedSQLiteGameTests<ChatGame>
 {

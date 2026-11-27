@@ -1,4 +1,4 @@
-// Copyright (C) 2020-2023 The Xaya developers
+// Copyright (C) 2020-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -141,10 +141,11 @@ main (int argc, char** argv)
   config.EnablePruning = FLAGS_enable_pruning;
   config.DataDirectory = FLAGS_datadir;
 
-  nf::NonFungibleLogic logic;
+  std::unique_ptr<NFInstanceFactory> fact;
 
-  NFInstanceFactory fact(logic);
-  config.InstanceFactory = &fact;
+  nf::NonFungibleLogic logic;
+  fact = std::make_unique<NFInstanceFactory> (logic);
+  config.InstanceFactory = fact.get ();
 
   nf::PendingMoves pending(logic);
   if (FLAGS_pending_moves)
