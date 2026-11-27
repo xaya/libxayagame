@@ -1,4 +1,4 @@
-// Copyright (C) 2023-2024 The Xaya developers
+// Copyright (C) 2023-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,6 +6,7 @@
 
 #include "testutils.hpp"
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 namespace xaya
@@ -15,6 +16,8 @@ namespace xaya
 
 namespace
 {
+
+using testing::Throw;
 
 /**
  * A mock Coprocessor that verifies that exactly the expected of
@@ -37,6 +40,17 @@ private:
 public:
 
   class MockBlock;
+
+  MockCoprocessor ()
+  {
+    EXPECT_CALL (*this, BeginTransaction ()).Times (0);
+    EXPECT_CALL (*this, CommitTransaction ()).Times (0);
+    EXPECT_CALL (*this, AbortTransaction ()).Times (0);
+  }
+
+  MOCK_METHOD0 (BeginTransaction, void ());
+  MOCK_METHOD0 (CommitTransaction, void ());
+  MOCK_METHOD0 (AbortTransaction, void ());
 
   /**
    * Specifies that constructed block processors should be failures.
@@ -251,6 +265,51 @@ TEST_F (CoprocessorTests, ErrorInStart)
     },
     std::runtime_error
   );
+}
+
+TEST_F (CoprocessorTests, ErrorInBeginTransaction)
+{
+  batch.Add ("mock2", proc2);
+  batch.Add ("mock3", proc3);
+
+  EXPECT_CALL (coproc, BeginTransaction ());
+  EXPECT_CALL (proc2, BeginTransaction ())
+      .WillOnce (Throw (std::runtime_error ("begin error")));
+  EXPECT_CALL (coproc, AbortTransaction ());
+
+  EXPECT_THROW (batch.BeginTransaction (), std::runtime_error);
+}
+
+TEST_F (CoprocessorTests, ErrorInCommitTransaction)
+{
+  batch.Add ("mock2", proc2);
+  batch.Add ("mock3", proc3);
+
+  EXPECT_CALL (coproc, BeginTransaction ());
+  EXPECT_CALL (proc2, BeginTransaction ());
+  EXPECT_CALL (proc3, BeginTransaction ());
+  batch.BeginTransaction ();
+
+  EXPECT_CALL (coproc, CommitTransaction ());
+  EXPECT_CALL (proc2, CommitTransaction ())
+      .WillOnce (Throw (std::runtime_error ("commit error")));
+  EXPECT_CALL (proc2, AbortTransaction ());
+  EXPECT_CALL (proc3, AbortTransaction ());
+
+  EXPECT_THROW (batch.CommitTransaction (), std::runtime_error);
+}
+
+TEST_F (CoprocessorTests, ErrorInAddDuringTransaction)
+{
+  EXPECT_CALL (coproc, BeginTransaction ());
+  batch.BeginTransaction ();
+
+  EXPECT_CALL (proc2, BeginTransaction ())
+      .WillOnce (Throw (std::runtime_error ("begin error")));
+  EXPECT_THROW (batch.Add ("mock2", proc2), std::runtime_error);
+
+  EXPECT_CALL (coproc, AbortTransaction ());
+  batch.AbortTransaction ();
 }
 
 TEST_F (CoprocessorTests, ByName)

@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -146,7 +146,6 @@ TEST_F (TransactionManagerTests, ErrorInCoprocessorBegin)
     EXPECT_CALL (coproc, BeginTransaction ())
         .WillOnce (Throw (std::runtime_error ("begin error")));
     EXPECT_CALL (storage, RollbackTransactionMock ());
-    EXPECT_CALL (coproc, AbortTransaction ());
 
     EXPECT_CALL (storage, BeginTransactionMock ());
     EXPECT_CALL (coproc, BeginTransaction ());
@@ -158,7 +157,8 @@ TEST_F (TransactionManagerTests, ErrorInCoprocessorBegin)
 
   /* A failure to begin the coprocessor transaction should propagate, but
      leave the manager (and storage) in a clean state, so that the operation
-     can be retried later (see issue #151).  */
+     can be retried later (see issue #151).  The coprocessor batch has no
+     transaction to abort, since its begin failed.  */
   EXPECT_THROW (tm.BeginTransaction (), std::runtime_error);
 
   tm.BeginTransaction ();
@@ -174,8 +174,8 @@ TEST_F (TransactionManagerTests, ErrorInCoprocessorCommit)
     EXPECT_CALL (coproc, BeginTransaction ());
     EXPECT_CALL (coproc, CommitTransaction ())
         .WillOnce (Throw (std::runtime_error ("commit error")));
-    EXPECT_CALL (storage, RollbackTransactionMock ());
     EXPECT_CALL (coproc, AbortTransaction ());
+    EXPECT_CALL (storage, RollbackTransactionMock ());
 
     EXPECT_CALL (storage, BeginTransactionMock ());
     EXPECT_CALL (coproc, BeginTransaction ());
@@ -186,10 +186,10 @@ TEST_F (TransactionManagerTests, ErrorInCoprocessorCommit)
   tm.SetBatchSize (1);
 
   tm.BeginTransaction ();
-  /* If a coprocessor fails to commit, the error should propagate, but a
-     subsequent rollback must actually abort the coprocessor transactions
-     that are still open, so that the block can be retried
-     (see issue #151).  */
+  /* If a coprocessor fails to commit, the batch immediately aborts the
+     still-open coprocessor transaction.  The manager then rolls back the
+     storage, so that the operation can be retried afterwards (see issue
+     #151).  The batch abort during the manager rollback is a no-op.  */
   EXPECT_THROW (tm.CommitTransaction (), std::runtime_error);
   tm.RollbackTransaction ();
 

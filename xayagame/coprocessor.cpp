@@ -10,22 +10,42 @@ namespace xaya
 void
 CoprocessorBatch::Add (const std::string& name, Coprocessor& p)
 {
+  /* Call BeginTransaction before adding it; in case that throws,
+     we don't add it but leave the existing batch alone in a
+     consistent state.  */
+  if (activeTransaction)
+    p.BeginTransaction ();
+
   CHECK (processors.emplace (name, &p).second)
       << "We already had a processor of name '" << name << "'";
   LOG (INFO) << "Added coprocessor '" << name << "'";
-
-  if (activeTransaction)
-    p.BeginTransaction ();
 }
 
 void
 CoprocessorBatch::BeginTransaction ()
 {
   CHECK (!activeTransaction) << "There is already an active transaction";
-  activeTransaction = true;
 
-  for (auto& p : processors)
-    p.second->BeginTransaction ();
+  std::set<std::string> started;
+  try
+    {
+      for (auto& p : processors)
+        {
+          p.second->BeginTransaction ();
+          started.insert (p.first);
+        }
+    }
+  catch (...)
+    {
+      /* On error, abort all the transactions already started.  */
+      for (auto& p : processors)
+        if (started.find (p.first) != started.end ())
+          p.second->AbortTransaction ();
+      throw;
+    }
+
+  /* If all were successful, mark as having an active transaction.  */
+  activeTransaction = true;
 }
 
 void
@@ -33,15 +53,25 @@ CoprocessorBatch::CommitTransaction ()
 {
   CHECK (activeTransaction) << "There is no active transaction";
 
-  /* Only clear the flag after all processors have committed successfully.
-     If one of them throws, the flag remains set, so that a subsequent
-     AbortTransaction call actually rolls back the processors that still
-     have an open transaction (rather than being a no-op) and the
-     operation can be retried.  */
-  for (auto& p : processors)
-    p.second->CommitTransaction ();
-
   activeTransaction = false;
+
+  std::set<std::string> committed;
+  try
+    {
+      for (auto& p : processors)
+        {
+          p.second->CommitTransaction ();
+          committed.insert (p.first);
+        }
+    }
+  catch (...)
+    {
+      /* If one of the commits throws, we want to abort all the others.  */
+      for (auto& p : processors)
+        if (committed.find (p.first) == committed.end ())
+          p.second->AbortTransaction ();
+      throw;
+    }
 }
 
 void

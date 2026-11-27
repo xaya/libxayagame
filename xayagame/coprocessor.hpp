@@ -63,10 +63,14 @@ public:
   virtual ~Coprocessor () = default;
 
   /**
-   * Request the coprocessor to start an "atomic transaction" for a batch
+   * Requests the coprocessor to start an "atomic transaction" for a batch
    * of future updates, if it supports this.  All updates in a block are always
    * wrapped into such a transaction, and possibly updates from many blocks
    * are in a single transaction while syncing.
+   *
+   * This may throw.  If it does, the implementation must not leave a
+   * transaction open; the batch only aborts participants for which
+   * BeginTransaction returned successfully.
    */
   virtual void
   BeginTransaction ()
@@ -76,6 +80,12 @@ public:
    * Requests the coprocessor to commit the currently active atomic
    * transaction to storage.  This is called after BeginTransaction
    * when all changes have been done successfully.
+   *
+   * This may throw.  If it does, the transaction remains outstanding from
+   * the batch's point of view, and AbortTransaction will be called.  The
+   * implementation must ensure that a failed commit can be cleaned up by
+   * AbortTransaction.  Participants whose commit already succeeded are not
+   * aborted.
    */
   virtual void
   CommitTransaction ()
@@ -85,6 +95,12 @@ public:
    * Requests the coprocessor to abort the currently active atomic
    * transaction and discard any changes made since BeginTransaction
    * has been called.
+   *
+   * This is only called for participants with an outstanding transaction,
+   * i.e. those for which BeginTransaction succeeded and whose
+   * CommitTransaction has not succeeded.  It must not throw.  Backend
+   * rollback failures must be logged/handled internally, with the logical
+   * transaction state left closed.
    */
   virtual void
   AbortTransaction ()
@@ -137,10 +153,37 @@ public:
    * Adds a new coprocessor to the batch.  This instance does not take
    * over ownership, so the reference must remain valid for as long as the
    * CoprocessorBatch lives.
+   *
+   * If a transaction is currently active, BeginTransaction is called on
+   * the new participant.  If that fails, the participant is not added and
+   * the existing active transaction is left unchanged.
    */
   void Add (const std::string& name, Coprocessor& p);
 
+  /**
+   * Starts a transaction on all participants in the batch.
+   *
+   * If any participant fails to begin, all participants whose begin
+   * succeeded are aborted, the batch remains without an active transaction,
+   * and the original exception is rethrown.
+   */
   void BeginTransaction ();
+
+  /**
+   * Commits the active transaction on all participants.
+   *
+   * If a participant fails to commit, participants whose commit already
+   * succeeded remain committed.  The failing participant and all later
+   * participants are aborted, the batch no longer has an active transaction,
+   * and the original exception is rethrown.
+   *
+   * In either case the batch has no active transaction afterwards, so a
+   * subsequent AbortTransaction call is fine.
+   *
+   * This is not an atomic commit across independent backends:
+   * After a partial commit, the already-committed participants are ahead
+   * of those that were rolled back.
+   */
   void CommitTransaction ();
 
   /**
