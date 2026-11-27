@@ -252,9 +252,6 @@ private:
    */
   unsigned transactionBatchSize = 1000;
 
-  /** The manager for batched atomic transactions.  */
-  internal::TransactionManager transactionManager;
-
   /** The main loop.  */
   internal::MainLoop mainLoop;
 
@@ -264,8 +261,18 @@ private:
   /** The background thread running regular connection checks, if any.  */
   std::unique_ptr<ConnectionCheckerThread> connectionChecker;
 
+  /** Whether Start() has been called and not yet been undone by Stop().  */
+  bool started = false;
+
   /** The coprocessor batch we use to handle coprocessors during blocks.  */
   CoprocessorBatch coproc;
+
+  /**
+   * The manager for batched atomic transactions.  This must be declared after
+   * coproc, because its destructor may flush pending commits through the
+   * coprocessor.
+   */
+  internal::TransactionManager transactionManager;
 
   /**
    * Mutex protecting cachedNullState.  This is a separate, subordinate lock
@@ -527,14 +534,18 @@ public:
 
   /**
    * Sets the game rules to use.  This must be called before starting
-   * the main loop, and may not be called while it is running.
+   * the main loop, and may not be called while it is running.  The instance
+   * must remain valid until after this Game has been destructed (or at least
+   * explicitly stopped).
    */
   void SetGameLogic (GameLogic& gl);
 
   /**
    * Sets the processor for pending moves.  Setting one is optional; if no
    * processor is set of pending move notifications are not enabled in the
-   * connected Xaya Core, then no pending state will be available.
+   * connected Xaya Core, then no pending state will be available.  The
+   * instance must remain valid until after this Game has been destructed
+   * (or at least explicitly stopped).
    */
   void SetPendingMoveProcessor (PendingMoveProcessor& p);
 
@@ -551,7 +562,9 @@ public:
   void SetTargetBlock (const uint256& blk);
 
   /**
-   * Adds a coprocessor to the batch that is updated on each block.
+   * Adds a coprocessor to the batch that is updated on each block.  The
+   * instance must remain valid until after this Game has been destructed,
+   * as pending transactions may still be flushed through it during shutdown.
    */
   void AddCoprocessor (const std::string& name, Coprocessor& p);
 
@@ -691,8 +704,9 @@ public:
   void Start ();
 
   /**
-   * Stops the ZMQ subscriber and other logic.  Must only be called if it is
-   * currently running.
+   * Stops the ZMQ subscriber and other logic.  This is safe to call multiple
+   * times, and it is also called automatically by the destructor if Start()
+   * was called without a matching Stop().
    */
   void Stop ();
 

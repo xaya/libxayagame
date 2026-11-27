@@ -252,11 +252,9 @@ TEST_F (BasicZmqSubscriberTests, RequestStopAndRestart)
 
 TEST_F (BasicZmqSubscriberTests, StopWithoutStart)
 {
-  EXPECT_DEATH (
-    {
-      ZmqSubscriber zmq;
-      zmq.Stop ();
-    }, "worker != nullptr");
+  ZmqSubscriber zmq;
+  /* Stop is safe to call even if not started, and does nothing.  */
+  zmq.Stop ();
 }
 
 /* ************************************************************************** */

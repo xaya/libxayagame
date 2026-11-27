@@ -31,6 +31,7 @@
 #include <string>
 #include <thread>
 
+DECLARE_int32 (xaya_connection_check_ms);
 DECLARE_int32 (xaya_zmq_staleness_ms);
 
 namespace xaya
@@ -762,6 +763,88 @@ TEST_F (TrackGameTests, NoRpcConnection)
   EXPECT_DEATH (
       UntrackGame (g),
       "RPC client is not yet set up");
+}
+
+/* ************************************************************************** */
+
+class GameLifecycleTests : public GameTests
+{
+
+protected:
+
+  GameLifecycleTests ()
+  {
+    const Json::Value notifications = ParseJson (R"(
+      [
+        {"type": "pubgameblocks", "address": "tcp://127.0.0.1:32101"}
+      ]
+    )");
+
+    EXPECT_CALL (*mockXayaServer, getzmqnotifications ())
+        .WillOnce (Return (notifications));
+    EXPECT_CALL (*mockXayaServer, trackedgameswithtoken ("add", GAME_ID, _))
+        .WillOnce (testing::Throw (jsonrpc::JsonRpcException (
+            jsonrpc::Errors::ERROR_RPC_METHOD_NOT_FOUND,
+            "Token tracking is not supported")));
+    EXPECT_CALL (*mockXayaServer, trackedgames ("add", GAME_ID));
+    EXPECT_CALL (*mockXayaServer, trackedgames ("remove", GAME_ID));
+
+    mockXayaServer->SetBestBlock (0, BlockHash (0));
+  }
+
+};
+
+TEST_F (GameLifecycleTests, DestructorStopsStartedGame)
+{
+  Game g(GAME_ID);
+  ConnectToMockRpc (g);
+  g.SetStorage (storage);
+  g.SetGameLogic (rules);
+  ASSERT_TRUE (g.DetectZmqEndpoint ());
+  g.Start ();
+}
+
+TEST_F (GameLifecycleTests, StopIsIdempotent)
+{
+  Game g(GAME_ID);
+  ConnectToMockRpc (g);
+  g.SetStorage (storage);
+  g.SetGameLogic (rules);
+  ASSERT_TRUE (g.DetectZmqEndpoint ());
+  g.Start ();
+  g.Stop ();
+  g.Stop ();
+}
+
+TEST_F (GameLifecycleTests, StopSkipsFinalProbe)
+{
+  gflags::FlagSaver flagSaver;
+
+  /* Ensure that the only probe is the one potentially done while stopping.  */
+  FLAGS_xaya_connection_check_ms = 60'000;
+  FLAGS_xaya_zmq_staleness_ms = 10'000;
+
+  EXPECT_CALL (*mockXayaServer, getblockhash (10))
+      .Times (testing::AnyNumber ())
+      .WillRepeatedly (Return (BlockHash (10).ToHex ()));
+  EXPECT_CALL (*mockXayaServer, game_sendupdates (testing::_, GAME_ID))
+      .Times (0);
+
+  Game g(GAME_ID);
+  ConnectToMockRpc (g);
+  g.SetStorage (storage);
+  g.SetGameLogic (rules);
+  ASSERT_TRUE (g.DetectZmqEndpoint ());
+  g.Start ();
+
+  ForceState (g, State::UP_TO_DATE);
+  mockXayaServer->SetBestBlock (11, BlockHash (11));
+  MakeZmqStale (g, std::chrono::milliseconds (6'000));
+
+  /* Stopping the game interrupts the connection checker.  It should not
+     run another probe at that point, but simply stop.  It should,
+     in particular, not trigger any game_sendupdates calls.  */
+  g.Stop ();
 }
 
 /* ************************************************************************** */
@@ -2437,6 +2520,27 @@ protected:
   }
 
 };
+
+TEST_F (GameCoprocessorTests, DestructionFlushesPendingBatch)
+{
+  GameTestCoprocessor flushCoproc;
+
+  {
+    Game local(GAME_ID);
+    local.SetStorage (storage);
+    local.SetGameLogic (rules);
+    local.AddCoprocessor ("flush", flushCoproc);
+
+    auto& tm = GetTransactionManager (local);
+    tm.SetBatchSize (10);
+    tm.BeginTransaction ();
+    tm.CommitTransaction ();
+  }
+
+  /* At this point, the local Game's destruction must have flushed the batch
+     through flushCoproc before destroying the coprocessor.  Its destructor
+     would CHECK-fail if the transaction had been left open.  */
+}
 
 TEST_F (GameCoprocessorTests, CoprocessorCalled)
 {

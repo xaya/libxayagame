@@ -140,6 +140,11 @@ private:
   bool noListeningForTesting = false;
 
   /**
+   * Sets up the sockets, as part of Start.
+   */
+  void SetUpSockets ();
+
+  /**
    * Receives a three-part message sent by the Xaya daemon (consisting
    * of topic and payload as strings as well as the serial number).  Returns
    * false if the socket was closed or the subscriber stopped, and errors out
@@ -232,7 +237,8 @@ public:
   void RequestStop ();
 
   /**
-   * Stops the ZMQ subscriber.  Must only be called if it is currently running.
+   * Stops the ZMQ subscriber.  This is safe to call even if not running,
+   * in which case it is a no-op.
    */
   void Stop ();
 
