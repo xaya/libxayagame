@@ -913,6 +913,34 @@ protected:
 
 };
 
+class ThrowingHasher : public SQLiteHasher
+{
+
+private:
+
+  unsigned storeCalls = 0;
+
+protected:
+
+  void
+  Store (SQLiteDatabase&) override
+  {
+    ++storeCalls;
+    throw Failure ();
+  }
+
+public:
+
+  using SQLiteHasher::SQLiteHasher;
+
+  unsigned
+  GetStoreCalls () const
+  {
+    return storeCalls;
+  }
+
+};
+
 TEST (SQLiteGameDestructorTests, FinishesProcessors)
 {
   TempFileName file;
@@ -940,6 +968,41 @@ TEST (SQLiteGameDestructorTests, FinishesProcessors)
   }
 
   EXPECT_TRUE (hasher.stored);
+}
+
+TEST (SQLiteGameDestructorTests, FinishesAllProcessorsOnStoreFailure)
+{
+  TempFileName file;
+  ThrowingHasher first;
+  ThrowingHasher second;
+
+  {
+    ChatGame rules;
+    rules.AddProcessor (first);
+    rules.AddProcessor (second);
+    rules.Initialise (file.GetName ());
+    rules.GetStorage ().Initialise ();
+
+    first.SetInterval (1);
+    second.SetInterval (1);
+
+    auto firstSnapshot = rules.GetDatabaseForTesting ().GetSnapshot ();
+    ASSERT_NE (firstSnapshot, nullptr);
+    auto secondSnapshot = rules.GetDatabaseForTesting ().GetSnapshot ();
+    ASSERT_NE (secondSnapshot, nullptr);
+
+    Json::Value blockData(Json::objectValue);
+    blockData["hash"] = BlockHash (11).ToHex ();
+    blockData["height"] = static_cast<Json::UInt64> (11);
+
+    first.Process (blockData, rules.GetDatabaseForTesting (),
+                   std::move (firstSnapshot));
+    second.Process (blockData, rules.GetDatabaseForTesting (),
+                    std::move (secondSnapshot));
+  }
+
+  EXPECT_EQ (first.GetStoreCalls (), 1u);
+  EXPECT_EQ (second.GetStoreCalls (), 1u);
 }
 
 class SQLiteGameHashingTests : public UninitialisedSQLiteGameTests<ChatGame>

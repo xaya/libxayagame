@@ -7,6 +7,7 @@
 #include <glog/logging.h>
 
 #include <cstring>
+#include <exception>
 
 namespace xaya
 {
@@ -240,9 +241,36 @@ protected:
   void
   CloseDatabase () override
   {
+    std::exception_ptr firstError;
+
     for (auto* p : game.processors)
-      p->Finish (GetDatabase ());
-    SQLiteStorage::CloseDatabase ();
+      try
+        {
+          p->Finish (GetDatabase ());
+        }
+      catch (...)
+        {
+          if (firstError == nullptr)
+            firstError = std::current_exception ();
+          else
+            LOG (ERROR) << "Exception while finishing another processor";
+        }
+
+    try
+      {
+        SQLiteStorage::CloseDatabase ();
+      }
+    catch (...)
+      {
+        if (firstError == nullptr)
+          firstError = std::current_exception ();
+        else
+          LOG (ERROR)
+              << "Exception while closing database after processor failure";
+      }
+
+    if (firstError != nullptr)
+      std::rethrow_exception (firstError);
   }
 
   void
