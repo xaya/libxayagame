@@ -38,6 +38,69 @@ CustomisedInstanceFactory::BuildGameComponents (Game& game)
   return {};
 }
 
+namespace internal
+{
+
+GameComponentRunner::GameComponentRunner (Components& c)
+  : components(c)
+{}
+
+GameComponentRunner::~GameComponentRunner ()
+{
+  StopStarted (nullptr);
+}
+
+void
+GameComponentRunner::StopStarted (std::exception_ptr* firstError) noexcept
+{
+  while (started > 0)
+    {
+      --started;
+
+      try
+        {
+          components[started]->Stop ();
+        }
+      catch (...)
+        {
+          if (firstError != nullptr && *firstError == nullptr)
+            *firstError = std::current_exception ();
+          else
+            LOG (ERROR) << "Exception while stopping game component";
+        }
+    }
+}
+
+void
+GameComponentRunner::Start ()
+{
+  try
+    {
+      while (started < components.size ())
+        {
+          components[started]->Start ();
+          ++started;
+        }
+    }
+  catch (...)
+    {
+      StopStarted (nullptr);
+      throw;
+    }
+}
+
+void
+GameComponentRunner::Stop ()
+{
+  std::exception_ptr firstError;
+  StopStarted (&firstError);
+
+  if (firstError != nullptr)
+    std::rethrow_exception (firstError);
+}
+
+} // namespace internal
+
 namespace
 {
 
@@ -249,11 +312,10 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
           components.push_back (
               instanceFact->BuildRpcServer (*game, *serverConnector));
 
-      for (auto& c : components)
-        c->Start ();
+      internal::GameComponentRunner componentRunner(components);
+      componentRunner.Start ();
       game->Run ();
-      for (auto& c : components)
-        c->Stop ();
+      componentRunner.Stop ();
 
       /* We need to make sure that the Game instance is destructed before the
          storage is.  That is necessary, since destructing the Game instance
@@ -331,11 +393,10 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
           components.push_back (
               instanceFact->BuildRpcServer (*game, *serverConnector));
 
-      for (auto& c : components)
-        c->Start ();
+      internal::GameComponentRunner componentRunner(components);
+      componentRunner.Start ();
       game->Run ();
-      for (auto& c : components)
-        c->Stop ();
+      componentRunner.Stop ();
 
       /* We need to make sure that the Game instance is destructed before the
          storage is.  That is necessary, since destructing the Game instance

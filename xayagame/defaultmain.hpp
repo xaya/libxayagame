@@ -15,6 +15,8 @@
 
 #include <json/json.h>
 
+#include <cstddef>
+#include <exception>
 #include <memory>
 #include <string>
 #include <vector>
@@ -63,6 +65,36 @@ public:
   virtual void Stop () = 0;
 
 };
+
+namespace internal
+{
+
+class GameComponentRunner
+{
+
+private:
+
+  using Components = std::vector<std::unique_ptr<GameComponent>>;
+
+  Components& components;
+  std::size_t started = 0;
+
+  void StopStarted (std::exception_ptr* firstError) noexcept;
+
+public:
+
+  explicit GameComponentRunner (Components& c);
+  ~GameComponentRunner ();
+
+  GameComponentRunner (const GameComponentRunner&) = delete;
+  void operator= (const GameComponentRunner&) = delete;
+
+  void Start ();
+  void Stop ();
+
+};
+
+} // namespace internal
 
 /**
  * Interace for a class that runs the game's RPC server.  We need this mainly
