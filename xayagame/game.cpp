@@ -90,7 +90,10 @@ private:
     std::unique_lock<std::mutex> lock(mut);
     while (!shouldStop)
       {
-        cv.wait_for (lock, intv);
+        cv.wait_for (lock, intv, [this] () { return shouldStop; });
+        if (shouldStop)
+          break;
+
         game.ProbeAndFixConnection ();
       }
   }
@@ -130,7 +133,28 @@ Game::Game (const std::string& id)
   zmq.AddListener (gameId, this);
 }
 
-Game::~Game () = default;
+Game::~Game ()
+{
+  if (!started)
+    return;
+
+  /* Make sure that all background threads have been joined before any of
+     our members (in particular the coprocessor batch and the transaction
+     manager) are destructed.  This also makes custom lifecycles safe that
+     use Start() directly and do not call Stop() explicitly.  */
+  try
+    {
+      Stop ();
+    }
+  catch (const std::exception& exc)
+    {
+      LOG (ERROR) << "Failed to stop game during destruction: " << exc.what ();
+    }
+  catch (...)
+    {
+      LOG (ERROR) << "Unknown exception while stopping game during destruction";
+    }
+}
 
 void
 Game::SetVersionString (const std::string& version)
@@ -1203,6 +1227,8 @@ Game::ConnectToZmq ()
 void
 Game::Start ()
 {
+  started = true;
+
   try
     {
       ConnectToZmq ();
@@ -1228,17 +1254,20 @@ Game::Stop ()
   connectionChecker.reset ();
 
   zmq.Stop ();
-  try
-    {
-      UntrackGame ();
-    }
-  catch (const std::exception& exc)
-    {
-      /* If the block source is unavailable (e.g. because it is itself
-         already shut down), untracking the game fails.  This should not
-         prevent a clean shutdown of the GSP.  */
-      LOG (ERROR) << "Failed to untrack game on shutdown: " << exc.what ();
-    }
+
+  if (rpcProvider != nullptr)
+    try
+      {
+        UntrackGame ();
+      }
+    catch (const std::exception& exc)
+      {
+        /* If the block source is unavailable (e.g. because it is itself
+           already shut down), untracking the game fails.  This should not
+           prevent a clean shutdown of the GSP.  */
+        LOG (ERROR) << "Failed to untrack game on shutdown: " << exc.what ();
+      }
+
   /* Make sure to wake up all listeners waiting for a state update (as there
      won't be one anymore).  This must hold the mut lock, as the notification
      also updates shared state (the cached pending JSON).  Note that this must
@@ -1246,13 +1275,18 @@ Game::Stop ()
      acquire the lock / join a thread that does.  */
   {
     std::lock_guard<std::mutex> lock(mut);
-    CHECK (state == State::DISCONNECTED);
+    state = State::DISCONNECTED;
     NotifyStateChange ();
     NotifyPendingStateChange ();
   }
 
-  /* Give the RPC server some more time to return still active calls.  */
-  std::this_thread::sleep_for (std::chrono::milliseconds (100));
+  const bool wasStarted = started;
+  started = false;
+
+  /* Give the RPC server some more time to return still active calls.  Avoid
+     delaying destructors of games that never actually started.  */
+  if (wasStarted)
+    std::this_thread::sleep_for (std::chrono::milliseconds (100));
 }
 
 void

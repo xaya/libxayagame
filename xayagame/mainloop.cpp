@@ -39,33 +39,6 @@ MainLoop::IsRunning () const
 namespace
 {
 
-/**
- * Helper class to run start/stop functions with RAII.
- */
-template <typename F>
-  class StartStopRunner
-{
-
-private:
-
-  const F& startFunc;
-  const F& stopFunc;
-
-public:
-
-  explicit StartStopRunner (const F& start, const F& stop)
-    : startFunc(start), stopFunc(stop)
-  {
-    startFunc ();
-  }
-
-  ~StartStopRunner ()
-  {
-    stopFunc ();
-  }
-
-};
-
 /** Whether a MainLoop is currently running.  */
 std::atomic<bool> mainLoopActive = false;
 
@@ -175,23 +148,51 @@ MainLoop::Run (const Functor& start, const Functor& stop)
 
   shouldStop = false;
   running = true;
-  {
-    LOG (INFO) << "Starting main loop";
-    StartStopRunner<Functor> startStop(start, stop);
-    while (!shouldStop)
-      {
-        const auto pred = [this] ()
-           {
-             return shouldStop
-                || stopRequested.load (std::memory_order_acquire);
-           };
-        cv.wait_for (mainLoopLock, std::chrono::milliseconds (100), pred);
 
-        if (stopRequested.load (std::memory_order_acquire))
-          shouldStop = true;
-      }
-    LOG (INFO) << "Stopping main loop";
-  }
+  bool needStop = true;
+  try
+    {
+      LOG (INFO) << "Starting main loop";
+      start ();
+
+      while (!shouldStop)
+        {
+          const auto pred = [this] ()
+             {
+               return shouldStop
+                  || stopRequested.load (std::memory_order_acquire);
+             };
+          cv.wait_for (mainLoopLock, std::chrono::milliseconds (100), pred);
+
+          if (stopRequested.load (std::memory_order_acquire))
+            shouldStop = true;
+        }
+
+      LOG (INFO) << "Stopping main loop";
+
+      /* If the stop functor itself throws, do not call it a second time
+         from the catch block below.  */
+      needStop = false;
+      stop ();
+    }
+  catch (...)
+    {
+      if (needStop)
+        try
+          {
+            /* A partially-completed start may already have launched workers,
+               so make sure they are shut down again.  */
+            stop ();
+          }
+        catch (...)
+          {
+            LOG (ERROR) << "Exception while stopping partially started loop";
+          }
+
+      running = false;
+      throw;
+    }
+
   running = false;
 }
 

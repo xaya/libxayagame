@@ -7,6 +7,7 @@
 #include <glog/logging.h>
 
 #include <cstring>
+#include <exception>
 
 namespace xaya
 {
@@ -240,9 +241,36 @@ protected:
   void
   CloseDatabase () override
   {
+    std::exception_ptr firstError;
+
     for (auto* p : game.processors)
-      p->Finish (GetDatabase ());
-    SQLiteStorage::CloseDatabase ();
+      try
+        {
+          p->Finish (GetDatabase ());
+        }
+      catch (...)
+        {
+          if (firstError == nullptr)
+            firstError = std::current_exception ();
+          else
+            LOG (ERROR) << "Exception while finishing another processor";
+        }
+
+    try
+      {
+        SQLiteStorage::CloseDatabase ();
+      }
+    catch (...)
+      {
+        if (firstError == nullptr)
+          firstError = std::current_exception ();
+        else
+          LOG (ERROR)
+              << "Exception while closing database after processor failure";
+      }
+
+    if (firstError != nullptr)
+      std::rethrow_exception (firstError);
   }
 
   void
@@ -454,7 +482,32 @@ SQLiteGame::SQLiteGame ()
   : stateSnapshot(std::make_unique<StateSnapshot> ())
 {}
 
-SQLiteGame::~SQLiteGame () = default;
+SQLiteGame::~SQLiteGame ()
+{
+  /* Close the database explicitly while our own stateSnapshot and the
+     processor references are still alive.  This runs the derived
+     Storage::CloseDatabase implementation, which finishes all processors
+     before the underlying database is closed.  Relying on the base-class
+     destructor alone would bypass that override.  */
+  if (database == nullptr || !database->IsOpen ())
+    return;
+
+  try
+    {
+      database->CloseDatabase ();
+    }
+  catch (const std::exception& exc)
+    {
+      LOG (ERROR)
+          << "Exception while closing SQLite database on destruction: "
+          << exc.what ();
+    }
+  catch (...)
+    {
+      LOG (ERROR)
+          << "Unknown exception while closing SQLite database on destruction";
+    }
+}
 
 void
 SQLiteGame::EnsureCurrentState (const GameStateData& state) const

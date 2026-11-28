@@ -25,6 +25,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <mutex>
 #include <vector>
 #include <string>
@@ -364,6 +365,24 @@ protected:
   GetZmq (Game& g)
   {
     return g.zmq;
+  }
+
+  /**
+   * Moves the last block update of the ZMQ subscriber into the past, so that
+   * connection-check tests can trigger a particular staleness deterministically
+   * without sleeping.
+   */
+  static void
+  MakeZmqStale (Game& g, const std::chrono::milliseconds age)
+  {
+    std::lock_guard<std::shared_mutex> lock(g.zmq.mutProcessing);
+    g.zmq.lastBlockUpdate = internal::ZmqSubscriber::Clock::now () - age;
+  }
+
+  static internal::TransactionManager&
+  GetTransactionManager (Game& g)
+  {
+    return g.transactionManager;
   }
 
   static void

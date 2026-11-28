@@ -290,7 +290,9 @@ public:
   SQLiteStorage& GetStorage ();
 
   /**
-   * Attaches a processor.
+   * Attaches a processor.  The processor must remain valid until this
+   * SQLiteGame has been destructed, or until the underlying database has
+   * been explicitly closed (which finishes all attached processors first).
    */
   void AddProcessor (SQLiteProcessor& proc);
 

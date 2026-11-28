@@ -133,6 +133,7 @@ target_link_libraries (xayagame_testutils PUBLIC
 # Unit tests.
 add_executable (xayagame_tests
   coprocessor_tests.cpp
+  defaultmain_tests.cpp
   game_tests.cpp
   gamelogic_tests.cpp
   heightcache_tests.cpp

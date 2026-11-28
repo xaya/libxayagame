@@ -534,6 +534,15 @@ public:
   SQLiteStorage (const SQLiteStorage&) = delete;
   void operator= (const SQLiteStorage&) = delete;
 
+  /**
+   * Returns true if the database is currently open.
+   */
+  bool
+  IsOpen () const
+  {
+    return db != nullptr;
+  }
+
   void Initialise () override;
 
   /**

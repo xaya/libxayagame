@@ -292,19 +292,10 @@ ZmqSubscriber::Listen (ZmqSubscriber* self)
 }
 
 void
-ZmqSubscriber::Start ()
+ZmqSubscriber::SetUpSockets ()
 {
-  CHECK (!addrBlocks.empty ()) << "ZMQ endpoint is not yet set";
-  CHECK (!IsRunning ());
-
-  /* If the listening thread is stopped but Stop() has not been called,
-     we clean up for a restart.  */
-  if (worker != nullptr)
-    Stop ();
-
   CHECK (sockets.empty ());
 
-  LOG (INFO) << "Starting ZMQ subscriber for blocks: " << addrBlocks;
   auto socket = std::make_unique<zmq::socket_t> (ctx, ZMQ_SUB);
   socket->connect (addrBlocks.c_str ());
   zmq::socket_t* const socketBlocks = socket.get ();
@@ -339,14 +330,42 @@ ZmqSubscriber::Start ()
     }
   else
     LOG (INFO) << "Not subscribing to pending moves";
+}
 
-  /* Reset last-seen sequence numbers for a fresh start.  */
-  lastSeq.clear ();
+void
+ZmqSubscriber::Start ()
+{
+  CHECK (!addrBlocks.empty ()) << "ZMQ endpoint is not yet set";
+  CHECK (!IsRunning ());
 
-  shouldStop = false;
-  running = true;
-  lastBlockUpdate = Clock::now ();
-  worker = std::make_unique<std::thread> (&ZmqSubscriber::Listen, this);
+  /* If the listening thread is stopped but Stop() has not been called,
+     we clean up for a restart.  */
+  if (worker != nullptr)
+    Stop ();
+
+  LOG (INFO) << "Starting ZMQ subscriber for blocks: " << addrBlocks;
+
+  try
+    {
+      SetUpSockets ();
+
+      /* Reset last-seen sequence numbers for a fresh start.  */
+      lastSeq.clear ();
+
+      shouldStop = false;
+      running = true;
+      lastBlockUpdate = Clock::now ();
+      worker = std::make_unique<std::thread> (&ZmqSubscriber::Listen, this);
+    }
+  catch (...)
+    {
+      /* worker is assigned last, so it cannot be set.  Clean up everything
+         else, so that "worker == nullptr" means "not started".  */
+      CHECK (worker == nullptr);
+      running = false;
+      sockets.clear ();
+      throw;
+    }
 }
 
 void
@@ -359,7 +378,9 @@ ZmqSubscriber::RequestStop ()
 void
 ZmqSubscriber::Stop ()
 {
-  CHECK (worker != nullptr);
+  if (worker == nullptr)
+    return;
+
   LOG (INFO) << "Stopping ZMQ subscriber at address " << addrBlocks;
 
   RequestStop ();

@@ -1,4 +1,4 @@
-// Copyright (C) 2018 The Xaya developers
+// Copyright (C) 2018-2026 The Xaya developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -70,7 +70,9 @@ public:
 
   /**
    * Run the main loop.  It executes the given "start" function, then
-   * blocks until terminated, and then executes "stop".
+   * blocks until terminated, and then executes "stop".  If "start" (or the
+   * loop itself) throws, "stop" is still attempted, so that a partially
+   * completed start is cleaned up.
    */
   void Run (const Functor& start, const Functor& stop);
 
