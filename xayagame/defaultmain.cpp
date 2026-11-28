@@ -215,14 +215,17 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
       if (config.XayaRpcWait)
         WaitForXaya (rpcProvider);
 
+      /* Define the storage before the game, so it outlives the
+         Game instance.  */
+      std::unique_ptr<StorageInterface> storage;
+
       auto game = std::make_unique<Game> (gameId);
       game->SetVersionString (config.VersionString);
       game->ConnectRpcClient (rpcProvider);
       VerifyXayaVersion (config, game->GetXayaVersion ());
       CHECK (game->DetectZmqEndpoint ());
 
-      std::unique_ptr<StorageInterface> storage
-          = CreateStorage (config, gameId, game->GetChain ());
+      storage = CreateStorage (config, gameId, game->GetChain ());
       game->SetStorage (*storage);
 
       game->SetGameLogic (rules);
@@ -233,9 +236,11 @@ DefaultMain (const GameDaemonConfiguration& config, const std::string& gameId,
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);
 
+      /* The components use the serverConnector, so it should outlive
+         the components.  */
+      auto serverConnector = CreateRpcServerConnector (config);
       auto components = instanceFact->BuildGameComponents (*game);
 
-      auto serverConnector = CreateRpcServerConnector (config);
       if (serverConnector == nullptr)
           LOG (WARNING)
               << "No connector has been set up for the game RPC server,"
@@ -313,9 +318,11 @@ SQLiteMain (const GameDaemonConfiguration& config, const std::string& gameId,
       if (config.EnablePruning >= 0)
         game->EnablePruning (config.EnablePruning);
 
+      /* The components use the serverConnector, so it should outlive
+         the components.  */
+      auto serverConnector = CreateRpcServerConnector (config);
       auto components = instanceFact->BuildGameComponents (*game);
 
-      auto serverConnector = CreateRpcServerConnector (config);
       if (serverConnector == nullptr)
           LOG (WARNING)
               << "No connector has been set up for the game RPC server,"
